@@ -1,0 +1,7 @@
+[package]
+name = "zero_x_infinity"
+version = "0.1.0"
+edition = "2024"
+description = "Order book matching engine"
+
+[dependencies]
