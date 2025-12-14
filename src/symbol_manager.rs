@@ -91,7 +91,12 @@ impl SymbolManager {
     pub fn add_asset(&mut self, asset_id: u32, decimals: u32, display_decimals: u32, name: &str) {
         self.assets.insert(
             asset_id,
-            AssetInfo { asset_id, decimals, display_decimals, name: name.to_string() },
+            AssetInfo {
+                asset_id,
+                decimals,
+                display_decimals,
+                name: name.to_string(),
+            },
         );
     }
 
@@ -108,7 +113,10 @@ impl SymbolManager {
     }
 
     pub fn get_asset_id(&self, name: &str) -> Option<u32> {
-        self.assets.values().find(|a| a.name == name).map(|a| a.asset_id)
+        self.assets
+            .values()
+            .find(|a| a.name == name)
+            .map(|a| a.asset_id)
     }
 
     /// Load initial state (simulating DB load)
@@ -117,9 +125,9 @@ impl SymbolManager {
         //TODO: refactor: we do NOT need quantity decimal any more,juse use get_asset_decimal
         // Add Assets (asset_id, decimals, display_decimals, name)
         // All assets use 8 decimals for consistency (like satoshi for BTC)
-        manager.add_asset(1, 8, 3, "BTC");   // BTC: 8 decimals, display 3
-        manager.add_asset(2, 8, 2, "USDT");  // USDT: 8 decimals, display 2
-        manager.add_asset(3, 8, 4, "ETH");   // ETH: 8 decimals, display 4
+        manager.add_asset(1, 8, 3, "BTC"); // BTC: 8 decimals, display 3
+        manager.add_asset(2, 8, 2, "USDT"); // USDT: 8 decimals, display 2
+        manager.add_asset(3, 8, 4, "ETH"); // ETH: 8 decimals, display 4
 
         // BTC_USDT: Base 1 (BTC), Quote 2 (USDT), Price Decimal 2
         manager.insert_symbol("BTC_USDT", 0, 1, 2, 2, 2);
