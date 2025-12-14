@@ -1,0 +1,12 @@
+[book]
+title = "0xInfinity"
+authors = ["gjwang"]
+language = "zh"
+src = "src"
+
+[build]
+build-dir = "book"
+
+[output.html]
+git-repository-url = "https://github.com/gjwang/zero_x_infinity"
+edit-url-template = "https://github.com/gjwang/zero_x_infinity/edit/main/docs/{path}"
