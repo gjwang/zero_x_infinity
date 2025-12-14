@@ -19,7 +19,7 @@
 这是一个从 0 到 1 的硬核交易引擎 in Rust 的教程。
 This is a pilgrimage from `Hello World` to `Microsecond Latency`.
 
-[Start the Tutorial ->](./docs/0x01-genesis.md)
+[Start the Tutorial ->](./docs/src/0x01-genesis.md)
 
 
 
