@@ -3,7 +3,7 @@ use crate::models::{Order, Side};
 
 #[derive(Debug)]
 struct PriceLevel {
-    price: f64,
+    price: u64,
     orders: VecDeque<Order>, // FIFO
 }
 
@@ -29,14 +29,15 @@ impl OrderBook {
         }
 
         // 2. Resting (if not fully filled)
-        if order.qty > 0.0 {
+        if order.qty > 0 {
             let book_side = if order.side == Side::Buy {
                 &mut self.buys
             } else {
                 &mut self.sells
             };
 
-            let level = book_side.iter_mut().find(|l| (l.price - order.price).abs() < 1e-9);
+            // With u64, we can use exact comparison (no floating point epsilon needed!)
+            let level = book_side.iter_mut().find(|l| l.price == order.price);
 
             if let Some(l) = level {
                 l.orders.push_back(order);
@@ -54,7 +55,7 @@ impl OrderBook {
 
     fn match_buy(&mut self, buy_order: &mut Order) {
         // Sells sorted ascending (cheapest first)
-        self.sells.sort_by(|a, b| a.price.partial_cmp(&b.price).unwrap());
+        self.sells.sort_by_key(|l| l.price);
 
         for level in self.sells.iter_mut() {
             // If buy price < lowest sell price, no match possible
@@ -63,7 +64,7 @@ impl OrderBook {
             }
 
             while let Some(sell_order) = level.orders.front_mut() {
-                let trade_qty = f64::min(buy_order.qty, sell_order.qty);
+                let trade_qty = u64::min(buy_order.qty, sell_order.qty);
                 
                 println!("MATCH: Buy {} eats Sell {} @ Price {} (Qty: {})", 
                          buy_order.id, sell_order.id, level.price, trade_qty);
@@ -71,11 +72,11 @@ impl OrderBook {
                 buy_order.qty -= trade_qty;
                 sell_order.qty -= trade_qty;
 
-                if sell_order.qty <= 0.0 {
+                if sell_order.qty == 0 {
                     level.orders.pop_front();
                 }
 
-                if buy_order.qty <= 0.0 {
+                if buy_order.qty == 0 {
                     return;
                 }
             }
@@ -87,7 +88,7 @@ impl OrderBook {
 
     fn match_sell(&mut self, sell_order: &mut Order) {
         // Buys sorted descending (highest first)
-        self.buys.sort_by(|a, b| b.price.partial_cmp(&a.price).unwrap());
+        self.buys.sort_by(|a, b| b.price.cmp(&a.price));
 
         for level in self.buys.iter_mut() {
             // If sell price > highest buy price, no match possible
@@ -96,7 +97,7 @@ impl OrderBook {
             }
 
             while let Some(buy_order) = level.orders.front_mut() {
-                let trade_qty = f64::min(sell_order.qty, buy_order.qty);
+                let trade_qty = u64::min(sell_order.qty, buy_order.qty);
 
                 println!("MATCH: Sell {} eats Buy {} @ Price {} (Qty: {})", 
                          sell_order.id, buy_order.id, level.price, trade_qty);
@@ -104,11 +105,11 @@ impl OrderBook {
                 sell_order.qty -= trade_qty;
                 buy_order.qty -= trade_qty;
 
-                if buy_order.qty <= 0.0 {
+                if buy_order.qty == 0 {
                     level.orders.pop_front();
                 }
 
-                if sell_order.qty <= 0.0 {
+                if sell_order.qty == 0 {
                     return;
                 }
             }

@@ -7,13 +7,13 @@ pub enum Side {
 #[derive(Debug, Clone)]
 pub struct Order {
     pub id: u64,
-    pub price: f64, // CRIME: Using f64 for financial data
-    pub qty: f64,
+    pub price: u64,
+    pub qty: u64,
     pub side: Side,
 }
 
 impl Order {
-    pub fn new(id: u64, price: f64, qty: f64, side: Side) -> Self {
+    pub fn new(id: u64, price: u64, qty: u64, side: Side) -> Self {
         Self { id, price, qty, side }
     }
 }
