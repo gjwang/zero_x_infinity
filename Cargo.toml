@@ -5,3 +5,4 @@ edition = "2024"
 description = "Order book matching engine"
 
 [dependencies]
+rustc-hash = "2"

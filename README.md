@@ -27,6 +27,7 @@ This is a pilgrimage from `Hello World` to `Microsecond Latency`.
 |-------|-------|-------------|
 | 0x01 | [Genesis](./docs/src/0x01-genesis.md) | 基础订单簿引擎 |
 | 0x02 | [The Curse of Float](./docs/src/0x02-the-curse-of-float.md) | 浮点数的诅咒 → u64 重构 |
+| 0x03 | [Decimal World](./docs/src/0x03-decimal-world.md) | 十进制转换与精度配置 |
 
 ---
 
