@@ -14,6 +14,11 @@ pub struct Order {
 
 impl Order {
     pub fn new(id: u64, price: u64, qty: u64, side: Side) -> Self {
-        Self { id, price, qty, side }
+        Self {
+            id,
+            price,
+            qty,
+            side,
+        }
     }
 }

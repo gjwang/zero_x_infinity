@@ -1,5 +1,5 @@
-use std::collections::VecDeque;
 use crate::models::{Order, Side};
+use std::collections::VecDeque;
 
 #[derive(Debug)]
 struct PriceLevel {
@@ -65,9 +65,11 @@ impl OrderBook {
 
             while let Some(sell_order) = level.orders.front_mut() {
                 let trade_qty = u64::min(buy_order.qty, sell_order.qty);
-                
-                println!("MATCH: Buy {} eats Sell {} @ Price {} (Qty: {})", 
-                         buy_order.id, sell_order.id, level.price, trade_qty);
+
+                println!(
+                    "MATCH: Buy {} eats Sell {} @ Price {} (Qty: {})",
+                    buy_order.id, sell_order.id, level.price, trade_qty
+                );
 
                 buy_order.qty -= trade_qty;
                 sell_order.qty -= trade_qty;
@@ -81,7 +83,7 @@ impl OrderBook {
                 }
             }
         }
-        
+
         // CRIME: Memory shifting in Vec
         self.sells.retain(|l| !l.orders.is_empty());
     }
@@ -99,8 +101,10 @@ impl OrderBook {
             while let Some(buy_order) = level.orders.front_mut() {
                 let trade_qty = u64::min(sell_order.qty, buy_order.qty);
 
-                println!("MATCH: Sell {} eats Buy {} @ Price {} (Qty: {})", 
-                         sell_order.id, buy_order.id, level.price, trade_qty);
+                println!(
+                    "MATCH: Sell {} eats Buy {} @ Price {} (Qty: {})",
+                    sell_order.id, buy_order.id, level.price, trade_qty
+                );
 
                 sell_order.qty -= trade_qty;
                 buy_order.qty -= trade_qty;
