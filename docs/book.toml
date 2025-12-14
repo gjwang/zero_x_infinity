@@ -9,4 +9,4 @@ build-dir = "book"
 
 [output.html]
 git-repository-url = "https://github.com/gjwang/zero_x_infinity"
-edit-url-template = "https://github.com/gjwang/zero_x_infinity/edit/main/docs/{path}"
+edit-url-template = "https://github.com/gjwang/zero_x_infinity/edit/main/docs/src/{path}"
