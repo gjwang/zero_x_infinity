@@ -68,7 +68,7 @@ fn main() {
         .expect("Asset not found");
     let qty_display_decimals = btc_info.display_decimals;
 
-    println!("--- 0xInfinity: Stage 3 (Decimal World) ---");
+    println!("=== 0xInfinity: Stage 4 (BTree OrderBook) ===");
     println!("Symbol: {} (ID: {})", symbol, symbol_info.symbol_id);
     println!(
         "Price Decimals: {}, Qty Display Decimals: {}",
@@ -78,37 +78,48 @@ fn main() {
 
     let mut book = OrderBook::new();
 
-    // 1. Makers (Sells) - Using decimal parsing
+    // 1. Makers (Sells)
     println!("[1] Makers coming in...");
+
     // Sell 10 BTC @ $100.00
     let price1 = parse_decimal("100.00", price_decimals);
     let qty1 = parse_decimal("10.000", qty_display_decimals);
+    let result = book.add_order(Order::new(1, price1, qty1, Side::Sell));
     println!(
-        "    Order 1: Sell {} BTC @ ${}",
+        "    Order 1: Sell {} BTC @ ${} -> {:?}",
         format_decimal(qty1, qty_display_decimals),
-        format_decimal(price1, price_decimals)
+        format_decimal(price1, price_decimals),
+        result.order.status
     );
-    book.add_order(Order::new(1, price1, qty1, Side::Sell));
 
     // Sell 5 BTC @ $102.00
     let price2 = parse_decimal("102.00", price_decimals);
     let qty2 = parse_decimal("5.000", qty_display_decimals);
+    let result = book.add_order(Order::new(2, price2, qty2, Side::Sell));
     println!(
-        "    Order 2: Sell {} BTC @ ${}",
+        "    Order 2: Sell {} BTC @ ${} -> {:?}",
         format_decimal(qty2, qty_display_decimals),
-        format_decimal(price2, price_decimals)
+        format_decimal(price2, price_decimals),
+        result.order.status
     );
-    book.add_order(Order::new(2, price2, qty2, Side::Sell));
 
     // Sell 5 BTC @ $101.00
     let price3 = parse_decimal("101.00", price_decimals);
     let qty3 = parse_decimal("5.000", qty_display_decimals);
+    let result = book.add_order(Order::new(3, price3, qty3, Side::Sell));
     println!(
-        "    Order 3: Sell {} BTC @ ${}",
+        "    Order 3: Sell {} BTC @ ${} -> {:?}",
         format_decimal(qty3, qty_display_decimals),
-        format_decimal(price3, price_decimals)
+        format_decimal(price3, price_decimals),
+        result.order.status
     );
-    book.add_order(Order::new(3, price3, qty3, Side::Sell));
+
+    println!(
+        "\n    Book State: Best Bid={:?}, Best Ask={:?}, Spread={:?}",
+        book.best_bid().map(|p| format_decimal(p, price_decimals)),
+        book.best_ask().map(|p| format_decimal(p, price_decimals)),
+        book.spread().map(|s| format_decimal(s, price_decimals))
+    );
 
     // 2. Taker (Buy)
     println!("\n[2] Taker eats liquidity...");
@@ -120,28 +131,49 @@ fn main() {
         format_decimal(qty4, qty_display_decimals),
         format_decimal(price4, price_decimals)
     );
-    book.add_order(Order::new(4, price4, qty4, Side::Buy));
+    let result = book.add_order(Order::new(4, price4, qty4, Side::Buy));
+
+    println!("    Trades:");
+    for trade in &result.trades {
+        println!(
+            "      - Trade #{}: {} @ ${}",
+            trade.id,
+            format_decimal(trade.qty, qty_display_decimals),
+            format_decimal(trade.price, price_decimals)
+        );
+    }
+    println!(
+        "    Order Status: {:?}, Filled: {}/{}",
+        result.order.status,
+        format_decimal(result.order.filled_qty, qty_display_decimals),
+        format_decimal(result.order.qty, qty_display_decimals)
+    );
+
+    println!(
+        "\n    Book State: Best Bid={:?}, Best Ask={:?}",
+        book.best_bid().map(|p| format_decimal(p, price_decimals)),
+        book.best_ask().map(|p| format_decimal(p, price_decimals))
+    );
 
     // 3. Maker (Buy)
     println!("\n[3] More makers...");
     // Buy 10 BTC @ $99.00
     let price5 = parse_decimal("99.00", price_decimals);
     let qty5 = parse_decimal("10.000", qty_display_decimals);
+    let result = book.add_order(Order::new(5, price5, qty5, Side::Buy));
     println!(
-        "    Order 5: Buy {} BTC @ ${}",
+        "    Order 5: Buy {} BTC @ ${} -> {:?}",
         format_decimal(qty5, qty_display_decimals),
-        format_decimal(price5, price_decimals)
+        format_decimal(price5, price_decimals),
+        result.order.status
     );
-    book.add_order(Order::new(5, price5, qty5, Side::Buy));
 
-    println!("\n--- End of Simulation ---");
-
-    // Demonstrate u64 max value
-    println!("\n--- u64 Range Demo ---");
-    let max_u64: u64 = u64::MAX;
-    println!("u64::MAX = {}", max_u64);
     println!(
-        "With 8 decimals, max representable value = {}",
-        format_decimal(max_u64, 8)
+        "\n    Final Book State: Best Bid={:?}, Best Ask={:?}, Spread={:?}",
+        book.best_bid().map(|p| format_decimal(p, price_decimals)),
+        book.best_ask().map(|p| format_decimal(p, price_decimals)),
+        book.spread().map(|s| format_decimal(s, price_decimals))
     );
+
+    println!("\n=== End of Simulation ===");
 }
