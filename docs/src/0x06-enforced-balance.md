@@ -169,16 +169,21 @@ pub struct UserAccount {
 }
 ```
 
-> **O(1) 直接数组索引**：`assets[asset_id]`
+> **O(1) 直接数组索引**
 >
 > ```rust
-> // 直接索引，无需查找
-> fn get_balance_mut(&mut self, asset_id: AssetId) -> &mut Balance {
+> // deposit() 自动创建资产槽位（唯一入口）
+> pub fn deposit(&mut self, asset_id: AssetId, amount: u64) -> Result<(), &'static str> {
 >     let idx = asset_id as usize;
 >     if idx >= self.assets.len() {
 >         self.assets.resize(idx + 1, Balance::default());
 >     }
->     &mut self.assets[idx]
+>     self.assets[idx].deposit(amount)
+> }
+>
+> // get_balance_mut() 不创建槽位，返回 Result
+> pub fn get_balance_mut(&mut self, asset_id: AssetId) -> Result<&mut Balance, &'static str> {
+>     self.assets.get_mut(asset_id as usize).ok_or("Asset not found")
 > }
 > ```
 
