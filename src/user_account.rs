@@ -1,304 +1,205 @@
-// user_account.rs - User account and balance management
+use serde::{Deserialize, Serialize};
 
-use rustc_hash::FxHashMap;
+// Import the ENFORCED Balance type
+pub use crate::enforced_balance::Balance;
 
-/// Asset balance for a user
-/// Tracks avail and frozen (locked in orders) amounts
-#[derive(Debug, Clone, Default)]
-pub struct Balance {
-    pub avail: u64,  // Available for new orders (short name for efficient JSON output)
-    pub frozen: u64, // Locked in pending orders
-}
+/// Asset ID - globally unique identifier for an asset.
+///
+/// # Critical Constraints:
+/// 1. **Immutable**: Once assigned, NEVER changes
+/// 2. **Small Values**: Must be small integers (used as direct array index)
+/// 3. **Sequential**: Assigned contiguously (e.g., 1, 2, 3, ... or 0, 1, 2, ...)
+///
+/// # O(1) Direct Array Indexing:
+/// ```ignore
+/// assets[asset_id as usize]  // Direct access, no search needed
+/// ```
+///
+/// # Performance:
+/// | Method          | Lookup | Memory     | Cache |
+/// |-----------------|--------|------------|-------|
+/// | Vec + linear    | O(n)   | Compact    | Good  |
+/// | HashMap         | O(1)*  | +Overhead  | Poor  |
+/// | **Direct Index**| O(1)   | Compact    | Best  |
+///
+/// *HashMap O(1) has hidden constant overhead (hashing, bucket lookup)
+pub type AssetId = u32;
 
-impl Balance {
-    pub fn new() -> Self {
-        Self::default()
-    }
+/// User ID - globally unique, immutable after assignment.
+pub type UserId = u64;
 
-    /// Total balance = avail + frozen
-    #[inline]
-    pub fn total(&self) -> u64 {
-        self.avail + self.frozen
-    }
+// Balance is now imported from enforced_balance module
+// All fields are private, all operations enforced
 
-    /// Deposit funds (adds to avail)
-    /// Returns false if overflow would occur - critical for financial systems
-    pub fn deposit(&mut self, amount: u64) -> bool {
-        match self.avail.checked_add(amount) {
-            Some(new_avail) => {
-                self.avail = new_avail;
-                true
-            }
-            None => false, // Overflow! This is a bug that needs investigation
-        }
-    }
-
-    /// Withdraw funds (from avail only)
-    pub fn withdraw(&mut self, amount: u64) -> bool {
-        if self.avail >= amount {
-            self.avail -= amount;
-            true
-        } else {
-            false
-        }
-    }
-
-    /// Freeze funds for an order (move from avail to frozen)
-    pub fn freeze(&mut self, amount: u64) -> bool {
-        if self.avail >= amount {
-            self.avail -= amount;
-            self.frozen += amount;
-            true
-        } else {
-            false
-        }
-    }
-
-    /// Unfreeze funds (move from frozen back to avail, e.g., order cancelled)
-    pub fn unfreeze(&mut self, amount: u64) -> bool {
-        if self.frozen >= amount {
-            self.frozen -= amount;
-            self.avail += amount;
-            true
-        } else {
-            false
-        }
-    }
-
-    /// Consume frozen funds (order executed, funds leave the account)
-    pub fn consume_frozen(&mut self, amount: u64) -> bool {
-        if self.frozen >= amount {
-            self.frozen -= amount;
-            true
-        } else {
-            false
-        }
-    }
-
-    /// Receive funds from a trade (adds to avail)
-    /// Returns false if overflow would occur
-    pub fn receive(&mut self, amount: u64) -> bool {
-        match self.avail.checked_add(amount) {
-            Some(new_avail) => {
-                self.avail = new_avail;
-                true
-            }
-            None => false,
-        }
-    }
-}
-
-/// A user account holding multiple asset balances
-/// Uses FxHashMap for O(1) asset lookup - faster than std HashMap for integer keys
-/// (FxHashMap uses a simpler, faster hash function optimized for small keys)
-#[derive(Debug, Clone)]
+/// UserAccount represents a user's account with balances across multiple assets.
+///
+/// # Data Structure:
+/// Uses `Vec<Balance>` where `asset_id` is used directly as the array index.
+/// This provides O(1) lookup with optimal cache performance.
+///
+/// # Why Vec<Balance> with Direct Indexing?
+///
+/// 1. **O(1) Lookup**: `assets[asset_id]` - no search, no hashing
+///
+/// 2. **Cache-Friendly**: Contiguous memory layout.
+///    When CPU loads one Balance, adjacent Balances are also loaded
+///    into L1/L2 cache (64-byte cache line), making subsequent
+///    accesses nearly zero-latency.
+///
+/// 3. **High-Frequency Function**: `get_balance()` is called 5-10 times
+///    per order (check balance, freeze, settle buyer/seller, refund).
+///    At 10K orders/sec, that's 50-100K calls/sec.
+///    O(1) + cache-friendly is critical for performance.
+///
+/// # Invariants (enforced by private fields):
+/// 1. user_id is immutable after creation
+/// 2. assets can only be accessed through get_balance methods
+/// 3. All mutations go through validated operations
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserAccount {
-    pub user_id: u64,
-    balances: FxHashMap<u32, Balance>, // asset_id -> Balance
+    user_id: UserId,       // PRIVATE - use user_id()
+    assets: Vec<Balance>,  // PRIVATE - O(1) index by asset_id: assets[asset_id]
 }
 
 impl UserAccount {
-    pub fn new(user_id: u64) -> Self {
+    /// Create a new user account with pre-allocated asset slots.
+    /// Default capacity is 8 assets, which covers most users.
+    pub fn new(user_id: UserId) -> Self {
         Self {
             user_id,
-            balances: FxHashMap::default(),
+            assets: Vec::with_capacity(8),
         }
     }
 
-    /// Get balance for an asset (creates if not exists)
-    pub fn get_balance_mut(&mut self, asset_id: u32) -> &mut Balance {
-        self.balances.entry(asset_id).or_insert_with(Balance::new)
+    /// Read-only access to user ID
+    #[inline(always)]
+    pub fn user_id(&self) -> UserId {
+        self.user_id
     }
 
-    /// Get balance for an asset (read-only)
-    pub fn get_balance(&self, asset_id: u32) -> Option<&Balance> {
-        self.balances.get(&asset_id)
+    /// Deposit funds to an asset.
+    /// This is the ONLY way to create a new asset slot.
+    /// Auto-creates the asset slot if it doesn't exist.
+    ///
+    /// # Errors
+    /// Returns error on overflow.
+    #[inline(always)]
+    pub fn deposit(&mut self, asset_id: AssetId, amount: u64) -> Result<(), &'static str> {
+        let idx = asset_id as usize;
+        // Auto-create asset slot if needed (only deposit can do this)
+        if idx >= self.assets.len() {
+            self.assets.resize(idx + 1, Balance::default());
+        }
+        self.assets[idx].deposit(amount)
     }
 
-    /// Deposit funds into the account
-    pub fn deposit(&mut self, asset_id: u32, amount: u64) {
-        self.get_balance_mut(asset_id).deposit(amount);
+    /// Get mutable reference to balance for an asset.
+    /// O(1) direct array indexing.
+    ///
+    /// # Errors
+    /// Returns error if asset doesn't exist.
+    /// Use `deposit()` first to create the asset slot.
+    #[inline(always)]
+    pub fn get_balance_mut(&mut self, asset_id: AssetId) -> Result<&mut Balance, &'static str> {
+        let idx = asset_id as usize;
+        self.assets.get_mut(idx).ok_or("Asset not found")
     }
 
-    /// Withdraw funds from the account
-    pub fn withdraw(&mut self, asset_id: u32, amount: u64) -> bool {
-        self.get_balance_mut(asset_id).withdraw(amount)
+    /// Get immutable reference to balance for an asset.
+    /// O(1) direct array indexing.
+    /// Returns None if asset doesn't exist.
+    #[inline(always)]
+    pub fn get_balance(&self, asset_id: AssetId) -> Option<&Balance> {
+        let idx = asset_id as usize;
+        self.assets.get(idx)
     }
 
-    /// Get avail balance for an asset
-    pub fn avail(&self, asset_id: u32) -> u64 {
-        self.balances.get(&asset_id).map(|b| b.avail).unwrap_or(0)
+    /// Get read-only slice of all balances.
+    /// Index corresponds to asset_id.
+    #[inline(always)]
+    pub fn assets(&self) -> &[Balance] {
+        &self.assets
     }
 
-    /// Get frozen balance for an asset
-    pub fn frozen(&self, asset_id: u32) -> u64 {
-        self.balances.get(&asset_id).map(|b| b.frozen).unwrap_or(0)
-    }
-}
-
-/// User account manager - holds all user accounts
-#[derive(Debug, Default)]
-pub struct AccountManager {
-    accounts: FxHashMap<u64, UserAccount>, // user_id -> UserAccount
-}
-
-impl AccountManager {
-    pub fn new() -> Self {
-        Self::default()
+    /// Get mutable access to assets (for internal ledger operations)
+    #[inline(always)]
+    pub(crate) fn assets_mut(&mut self) -> &mut Vec<Balance> {
+        &mut self.assets
     }
 
-    /// Get or create a user account
-    pub fn get_account_mut(&mut self, user_id: u64) -> &mut UserAccount {
-        self.accounts
-            .entry(user_id)
-            .or_insert_with(|| UserAccount::new(user_id))
+    pub fn check_buyer_balance(
+        &self,
+        quote_asset_id: AssetId,
+        spend_quote: u64,
+        refund_quote: u64,
+    ) -> Result<(), &'static str> {
+        let quote_bal = self
+            .get_balance(quote_asset_id)
+            .ok_or("Quote asset not found")?;
+
+        let required = spend_quote + refund_quote;
+        if quote_bal.frozen() < required {
+            return Err("Insufficient frozen quote funds");
+        }
+        Ok(())
     }
 
-    /// Get a user account (read-only)
-    pub fn get_account(&self, user_id: u64) -> Option<&UserAccount> {
-        self.accounts.get(&user_id)
+    pub fn check_seller_balance(
+        &self,
+        base_asset_id: AssetId,
+        spend_base: u64,
+        refund_base: u64,
+    ) -> Result<(), &'static str> {
+        let base_bal = self
+            .get_balance(base_asset_id)
+            .ok_or("Base asset not found")?;
+
+        let required = spend_base + refund_base;
+        if base_bal.frozen() < required {
+            return Err("Insufficient frozen base funds");
+        }
+        Ok(())
     }
 
-    /// Deposit funds to a user's account
-    pub fn deposit(&mut self, user_id: u64, asset_id: u32, amount: u64) {
-        self.get_account_mut(user_id).deposit(asset_id, amount);
-    }
-
-    /// Check if user has sufficient avail balance
-    pub fn has_sufficient_balance(&self, user_id: u64, asset_id: u32, amount: u64) -> bool {
-        self.accounts
-            .get(&user_id)
-            .map(|acc| acc.avail(asset_id) >= amount)
-            .unwrap_or(false)
-    }
-
-    /// Freeze funds for an order
-    pub fn freeze(&mut self, user_id: u64, asset_id: u32, amount: u64) -> bool {
-        self.get_account_mut(user_id)
-            .get_balance_mut(asset_id)
-            .freeze(amount)
-    }
-
-    /// Unfreeze funds (order cancelled)
-    pub fn unfreeze(&mut self, user_id: u64, asset_id: u32, amount: u64) -> bool {
-        self.get_account_mut(user_id)
-            .get_balance_mut(asset_id)
-            .unfreeze(amount)
-    }
-
-    /// Settle a trade: buyer receives base asset, seller receives quote asset
-    /// The frozen funds are consumed, and received funds are added
-    pub fn settle_trade(
+    pub fn settle_as_buyer(
         &mut self,
-        buyer_id: u64,
-        seller_id: u64,
-        base_asset_id: u32,
-        quote_asset_id: u32,
-        base_amount: u64,  // quantity traded
-        quote_amount: u64, // price * quantity
-    ) {
-        // Buyer: spent quote asset (frozen -> consumed), receives base asset
-        self.get_account_mut(buyer_id)
-            .get_balance_mut(quote_asset_id)
-            .consume_frozen(quote_amount);
-        self.get_account_mut(buyer_id)
-            .get_balance_mut(base_asset_id)
-            .receive(base_amount);
+        quote_asset_id: AssetId,
+        base_asset_id: AssetId,
+        spend_quote: u64,
+        gain_base: u64,
+        refund_quote: u64,
+    ) -> Result<(), &'static str> {
+        // Debit Quote (Frozen)
+        self.get_balance_mut(quote_asset_id)?.spend_frozen(spend_quote)?;
 
-        // Seller: spent base asset (frozen -> consumed), receives quote asset
-        self.get_account_mut(seller_id)
-            .get_balance_mut(base_asset_id)
-            .consume_frozen(base_amount);
-        self.get_account_mut(seller_id)
-            .get_balance_mut(quote_asset_id)
-            .receive(quote_amount);
-    }
-}
+        // Credit Base (Available)
+        self.get_balance_mut(base_asset_id)?.deposit(gain_base)?;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    const BTC: u32 = 1;
-    const USDT: u32 = 2;
-
-    #[test]
-    fn test_balance_deposit_withdraw() {
-        let mut balance = Balance::new();
-
-        balance.deposit(1000);
-        assert_eq!(balance.avail, 1000);
-        assert_eq!(balance.frozen, 0);
-
-        assert!(balance.withdraw(300));
-        assert_eq!(balance.avail, 700);
-
-        assert!(!balance.withdraw(800)); // Insufficient
-        assert_eq!(balance.avail, 700);
+        // Refund Quote (Frozen -> Available)
+        if refund_quote > 0 {
+            self.get_balance_mut(quote_asset_id)?.unlock(refund_quote)?;
+        }
+        Ok(())
     }
 
-    #[test]
-    fn test_balance_freeze_unfreeze() {
-        let mut balance = Balance::new();
-        balance.deposit(1000);
+    pub fn settle_as_seller(
+        &mut self,
+        base_asset_id: AssetId,
+        quote_asset_id: AssetId,
+        spend_base: u64,
+        gain_quote: u64,
+        refund_base: u64,
+    ) -> Result<(), &'static str> {
+        // Debit Base (Frozen)
+        self.get_balance_mut(base_asset_id)?.spend_frozen(spend_base)?;
 
-        assert!(balance.freeze(400));
-        assert_eq!(balance.avail, 600);
-        assert_eq!(balance.frozen, 400);
+        // Credit Quote (Available)
+        self.get_balance_mut(quote_asset_id)?.deposit(gain_quote)?;
 
-        assert!(balance.unfreeze(200));
-        assert_eq!(balance.avail, 800);
-        assert_eq!(balance.frozen, 200);
-
-        assert!(!balance.freeze(900)); // Insufficient avail
-    }
-
-    #[test]
-    fn test_user_account() {
-        let mut account = UserAccount::new(1);
-
-        account.deposit(BTC, 10_00000000); // 10 BTC
-        account.deposit(USDT, 100000_00000000); // 100,000 USDT
-
-        assert_eq!(account.avail(BTC), 10_00000000);
-        assert_eq!(account.avail(USDT), 100000_00000000);
-    }
-
-    #[test]
-    fn test_account_manager_settle_trade() {
-        let mut manager = AccountManager::new();
-
-        // User 1 (buyer): has USDT, wants BTC
-        manager.deposit(1, USDT, 100000_00000000); // 100,000 USDT
-
-        // User 2 (seller): has BTC, wants USDT
-        manager.deposit(2, BTC, 10_00000000); // 10 BTC
-
-        // Freeze funds for orders
-        // Buyer freezes USDT (to buy 1 BTC at 50,000 USDT)
-        assert!(manager.freeze(1, USDT, 50000_00000000));
-        // Seller freezes BTC
-        assert!(manager.freeze(2, BTC, 1_00000000));
-
-        // Settle trade: 1 BTC @ 50,000 USDT
-        manager.settle_trade(
-            1, // buyer
-            2, // seller
-            BTC,
-            USDT,
-            1_00000000,     // 1 BTC
-            50000_00000000, // 50,000 USDT
-        );
-
-        // Check balances after trade
-        // Buyer: -50,000 USDT (was frozen, now consumed), +1 BTC
-        assert_eq!(manager.get_account(1).unwrap().avail(USDT), 50000_00000000); // 100k - 50k frozen = 50k avail
-        assert_eq!(manager.get_account(1).unwrap().frozen(USDT), 0);
-        assert_eq!(manager.get_account(1).unwrap().avail(BTC), 1_00000000);
-
-        // Seller: -1 BTC (was frozen, now consumed), +50,000 USDT
-        assert_eq!(manager.get_account(2).unwrap().avail(BTC), 9_00000000); // 10 - 1 frozen = 9 avail
-        assert_eq!(manager.get_account(2).unwrap().frozen(BTC), 0);
-        assert_eq!(manager.get_account(2).unwrap().avail(USDT), 50000_00000000);
+        // Refund Base (Frozen -> Available)
+        if refund_base > 0 {
+            self.get_balance_mut(base_asset_id)?.unlock(refund_base)?;
+        }
+        Ok(())
     }
 }

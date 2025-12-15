@@ -1,3 +1,4 @@
+mod enforced_balance;
 mod engine;
 mod models;
 mod symbol_manager;
@@ -5,10 +6,12 @@ mod user_account;
 
 use engine::OrderBook;
 use models::{Order, Side};
+use rustc_hash::FxHashMap;
 use symbol_manager::SymbolManager;
-use user_account::AccountManager;
+use user_account::UserAccount;
 
 /// Convert decimal string to u64 internal representation
+#[allow(dead_code)]
 fn parse_decimal(s: &str, decimals: u32) -> u64 {
     let multiplier = 10u64.pow(decimals);
 
@@ -71,7 +74,7 @@ fn main() {
     let qty_decimal = base_asset.decimals;
     let qty_unit = 10u64.pow(qty_decimal); // Precomputed divisor for cost calculation
 
-    println!("=== 0xInfinity: Stage 5 (User Balance) ===");
+    println!("=== 0xInfinity: Stage 6 (Enforced Balance) ===");
     println!(
         "Symbol: {} | Price: {} decimals, Qty: {} decimals",
         symbol, price_decimal, qty_decimal
@@ -79,37 +82,73 @@ fn main() {
     println!("Cost formula: price * qty / {}", qty_unit);
     println!();
 
-    // Initialize account manager
-    let mut accounts = AccountManager::new();
+    // Initialize user accounts (now using UserAccount directly instead of AccountManager)
+    let mut accounts: FxHashMap<u64, UserAccount> = FxHashMap::default();
 
     // User 1 (Alice): Seller - has BTC
     // User 2 (Bob): Buyer - has USDT
     let alice = 1u64;
     let bob = 2u64;
 
+    // Create accounts
+    accounts.insert(alice, UserAccount::new(alice));
+    accounts.insert(bob, UserAccount::new(bob));
+
     // Price unit for USDT (quote asset) - use price_decimal
     let price_unit = 10u64.pow(price_decimal);
 
-    // Deposit initial funds
+    // Deposit initial funds using the new enforced API
     println!("[0] Initial deposits...");
-    accounts.deposit(alice, BTC, 100 * qty_unit); // 100 BTC
-    accounts.deposit(alice, USDT, 10_000 * price_unit); // 10,000 USDT
-    accounts.deposit(bob, USDT, 200_000 * price_unit); // 200,000 USDT
-    accounts.deposit(bob, BTC, 5 * qty_unit); // 5 BTC
+
+    // Alice: deposit (auto-creates asset slots)
+    let alice_acc = accounts.get_mut(&alice).unwrap();
+    alice_acc.deposit(BTC, 100 * qty_unit).unwrap();
+    alice_acc.deposit(USDT, 10_000 * price_unit).unwrap();
+
+    // Bob: deposit (auto-creates asset slots)
+    let bob_acc = accounts.get_mut(&bob).unwrap();
+    bob_acc.deposit(USDT, 200_000 * price_unit).unwrap();
+    bob_acc.deposit(BTC, 5 * qty_unit).unwrap();
 
     println!(
         "    Alice: {} BTC, {} USDT",
-        format_decimal(accounts.get_account(alice).unwrap().avail(BTC), qty_decimal),
         format_decimal(
-            accounts.get_account(alice).unwrap().avail(USDT),
+            accounts
+                .get(&alice)
+                .unwrap()
+                .get_balance(BTC)
+                .map(|b| b.avail())
+                .unwrap_or(0),
+            qty_decimal
+        ),
+        format_decimal(
+            accounts
+                .get(&alice)
+                .unwrap()
+                .get_balance(USDT)
+                .map(|b| b.avail())
+                .unwrap_or(0),
             price_decimal
         )
     );
     println!(
         "    Bob:   {} BTC, {} USDT",
-        format_decimal(accounts.get_account(bob).unwrap().avail(BTC), qty_decimal),
         format_decimal(
-            accounts.get_account(bob).unwrap().avail(USDT),
+            accounts
+                .get(&bob)
+                .unwrap()
+                .get_balance(BTC)
+                .map(|b| b.avail())
+                .unwrap_or(0),
+            qty_decimal
+        ),
+        format_decimal(
+            accounts
+                .get(&bob)
+                .unwrap()
+                .get_balance(USDT)
+                .map(|b| b.avail())
+                .unwrap_or(0),
             price_decimal
         )
     );
@@ -123,8 +162,15 @@ fn main() {
     let price1 = 100 * price_unit;
     let qty1 = 10 * qty_unit;
 
-    // Check balance and freeze funds (sell order freezes base asset)
-    if accounts.freeze(alice, BTC, qty1) {
+    // Lock funds (sell order locks base asset) - using new enforced API
+    if accounts
+        .get_mut(&alice)
+        .unwrap()
+        .get_balance_mut(BTC)
+        .unwrap()
+        .lock(qty1)
+        .is_ok()
+    {
         let result = book.add_order(Order::new(1, alice, price1, qty1, Side::Sell));
         println!(
             "    Order 1: Sell {} BTC @ ${} -> {:?}",
@@ -136,7 +182,14 @@ fn main() {
 
     let price2 = 101 * price_unit;
     let qty2 = 5 * qty_unit;
-    if accounts.freeze(alice, BTC, qty2) {
+    if accounts
+        .get_mut(&alice)
+        .unwrap()
+        .get_balance_mut(BTC)
+        .unwrap()
+        .lock(qty2)
+        .is_ok()
+    {
         let result = book.add_order(Order::new(2, alice, price2, qty2, Side::Sell));
         println!(
             "    Order 2: Sell {} BTC @ ${} -> {:?}",
@@ -146,13 +199,11 @@ fn main() {
         );
     }
 
+    let alice_btc = accounts.get(&alice).unwrap().get_balance(BTC).unwrap();
     println!(
         "    Alice balance: avail={} BTC, frozen={} BTC",
-        format_decimal(accounts.get_account(alice).unwrap().avail(BTC), qty_decimal),
-        format_decimal(
-            accounts.get_account(alice).unwrap().frozen(BTC),
-            qty_decimal
-        )
+        format_decimal(alice_btc.avail(), qty_decimal),
+        format_decimal(alice_btc.frozen(), qty_decimal)
     );
 
     // [2] Bob places a buy order that matches
@@ -170,7 +221,15 @@ fn main() {
         format_decimal(cost, price_decimal)
     );
 
-    if accounts.freeze(bob, USDT, cost) {
+    // Lock funds for buy order
+    if accounts
+        .get_mut(&bob)
+        .unwrap()
+        .get_balance_mut(USDT)
+        .unwrap()
+        .lock(cost)
+        .is_ok()
+    {
         let result = book.add_order(Order::new(3, bob, price3, qty3, Side::Buy));
 
         println!("    Trades:");
@@ -182,27 +241,39 @@ fn main() {
                 format_decimal(trade.price, price_decimal)
             );
 
-            // Settle each trade: cost = price * qty / qty_unit
+            // Settle each trade using new enforced API
             let trade_cost = trade.price * trade.qty / qty_unit;
-            accounts.settle_trade(
-                trade.buyer_user_id,
-                trade.seller_user_id,
-                base_asset_id,
-                quote_asset_id,
-                trade.qty,
-                trade_cost,
-            );
+
+            // Buyer (Bob): spend frozen USDT, receive BTC
+            accounts
+                .get_mut(&trade.buyer_user_id)
+                .unwrap()
+                .settle_as_buyer(quote_asset_id, base_asset_id, trade_cost, trade.qty, 0)
+                .expect("Buyer settlement failed");
+
+            // Seller (Alice): spend frozen BTC, receive USDT
+            accounts
+                .get_mut(&trade.seller_user_id)
+                .unwrap()
+                .settle_as_seller(base_asset_id, quote_asset_id, trade.qty, trade_cost, 0)
+                .expect("Seller settlement failed");
         }
 
-        // Note: For partial fills, refund unused frozen funds
-        let filled_cost = result
+        // Refund unused frozen funds
+        let filled_cost: u64 = result
             .trades
             .iter()
             .map(|t| t.price * t.qty / qty_unit)
-            .sum::<u64>();
+            .sum();
         let refund = cost - filled_cost;
         if refund > 0 {
-            accounts.unfreeze(bob, USDT, refund);
+            accounts
+                .get_mut(&bob)
+                .unwrap()
+                .get_balance_mut(USDT)
+                .unwrap()
+                .unlock(refund)
+                .expect("Refund failed");
         }
 
         println!("    Order status: {:?}", result.order.status);
@@ -212,27 +283,36 @@ fn main() {
 
     // [3] Final balances
     println!("\n[3] Final balances:");
+    let alice_acc = accounts.get(&alice).unwrap();
+    let bob_acc = accounts.get(&bob).unwrap();
+
     println!(
         "    Alice: {} BTC (frozen: {}), {} USDT",
-        format_decimal(accounts.get_account(alice).unwrap().avail(BTC), qty_decimal),
         format_decimal(
-            accounts.get_account(alice).unwrap().frozen(BTC),
+            alice_acc.get_balance(BTC).map(|b| b.avail()).unwrap_or(0),
             qty_decimal
         ),
         format_decimal(
-            accounts.get_account(alice).unwrap().avail(USDT),
+            alice_acc.get_balance(BTC).map(|b| b.frozen()).unwrap_or(0),
+            qty_decimal
+        ),
+        format_decimal(
+            alice_acc.get_balance(USDT).map(|b| b.avail()).unwrap_or(0),
             price_decimal
         )
     );
     println!(
         "    Bob:   {} BTC, {} USDT (frozen: {})",
-        format_decimal(accounts.get_account(bob).unwrap().avail(BTC), qty_decimal),
         format_decimal(
-            accounts.get_account(bob).unwrap().avail(USDT),
+            bob_acc.get_balance(BTC).map(|b| b.avail()).unwrap_or(0),
+            qty_decimal
+        ),
+        format_decimal(
+            bob_acc.get_balance(USDT).map(|b| b.avail()).unwrap_or(0),
             price_decimal
         ),
         format_decimal(
-            accounts.get_account(bob).unwrap().frozen(USDT),
+            bob_acc.get_balance(USDT).map(|b| b.frozen()).unwrap_or(0),
             price_decimal
         )
     );
