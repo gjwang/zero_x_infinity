@@ -1,29 +1,28 @@
 mod engine;
 mod models;
 mod symbol_manager;
+mod user_account;
 
 use engine::OrderBook;
 use models::{Order, Side};
 use symbol_manager::SymbolManager;
+use user_account::AccountManager;
 
 /// Convert decimal string to u64 internal representation
-/// e.g., "100.50" with 2 decimals -> 10050
 fn parse_decimal(s: &str, decimals: u32) -> u64 {
     let multiplier = 10u64.pow(decimals);
 
     if let Some(pos) = s.find('.') {
         let (int_part, dec_part) = s.split_at(pos);
-        let dec_part = &dec_part[1..]; // remove the '.'
+        let dec_part = &dec_part[1..];
 
         let int_val: u64 = int_part.parse().unwrap_or(0);
         let dec_len = dec_part.len() as u32;
 
         if dec_len > decimals {
-            // Truncate extra decimals
             let dec_val: u64 = dec_part[..decimals as usize].parse().unwrap_or(0);
             int_val * multiplier + dec_val
         } else {
-            // Pad with zeros
             let dec_val: u64 = dec_part.parse().unwrap_or(0);
             int_val * multiplier + dec_val * 10u64.pow(decimals - dec_len)
         }
@@ -33,8 +32,7 @@ fn parse_decimal(s: &str, decimals: u32) -> u64 {
     }
 }
 
-/// Convert u64 internal representation to decimal string for display
-/// e.g., 10050 with 2 decimals -> "100.50"
+/// Convert u64 internal representation to decimal string
 fn format_decimal(value: u64, decimals: u32) -> String {
     let multiplier = 10u64.pow(decimals);
     let int_part = value / multiplier;
@@ -52,127 +50,197 @@ fn format_decimal(value: u64, decimals: u32) -> String {
     }
 }
 
+// Asset IDs
+const BTC: u32 = 1;
+const USDT: u32 = 2;
+
 fn main() {
-    // Load symbol configuration (simulating database load)
     let manager = SymbolManager::load_from_db();
 
-    // Get BTC_USDT symbol info
     let symbol = "BTC_USDT";
     let symbol_info = manager.get_symbol_info(symbol).expect("Symbol not found");
-    let price_decimals = symbol_info.price_decimal;
+    let base_asset_id = symbol_info.base_asset_id;
+    let quote_asset_id = symbol_info.quote_asset_id;
+    let price_decimal = symbol_info.price_decimal;
 
-    // Get BTC asset info for quantity decimals
-    let btc_info = manager
+    // Get qty precision from base asset
+    let base_asset = manager
         .assets
-        .get(&symbol_info.base_asset_id)
-        .expect("Asset not found");
-    let qty_display_decimals = btc_info.display_decimals;
+        .get(&base_asset_id)
+        .expect("Base asset not found");
+    let qty_decimal = base_asset.decimals;
+    let qty_unit = 10u64.pow(qty_decimal); // Precomputed divisor for cost calculation
 
-    println!("=== 0xInfinity: Stage 4 (BTree OrderBook) ===");
-    println!("Symbol: {} (ID: {})", symbol, symbol_info.symbol_id);
+    println!("=== 0xInfinity: Stage 5 (User Balance) ===");
     println!(
-        "Price Decimals: {}, Qty Display Decimals: {}",
-        price_decimals, qty_display_decimals
+        "Symbol: {} | Price: {} decimals, Qty: {} decimals",
+        symbol, price_decimal, qty_decimal
     );
+    println!("Cost formula: price * qty / {}", qty_unit);
     println!();
+
+    // Initialize account manager
+    let mut accounts = AccountManager::new();
+
+    // User 1 (Alice): Seller - has BTC
+    // User 2 (Bob): Buyer - has USDT
+    let alice = 1u64;
+    let bob = 2u64;
+
+    // Price unit for USDT (quote asset) - use price_decimal
+    let price_unit = 10u64.pow(price_decimal);
+
+    // Deposit initial funds
+    println!("[0] Initial deposits...");
+    accounts.deposit(alice, BTC, 100 * qty_unit); // 100 BTC
+    accounts.deposit(alice, USDT, 10_000 * price_unit); // 10,000 USDT
+    accounts.deposit(bob, USDT, 200_000 * price_unit); // 200,000 USDT
+    accounts.deposit(bob, BTC, 5 * qty_unit); // 5 BTC
+
+    println!(
+        "    Alice: {} BTC, {} USDT",
+        format_decimal(accounts.get_account(alice).unwrap().avail(BTC), qty_decimal),
+        format_decimal(
+            accounts.get_account(alice).unwrap().avail(USDT),
+            price_decimal
+        )
+    );
+    println!(
+        "    Bob:   {} BTC, {} USDT",
+        format_decimal(accounts.get_account(bob).unwrap().avail(BTC), qty_decimal),
+        format_decimal(
+            accounts.get_account(bob).unwrap().avail(USDT),
+            price_decimal
+        )
+    );
 
     let mut book = OrderBook::new();
 
-    // 1. Makers (Sells)
-    println!("[1] Makers coming in...");
+    // [1] Alice places sell orders
+    println!("\n[1] Alice places sell orders...");
 
-    // Sell 10 BTC @ $100.00
-    let price1 = parse_decimal("100.00", price_decimals);
-    let qty1 = parse_decimal("10.000", qty_display_decimals);
-    let result = book.add_order(Order::new(1, price1, qty1, Side::Sell));
-    println!(
-        "    Order 1: Sell {} BTC @ ${} -> {:?}",
-        format_decimal(qty1, qty_display_decimals),
-        format_decimal(price1, price_decimals),
-        result.order.status
-    );
+    // price = 100 USDT (in price_unit), qty = 10 BTC (in qty_unit)
+    let price1 = 100 * price_unit;
+    let qty1 = 10 * qty_unit;
 
-    // Sell 5 BTC @ $102.00
-    let price2 = parse_decimal("102.00", price_decimals);
-    let qty2 = parse_decimal("5.000", qty_display_decimals);
-    let result = book.add_order(Order::new(2, price2, qty2, Side::Sell));
-    println!(
-        "    Order 2: Sell {} BTC @ ${} -> {:?}",
-        format_decimal(qty2, qty_display_decimals),
-        format_decimal(price2, price_decimals),
-        result.order.status
-    );
-
-    // Sell 5 BTC @ $101.00
-    let price3 = parse_decimal("101.00", price_decimals);
-    let qty3 = parse_decimal("5.000", qty_display_decimals);
-    let result = book.add_order(Order::new(3, price3, qty3, Side::Sell));
-    println!(
-        "    Order 3: Sell {} BTC @ ${} -> {:?}",
-        format_decimal(qty3, qty_display_decimals),
-        format_decimal(price3, price_decimals),
-        result.order.status
-    );
-
-    println!(
-        "\n    Book State: Best Bid={:?}, Best Ask={:?}, Spread={:?}",
-        book.best_bid().map(|p| format_decimal(p, price_decimals)),
-        book.best_ask().map(|p| format_decimal(p, price_decimals)),
-        book.spread().map(|s| format_decimal(s, price_decimals))
-    );
-
-    // 2. Taker (Buy)
-    println!("\n[2] Taker eats liquidity...");
-    // Buy 12 BTC @ $101.50 (will match 10@100 + 2@101)
-    let price4 = parse_decimal("101.50", price_decimals);
-    let qty4 = parse_decimal("12.000", qty_display_decimals);
-    println!(
-        "    Order 4: Buy {} BTC @ ${}",
-        format_decimal(qty4, qty_display_decimals),
-        format_decimal(price4, price_decimals)
-    );
-    let result = book.add_order(Order::new(4, price4, qty4, Side::Buy));
-
-    println!("    Trades:");
-    for trade in &result.trades {
+    // Check balance and freeze funds (sell order freezes base asset)
+    if accounts.freeze(alice, BTC, qty1) {
+        let result = book.add_order(Order::new(1, alice, price1, qty1, Side::Sell));
         println!(
-            "      - Trade #{}: {} @ ${}",
-            trade.id,
-            format_decimal(trade.qty, qty_display_decimals),
-            format_decimal(trade.price, price_decimals)
+            "    Order 1: Sell {} BTC @ ${} -> {:?}",
+            format_decimal(qty1, qty_decimal),
+            format_decimal(price1, price_decimal),
+            result.order.status
         );
     }
+
+    let price2 = 101 * price_unit;
+    let qty2 = 5 * qty_unit;
+    if accounts.freeze(alice, BTC, qty2) {
+        let result = book.add_order(Order::new(2, alice, price2, qty2, Side::Sell));
+        println!(
+            "    Order 2: Sell {} BTC @ ${} -> {:?}",
+            format_decimal(qty2, qty_decimal),
+            format_decimal(price2, price_decimal),
+            result.order.status
+        );
+    }
+
     println!(
-        "    Order Status: {:?}, Filled: {}/{}",
-        result.order.status,
-        format_decimal(result.order.filled_qty, qty_display_decimals),
-        format_decimal(result.order.qty, qty_display_decimals)
+        "    Alice balance: avail={} BTC, frozen={} BTC",
+        format_decimal(accounts.get_account(alice).unwrap().avail(BTC), qty_decimal),
+        format_decimal(
+            accounts.get_account(alice).unwrap().frozen(BTC),
+            qty_decimal
+        )
+    );
+
+    // [2] Bob places a buy order that matches
+    println!("\n[2] Bob places buy order (taker)...");
+
+    let price3 = 101 * price_unit;
+    let qty3 = 12 * qty_unit;
+    // cost = price * qty / qty_unit (price is "USDT per BTC", qty is BTC)
+    let cost = price3 * qty3 / qty_unit;
+
+    println!(
+        "    Order 3: Buy {} BTC @ ${} (cost: {} USDT)",
+        format_decimal(qty3, qty_decimal),
+        format_decimal(price3, price_decimal),
+        format_decimal(cost, price_decimal)
+    );
+
+    if accounts.freeze(bob, USDT, cost) {
+        let result = book.add_order(Order::new(3, bob, price3, qty3, Side::Buy));
+
+        println!("    Trades:");
+        for trade in &result.trades {
+            println!(
+                "      - Trade #{}: {} BTC @ ${}",
+                trade.id,
+                format_decimal(trade.qty, qty_decimal),
+                format_decimal(trade.price, price_decimal)
+            );
+
+            // Settle each trade: cost = price * qty / qty_unit
+            let trade_cost = trade.price * trade.qty / qty_unit;
+            accounts.settle_trade(
+                trade.buyer_user_id,
+                trade.seller_user_id,
+                base_asset_id,
+                quote_asset_id,
+                trade.qty,
+                trade_cost,
+            );
+        }
+
+        // Note: For partial fills, refund unused frozen funds
+        let filled_cost = result
+            .trades
+            .iter()
+            .map(|t| t.price * t.qty / qty_unit)
+            .sum::<u64>();
+        let refund = cost - filled_cost;
+        if refund > 0 {
+            accounts.unfreeze(bob, USDT, refund);
+        }
+
+        println!("    Order status: {:?}", result.order.status);
+    } else {
+        println!("    REJECTED: Insufficient USDT balance");
+    }
+
+    // [3] Final balances
+    println!("\n[3] Final balances:");
+    println!(
+        "    Alice: {} BTC (frozen: {}), {} USDT",
+        format_decimal(accounts.get_account(alice).unwrap().avail(BTC), qty_decimal),
+        format_decimal(
+            accounts.get_account(alice).unwrap().frozen(BTC),
+            qty_decimal
+        ),
+        format_decimal(
+            accounts.get_account(alice).unwrap().avail(USDT),
+            price_decimal
+        )
+    );
+    println!(
+        "    Bob:   {} BTC, {} USDT (frozen: {})",
+        format_decimal(accounts.get_account(bob).unwrap().avail(BTC), qty_decimal),
+        format_decimal(
+            accounts.get_account(bob).unwrap().avail(USDT),
+            price_decimal
+        ),
+        format_decimal(
+            accounts.get_account(bob).unwrap().frozen(USDT),
+            price_decimal
+        )
     );
 
     println!(
-        "\n    Book State: Best Bid={:?}, Best Ask={:?}",
-        book.best_bid().map(|p| format_decimal(p, price_decimals)),
-        book.best_ask().map(|p| format_decimal(p, price_decimals))
-    );
-
-    // 3. Maker (Buy)
-    println!("\n[3] More makers...");
-    // Buy 10 BTC @ $99.00
-    let price5 = parse_decimal("99.00", price_decimals);
-    let qty5 = parse_decimal("10.000", qty_display_decimals);
-    let result = book.add_order(Order::new(5, price5, qty5, Side::Buy));
-    println!(
-        "    Order 5: Buy {} BTC @ ${} -> {:?}",
-        format_decimal(qty5, qty_display_decimals),
-        format_decimal(price5, price_decimals),
-        result.order.status
-    );
-
-    println!(
-        "\n    Final Book State: Best Bid={:?}, Best Ask={:?}, Spread={:?}",
-        book.best_bid().map(|p| format_decimal(p, price_decimals)),
-        book.best_ask().map(|p| format_decimal(p, price_decimals)),
-        book.spread().map(|s| format_decimal(s, price_decimals))
+        "\n    Book: Best Bid={:?}, Best Ask={:?}",
+        book.best_bid().map(|p| format_decimal(p, price_decimal)),
+        book.best_ask().map(|p| format_decimal(p, price_decimal))
     );
 
     println!("\n=== End of Simulation ===");
