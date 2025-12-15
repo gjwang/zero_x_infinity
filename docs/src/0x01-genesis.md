@@ -1,8 +1,8 @@
-# 0x01 Genesis: The Basic Engine
+# 0x01 创世纪: 基础引擎 (Genesis: The Basic Engine)
 
 这是 0xInfinity 的第一个版本。在这一阶段，我们构建了一个最简单的中央限价订单簿（CLOB）雏形。我们的目标是直观地展示现实世界的交易逻辑，使用标准的数据结构来管理订单。
 
-## 1. Visualizing the Orderbook (订单簿布局)
+## 1. 订单簿布局 (Visualizing the Orderbook)
 
 订单簿本质上是一个按价格排列的列表。我们将卖单（Sells）放在上方，买单（Buys）放在下方。中间的空隙被称为“价差（Spread）”。
 

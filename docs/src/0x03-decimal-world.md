@@ -1,10 +1,10 @@
-# 0x03: Decimal World (十进制世界)
+# 0x03: 十进制世界 (Decimal World)
 
 在上一章中，我们将所有的 `f64` 重构为 `u64`，解决了浮点数的精度问题。但这引入了一个新的问题：**客户端使用的是十进制，而我们内部使用的是整数，如何进行转换？**
 
 ---
 
-## 1. The Decimal Conversion Problem (十进制转换问题)
+## 1. 十进制转换问题 (The Decimal Conversion Problem)
 
 用户在下单时，输入的价格是 `"100.50"`，数量是 `"10.5"`。但我们的引擎内部使用的是 `u64` 整数：
 
@@ -41,7 +41,7 @@ fn format_decimal(value: u64, decimals: u32) -> String {
 
 ---
 
-## 2. u64 Max Value (u64 的最大值问题)
+## 2. u64 的最大值问题 (u64 Max Value)
 
 `u64` 的最大值是：
 
@@ -127,7 +127,7 @@ manager.add_asset(3, 8, 4, "ETH");
 
 ---
 
-## 3. Symbol Configuration (交易对配置)
+## 3. 交易对配置 (Symbol Configuration)
 
 不同的交易对可能有不同的精度要求：
 
