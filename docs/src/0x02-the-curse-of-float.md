@@ -1,6 +1,6 @@
-# 0x02: The Curse of Float (浮点数的诅咒)
+# 0x02: 浮点数的诅咒 (The Curse of Float)
 
-## 1. The Rookie Mistake (新手常犯的错误)
+## 1. 新手常犯的错误 (The Rookie Mistake)
 
 有经验的老手，应该马上看到 `price` 的类型是 `f64`，这是有问题的。因为我们在 `models.rs` 里有这行代码：
 
@@ -18,7 +18,7 @@ pub price: f64, // The root of all evil
 
 ---
 
-## 2. The Precision Trap (精度陷阱)
+## 2. 精度陷阱 (The Precision Trap)
 
 跑一下这段极其简单的代码（你可以在本项目中运行 `cargo run --example the_curse_of_float`）：
 
@@ -53,7 +53,7 @@ PANIC: Math is broken! Sum is 0.30000000000000004441
 
 ---
 
-## 3. Why Blockchain Hates Floats (区块链的零容忍)
+## 3. 区块链的零容忍 (Why Blockchain Hates Floats)
 
 如果了解过以太坊的智能合约语言就知道，在合约里面是没有任何浮点数的。很多人不知道为什么。
 
@@ -70,7 +70,7 @@ Node B (ARM) 算出结果：100.00000000000000
 
 ---
 
-## 4. The Decimal Temptation (Decimal 的诱惑与陷阱)
+## 4. Decimal 的诱惑与陷阱 (The Decimal Temptation)
 
 有人意识到 `f64` 的问题时，会寻找一种**精确的小数类型**，比如 `rust_decimal`。
 
@@ -88,7 +88,7 @@ Node B (ARM) 算出结果：100.00000000000000
 
 ---
 
-## 5. Need for Speed: f64 vs u64
+## 5. 性能之争: f64 vs u64 (Need for Speed)
 
 除了 100% 确定性，我们不使用 `Decimal` 的另一个核心理由是：**性能**。
 
