@@ -87,6 +87,8 @@ impl OrderBook {
                     self.trade_id_counter,
                     buy_order.id,
                     sell_order.id,
+                    buy_order.user_id,
+                    sell_order.user_id,
                     price, // Trade at the resting order's price (maker price)
                     trade_qty,
                 ));
@@ -144,6 +146,8 @@ impl OrderBook {
                     self.trade_id_counter,
                     buy_order.id,
                     sell_order.id,
+                    buy_order.user_id,
+                    sell_order.user_id,
                     price, // Trade at the resting order's price (maker price)
                     trade_qty,
                 ));
@@ -285,7 +289,7 @@ mod tests {
         let mut book = OrderBook::new();
 
         // Add a buy order - should rest since no sells
-        let result = book.add_order(Order::new(1, 100, 10, Side::Buy));
+        let result = book.add_order(Order::new(1, 1, 100, 10, Side::Buy));
 
         assert_eq!(result.trades.len(), 0);
         assert_eq!(result.order.filled_qty, 0);
@@ -298,11 +302,11 @@ mod tests {
         let mut book = OrderBook::new();
 
         // Add a sell order at 100
-        book.add_order(Order::new(1, 100, 10, Side::Sell));
+        book.add_order(Order::new(1, 1, 100, 10, Side::Sell));
         assert_eq!(book.best_ask(), Some(100));
 
         // Add a buy order at 100 - should fully match
-        let result = book.add_order(Order::new(2, 100, 10, Side::Buy));
+        let result = book.add_order(Order::new(2, 2, 100, 10, Side::Buy));
 
         assert_eq!(result.trades.len(), 1);
         assert_eq!(result.trades[0].qty, 10);
@@ -317,10 +321,10 @@ mod tests {
         let mut book = OrderBook::new();
 
         // Add a sell order for 10 units
-        book.add_order(Order::new(1, 100, 10, Side::Sell));
+        book.add_order(Order::new(1, 1, 100, 10, Side::Sell));
 
         // Add a buy order for 15 units - should partially match
-        let result = book.add_order(Order::new(2, 100, 15, Side::Buy));
+        let result = book.add_order(Order::new(2, 2, 100, 15, Side::Buy));
 
         assert_eq!(result.trades.len(), 1);
         assert_eq!(result.trades[0].qty, 10);
@@ -338,14 +342,14 @@ mod tests {
         let mut book = OrderBook::new();
 
         // Add sells at different prices
-        book.add_order(Order::new(1, 102, 5, Side::Sell));
-        book.add_order(Order::new(2, 100, 5, Side::Sell)); // Best ask
-        book.add_order(Order::new(3, 101, 5, Side::Sell));
+        book.add_order(Order::new(1, 1, 102, 5, Side::Sell));
+        book.add_order(Order::new(2, 1, 100, 5, Side::Sell)); // Best ask
+        book.add_order(Order::new(3, 1, 101, 5, Side::Sell));
 
         assert_eq!(book.best_ask(), Some(100));
 
         // Buy should match best price first
-        let result = book.add_order(Order::new(4, 105, 10, Side::Buy));
+        let result = book.add_order(Order::new(4, 2, 105, 10, Side::Buy));
 
         // Should match order 2 (price 100) then order 3 (price 101)
         assert_eq!(result.trades.len(), 2);
@@ -360,11 +364,11 @@ mod tests {
         let mut book = OrderBook::new();
 
         // Add sells at same price - FIFO order
-        book.add_order(Order::new(1, 100, 5, Side::Sell)); // First
-        book.add_order(Order::new(2, 100, 5, Side::Sell)); // Second
+        book.add_order(Order::new(1, 1, 100, 5, Side::Sell)); // First
+        book.add_order(Order::new(2, 1, 100, 5, Side::Sell)); // Second
 
         // Buy should match first order first
-        let result = book.add_order(Order::new(3, 100, 5, Side::Buy));
+        let result = book.add_order(Order::new(3, 2, 100, 5, Side::Buy));
 
         assert_eq!(result.trades.len(), 1);
         assert_eq!(result.trades[0].seller_order_id, 1); // FIFO: order 1 matched first
@@ -374,8 +378,8 @@ mod tests {
     fn test_cancel_order() {
         let mut book = OrderBook::new();
 
-        book.add_order(Order::new(1, 100, 10, Side::Buy));
-        book.add_order(Order::new(2, 100, 10, Side::Buy));
+        book.add_order(Order::new(1, 1, 100, 10, Side::Buy));
+        book.add_order(Order::new(2, 1, 100, 10, Side::Buy));
 
         assert_eq!(book.qty_at_price(100, Side::Buy), 20);
 
@@ -397,11 +401,11 @@ mod tests {
         assert_eq!(book.spread(), None);
 
         // Only buy - no spread
-        book.add_order(Order::new(1, 99, 10, Side::Buy));
+        book.add_order(Order::new(1, 1, 99, 10, Side::Buy));
         assert_eq!(book.spread(), None);
 
         // Add sell - now we have spread
-        book.add_order(Order::new(2, 101, 10, Side::Sell));
+        book.add_order(Order::new(2, 1, 101, 10, Side::Sell));
         assert_eq!(book.spread(), Some(2)); // 101 - 99 = 2
     }
 
@@ -410,12 +414,12 @@ mod tests {
         let mut book = OrderBook::new();
 
         // Add multiple small sells
-        book.add_order(Order::new(1, 100, 3, Side::Sell));
-        book.add_order(Order::new(2, 100, 3, Side::Sell));
-        book.add_order(Order::new(3, 100, 4, Side::Sell));
+        book.add_order(Order::new(1, 1, 100, 3, Side::Sell));
+        book.add_order(Order::new(2, 1, 100, 3, Side::Sell));
+        book.add_order(Order::new(3, 1, 100, 4, Side::Sell));
 
         // One big buy eats them all
-        let result = book.add_order(Order::new(4, 100, 10, Side::Buy));
+        let result = book.add_order(Order::new(4, 2, 100, 10, Side::Buy));
 
         assert_eq!(result.trades.len(), 3);
         assert_eq!(result.order.status, OrderStatus::Filled);

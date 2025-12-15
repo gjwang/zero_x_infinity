@@ -11,7 +11,7 @@ pub enum Side {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OrderType {
     Limit,  // Limit order: must specify price
-    Market, // Market order: execute at best available price
+    Market, // Market order: execute at best avail price
 }
 
 /// Order status
@@ -27,6 +27,7 @@ pub enum OrderStatus {
 #[derive(Debug, Clone)]
 pub struct Order {
     pub id: u64,
+    pub user_id: u64,    // User who placed this order
     pub price: u64,      // Price in internal units (e.g., 8 decimals)
     pub qty: u64,        // Original quantity
     pub filled_qty: u64, // How much has been filled
@@ -37,9 +38,10 @@ pub struct Order {
 
 impl Order {
     /// Create a new limit order
-    pub fn new(id: u64, price: u64, qty: u64, side: Side) -> Self {
+    pub fn new(id: u64, user_id: u64, price: u64, qty: u64, side: Side) -> Self {
         Self {
             id,
+            user_id,
             price,
             qty,
             filled_qty: 0,
@@ -50,9 +52,10 @@ impl Order {
     }
 
     /// Create a market order (price = 0 means "any price")
-    pub fn market(id: u64, qty: u64, side: Side) -> Self {
+    pub fn market(id: u64, user_id: u64, qty: u64, side: Side) -> Self {
         Self {
             id,
+            user_id,
             price: if side == Side::Buy { u64::MAX } else { 0 },
             qty,
             filled_qty: 0,
@@ -81,16 +84,28 @@ pub struct Trade {
     pub id: u64,
     pub buyer_order_id: u64,
     pub seller_order_id: u64,
+    pub buyer_user_id: u64,
+    pub seller_user_id: u64,
     pub price: u64,
     pub qty: u64,
 }
 
 impl Trade {
-    pub fn new(id: u64, buyer_order_id: u64, seller_order_id: u64, price: u64, qty: u64) -> Self {
+    pub fn new(
+        id: u64,
+        buyer_order_id: u64,
+        seller_order_id: u64,
+        buyer_user_id: u64,
+        seller_user_id: u64,
+        price: u64,
+        qty: u64,
+    ) -> Self {
         Self {
             id,
             buyer_order_id,
             seller_order_id,
+            buyer_user_id,
+            seller_user_id,
             price,
             qty,
         }
