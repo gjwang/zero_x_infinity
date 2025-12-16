@@ -75,7 +75,7 @@ output/           # 当前运行结果（gitignored）
 │ Layer 1: Client (display_decimals)                          │
 │   - 用户看到的数字                                            │
 │   - 可以根据业务需求调整                                        │
-│   - 例如：BTC 显示 2 位小数 (0.01 BTC)                         │
+│   - 例如：BTC 数量显示 6 位小数 (0.000001 BTC)              │
 └─────────────────────────────────────────────────────────────┘
                               ↓
                     自动转换 (× 10^decimals)
@@ -90,17 +90,35 @@ output/           # 当前运行结果（gitignored）
 
 ### 2.3 配置文件设计
 
-**assets_config.csv**：
+**assets_config.csv**（资产精度配置）：
 ```csv
 asset_id,asset,decimals,display_decimals
-1,BTC,8,2
-2,USDT,6,2
+1,BTC,8,6     # 最小单位 0.000001 BTC ≈ $0.085
+2,USDT,6,4   # 最小单位 0.0001 USDT
+3,ETH,8,4    # 最小单位 0.0001 ETH ≈ $0.40
 ```
 
 | 字段 | 可变性 | 说明 |
 |------|--------|------|
 | `decimals` | ⚠️ **永不改变** | 定义最小单位，改变会破坏所有现有数据 |
-| `display_decimals` | ✅ 可动态调整 | 可根据市场情况随时调整 |
+| `display_decimals` | ✅ 可动态调整 | 用于**数量 (qty)** 的客户端精度 |
+
+**symbols_config.csv**（交易对配置）：
+```csv
+symbol_id,symbol,base_asset_id,quote_asset_id,price_decimal,price_display_decimal
+0,BTC_USDT,1,2,6,2    # 价格最小单位 $0.01
+1,ETH_USDT,3,2,6,2
+```
+
+**关键设计：精度来源**
+
+| 订单字段 | 精度来源 | 配置位置 |
+|----------|----------|----------|
+| `qty` (数量) | `base_asset.display_decimals` | assets_config.csv |
+| `price` (价格) | `symbol.price_display_decimal` | symbols_config.csv |
+
+> ⚠️ 注意：**price 精度来自 symbol 配置，不是 quote_asset！**
+> 这样设计是因为同一个 quote asset（如 USDT）在不同交易对中可能有不同的价格精度。
 
 **为什么 decimals 不能改变？**
 
@@ -113,7 +131,7 @@ asset_id,asset,decimals,display_decimals
 
 这只是显示层，不影响存储：
 - 原来显示 0.12345678 BTC
-- 调整后显示 0.12 BTC
+- 调整后显示 0.123456 BTC（6位）
 - 内部存储仍然是 12345678 satoshi
 
 ---
