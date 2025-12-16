@@ -105,6 +105,35 @@ pub fn load_symbol_manager() -> (SymbolManager, u32) {
     );
     println!("  Internal decimals: base={}", symbol_info.base_decimals);
 
+    // Calculate and display max tradeable value (overflow safety check)
+    // For price * qty to not overflow u64, we calculate max qty at a reference price
+    let quote_decimals = manager
+        .get_asset_decimal(symbol_info.quote_asset_id)
+        .unwrap_or(6);
+    let qty_scale = 10u64.pow(symbol_info.base_decimals);
+
+    // Reference price: 100,000 (e.g., BTC @ $100k)
+    let ref_price_human = 100_000u64;
+    let ref_price_scaled = ref_price_human * 10u64.pow(quote_decimals);
+
+    // Max qty (in base units) before overflow: u64::MAX / ref_price_scaled
+    let max_qty_units = u64::MAX / ref_price_scaled;
+    let max_qty_display = max_qty_units as f64 / qty_scale as f64;
+
+    let base_name = manager
+        .get_asset_name(symbol_info.base_asset_id)
+        .unwrap_or("BASE".to_string());
+
+    println!(
+        "  ⚠️  Max tradeable @ ${}: {:.2} {} per order (u64 safe)",
+        ref_price_human, max_qty_display, base_name
+    );
+
+    // Warn if max tradeable is suspiciously low
+    if max_qty_display < 100.0 {
+        println!("  ⚠️  WARNING: Max tradeable is LOW! Consider reducing quote asset decimals.");
+    }
+
     (manager, active_symbol_id)
 }
 
