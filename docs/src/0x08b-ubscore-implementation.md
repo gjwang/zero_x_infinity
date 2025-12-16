@@ -550,42 +550,63 @@ diff baseline/sorted.csv output/sorted.csv
 
 这样无论执行顺序如何，排序后结果相同。
 
-### 10.4 生产环境：DB Upsert + 幂等设计
+### 10.4 最终方案：分离 Version 空间
 
-**问题**：Crash 后 Replay，事件到达顺序可能与原运行不同，导致 DB version 检查失败。
+**核心洞察**：Pipeline 中 Lock 和 Settle 交错顺序不确定，但各自队列内顺序确定。
 
-**解决方案**：DB 使用 Upsert + 幂等操作
+```rust
+struct Balance {
+    avail: u64,
+    frozen: u64,
+    lock_version: u64,    // 只在 lock/unlock 时递增
+    settle_version: u64,  // 只在 settle 时递增
+}
 
-```sql
--- 主键使用 (user_id, asset_id, event_source, event_id)
--- 不依赖 version 做写入校验
-
-INSERT INTO balance_events (
-    user_id, asset_id, 
-    event_source, event_id,  -- 'order:123' 或 'trade:456'
-    op_type, delta, balance_after
-)
-ON CONFLICT (user_id, asset_id, event_source, event_id) 
-DO NOTHING;  -- 幂等：重复到达直接忽略
+struct BalanceEvent {
+    user_id: u64,
+    asset_id: u32,
+    event_type: EventType,  // Lock | Unlock | Settle
+    version: u64,           // 只在同类型内递增
+    source_id: u64,         // order_seq_id | trade_id
+    delta: i64,
+}
 ```
 
-**设计原则**：
+**关键设计**：
 
-1. **幂等写入** - 相同 (user_id, asset_id, event_source, event_id) 只会写一次
-2. **乱序容忍** - 事件可以任意顺序到达 DB
-3. **version 仅用于审计** - 不用于写入校验，读取时按 event_id 排序重建顺序
-4. **最终一致** - 无论到达顺序如何，最终状态相同
+| Version 空间 | 递增条件 | 排序依据 |
+|-------------|----------|----------|
+| lock_version | Lock/Unlock 事件 | order_seq_id |
+| settle_version | Settle 事件 | trade_id |
+
+**验证策略**：
 
 ```
-事件到达顺序：[E3, E1, E5, E2, E4]
-DB 存储后：   {E1, E2, E3, E4, E5}  -- 主键保证唯一
-读取排序：    [E1, E2, E3, E4, E5]  -- ORDER BY event_id
+不验证：某时刻的"快照"是否一致（不可能一致）
+验证：  处理完成后的"最终集合"是否一致
+
+分别验证：
+  1. Lock 事件集合（按 lock_version 排序）→ 1:1 对应 order_seq_id
+  2. Settle 事件集合（按 settle_version 排序）→ 1:1 对应 trade_id
+  3. 最终余额 → 完全相同
+```
+
+**为什么有效**：
+
+```
+Order Queue: [O1, O2, O3] → 严格按 order_seq_id 顺序消费
+Trade Queue: [T1, T2]     → 严格按 trade_id 顺序消费
+
+无论两个队列如何交错：
+  - lock_version 1 永远对应 O1
+  - lock_version 2 永远对应 O2  
+  - settle_version 1 永远对应 T1
 ```
 
 ### 10.5 下一章任务 (0x08c)
 
-1. **扩展 LedgerEntry** - 添加 `event_source` 和 `op_type`
-2. **记录所有余额操作** - lock/unlock/spend_frozen
-3. **验证 version 连续性** - per-user-per-asset
-4. **更新 E2E 测试** - 排序后比较
-5. **实现 Upsert 幂等写入** - 乱序容忍
+1. **实现分离 Version 空间** - lock_version / settle_version
+2. **扩展 BalanceEvent** - 添加 event_type, version, source_id
+3. **记录所有余额操作** - lock/unlock/settle
+4. **分类验证测试** - Lock 集合验证 / Settle 集合验证 / 最终余额验证
+
