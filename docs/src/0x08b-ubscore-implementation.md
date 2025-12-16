@@ -727,6 +727,86 @@ Pipeline 并发 ⟺ 过程顺序不确定（不可避免）
   - 分类验证取代全局验证
 ```
 
+### 11.6 因果链设计
+
+#### 因果关系模型
+
+```
+Order(seq=5) ─────→ Lock(source=order:5)
+                          ↓ (matching with Order seq=2)
+Trade(id=3, taker=5, maker=2)
+                          ↓
+Settle(source=trade:3) for buyer
+Settle(source=trade:3) for seller
+```
+
+#### 数据结构
+
+```rust
+struct BalanceEvent {
+    user_id: u64,
+    asset_id: u32,
+    event_type: EventType,  // Lock | Unlock | Settle
+    version: u64,           // 只在同类型内递增
+    
+    // 因果链
+    source_type: SourceType,  // Order | Trade
+    source_id: u64,           // order_seq_id | trade_id
+    
+    delta: i64,
+}
+
+struct Trade {
+    id: u64,
+    taker_order_seq: u64,  // 因果链 → 追溯到 taker 订单
+    maker_order_seq: u64,  // 因果链 → 追溯到 maker 订单
+    // ...
+}
+```
+
+#### 验证规则
+
+```
+1. Lock(source=order:N) → 必须存在 Order(seq=N) in WAL
+
+2. Trade(taker=N, maker=M) → 
+   必须存在 Lock(source=order:N) 和 Lock(source=order:M)
+   
+3. Settle(source=trade:T) → 必须存在 Trade(id=T)
+```
+
+#### 实时 vs 审计
+
+| 职责 | 实时（UBSCore） | 审计（离线工具） |
+|------|-----------------|------------------|
+| 追踪 pending_orders | ❌ 不追踪 | ✅ 从 WAL 重建 |
+| 验证因果链 | ❌ 不验证 | ✅ 完整验证 |
+| 信任 frozen | ✅ 直接使用 | N/A |
+
+**设计决策**：UBSCore 不追踪 pending_orders，信任 Balance.frozen。因果链验证是审计工具的职责。
+
+#### 优点
+
+1. **UBSCore 更简洁** - 不需要维护 pending_orders HashMap
+2. **更低延迟** - 减少实时路径的操作
+3. **关注点分离** - 审计验证与实时处理分离
+4. **WAL 是唯一事实来源** - 所有状态可从 WAL 重建
+
+#### 缺点
+
+1. **实时无法验证因果** - 恶意 Trade 可能在 Lock 之前到达（需要信任 ME）
+2. **依赖服务间信任** - ME 只发送有效 Trade，UBS 信任但不验证
+3. **审计有延迟** - 问题只能事后发现，不是实时阻止
+
+#### 缓解措施
+
+```
+1. ME 是可信服务 - 只产生合法 Trade
+2. Trade 携带 taker_order_seq/maker_order_seq - 可追溯
+3. 定期审计 - 及时发现异常
+4. Balance.frozen 仍然保护 - 即使因果链断裂，余额不会负数
+```
+
 ---
 
 ## 12. 下一章任务 (0x08c)
@@ -736,3 +816,4 @@ Pipeline 并发 ⟺ 过程顺序不确定（不可避免）
 3. **记录所有余额操作** - lock/unlock/settle
 4. **分类验证测试** - Lock 集合验证 / Settle 集合验证 / 最终余额验证
 5. **Ring Buffer 集成** - crossbeam-queue 连接各阶段
+6. **因果链审计工具** - 离线验证 Order → Lock → Trade → Settle
