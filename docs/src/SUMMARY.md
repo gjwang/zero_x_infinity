@@ -13,4 +13,5 @@
 
 ---
 
-- [Performance Report (CI Generated)](./perf-report.md)
+- [Performance Report (Latest)](./perf-report.md)
+- [Performance History](./perf-history/README.md)
