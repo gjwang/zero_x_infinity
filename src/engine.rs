@@ -271,18 +271,24 @@ impl OrderBook {
     /// Iterate over all orders in the book (for dumping final state)
     /// Returns: (side, order) pairs
     pub fn iter_orders(&self) -> impl Iterator<Item = (&Order,)> + '_ {
-        let bids = self.bids.values()
+        let bids = self
+            .bids
+            .values()
             .flat_map(|level| level.iter())
             .map(|order| (order,));
-        let asks = self.asks.values()
+        let asks = self
+            .asks
+            .values()
             .flat_map(|level| level.iter())
             .map(|order| (order,));
         bids.chain(asks)
     }
-    
+
     /// Get all orders as a Vec (for final dump)
     pub fn all_orders(&self) -> Vec<&Order> {
-        let mut orders: Vec<&Order> = self.bids.values()
+        let mut orders: Vec<&Order> = self
+            .bids
+            .values()
             .flat_map(|level| level.iter())
             .chain(self.asks.values().flat_map(|level| level.iter()))
             .collect();
