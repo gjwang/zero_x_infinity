@@ -729,96 +729,79 @@ Pipeline 并发 ⟺ 过程顺序不确定（不可避免）
 
 ### 11.6 因果链设计
 
-#### 因果关系模型
+#### 什么是因果链
+
+每个余额变更事件都记录其**触发源**，形成可追溯的链条：
 
 ```
-Order(seq=5) ─────→ Lock(source=order:5)
-                          ↓ (matching with Order seq=2)
-Trade(id=3, taker=5, maker=2)
-                          ↓
-Settle(source=trade:3) for buyer
-Settle(source=trade:3) for seller
+Order(seq=5) ──触发──→ Lock(buyer USDT)
+     │
+     ├──→ 与 Order(seq=2) 撮合
+     │
+     └──→ Trade(id=3)
+              │
+              ├──触发──→ Settle(buyer: -USDT, +BTC)
+              └──触发──→ Settle(seller: -BTC, +USDT)
 ```
 
-#### 数据结构
+#### 如何记录因果关系
 
 ```rust
+// 每个 BalanceEvent 记录其来源
 struct BalanceEvent {
     user_id: u64,
     asset_id: u32,
-    event_type: EventType,  // Lock | Unlock | Settle
-    version: u64,           // 只在同类型内递增
+    event_type: EventType,   // Lock | Settle
+    version: u64,            // per event_type
     
-    // 因果链
-    source_type: SourceType,  // Order | Trade
-    source_id: u64,           // order_seq_id | trade_id
-    
+    source_type: SourceType, // Order | Trade
+    source_id: u64,          // order_seq_id | trade_id
     delta: i64,
 }
 
+// Trade 也记录其来源订单
 struct Trade {
     id: u64,
-    taker_order_seq: u64,  // 因果链 → 追溯到 taker 订单
-    maker_order_seq: u64,  // 因果链 → 追溯到 maker 订单
-    // ...
+    taker_order_seq: u64,    // 触发撮合的 taker 订单
+    maker_order_seq: u64,    // 被撮合的 maker 订单
 }
 ```
 
-#### 验证规则
+#### 因果链的价值：快速定位错误
 
-```
-1. Lock(source=order:N) → 必须存在 Order(seq=N) in WAL
+当系统出现问题时，因果链可以精确定位：
 
-2. Trade(taker=N, maker=M) → 
-   必须存在 Lock(source=order:N) 和 Lock(source=order:M)
-   
-3. Settle(source=trade:T) → 必须存在 Trade(id=T)
-```
+| 异常现象 | 因果链断裂点 | 快速定位 |
+|----------|-------------|----------|
+| Settle 无对应 Lock | Lock(source=order:N) 不存在 | Order N 处理失败 |
+| Trade 无对应 Order | Trade.taker_order_seq 无效 | ME 或 Gateway 异常 |
+| Lock 无对应 Settle | Trade 未产生或丢失 | ME 处理失败 |
 
-#### 实时 vs 审计
+#### 验证方式
 
-| 职责 | 实时（UBSCore） | 审计（离线工具） |
-|------|-----------------|------------------|
-| 追踪 pending_orders | ❌ 不追踪 | ✅ 从 WAL 重建 |
-| 验证因果链 | ❌ 不验证 | ✅ 完整验证 |
-
-**设计决策**：实时路径保持简洁，因果链用于事后错误捕捉。
-
-#### 因果链的核心价值
-
-**不是关于"信任"，而是关于"可追溯性"和"错误捕捉"**：
-
-```
-                    ┌──────────────────────────────────┐
-    正常流程：      │ Order → Lock → Trade → Settle   │  ✓ 链完整
-                    └──────────────────────────────────┘
-                    
-                    ┌──────────────────────────────────┐
-    异常情况 1：    │ Trade → Settle (缺少 Lock)       │  ✗ 断链！
-                    └──────────────────────────────────┘
-                    → 审计立即发现：Trade 引用的 Order 没有对应的 Lock
-                    
-                    ┌──────────────────────────────────┐
-    异常情况 2：    │ Lock → Settle (缺少 Trade)       │  ✗ 断链！
-                    └──────────────────────────────────┘
-                    → 审计立即发现：Settle 引用的 Trade 不存在
+```sql
+-- 1. 检查所有 Lock 都有对应的 Order
+SELECT * FROM balance_events e
+WHERE e.event_type = 'Lock'
+  AND NOT EXISTS (SELECT 1 FROM order_wal w WHERE w.seq_id = e.source_id);
+  
+-- 2. 检查所有 Settle 都有对应的 Trade
+SELECT * FROM balance_events e
+WHERE e.event_type = 'Settle'
+  AND NOT EXISTS (SELECT 1 FROM trades t WHERE t.id = e.source_id);
 ```
 
-#### 优点
+#### 与 Version 空间的关系
 
-1. **快速定位错误** - 因果链断裂时，精确知道哪个环节出问题
-2. **完整审计轨迹** - 每个余额变更都可追溯到源头
-3. **UBSCore 更简洁** - 不需要维护 pending_orders HashMap
-4. **问题隔离** - 某个订单异常不影响其他订单
+| 设计 | 作用 | 验证时机 |
+|------|------|----------|
+| **lock_version** | 保证 Lock 事件顺序一致 | 分类验证 |
+| **settle_version** | 保证 Settle 事件顺序一致 | 分类验证 |
+| **source_id** | 追溯到触发源 | 因果链审计 |
 
-#### 这不是缺点
+#### 总结
 
-~~"实时无法验证因果"~~ → 这是**设计选择**，不是缺点
-
-**实时路径**：专注于余额检查（frozen 保护）
-**审计路径**：专注于因果验证（完整性检查）
-
-两者分工明确，各司其职。
+因果链让每个余额变更都有"来源证明"，出问题时可以快速追溯到具体的订单或成交。
 
 ---
 
