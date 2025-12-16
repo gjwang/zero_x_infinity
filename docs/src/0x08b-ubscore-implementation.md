@@ -487,3 +487,72 @@ fn test_buy_cost_real_world_overflow_case() {
 2. **金融系统禁止静默填充默认值**（如 `unwrap_or(u64::MAX)`）
 3. **精度设计要考虑乘法溢出边界**
 4. **多模式测试能发现隐藏 bug**（传统模式看似正确，UBSCore 暴露问题）
+
+---
+
+## 10. 待改进：Ledger 完整性与确定性
+
+### 10.1 当前 Ledger 不完整
+
+当前 Ledger 只记录**结算操作（credit/debit）**，缺失了其他余额变更：
+
+| 操作 | 当前记录 | 生产要求 |
+|------|----------|----------|
+| Deposit | ❌ | ✅ |
+| **Lock** | ❌ | ✅ |
+| **Unlock** | ❌ | ✅ |
+| Spend Frozen | ❌ | ✅ |
+| Credit | ✅ | ✅ |
+| Debit | ✅ | ✅ |
+
+**问题**：无法审计 lock/unlock 操作，无法验证 version 连续性。
+
+### 10.2 Pipeline 模式的确定性问题
+
+当采用 Ring Buffer 多阶段 Pipeline 时：
+
+```
+正常运行：[Lock1, Lock2, Lock3, Settle1, Settle2, Settle3]
+Crash 重放：[Lock1, Settle1, Lock2, Settle2, Lock3, Settle3]
+```
+
+**最终状态相同，但中间过程不同** → 无法直接 diff 比较。
+
+### 10.3 解决方案
+
+**方案 A：串行处理（当前实现）**
+- 每个订单完整处理后才处理下一个
+- 顺序完全确定
+- 缺点：无法利用 Pipeline 并行
+
+**方案 B：Event-Sourced Ledger（推荐）**
+
+每个 Ledger 条目绑定到**确定性事件来源**：
+
+```rust
+struct LedgerEntry {
+    user_id: UserId,
+    asset_id: AssetId,
+    event_source: EventSource,  // Order(seq_id), Trade(trade_id), Deposit(ref_id)
+    op_type: OpType,            // Lock, Unlock, SpendFrozen, Credit, Debit
+    delta: i64,
+    balance_after: u64,
+    version: u64,               // per (user_id, asset_id)
+}
+```
+
+**比较时按 `(event_source, event_id)` 排序**：
+
+```bash
+sort -t',' -k3,4 ledger.csv > sorted_ledger.csv
+diff baseline/sorted.csv output/sorted.csv
+```
+
+这样无论执行顺序如何，排序后结果相同。
+
+### 10.4 下一章任务 (0x08c)
+
+1. **扩展 LedgerEntry** - 添加 `event_source` 和 `op_type`
+2. **记录所有余额操作** - lock/unlock/spend_frozen
+3. **验证 version 连续性** - per-user-per-asset
+4. **更新 E2E 测试** - 排序后比较
