@@ -3,10 +3,10 @@
 //! This module handles all CSV file operations for configuration,
 //! orders, balances, and output snapshots.
 
-use crate::config::{AssetConfig, SymbolConfig, TradingConfig};
-use crate::core_types::{AssetId, UserId};
+use crate::core_types::UserId;
 use crate::models::{OrderType, Side};
 use crate::orderbook::OrderBook;
+use crate::symbol_manager::SymbolManager;
 use crate::user_account::UserAccount;
 use rustc_hash::FxHashMap;
 use std::fs::File;
@@ -25,112 +25,87 @@ pub const ORDERS_CSV: &str = "fixtures/orders.csv";
 // Configuration Loading
 // ============================================================
 
-/// Load asset configurations from CSV
-pub fn load_assets_config(path: &str) -> FxHashMap<AssetId, AssetConfig> {
-    let file = File::open(path).expect("Failed to open assets_config.csv");
-    let reader = BufReader::new(file);
+/// Load SymbolManager from CSV files
+///
+/// Returns (SymbolManager, active_symbol_id)
+pub fn load_symbol_manager() -> (SymbolManager, u32) {
+    let mut manager = SymbolManager::new();
 
-    let mut assets = FxHashMap::default();
+    // Load assets first
+    let file = File::open(ASSETS_CONFIG_CSV).expect("Failed to open assets_config.csv");
+    let reader = BufReader::new(file);
+    let mut asset_count = 0;
 
     for line in reader.lines().skip(1) {
         let line = line.unwrap();
         let parts: Vec<&str> = line.split(',').collect();
         if parts.len() >= 4 {
-            let asset = AssetConfig {
-                asset_id: parts[0].parse().unwrap(),
-                asset: parts[1].to_string(),
-                decimals: parts[2].parse().unwrap(),
-                display_decimals: parts[3].parse().unwrap(),
-            };
-            assets.insert(asset.asset_id, asset);
+            let asset_id: u32 = parts[0].parse().unwrap();
+            let name = parts[1];
+            let decimals: u32 = parts[2].parse().unwrap();
+            let display_decimals: u32 = parts[3].parse().unwrap();
+            manager.add_asset(asset_id, decimals, display_decimals, name);
+            asset_count += 1;
         }
     }
+    println!("Loaded {} assets from {}", asset_count, ASSETS_CONFIG_CSV);
 
-    println!("Loaded {} assets from {}", assets.len(), path);
-    assets
-}
-
-/// Load symbol configurations from CSV
-pub fn load_symbols_config(path: &str) -> Vec<SymbolConfig> {
-    let file = File::open(path).expect("Failed to open symbols_config.csv");
+    // Load symbols
+    let file = File::open(SYMBOLS_CONFIG_CSV).expect("Failed to open symbols_config.csv");
     let reader = BufReader::new(file);
-
-    let mut symbols = Vec::new();
+    let mut symbol_count = 0;
+    let mut first_symbol_id: Option<u32> = None;
 
     for line in reader.lines().skip(1) {
         let line = line.unwrap();
         let parts: Vec<&str> = line.split(',').collect();
         if parts.len() >= 6 {
-            symbols.push(SymbolConfig {
-                symbol_id: parts[0].parse().unwrap(),
-                symbol: parts[1].to_string(),
-                base_asset_id: parts[2].parse().unwrap(),
-                quote_asset_id: parts[3].parse().unwrap(),
-                price_decimal: parts[4].parse().unwrap(),
-                price_display_decimal: parts[5].parse().unwrap(),
-            });
+            let symbol_id: u32 = parts[0].parse().unwrap();
+            let symbol = parts[1];
+            let base_asset_id: u32 = parts[2].parse().unwrap();
+            let quote_asset_id: u32 = parts[3].parse().unwrap();
+            let price_decimal: u32 = parts[4].parse().unwrap();
+            let price_display_decimal: u32 = parts[5].parse().unwrap();
+
+            manager
+                .insert_symbol(
+                    symbol,
+                    symbol_id,
+                    base_asset_id,
+                    quote_asset_id,
+                    price_decimal,
+                    price_display_decimal,
+                )
+                .expect("Failed to insert symbol - check asset exists");
+
+            if first_symbol_id.is_none() {
+                first_symbol_id = Some(symbol_id);
+            }
+            symbol_count += 1;
         }
     }
+    println!(
+        "Loaded {} symbols from {}",
+        symbol_count, SYMBOLS_CONFIG_CSV
+    );
 
-    println!("Loaded {} symbols from {}", symbols.len(), path);
-    symbols
-}
-
-/// Load complete trading configuration
-pub fn load_trading_config() -> TradingConfig {
-    let assets = load_assets_config(ASSETS_CONFIG_CSV);
-    let symbols = load_symbols_config(SYMBOLS_CONFIG_CSV);
-
-    // Use first symbol (BTC_USDT) as active
-    let active_symbol = symbols.first().cloned().expect("No symbols configured");
-
-    // Internal storage decimals
-    let base_decimals = assets
-        .get(&active_symbol.base_asset_id)
-        .map(|a| a.decimals)
-        .unwrap_or(8);
-    let quote_decimals = assets
-        .get(&active_symbol.quote_asset_id)
-        .map(|a| a.decimals)
-        .unwrap_or(6);
-
-    // Client-facing display decimals
-    let base_display_decimals = assets
-        .get(&active_symbol.base_asset_id)
-        .map(|a| a.display_decimals)
-        .unwrap_or(6);
-    let price_display_decimals = active_symbol.price_display_decimal;
+    // Use first symbol as active
+    let active_symbol_id = first_symbol_id.expect("No symbols configured");
+    let symbol_info = manager.get_symbol_info_by_id(active_symbol_id).unwrap();
 
     println!(
         "Active symbol: {} (base={}, quote={})",
-        active_symbol.symbol,
-        assets
-            .get(&active_symbol.base_asset_id)
-            .map(|a| a.asset.as_str())
-            .unwrap_or("?"),
-        assets
-            .get(&active_symbol.quote_asset_id)
-            .map(|a| a.asset.as_str())
-            .unwrap_or("?")
+        symbol_info.symbol,
+        manager
+            .get_asset_name(symbol_info.base_asset_id)
+            .unwrap_or("?".to_string()),
+        manager
+            .get_asset_name(symbol_info.quote_asset_id)
+            .unwrap_or("?".to_string())
     );
-    println!(
-        "  Internal decimals: base={}, quote={}",
-        base_decimals, quote_decimals
-    );
-    println!(
-        "  Display decimals:  qty={}, price={}",
-        base_display_decimals, price_display_decimals
-    );
+    println!("  Internal decimals: base={}", symbol_info.base_decimals);
 
-    TradingConfig {
-        assets,
-        symbols,
-        active_symbol,
-        base_decimals,
-        quote_decimals,
-        qty_display_decimals: base_display_decimals,
-        price_display_decimals,
-    }
+    (manager, active_symbol_id)
 }
 
 // ============================================================
@@ -148,10 +123,7 @@ pub struct InputOrder {
 }
 
 /// Load balances from CSV and create user accounts with deposits
-pub fn load_balances_and_deposit(
-    path: &str,
-    _config: &TradingConfig,
-) -> FxHashMap<UserId, UserAccount> {
+pub fn load_balances_and_deposit(path: &str) -> FxHashMap<UserId, UserAccount> {
     let file = File::open(path).expect("Failed to open balances.csv");
     let reader = BufReader::new(file);
 
@@ -183,12 +155,19 @@ pub fn load_balances_and_deposit(
 }
 
 /// Load orders from CSV and convert to internal format
-pub fn load_orders(path: &str, config: &TradingConfig) -> Vec<InputOrder> {
+pub fn load_orders(path: &str, manager: &SymbolManager, active_symbol_id: u32) -> Vec<InputOrder> {
     let file = File::open(path).expect("Failed to open orders.csv");
     let reader = BufReader::new(file);
 
-    let base_multiplier = 10u64.pow(config.base_decimals);
-    let quote_multiplier = 10u64.pow(config.quote_decimals);
+    let symbol_info = manager
+        .get_symbol_info_by_id(active_symbol_id)
+        .expect("Active symbol not found");
+    let base_multiplier = symbol_info.qty_unit(); // 10^base_decimals
+    let quote_multiplier = 10u64.pow(
+        manager
+            .get_asset_decimal(symbol_info.quote_asset_id)
+            .unwrap_or(6),
+    );
 
     let mut orders = Vec::new();
 
@@ -234,7 +213,8 @@ pub fn load_orders(path: &str, config: &TradingConfig) -> Vec<InputOrder> {
 /// Dump balances to CSV file
 pub fn dump_balances(
     accounts: &FxHashMap<UserId, UserAccount>,
-    config: &TradingConfig,
+    manager: &SymbolManager,
+    active_symbol_id: u32,
     path: &str,
 ) {
     let mut file = File::create(path).unwrap();
@@ -244,8 +224,11 @@ pub fn dump_balances(
     let mut user_ids: Vec<_> = accounts.keys().collect();
     user_ids.sort();
 
-    let base_id = config.active_symbol.base_asset_id;
-    let quote_id = config.active_symbol.quote_asset_id;
+    let symbol_info = manager
+        .get_symbol_info_by_id(active_symbol_id)
+        .expect("Active symbol not found");
+    let base_id = symbol_info.base_asset_id;
+    let quote_id = symbol_info.quote_asset_id;
 
     for user_id in user_ids {
         let account = accounts.get(user_id).unwrap();

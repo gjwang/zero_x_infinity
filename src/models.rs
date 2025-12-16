@@ -87,16 +87,37 @@ impl InternalOrder {
         self.filled_qty >= self.qty
     }
 
-    /// Calculate order cost (amount to lock) - no parameters needed!
+    /// Calculate order cost (amount to lock)
     ///
-    /// Uses checked_mul to detect overflow:
-    /// - Buy: price × qty (both already scaled by Gateway)
-    /// - Sell: qty
-    /// - overflow → u64::MAX → order rejected later
+    /// # Arguments
+    /// - `qty_unit`: Base asset unit (e.g., 10^8 for BTC) for quote amount calculation
+    ///
+    /// # Formula
+    /// - Buy: `price × qty / qty_unit` = quote amount to lock
+    /// - Sell: `qty` = base amount to lock
+    ///
+    /// # Example (BTC/USDT with base_decimals=8, quote_decimals=6)
+    /// ```text
+    /// Buy 1 BTC @ 30000 USDT:
+    ///   price = 30000_000000 (30000 USDT, 6 decimals)
+    ///   qty   = 1_00000000   (1 BTC, 8 decimals)
+    ///   qty_unit = 10^8
+    ///   cost = 30000_000000 * 1_00000000 / 10^8 = 30000_000000 (30000 USDT)
+    ///
+    /// Sell 1 BTC:
+    ///   cost = 1_00000000 (1 BTC, lock base asset directly)
+    /// ```
+    ///
+    /// # Overflow handling
+    /// Uses checked_mul to detect overflow → returns u64::MAX → order rejected later
     #[inline]
-    pub fn calculate_cost(&self) -> u64 {
+    pub fn calculate_cost(&self, qty_unit: u64) -> u64 {
         match self.side {
-            Side::Buy => self.price.checked_mul(self.qty).unwrap_or(u64::MAX),
+            Side::Buy => self
+                .price
+                .checked_mul(self.qty)
+                .map(|v| v / qty_unit)
+                .unwrap_or(u64::MAX),
             Side::Sell => self.qty,
         }
     }
@@ -149,4 +170,188 @@ impl Trade {
 pub struct OrderResult {
     pub order: InternalOrder,
     pub trades: Vec<Trade>,
+}
+
+// ============================================================
+// TESTS
+// ============================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Test constants matching real config
+    const BTC_DECIMALS: u32 = 8;
+    const USDT_DECIMALS: u32 = 6;
+    const QTY_UNIT: u64 = 10u64.pow(BTC_DECIMALS); // 10^8 for BTC
+
+    /// Helper to create a Buy order
+    fn buy_order(price: u64, qty: u64) -> InternalOrder {
+        InternalOrder::new(1, 1, 0, price, qty, Side::Buy)
+    }
+
+    /// Helper to create a Sell order
+    fn sell_order(price: u64, qty: u64) -> InternalOrder {
+        InternalOrder::new(1, 1, 0, price, qty, Side::Sell)
+    }
+
+    // ============================================================
+    // Buy Order Tests - cost = price × qty / qty_unit
+    // ============================================================
+
+    #[test]
+    fn test_buy_cost_1_btc_at_30000_usdt() {
+        // Buy 1 BTC @ 30000 USDT
+        // price = 30000 * 10^6 = 30_000_000_000 (30000 USDT in internal units)
+        // qty = 1 * 10^8 = 100_000_000 (1 BTC in satoshi)
+        // cost = 30_000_000_000 * 100_000_000 / 10^8 = 30_000_000_000 (30000 USDT)
+        let price = 30000u64 * 10u64.pow(USDT_DECIMALS);
+        let qty = 1u64 * 10u64.pow(BTC_DECIMALS);
+        let order = buy_order(price, qty);
+
+        let cost = order.calculate_cost(QTY_UNIT);
+        assert_eq!(cost, 30_000_000_000); // 30000 USDT in internal units
+    }
+
+    #[test]
+    fn test_buy_cost_0_1_btc_at_30000_usdt() {
+        // Buy 0.1 BTC @ 30000 USDT
+        // price = 30000 * 10^6 = 30_000_000_000
+        // qty = 0.1 * 10^8 = 10_000_000
+        // cost = 30_000_000_000 * 10_000_000 / 10^8 = 3_000_000_000 (3000 USDT)
+        let price = 30000u64 * 10u64.pow(USDT_DECIMALS);
+        let qty = 10_000_000u64; // 0.1 BTC
+        let order = buy_order(price, qty);
+
+        let cost = order.calculate_cost(QTY_UNIT);
+        assert_eq!(cost, 3_000_000_000); // 3000 USDT
+    }
+
+    #[test]
+    fn test_buy_cost_0_00001_btc_at_50000_usdt() {
+        // Buy 0.00001 BTC @ 50000 USDT
+        // price = 50000 * 10^6 = 50_000_000_000
+        // qty = 0.00001 * 10^8 = 1000 satoshi
+        // cost = 50_000_000_000 * 1000 / 10^8 = 500_000 (0.5 USDT)
+        let price = 50000u64 * 10u64.pow(USDT_DECIMALS);
+        let qty = 1000u64; // 0.00001 BTC
+        let order = buy_order(price, qty);
+
+        let cost = order.calculate_cost(QTY_UNIT);
+        assert_eq!(cost, 500_000); // 0.5 USDT
+    }
+
+    #[test]
+    fn test_buy_cost_with_decimal_price() {
+        // Buy 1 BTC @ 30000.50 USDT
+        // price = 30000.50 * 10^6 = 30_000_500_000
+        // qty = 1 * 10^8 = 100_000_000
+        // cost = 30_000_500_000 * 100_000_000 / 10^8 = 30_000_500_000 (30000.50 USDT)
+        let price = 30_000_500_000u64; // 30000.50 USDT
+        let qty = 100_000_000u64; // 1 BTC
+        let order = buy_order(price, qty);
+
+        let cost = order.calculate_cost(QTY_UNIT);
+        assert_eq!(cost, 30_000_500_000); // 30000.50 USDT
+    }
+
+    // ============================================================
+    // Sell Order Tests - cost = qty (no division needed)
+    // ============================================================
+
+    #[test]
+    fn test_sell_cost_1_btc() {
+        // Sell 1 BTC - cost is just the qty
+        let qty = 100_000_000u64; // 1 BTC
+        let order = sell_order(30_000_000_000, qty);
+
+        let cost = order.calculate_cost(QTY_UNIT);
+        assert_eq!(cost, 100_000_000); // 1 BTC in satoshi
+    }
+
+    #[test]
+    fn test_sell_cost_0_5_btc() {
+        // Sell 0.5 BTC
+        let qty = 50_000_000u64; // 0.5 BTC
+        let order = sell_order(25_000_000_000, qty);
+
+        let cost = order.calculate_cost(QTY_UNIT);
+        assert_eq!(cost, 50_000_000); // 0.5 BTC
+    }
+
+    #[test]
+    fn test_sell_cost_ignores_price() {
+        // Sell order cost should be independent of price
+        let qty = 100_000_000u64;
+        let order1 = sell_order(10_000_000_000, qty); // @ 10000 USDT
+        let order2 = sell_order(100_000_000_000, qty); // @ 100000 USDT
+
+        assert_eq!(order1.calculate_cost(QTY_UNIT), qty);
+        assert_eq!(order2.calculate_cost(QTY_UNIT), qty);
+    }
+
+    // ============================================================
+    // Edge Cases and Overflow Tests
+    // ============================================================
+
+    #[test]
+    fn test_buy_cost_overflow_returns_max() {
+        // Test overflow protection
+        // price = u64::MAX, qty = u64::MAX → overflow → u64::MAX
+        let order = buy_order(u64::MAX, u64::MAX);
+        let cost = order.calculate_cost(QTY_UNIT);
+        assert_eq!(cost, u64::MAX);
+    }
+
+    #[test]
+    fn test_buy_cost_near_overflow_boundary() {
+        // Test near overflow boundary
+        // price = 10^18, qty = 10^8 → 10^26 (overflows u64::MAX ~1.8×10^19)
+        let price = 1_000_000_000_000_000_000u64; // 10^18
+        let qty = 100_000_000u64; // 10^8
+        let order = buy_order(price, qty);
+        let cost = order.calculate_cost(QTY_UNIT);
+        assert_eq!(cost, u64::MAX); // Overflow detected
+    }
+
+    #[test]
+    fn test_buy_cost_zero_price() {
+        // Zero price → cost = 0
+        let order = buy_order(0, 100_000_000);
+        assert_eq!(order.calculate_cost(QTY_UNIT), 0);
+    }
+
+    #[test]
+    fn test_buy_cost_zero_qty() {
+        // Zero qty → cost = 0
+        let order = buy_order(30_000_000_000, 0);
+        assert_eq!(order.calculate_cost(QTY_UNIT), 0);
+    }
+
+    #[test]
+    fn test_sell_cost_zero_qty() {
+        // Zero qty → cost = 0
+        let order = sell_order(30_000_000_000, 0);
+        assert_eq!(order.calculate_cost(QTY_UNIT), 0);
+    }
+
+    // ============================================================
+    // Cross-validation with main.rs formula
+    // ============================================================
+
+    #[test]
+    fn test_buy_cost_matches_main_formula() {
+        // Verify calculate_cost matches the formula used in main.rs:
+        // let cost = input.price * input.qty / qty_unit;
+        let price = 42_123_456_789u64; // 42123.456789 USDT
+        let qty = 123_456_789u64; // 1.23456789 BTC
+        let qty_unit = QTY_UNIT;
+
+        let order = buy_order(price, qty);
+        let calculated_cost = order.calculate_cost(qty_unit);
+
+        // Manual calculation (same as main.rs)
+        let expected_cost = price * qty / qty_unit;
+        assert_eq!(calculated_cost, expected_cost);
+    }
 }

@@ -5,7 +5,7 @@
 //! # Modules
 //!
 //! - [`types`] - Core type definitions (AssetId, UserId, etc.)
-//! - [`config`] - Trading configuration (assets, symbols)
+//! - [`symbol_manager`] - Symbol and asset configuration
 //! - [`models`] - InternalOrder and Trade types
 //! - [`messages`] - Inter-service communication types
 //! - [`ubscore`] - User Balance Core Service (single-threaded balance ops)
@@ -21,8 +21,8 @@
 // Core types - must be first!
 pub mod core_types;
 
-// Configuration
-pub mod config;
+// Symbol/Asset configuration
+pub mod symbol_manager;
 
 // Trading components
 pub mod balance;
@@ -37,12 +37,8 @@ pub mod ubscore;
 pub mod user_account;
 pub mod wal;
 
-// Legacy re-exports for backwards compatibility
-pub mod symbol_manager;
-
 // Convenient re-exports at crate root
 pub use balance::Balance;
-pub use config::TradingConfig;
 pub use core_types::{AssetId, OrderId, SeqNum, TradeId, UserId};
 pub use engine::MatchingEngine;
 pub use messages::{
@@ -50,6 +46,7 @@ pub use messages::{
 };
 pub use models::{InternalOrder, OrderResult, OrderStatus, OrderType, Side, Trade};
 pub use orderbook::OrderBook;
+pub use symbol_manager::{SymbolInfo, SymbolManager};
 pub use ubscore::UBSCore;
 pub use user_account::UserAccount;
 pub use wal::{WalConfig, WalWriter};
