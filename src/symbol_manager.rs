@@ -15,7 +15,7 @@ pub struct AssetInfo {
     pub asset_id: u32,
     pub decimals: u32,
     pub display_decimals: u32, // Max allowed decimals for display/input
-    pub name: String,
+    pub asset: String,
 }
 
 /// Manages symbol-to-ID and ID-to-symbol mappings
@@ -88,20 +88,20 @@ impl SymbolManager {
         self.symbol_info.get(&id)
     }
 
-    pub fn add_asset(&mut self, asset_id: u32, decimals: u32, display_decimals: u32, name: &str) {
+    pub fn add_asset(&mut self, asset_id: u32, decimals: u32, display_decimals: u32, asset: &str) {
         self.assets.insert(
             asset_id,
             AssetInfo {
                 asset_id,
                 decimals,
                 display_decimals,
-                name: name.to_string(),
+                asset: asset.to_string(),
             },
         );
     }
 
-    pub fn get_asset_name(&self, asset_id: u32) -> Option<String> {
-        self.assets.get(&asset_id).map(|a| a.name.clone())
+    pub fn get_asset(&self, asset_id: u32) -> Option<String> {
+        self.assets.get(&asset_id).map(|a| a.asset.clone())
     }
 
     pub fn get_asset_decimal(&self, asset_id: u32) -> Option<u32> {
@@ -112,10 +112,10 @@ impl SymbolManager {
         self.assets.get(&asset_id).map(|a| a.display_decimals)
     }
 
-    pub fn get_asset_id(&self, name: &str) -> Option<u32> {
+    pub fn get_asset_id(&self, asset: &str) -> Option<u32> {
         self.assets
             .values()
-            .find(|a| a.name == name)
+            .find(|a| a.asset == asset)
             .map(|a| a.asset_id)
     }
 

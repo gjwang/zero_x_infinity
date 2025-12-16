@@ -31,6 +31,7 @@ This is a pilgrimage from `Hello World` to `Microsecond Latency`.
 | 0x04 | [BTree OrderBook](./docs/src/0x04-btree-orderbook.md) | BTreeMap 数据结构重构 |
 | 0x05 | [User Balance](./docs/src/0x05-user-balance.md) | 用户账户与余额管理 |
 | 0x06 | [Enforced Balance](./docs/src/0x06-enforced-balance.md) | 类型安全的强制余额 |
+| 0x07a | [Testing Framework](./docs/src/0x07a-testing-framework.md) | 100万订单批量测试框架 |
 
 ---
 

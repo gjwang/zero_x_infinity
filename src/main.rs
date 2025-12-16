@@ -1,3 +1,12 @@
+//! Chapter 7: Testing Framework for Matching Engine
+//!
+//! This module provides a batch testing infrastructure:
+//! 1. Load configuration from assets_config.csv and symbols_config.csv
+//! 2. Load orders and accounts from CSV
+//! 3. Execute all orders through the matching engine
+//! 4. Output results to CSV (trades, order states, balances)
+//! 5. Save final state snapshot
+
 mod enforced_balance;
 mod engine;
 mod models;
@@ -5,323 +14,630 @@ mod symbol_manager;
 mod user_account;
 
 use engine::OrderBook;
-use models::{Order, Side};
+use models::{Order, OrderResult, OrderType, Side, Trade};
 use rustc_hash::FxHashMap;
-use symbol_manager::SymbolManager;
-use user_account::UserAccount;
+use std::fs::File;
+use std::io::{BufRead, BufReader, Write};
+use std::time::Instant;
+use user_account::{AssetId, UserAccount, UserId};
 
-/// Convert decimal string to u64 internal representation
-#[allow(dead_code)]
-fn parse_decimal(s: &str, decimals: u32) -> u64 {
-    let multiplier = 10u64.pow(decimals);
+// ============================================================
+// CONFIGURATION
+// ============================================================
 
-    if let Some(pos) = s.find('.') {
-        let (int_part, dec_part) = s.split_at(pos);
-        let dec_part = &dec_part[1..];
+/// File paths (single source of truth)
+const ASSETS_CONFIG_CSV: &str = "fixtures/assets_config.csv";
+const SYMBOLS_CONFIG_CSV: &str = "fixtures/symbols_config.csv";
+const ORDERS_CSV: &str = "fixtures/orders.csv";
+const BALANCES_INIT_CSV: &str = "fixtures/balances_init.csv";
 
-        let int_val: u64 = int_part.parse().unwrap_or(0);
-        let dec_len = dec_part.len() as u32;
+// Output directory: current run results (compare against baseline/)
+// baseline/ = golden files (first correct run, git tracked)
+// output/   = current run (gitignored, compare with baseline/)
+const OUTPUT_DIR: &str = "output";
+const OUTPUT_BALANCES_T1: &str = "output/t1_balances_deposited.csv";
+const OUTPUT_BALANCES_T2: &str = "output/t2_balances_final.csv";
+const OUTPUT_ORDERBOOK_T2: &str = "output/t2_orderbook.csv";
+const OUTPUT_TRADES: &str = "output/t2_trades.csv";
+const OUTPUT_SUMMARY: &str = "output/t2_summary.txt";
 
-        if dec_len > decimals {
-            let dec_val: u64 = dec_part[..decimals as usize].parse().unwrap_or(0);
-            int_val * multiplier + dec_val
-        } else {
-            let dec_val: u64 = dec_part.parse().unwrap_or(0);
-            int_val * multiplier + dec_val * 10u64.pow(decimals - dec_len)
+// ============================================================
+// DATA STRUCTURES
+// ============================================================
+
+/// Asset configuration from assets_config.csv
+/// 
+/// # Decimal Precision Design
+/// 
+/// Two types of decimals serve different purposes:
+/// 
+/// | Field | Mutable | Purpose | Example |
+/// |-------|---------|---------|---------|
+/// | `decimals` | ⚠️ **IMMUTABLE** | Internal storage precision | BTC=8 (satoshi) |
+/// | `display_decimals` | ✅ Dynamic | Client-facing precision | BTC=2 (0.01 BTC) |
+/// 
+/// ## Key Rules:
+/// 
+/// 1. **`decimals`** - Set once, never change
+///    - Defines minimum unit (e.g., 1 satoshi = 10^-8 BTC)
+///    - All internal calculations use this precision
+///    - Changing this would break all existing balances/orders
+/// 
+/// 2. **`display_decimals`** - Can be adjusted anytime
+///    - Client sees prices/quantities with this precision
+///    - Can be changed based on market conditions
+///    - Example: Show $84,907.12 instead of $84,907.123456
+#[derive(Debug, Clone)]
+struct AssetConfig {
+    asset_id: AssetId,
+    asset: String,
+    /// Internal precision - ⚠️ IMMUTABLE after launch
+    /// All balances/orders stored with this precision
+    decimals: u32,
+    /// Client-facing precision - ✅ can be adjusted dynamically
+    /// Orders from clients use this format
+    display_decimals: u32,
+}
+
+/// Symbol configuration from symbols_config.csv
+#[derive(Debug, Clone)]
+struct SymbolConfig {
+    #[allow(dead_code)]
+    symbol_id: u32,
+    symbol: String,
+    base_asset_id: AssetId,
+    quote_asset_id: AssetId,
+    #[allow(dead_code)]
+    price_decimal: u32,
+    #[allow(dead_code)]
+    price_display_decimal: u32,
+}
+
+/// Complete trading configuration
+#[derive(Debug)]
+struct TradingConfig {
+    assets: FxHashMap<AssetId, AssetConfig>,
+    symbols: Vec<SymbolConfig>,
+    // Active symbol for this test run
+    active_symbol: SymbolConfig,
+    // Internal storage decimals
+    base_decimals: u32,
+    quote_decimals: u32,
+    // Client-facing display decimals (for parsing orders)
+    base_display_decimals: u32,
+    quote_display_decimals: u32,
+}
+
+/// Input order from CSV
+#[derive(Debug, Clone)]
+struct InputOrder {
+    order_id: u64,
+    user_id: u64,
+    side: Side,
+    price: u64,
+    qty: u64,
+}
+
+// ============================================================
+// CSV LOADING
+// ============================================================
+
+fn load_assets_config(path: &str) -> FxHashMap<AssetId, AssetConfig> {
+    let file = File::open(path).expect("Failed to open assets_config.csv");
+    let reader = BufReader::new(file);
+    
+    let mut assets = FxHashMap::default();
+    
+    for line in reader.lines().skip(1) {
+        let line = line.unwrap();
+        let parts: Vec<&str> = line.split(',').collect();
+        if parts.len() >= 4 {
+            let asset = AssetConfig {
+                asset_id: parts[0].parse().unwrap(),
+                asset: parts[1].to_string(),
+                decimals: parts[2].parse().unwrap(),
+                display_decimals: parts[3].parse().unwrap(),
+            };
+            assets.insert(asset.asset_id, asset);
         }
-    } else {
-        let int_val: u64 = s.parse().unwrap_or(0);
-        int_val * multiplier
+    }
+    
+    println!("Loaded {} assets from {}", assets.len(), path);
+    assets
+}
+
+fn load_symbols_config(path: &str) -> Vec<SymbolConfig> {
+    let file = File::open(path).expect("Failed to open symbols_config.csv");
+    let reader = BufReader::new(file);
+    
+    let mut symbols = Vec::new();
+    
+    for line in reader.lines().skip(1) {
+        let line = line.unwrap();
+        let parts: Vec<&str> = line.split(',').collect();
+        if parts.len() >= 6 {
+            symbols.push(SymbolConfig {
+                symbol_id: parts[0].parse().unwrap(),
+                symbol: parts[1].to_string(),
+                base_asset_id: parts[2].parse().unwrap(),
+                quote_asset_id: parts[3].parse().unwrap(),
+                price_decimal: parts[4].parse().unwrap(),
+                price_display_decimal: parts[5].parse().unwrap(),
+            });
+        }
+    }
+    
+    println!("Loaded {} symbols from {}", symbols.len(), path);
+    symbols
+}
+
+fn load_trading_config() -> TradingConfig {
+    let assets = load_assets_config(ASSETS_CONFIG_CSV);
+    let symbols = load_symbols_config(SYMBOLS_CONFIG_CSV);
+    
+    // Use first symbol (BTC_USDT) as active
+    let active_symbol = symbols.first().cloned().expect("No symbols configured");
+    
+    // Internal storage decimals
+    let base_decimals = assets.get(&active_symbol.base_asset_id)
+        .map(|a| a.decimals).unwrap_or(8);
+    let quote_decimals = assets.get(&active_symbol.quote_asset_id)
+        .map(|a| a.decimals).unwrap_or(6);
+    
+    // Client-facing display decimals (for parsing orders)
+    let base_display_decimals = assets.get(&active_symbol.base_asset_id)
+        .map(|a| a.display_decimals).unwrap_or(8);
+    let quote_display_decimals = assets.get(&active_symbol.quote_asset_id)
+        .map(|a| a.display_decimals).unwrap_or(2);
+    
+    println!("Active symbol: {} (base={}, quote={})", 
+        active_symbol.symbol, 
+        assets.get(&active_symbol.base_asset_id).map(|a| a.asset.as_str()).unwrap_or("?"),
+        assets.get(&active_symbol.quote_asset_id).map(|a| a.asset.as_str()).unwrap_or("?")
+    );
+    println!("  Internal decimals: base={}, quote={}", base_decimals, quote_decimals);
+    println!("  Display decimals:  base={}, quote={}", base_display_decimals, quote_display_decimals);
+    
+    TradingConfig {
+        assets,
+        symbols,
+        active_symbol,
+        base_decimals,
+        quote_decimals,
+        base_display_decimals,
+        quote_display_decimals,
     }
 }
 
-/// Convert u64 internal representation to decimal string
-fn format_decimal(value: u64, decimals: u32) -> String {
-    let multiplier = 10u64.pow(decimals);
-    let int_part = value / multiplier;
-    let dec_part = value % multiplier;
+fn load_balances_and_deposit(path: &str, _config: &TradingConfig) -> FxHashMap<UserId, UserAccount> {
+    let file = File::open(path).expect("Failed to open balances.csv");
+    let reader = BufReader::new(file);
+    
+    let mut accounts: FxHashMap<UserId, UserAccount> = FxHashMap::default();
+    
+    // Row-based CSV format: user_id,asset_id,avail,frozen,version
+    for line in reader.lines().skip(1) {
+        let line = line.unwrap();
+        let parts: Vec<&str> = line.split(',').collect();
+        if parts.len() >= 5 {
+            let user_id: u64 = parts[0].parse().unwrap();
+            let asset_id: u32 = parts[1].parse().unwrap();
+            let avail: u64 = parts[2].parse().unwrap();
+            let _frozen: u64 = parts[3].parse().unwrap();   // Initial frozen is 0
+            let _version: u64 = parts[4].parse().unwrap();  // Initial version is 0
+            
+            // Get or create account
+            let account = accounts.entry(user_id).or_insert_with(|| UserAccount::new(user_id));
+            // deposit() adds to avail balance
+            account.deposit(asset_id, avail).unwrap();
+        }
+    }
+    
+    println!("Loaded balances for {} accounts (row-based format)", accounts.len());
+    accounts
+}
 
-    if decimals == 0 {
-        format!("{}", int_part)
-    } else {
-        format!(
-            "{}.{:0>width$}",
-            int_part,
-            dec_part,
-            width = decimals as usize
-        )
+fn load_orders(path: &str, config: &TradingConfig) -> Vec<InputOrder> {
+    let file = File::open(path).expect("Failed to open orders.csv");
+    let reader = BufReader::new(file);
+    
+    // Client input uses display_decimals format (e.g., "84907.12" for 2 decimals)
+    // Convert to internal units using full decimals (e.g., 84907.12 * 10^6 = 84907120000)
+    let base_multiplier = 10u64.pow(config.base_decimals);
+    let quote_multiplier = 10u64.pow(config.quote_decimals);
+    
+    let mut orders = Vec::new();
+    
+    for line in reader.lines().skip(1) {
+        let line = line.unwrap();
+        let parts: Vec<&str> = line.split(',').collect();
+        if parts.len() >= 5 {
+            let order_id: u64 = parts[0].parse().unwrap();
+            let user_id: u64 = parts[1].parse().unwrap();
+            let side = if parts[2] == "buy" { Side::Buy } else { Side::Sell };
+            
+            // Parse client format (display_decimals) and convert to internal units
+            let price_float: f64 = parts[3].parse().unwrap();  // e.g., 84907.12 (2 decimals)
+            let qty_float: f64 = parts[4].parse().unwrap();    // e.g., 0.39048310 (8 decimals)
+            
+            let price = (price_float * quote_multiplier as f64).round() as u64;  // -> 84907120000
+            let qty = (qty_float * base_multiplier as f64).round() as u64;
+            
+            orders.push(InputOrder { order_id, user_id, side, price, qty });
+        }
+    }
+    
+    println!("Loaded {} orders (converted from client format)", orders.len());
+    orders
+}
+
+// ============================================================
+// CSV OUTPUT
+/// Ledger entry for settlement audit
+/// Each balance change is recorded as one entry
+struct LedgerEntry {
+    trade_id: u64,
+    user_id: u64,
+    asset_id: u32,
+    op: &'static str,  // "credit" or "debit"
+    delta: u64,
+    balance_after: u64,
+}
+
+struct LedgerWriter {
+    file: File,
+    entry_count: u64,
+}
+
+impl LedgerWriter {
+    fn new_with_path(path: &str) -> Self {
+        let mut file = File::create(path).unwrap();
+        // Ledger format: trade_id,user_id,asset_id,op,delta,balance_after
+        writeln!(file, "trade_id,user_id,asset_id,op,delta,balance_after").unwrap();
+        
+        LedgerWriter {
+            file,
+            entry_count: 0,
+        }
+    }
+    
+    fn write_entry(&mut self, entry: &LedgerEntry) {
+        writeln!(
+            self.file,
+            "{},{},{},{},{},{}",
+            entry.trade_id, entry.user_id, entry.asset_id,
+            entry.op, entry.delta, entry.balance_after
+        ).unwrap();
+        self.entry_count += 1;
     }
 }
 
-// Asset IDs
-const BTC: u32 = 1;
-const USDT: u32 = 2;
+/// Dump complete ME orderbook snapshot
+/// This snapshot contains all information needed to restore ME state after restart
+fn dump_orderbook_snapshot(book: &OrderBook, path: &str) {
+    let mut file = File::create(path).unwrap();
+    
+    // Complete snapshot format: all fields needed to reconstruct Order struct
+    // order_id: unique ID
+    // user_id: who placed the order
+    // side: buy/sell
+    // order_type: limit/market
+    // price: limit price (internal units)
+    // qty: original quantity
+    // filled_qty: how much has been filled
+    // status: current order status
+    writeln!(file, "order_id,user_id,side,order_type,price,qty,filled_qty,status").unwrap();
+    
+    for order in book.all_orders() {
+        let side_str = match order.side {
+            Side::Buy => "buy",
+            Side::Sell => "sell",
+        };
+        let type_str = match order.order_type {
+            OrderType::Limit => "limit",
+            OrderType::Market => "market",
+        };
+        writeln!(
+            file,
+            "{},{},{},{},{},{},{},{:?}",
+            order.id, order.user_id, side_str, type_str,
+            order.price, order.qty, order.filled_qty,
+            order.status
+        ).unwrap();
+    }
+    println!("Dumped ME snapshot: {} active orders to {}", book.all_orders().len(), path);
+}
+
+fn dump_balances(accounts: &FxHashMap<UserId, UserAccount>, config: &TradingConfig, path: &str) {
+    std::fs::create_dir_all(OUTPUT_DIR).unwrap();
+    let mut file = File::create(path).unwrap();
+    
+    // Row-based format: user_id,asset_id,avail,frozen,version (matches input format)
+    writeln!(file, "user_id,asset_id,avail,frozen,version").unwrap();
+    
+    let mut user_ids: Vec<_> = accounts.keys().collect();
+    user_ids.sort();
+    
+    let base_id = config.active_symbol.base_asset_id;
+    let quote_id = config.active_symbol.quote_asset_id;
+    
+    for user_id in user_ids {
+        let account = accounts.get(user_id).unwrap();
+        
+        // Base asset row
+        if let Some(b) = account.get_balance(base_id) {
+            writeln!(file, "{},{},{},{},{}", user_id, base_id, b.avail(), b.frozen(), b.version()).unwrap();
+        }
+        
+        // Quote asset row
+        if let Some(b) = account.get_balance(quote_id) {
+            writeln!(file, "{},{},{},{},{}", user_id, quote_id, b.avail(), b.frozen(), b.version()).unwrap();
+        }
+    }
+    println!("Dumped balances to {}", path);
+}
+
+fn write_final_orderbook(book: &OrderBook, path: &str) {
+    let mut file = File::create(path).unwrap();
+    writeln!(file, "best_bid,best_ask,bid_depth,ask_depth").unwrap();
+    
+    let (bid_depth, ask_depth) = book.depth();
+    writeln!(
+        file,
+        "{},{},{},{}",
+        book.best_bid().map(|p| p.to_string()).unwrap_or_default(),
+        book.best_ask().map(|p| p.to_string()).unwrap_or_default(),
+        bid_depth,
+        ask_depth
+    ).unwrap();
+    println!("Wrote final orderbook to {}", path);
+}
+
+// ============================================================
+// ORDER EXECUTION
+// ============================================================
+
+fn execute_orders(
+    orders: &[InputOrder],
+    accounts: &mut FxHashMap<UserId, UserAccount>,
+    book: &mut OrderBook,
+    ledger: &mut LedgerWriter,
+    config: &TradingConfig,
+) -> (u64, u64, u64) {
+    let qty_unit = 10u64.pow(config.base_decimals);
+    let base_id = config.active_symbol.base_asset_id;
+    let quote_id = config.active_symbol.quote_asset_id;
+    
+    let mut accepted = 0u64;
+    let mut rejected = 0u64;
+    let mut total_trades = 0u64;
+    
+    for (i, input) in orders.iter().enumerate() {
+        // Progress every 100k orders
+        if (i + 1) % 100_000 == 0 {
+            println!("Processed {} / {} orders...", i + 1, orders.len());
+        }
+        
+        let account = match accounts.get_mut(&input.user_id) {
+            Some(acc) => acc,
+            None => {
+                rejected += 1;
+                continue;
+            }
+        };
+        
+        // Calculate required funds and try to lock
+        let lock_result = match input.side {
+            Side::Buy => {
+                // Buy: lock quote asset
+                let cost = input.price * input.qty / qty_unit;
+                account.get_balance_mut(quote_id).and_then(|b| b.lock(cost))
+            }
+            Side::Sell => {
+                // Sell: lock base asset
+                account.get_balance_mut(base_id).and_then(|b| b.lock(input.qty))
+            }
+        };
+        
+        if lock_result.is_err() {
+            rejected += 1;
+            continue;
+        }
+        
+        // Submit order to matching engine
+        let order = Order::new(
+            input.order_id,
+            input.user_id,
+            input.price,
+            input.qty,
+            input.side.clone(),
+        );
+        let result = book.add_order(order);
+        
+        // Process trades (settlement) and write ledger entries
+        for trade in &result.trades {
+            let trade_cost = trade.price * trade.qty / qty_unit;
+            
+            // Buyer settlement: debit quote (frozen -> out), credit base (in)
+            if let Some(buyer_acc) = accounts.get_mut(&trade.buyer_user_id) {
+                let _ = buyer_acc.settle_as_buyer(quote_id, base_id, trade_cost, trade.qty, 0);
+                
+                // Ledger: buyer debits quote asset
+                if let Some(b) = buyer_acc.get_balance(quote_id) {
+                    ledger.write_entry(&LedgerEntry {
+                        trade_id: trade.id,
+                        user_id: trade.buyer_user_id,
+                        asset_id: quote_id,
+                        op: "debit",
+                        delta: trade_cost,
+                        balance_after: b.avail() + b.frozen(),
+                    });
+                }
+                // Ledger: buyer credits base asset
+                if let Some(b) = buyer_acc.get_balance(base_id) {
+                    ledger.write_entry(&LedgerEntry {
+                        trade_id: trade.id,
+                        user_id: trade.buyer_user_id,
+                        asset_id: base_id,
+                        op: "credit",
+                        delta: trade.qty,
+                        balance_after: b.avail() + b.frozen(),
+                    });
+                }
+            }
+            
+            // Seller settlement: debit base (frozen -> out), credit quote (in)
+            if let Some(seller_acc) = accounts.get_mut(&trade.seller_user_id) {
+                let _ = seller_acc.settle_as_seller(base_id, quote_id, trade.qty, trade_cost, 0);
+                
+                // Ledger: seller debits base asset
+                if let Some(b) = seller_acc.get_balance(base_id) {
+                    ledger.write_entry(&LedgerEntry {
+                        trade_id: trade.id,
+                        user_id: trade.seller_user_id,
+                        asset_id: base_id,
+                        op: "debit",
+                        delta: trade.qty,
+                        balance_after: b.avail() + b.frozen(),
+                    });
+                }
+                // Ledger: seller credits quote asset
+                if let Some(b) = seller_acc.get_balance(quote_id) {
+                    ledger.write_entry(&LedgerEntry {
+                        trade_id: trade.id,
+                        user_id: trade.seller_user_id,
+                        asset_id: quote_id,
+                        op: "credit",
+                        delta: trade_cost,
+                        balance_after: b.avail() + b.frozen(),
+                    });
+                }
+            }
+        }
+        
+        total_trades += result.trades.len() as u64;
+        accepted += 1;
+    }
+    
+    (accepted, rejected, total_trades)
+}
+
+// ============================================================
+// MAIN
+// ============================================================
+
+/// Parse command line args: --baseline flag switches output to baseline/
+fn get_output_dir() -> &'static str {
+    let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--baseline") {
+        "baseline"
+    } else {
+        "output"
+    }
+}
 
 fn main() {
-    let manager = SymbolManager::load_from_db();
-
-    let symbol = "BTC_USDT";
-    let symbol_info = manager.get_symbol_info(symbol).expect("Symbol not found");
-    let base_asset_id = symbol_info.base_asset_id;
-    let quote_asset_id = symbol_info.quote_asset_id;
-    let price_decimal = symbol_info.price_decimal;
-
-    // Get qty precision from base asset
-    let base_asset = manager
-        .assets
-        .get(&base_asset_id)
-        .expect("Base asset not found");
-    let qty_decimal = base_asset.decimals;
-    let qty_unit = 10u64.pow(qty_decimal); // Precomputed divisor for cost calculation
-
-    println!("=== 0xInfinity: Stage 6 (Enforced Balance) ===");
-    println!(
-        "Symbol: {} | Price: {} decimals, Qty: {} decimals",
-        symbol, price_decimal, qty_decimal
-    );
-    println!("Cost formula: price * qty / {}", qty_unit);
-    println!();
-
-    // Initialize user accounts (now using UserAccount directly instead of AccountManager)
-    let mut accounts: FxHashMap<u64, UserAccount> = FxHashMap::default();
-
-    // User 1 (Alice): Seller - has BTC
-    // User 2 (Bob): Buyer - has USDT
-    let alice = 1u64;
-    let bob = 2u64;
-
-    // Create accounts
-    accounts.insert(alice, UserAccount::new(alice));
-    accounts.insert(bob, UserAccount::new(bob));
-
-    // Price unit for USDT (quote asset) - use price_decimal
-    let price_unit = 10u64.pow(price_decimal);
-
-    // Deposit initial funds using the new enforced API
-    println!("[0] Initial deposits...");
-
-    // Alice: deposit (auto-creates asset slots)
-    let alice_acc = accounts.get_mut(&alice).unwrap();
-    alice_acc.deposit(BTC, 100 * qty_unit).unwrap();
-    alice_acc.deposit(USDT, 10_000 * price_unit).unwrap();
-
-    // Bob: deposit (auto-creates asset slots)
-    let bob_acc = accounts.get_mut(&bob).unwrap();
-    bob_acc.deposit(USDT, 200_000 * price_unit).unwrap();
-    bob_acc.deposit(BTC, 5 * qty_unit).unwrap();
-
-    println!(
-        "    Alice: {} BTC, {} USDT",
-        format_decimal(
-            accounts
-                .get(&alice)
-                .unwrap()
-                .get_balance(BTC)
-                .map(|b| b.avail())
-                .unwrap_or(0),
-            qty_decimal
-        ),
-        format_decimal(
-            accounts
-                .get(&alice)
-                .unwrap()
-                .get_balance(USDT)
-                .map(|b| b.avail())
-                .unwrap_or(0),
-            price_decimal
-        )
-    );
-    println!(
-        "    Bob:   {} BTC, {} USDT",
-        format_decimal(
-            accounts
-                .get(&bob)
-                .unwrap()
-                .get_balance(BTC)
-                .map(|b| b.avail())
-                .unwrap_or(0),
-            qty_decimal
-        ),
-        format_decimal(
-            accounts
-                .get(&bob)
-                .unwrap()
-                .get_balance(USDT)
-                .map(|b| b.avail())
-                .unwrap_or(0),
-            price_decimal
-        )
-    );
-
+    let output_dir = get_output_dir();
+    println!("=== 0xInfinity: Chapter 7 - Testing Framework ===");
+    println!("Output directory: {}/\n", output_dir);
+    
+    let start_time = Instant::now();
+    
+    // Step 1: Load configuration (single source of truth)
+    println!("[1] Loading configuration...");
+    let config = load_trading_config();
+    
+    // Generate output paths based on output_dir
+    let balances_t1 = format!("{}/t1_balances_deposited.csv", output_dir);
+    let balances_t2 = format!("{}/t2_balances_final.csv", output_dir);
+    let orderbook_t2 = format!("{}/t2_orderbook.csv", output_dir);
+    let ledger_path = format!("{}/t2_ledger.csv", output_dir);
+    let summary_path = format!("{}/t2_summary.txt", output_dir);
+    
+    // Ensure output directory exists
+    std::fs::create_dir_all(output_dir).unwrap();
+    
+    // Step 2: Load balances and deposit (init user accounts)
+    println!("\n[2] Loading balances and depositing...");
+    let mut accounts = load_balances_and_deposit(BALANCES_INIT_CSV, &config);
+    
+    // Step 3: Dump balance snapshot AFTER deposit (before trading)
+    println!("\n[3] Dumping balance snapshot after deposit...");
+    dump_balances(&accounts, &config, &balances_t1);
+    
+    // Step 4: Load orders
+    println!("\n[4] Loading orders...");
+    let orders = load_orders(ORDERS_CSV, &config);
+    
+    let load_time = start_time.elapsed();
+    println!("\n    Data loading completed in {:.2?}", load_time);
+    
+    // Step 5: Initialize matching engine
+    println!("\n[5] Initializing matching engine...");
     let mut book = OrderBook::new();
-
-    // [1] Alice places sell orders
-    println!("\n[1] Alice places sell orders...");
-
-    // price = 100 USDT (in price_unit), qty = 10 BTC (in qty_unit)
-    let price1 = 100 * price_unit;
-    let qty1 = 10 * qty_unit;
-
-    // Lock funds (sell order locks base asset) - using new enforced API
-    if accounts
-        .get_mut(&alice)
-        .unwrap()
-        .get_balance_mut(BTC)
-        .unwrap()
-        .lock(qty1)
-        .is_ok()
-    {
-        let result = book.add_order(Order::new(1, alice, price1, qty1, Side::Sell));
-        println!(
-            "    Order 1: Sell {} BTC @ ${} -> {:?}",
-            format_decimal(qty1, qty_decimal),
-            format_decimal(price1, price_decimal),
-            result.order.status
-        );
-    }
-
-    let price2 = 101 * price_unit;
-    let qty2 = 5 * qty_unit;
-    if accounts
-        .get_mut(&alice)
-        .unwrap()
-        .get_balance_mut(BTC)
-        .unwrap()
-        .lock(qty2)
-        .is_ok()
-    {
-        let result = book.add_order(Order::new(2, alice, price2, qty2, Side::Sell));
-        println!(
-            "    Order 2: Sell {} BTC @ ${} -> {:?}",
-            format_decimal(qty2, qty_decimal),
-            format_decimal(price2, price_decimal),
-            result.order.status
-        );
-    }
-
-    let alice_btc = accounts.get(&alice).unwrap().get_balance(BTC).unwrap();
-    println!(
-        "    Alice balance: avail={} BTC, frozen={} BTC",
-        format_decimal(alice_btc.avail(), qty_decimal),
-        format_decimal(alice_btc.frozen(), qty_decimal)
+    let mut ledger = LedgerWriter::new_with_path(&ledger_path);
+    
+    // Step 6: Execute orders
+    println!("\n[6] Executing orders...");
+    let exec_start = Instant::now();
+    
+    let (accepted, rejected, total_trades) = execute_orders(
+        &orders,
+        &mut accounts,
+        &mut book,
+        &mut ledger,
+        &config,
     );
+    
+    let exec_time = exec_start.elapsed();
+    
+    // Step 7: Dump final state
+    println!("\n[7] Dumping final state...");
+    dump_balances(&accounts, &config, &balances_t2);
+    dump_orderbook_snapshot(&book, &orderbook_t2);
+    
+    // Step 7: Summary
+    let total_time = start_time.elapsed();
+    let orders_per_sec = orders.len() as f64 / exec_time.as_secs_f64();
+    
+    let summary = format!(
+        r#"=== Execution Summary ===
+Symbol: {}
+Total Orders: {}
+  Accepted: {}
+  Rejected: {}
+Total Trades: {}
+Execution Time: {:.2?}
+Throughput: {:.0} orders/sec
 
-    // [2] Bob places a buy order that matches
-    println!("\n[2] Bob places buy order (taker)...");
+Final Orderbook:
+  Best Bid: {:?}
+  Best Ask: {:?}
+  Bid Depth: {} levels
+  Ask Depth: {} levels
 
-    let price3 = 101 * price_unit;
-    let qty3 = 12 * qty_unit;
-    // cost = price * qty / qty_unit (price is "USDT per BTC", qty is BTC)
-    let cost = price3 * qty3 / qty_unit;
-
-    println!(
-        "    Order 3: Buy {} BTC @ ${} (cost: {} USDT)",
-        format_decimal(qty3, qty_decimal),
-        format_decimal(price3, price_decimal),
-        format_decimal(cost, price_decimal)
+Total Time: {:.2?}
+"#,
+        config.active_symbol.symbol,
+        orders.len(),
+        accepted,
+        rejected,
+        total_trades,
+        exec_time,
+        orders_per_sec,
+        book.best_bid(),
+        book.best_ask(),
+        book.depth().0,
+        book.depth().1,
+        total_time,
     );
-
-    // Lock funds for buy order
-    if accounts
-        .get_mut(&bob)
-        .unwrap()
-        .get_balance_mut(USDT)
-        .unwrap()
-        .lock(cost)
-        .is_ok()
-    {
-        let result = book.add_order(Order::new(3, bob, price3, qty3, Side::Buy));
-
-        println!("    Trades:");
-        for trade in &result.trades {
-            println!(
-                "      - Trade #{}: {} BTC @ ${}",
-                trade.id,
-                format_decimal(trade.qty, qty_decimal),
-                format_decimal(trade.price, price_decimal)
-            );
-
-            // Settle each trade using new enforced API
-            let trade_cost = trade.price * trade.qty / qty_unit;
-
-            // Buyer (Bob): spend frozen USDT, receive BTC
-            accounts
-                .get_mut(&trade.buyer_user_id)
-                .unwrap()
-                .settle_as_buyer(quote_asset_id, base_asset_id, trade_cost, trade.qty, 0)
-                .expect("Buyer settlement failed");
-
-            // Seller (Alice): spend frozen BTC, receive USDT
-            accounts
-                .get_mut(&trade.seller_user_id)
-                .unwrap()
-                .settle_as_seller(base_asset_id, quote_asset_id, trade.qty, trade_cost, 0)
-                .expect("Seller settlement failed");
-        }
-
-        // Refund unused frozen funds
-        let filled_cost: u64 = result
-            .trades
-            .iter()
-            .map(|t| t.price * t.qty / qty_unit)
-            .sum();
-        let refund = cost - filled_cost;
-        if refund > 0 {
-            accounts
-                .get_mut(&bob)
-                .unwrap()
-                .get_balance_mut(USDT)
-                .unwrap()
-                .unlock(refund)
-                .expect("Refund failed");
-        }
-
-        println!("    Order status: {:?}", result.order.status);
-    } else {
-        println!("    REJECTED: Insufficient USDT balance");
-    }
-
-    // [3] Final balances
-    println!("\n[3] Final balances:");
-    let alice_acc = accounts.get(&alice).unwrap();
-    let bob_acc = accounts.get(&bob).unwrap();
-
-    println!(
-        "    Alice: {} BTC (frozen: {}), {} USDT",
-        format_decimal(
-            alice_acc.get_balance(BTC).map(|b| b.avail()).unwrap_or(0),
-            qty_decimal
-        ),
-        format_decimal(
-            alice_acc.get_balance(BTC).map(|b| b.frozen()).unwrap_or(0),
-            qty_decimal
-        ),
-        format_decimal(
-            alice_acc.get_balance(USDT).map(|b| b.avail()).unwrap_or(0),
-            price_decimal
-        )
-    );
-    println!(
-        "    Bob:   {} BTC, {} USDT (frozen: {})",
-        format_decimal(
-            bob_acc.get_balance(BTC).map(|b| b.avail()).unwrap_or(0),
-            qty_decimal
-        ),
-        format_decimal(
-            bob_acc.get_balance(USDT).map(|b| b.avail()).unwrap_or(0),
-            price_decimal
-        ),
-        format_decimal(
-            bob_acc.get_balance(USDT).map(|b| b.frozen()).unwrap_or(0),
-            price_decimal
-        )
-    );
-
-    println!(
-        "\n    Book: Best Bid={:?}, Best Ask={:?}",
-        book.best_bid().map(|p| format_decimal(p, price_decimal)),
-        book.best_ask().map(|p| format_decimal(p, price_decimal))
-    );
-
-    println!("\n=== End of Simulation ===");
+    
+    println!("\n{}", summary);
+    
+    // Write summary to file
+    let mut summary_file = File::create(&summary_path).unwrap();
+    summary_file.write_all(summary.as_bytes()).unwrap();
+    println!("Summary written to {}", summary_path);
+    
+    println!("\n=== Done ===");
 }
