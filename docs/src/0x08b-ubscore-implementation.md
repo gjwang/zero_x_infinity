@@ -336,3 +336,137 @@ Chapter 0x08c 将探索：
 2. 多线程 Settlement
 3. Ledger I/O 优化
 4. 二进制 WAL 格式
+
+---
+
+## 9. 重要 Bug 修复：Cost 计算溢出
+
+### 9.1 问题发现
+
+在实现 UBSCore 并运行 `--ubscore` 模式测试时，发现了 **1032 个订单被拒绝**，而传统模式全部接受。
+
+```bash
+# UBSCore 模式
+$ cargo run --release -- --ubscore
+  Accepted: 98968
+  Rejected: 1032  # ← 异常！
+
+# 传统模式
+$ cargo run --release
+  Accepted: 100000
+  Rejected: 0
+```
+
+### 9.2 根本原因
+
+**Cost 计算时 `price * qty` 溢出 u64**
+
+以真实订单 #21 为例：
+- `price = 84,956,010,000` (84956.01 USDT，6位精度)
+- `qty = 256,284,400` (2.562844 BTC，8位精度)
+- `price * qty = 2.177 × 10^19`
+- `u64::MAX = 1.844 × 10^19`
+
+**超过 u64 上限！**
+
+### 9.3 传统模式为什么没报错？
+
+**Release 模式的 wrapping arithmetic！**
+
+```rust
+// 传统模式代码
+let cost = input.price * input.qty / qty_unit;
+```
+
+在 Release 模式下，u64 乘法溢出会 **wrapping（取模 2^64）**，得到一个**看似合理但完全错误的值**：
+
+| 计算方式 | 结果 | 解释 |
+|----------|------|------|
+| 正确 (u128) | 217,729,000,492 USDT | 应锁定金额 |
+| 错误 (u64 wrapping) | 33,261,559,755 USDT | 实际锁定金额 |
+| **差异** | **184,467,440,737 USDT** | **少锁了 1844 亿！** |
+
+**这是严重的金融安全漏洞：用户只被锁定了 33,261 USDT，却买了价值 217,729 USDT 的 BTC！**
+
+### 9.4 修复方案
+
+```rust
+/// 使用 u128 进行中间计算，返回明确的错误类型
+pub fn calculate_cost(&self, qty_unit: u64) -> Result<u64, CostError> {
+    match self.side {
+        Side::Buy => {
+            // 使用 u128 避免中间计算溢出
+            let cost_128 = (self.price as u128) * (self.qty as u128) / (qty_unit as u128);
+            
+            // 如果最终结果超过 u64，返回明确错误
+            if cost_128 > u64::MAX as u128 {
+                Err(CostError::Overflow { price, qty, qty_unit })
+            } else {
+                Ok(cost_128 as u64)
+            }
+        }
+        Side::Sell => Ok(self.qty),
+    }
+}
+```
+
+**设计原则：金融级系统禁止静默填充默认值**
+
+### 9.5 配置问题：USDT 精度过高
+
+进一步分析发现，**USDT 使用 6 位精度（decimals=6）是溢出的根本原因**：
+
+| 配置 | price 精度 | qty 精度 | 最大可交易 BTC @ $85000 |
+|------|------------|----------|-------------------------|
+| **当前** | 6 位 | 8 位 | **2.17 BTC** ❌ |
+| **推荐** | 2 位 | 8 位 | **21,702 BTC** ✅ |
+
+**Binance 使用 2 位价格精度**，可以安全交易超过 21,000 BTC。
+
+当前配置：
+```csv
+# fixtures/assets_config.csv
+asset_id,asset,decimals,display_decimals
+2,USDT,6,4  # ← 6 位精度导致溢出风险
+```
+
+建议修改为：
+```csv
+2,USDT,2,2  # 或最多 4 位
+```
+
+### 9.6 测试用例
+
+添加了关键测试用例记录此问题：
+
+```rust
+#[test]
+fn test_buy_cost_real_world_overflow_case() {
+    // CRITICAL: Real-world case from production test data
+    // Order #21: Buy 2.562844 BTC @ 84956.01 USDT
+    //
+    // With naive u64: price * qty = 2.177×10^19 > u64::MAX
+    //   → wrapping overflow → 33,261,559,755 (WRONG!)
+    //
+    // With u128 intermediate: 217,729,000,492 (CORRECT!)
+    
+    let price = 84_956_010_000u64;
+    let qty = 256_284_400u64;
+    let qty_unit = 100_000_000u64;
+    
+    let order = buy_order(price, qty);
+    let cost = order.calculate_cost(qty_unit);
+    
+    assert_eq!(cost, Ok(217_729_000_492));
+    
+    // 验证这在 naive u64 乘法中确实会溢出
+    assert!(price.checked_mul(qty).is_none());
+}
+```
+
+### 9.7 教训总结
+
+1. **永远使用 checked 算术或显式溢出处理**
+2. **金融系统禁止静默填充默认值**（如 `unwrap_or(u64::MAX)`）
+3. **精度设计要考虑乘法溢出边界**
+4. **多模式测试能发现隐藏 bug**（传统模式看似正确，UBSCore 暴露问题）
