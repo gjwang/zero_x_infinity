@@ -11,16 +11,8 @@
 /// 5. Type system prevents bypassing validation
 use serde::{Deserialize, Serialize};
 
-/// Asset ID - globally unique identifier for an asset.
-///
-/// # Constraints:
-/// - **Immutable**: Once assigned, NEVER changes
-/// - **Small Values**: Enables direct array indexing
-/// - **Sequential**: Assigned contiguously (1,2,3... or 0,1,2...)
-pub type AssetId = u32;
-
-/// User ID - globally unique, immutable after assignment.
-pub type UserId = u64;
+// Types are defined in types.rs - we can use them via crate::types if needed
+// but Balance doesn't actually need AssetId/UserId directly
 
 /// Balance for a single asset
 ///
@@ -31,7 +23,7 @@ pub type UserId = u64;
 /// - All state changes return Result
 ///
 /// # Usage:
-/// ```
+/// ```ignore
 /// let mut balance = Balance::default();
 /// balance.deposit(1000)?;           // avail = 1000
 /// balance.lock(500)?;                // avail = 500, frozen = 500

@@ -1,35 +1,10 @@
 use serde::{Deserialize, Serialize};
 
-// Import the ENFORCED Balance type
-pub use crate::enforced_balance::Balance;
+// Import core types from types module
+pub use crate::types::{AssetId, UserId};
 
-/// Asset ID - globally unique identifier for an asset.
-///
-/// # Critical Constraints:
-/// 1. **Immutable**: Once assigned, NEVER changes
-/// 2. **Small Values**: Must be small integers (used as direct array index)
-/// 3. **Sequential**: Assigned contiguously (e.g., 1, 2, 3, ... or 0, 1, 2, ...)
-///
-/// # O(1) Direct Array Indexing:
-/// ```ignore
-/// assets[asset_id as usize]  // Direct access, no search needed
-/// ```
-///
-/// # Performance:
-/// | Method          | Lookup | Memory     | Cache |
-/// |-----------------|--------|------------|-------|
-/// | Vec + linear    | O(n)   | Compact    | Good  |
-/// | HashMap         | O(1)*  | +Overhead  | Poor  |
-/// | **Direct Index**| O(1)   | Compact    | Best  |
-///
-/// *HashMap O(1) has hidden constant overhead (hashing, bucket lookup)
-pub type AssetId = u32;
-
-/// User ID - globally unique, immutable after assignment.
-pub type UserId = u64;
-
-// Balance is now imported from enforced_balance module
-// All fields are private, all operations enforced
+// Import the ENFORCED Balance type from balance module
+pub use crate::balance::Balance;
 
 /// UserAccount represents a user's account with balances across multiple assets.
 ///
@@ -119,12 +94,6 @@ impl UserAccount {
     #[inline(always)]
     pub fn assets(&self) -> &[Balance] {
         &self.assets
-    }
-
-    /// Get mutable access to assets (for internal ledger operations)
-    #[inline(always)]
-    pub(crate) fn assets_mut(&mut self) -> &mut Vec<Balance> {
-        &mut self.assets
     }
 
     pub fn check_buyer_balance(
