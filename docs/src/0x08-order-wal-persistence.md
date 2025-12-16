@@ -87,29 +87,37 @@
 
 ### 3.2 Pre-Check：减少无效订单
 
-在持久化前进行余额校验：
+Pre-Check 通过查询 UBSCore 获取余额信息，**只读，无副作用**：
 
-```rust
-fn pre_check_order(order: &Order, accounts: &AccountManager) -> Result<(), RejectReason> {
-    let user = accounts.get(order.user_id)?;
-    
-    match order.side {
-        Side::Buy => {
-            // 买单：检查 Quote 资产余额
-            let cost = order.price * order.qty / QTY_UNIT;
-            if user.avail(QUOTE_ASSET) < cost {
-                return Err(RejectReason::InsufficientBalance);
-            }
-        }
-        Side::Sell => {
-            // 卖单：检查 Base 资产余额
-            if user.avail(BASE_ASSET) < order.qty {
-                return Err(RejectReason::InsufficientBalance);
-            }
-        }
-    }
-    Ok(())
-}
+```
+┌───────────────────────────────────────────────────────────────────┐
+│                     Pre-Check 流程 (伪代码)                        │
+├───────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  async fn pre_check(order: Order) -> Result<Order, Reject> {      │
+│      // 1. 查询 UBSCore 获取余额 (只读查询)                        │
+│      let balance = ubscore.query_balance(order.user_id, asset);   │
+│                                                                   │
+│      // 2. 计算所需金额                                            │
+│      let required = match order.side {                            │
+│          Buy  => order.price * order.qty / QTY_UNIT,  // quote    │
+│          Sell => order.qty,                            // base    │
+│      };                                                           │
+│                                                                   │
+│      // 3. 余额检查 (只读，不锁定)                                  │
+│      if balance.avail < required {                                │
+│          return Err(Reject::InsufficientBalance);                 │
+│      }                                                            │
+│                                                                   │
+│      // 4. 检查通过，放行订单到下一阶段                             │
+│      Ok(order)                                                    │
+│  }                                                                │
+│                                                                   │
+│  注意：Pre-Check 不锁定余额！                                       │
+│  余额可能在 Pre-Check 和 WAL 之间被其他订单消耗                     │
+│  这是允许的，WAL 后的 Balance Lock 会处理这种情况                   │
+│                                                                   │
+└───────────────────────────────────────────────────────────────────┘
 ```
 
 **为什么需要 Pre-Check？**
@@ -118,7 +126,10 @@ fn pre_check_order(order: &Order, accounts: &AccountManager) -> Result<(), Rejec
 |--------------|--------------|
 | 无效订单也被持久化 | 无效订单提前拒绝 |
 | 浪费 WAL 空间 | 节省存储 |
-| ME 还要再次检查 | 保证进入 ME 的订单有效 |
+| 增加系统负载 | 减少无效订单进入核心流程 |
+
+**重要**：Pre-Check 是"尽力而为"的过滤器，不保证 100% 准确。
+通过 Pre-Check 的订单，仍可能在 WAL + Balance Lock 阶段被拒绝。
 
 ### 3.3 一旦持久化，必须完整执行
 
@@ -479,43 +490,233 @@ impl<T, const N: usize> RingBuffer<T, N> {
 
 ## 7. 整体架构
 
+### 7.1 核心服务
+
+系统由以下核心服务组成：
+
+| 服务 | 职责 | 状态 |
+|------|------|------|
+| **Gateway** | 接收客户端请求 | 无状态 |
+| **Pre-Check** | 只读查询余额，过滤无效订单 | 无状态 |
+| **UBSCore** | 所有余额操作 + Order WAL | 有状态 (余额) |
+| **ME** | 纯撮合，生成 Trade Events | 有状态 (OrderBook) |
+| **Settlement** | 持久化 events，未来写 DB | 无状态 |
+
+### 7.2 UBSCore Service (User Balance Core)
+
+**UBSCore 是所有账户余额操作的唯一入口**，单线程执行保证原子性。
+
+#### 7.2.1 为什么需要 UBSCore？
+
+| 分散处理余额 | 集中到 UBSCore |
+|-------------|----------------|
+| 多处修改余额，需要分布式锁 | 唯一入口，单线程无锁 |
+| 双花风险高 | 天然原子，无双花 |
+| 难以审计 | 所有变更可追踪 |
+| 恢复困难 | 单一 WAL 可完整恢复 |
+
+#### 7.2.2 UBSCore 提供的操作
+
+```rust
+// 余额查询 (只读)
+fn query_balance(user_id: UserId, asset_id: AssetId) -> Balance;
+
+// 余额操作 (修改)
+fn lock(user_id: UserId, asset_id: AssetId, amount: u64) -> Result<()>;
+fn unlock(user_id: UserId, asset_id: AssetId, amount: u64) -> Result<()>;
+fn spend_frozen(user_id: UserId, asset_id: AssetId, amount: u64) -> Result<()>;
+fn deposit(user_id: UserId, asset_id: AssetId, amount: u64) -> Result<()>;
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                    0xInfinity HFT Architecture                          │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│   Client Orders                                                         │
-│        │                                                                │
-│        ▼                                                                │
-│   ┌─────────────┐                                                       │
-│   │   Gateway   │  ← 多线程接收网络请求                                  │
-│   │  (Receiver) │                                                       │
-│   └──────┬──────┘                                                       │
-│          │ Ring Buffer                                                  │
-│          ▼                                                              │
-│   ┌─────────────┐                                                       │
-│   │  Sequencer  │  ← 单线程：分配 sequence_id                           │
-│   │  + PreCheck │     + 余额预检查                                       │
-│   └──────┬──────┘                                                       │
-│          │ Ring Buffer                                                  │
-│          ▼                                                              │
-│   ┌─────────────┐                                                       │
-│   │  WAL Writer │  ← 单线程：持久化 + Group Commit                       │
-│   └──────┬──────┘                                                       │
-│          │ Ring Buffer                                                  │
-│          ▼                                                              │
-│   ┌─────────────┐                                                       │
-│   │  Matching   │  ← 单线程：核心撮合逻辑                                │
-│   │   Engine    │                                                       │
-│   └──────┬──────┘                                                       │
-│          │ Ring Buffer                                                  │
-│          ▼                                                              │
-│   ┌─────────────┐                                                       │
-│   │ Settlement  │  ← 单线程：余额更新 + 成交记录                         │
-│   │  + Ledger   │                                                       │
-│   └─────────────┘                                                       │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
+
+#### 7.2.3 UBSCore 在订单流程中的角色
+
+```
+订单到达 UBSCore 后：
+1. Write Order WAL (持久化订单)
+2. Lock Balance (锁定资金)
+   - 成功 → 转发到 ME
+   - 失败 → 标记为 Rejected，不进入 ME
+3. 收到 Trade Events 后执行 Settlement
+   - Buyer: spend_frozen(quote), deposit(base)
+   - Seller: spend_frozen(base), deposit(quote)
+```
+
+### 7.3 Matching Engine (ME)
+
+**ME 是纯撮合引擎，不关心余额**。
+
+| ME 做的事 | ME 不做的事 |
+|----------|------------|
+| 维护 OrderBook | 检查余额 |
+| 价格-时间优先撮合 | 锁定/解锁余额 |
+| 生成 Trade Events | 更新余额 |
+|  | 持久化任何数据 |
+
+**Trade Event 包含足够信息生成 Balance Update**：
+
+```rust
+struct TradeEvent {
+    trade_id: TradeId,
+    buyer_order_id: OrderId,
+    seller_order_id: OrderId,
+    buyer_user_id: UserId,
+    seller_user_id: UserId,
+    price: u64,
+    qty: u64,
+    // 可以从这些信息计算出：
+    // - buyer 需要 spend_frozen(quote, price * qty)
+    // - buyer 需要 deposit(base, qty)
+    // - seller 需要 spend_frozen(base, qty)
+    // - seller 需要 deposit(quote, price * qty)
+}
+```
+
+### 7.4 Settlement Service
+
+**Settlement 负责持久化，不修改余额**。
+
+| Settlement 做的事 | Settlement 不做的事 |
+|------------------|-------------------|
+| 持久化 Trade Events | 更新余额 (由 UBSCore 做) |
+| 持久化 Order Events | 撮合订单 |
+| 未来写入 DB 供查询 | |
+| 生成审计日志 | |
+
+### 7.5 完整架构图
+
+```
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                         0xInfinity HFT Architecture                               │
+├──────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                   │
+│   Client Orders                                                                   │
+│        │                                                                          │
+│        ▼                                                                          │
+│   ┌──────────────┐                                                                │
+│   │   Gateway    │  ← 多线程接收网络请求                                           │
+│   └──────┬───────┘                                                                │
+│          │                                                                        │
+│          ▼                                                                        │
+│   ┌──────────────┐         query balance          ┌────────────────────────────┐ │
+│   │  Pre-Check   │ ──────────────────────────────▶│                            │ │
+│   │  (只读查询)   │◀────────────────────────────── │                            │ │
+│   └──────┬───────┘         return balance         │                            │ │
+│          │                                        │                            │ │
+│          │ 过滤明显无效订单                        │                            │ │
+│          ▼                                        │                            │ │
+│   ┌──────────────┐                                │      UBSCore Service       │ │
+│   │ Order Buffer │                                │   (User Balance Core)      │ │
+│   └──────┬───────┘                                │                            │ │
+│          │ Ring Buffer                            │   ┌────────────────────┐   │ │
+│          ▼                                        │   │  Balance State     │   │ │
+│   ┌──────────────────────────────────────────┐    │   │  (内存, 单线程)    │   │ │
+│   │  UBSCore: Order Processing               │    │   └────────────────────┘   │ │
+│   │  1. Write Order WAL (持久化)              │    │                            │ │
+│   │  2. Lock Balance                         │    │   Operations:              │ │
+│   │     - OK → forward to ME                 │    │   - lock / unlock          │ │
+│   │     - Fail → Rejected (记录状态)         │    │   - spend_frozen           │ │
+│   └──────────────┬───────────────────────────┘    │   - deposit                │ │
+│                  │                                │                            │ │
+│                  │ Ring Buffer (valid orders)     │                            │ │
+│                  ▼                                │                            │ │
+│   ┌──────────────────────────────────────────┐    │                            │ │
+│   │         Matching Engine (ME)             │    │                            │ │
+│   │                                          │    │                            │ │
+│   │  纯撮合，不关心 Balance                   │    │                            │ │
+│   │  输出: Trade Events                      │    │                            │ │
+│   │                                          │    │                            │ │
+│   └──────────────┬───────────────────────────┘    │                            │ │
+│                  │                                │                            │ │
+│                  │ Ring Buffer (Trade Events)     │                            │ │
+│                  │                                │                            │ │
+│         ┌───────┴────────┐                        │                            │ │
+│         │                │                        │                            │ │
+│         ▼                ▼                        │                            │ │
+│   ┌───────────┐   ┌─────────────────────────┐     │                            │ │
+│   │ Settlement│   │ Balance Update Events   │────▶│  执行余额更新:             │ │
+│   │           │   │ (from Trade Events)     │     │  - Buyer: -quote, +base    │ │
+│   │ 持久化:    │   └─────────────────────────┘     │  - Seller: -base, +quote   │ │
+│   │ - Trades  │                                   │                            │ │
+│   │ - Orders  │                                   └────────────────────────────┘ │
+│   │ - Ledger  │                                                                   │
+│   │           │                                                                   │
+│   │ 未来 → DB │                                                                   │
+│   └───────────┘                                                                   │
+│                                                                                   │
+└──────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 7.6 数据流详解
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                              订单处理流程                                         │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                  │
+│  [1] Pre-Check                                                                   │
+│      │                                                                           │
+│      ├── Query UBSCore: 获取用户余额 (只读)                                       │
+│      ├── 检查: 余额是否足够？                                                     │
+│      └── 过滤: 明显无效订单不进入系统                                             │
+│                                                                                  │
+│  [2] Order Buffer → Ring Buffer → UBSCore                                       │
+│      │                                                                           │
+│      ├── UBSCore 收到订单                                                        │
+│      ├── Step 1: Write Order WAL (先持久化)                                      │
+│      ├── Step 2: Lock Balance                                                   │
+│      │     ├── 成功 → 订单有效，转发到 ME                                        │
+│      │     └── 失败 → 订单 Rejected (仍有记录)                                   │
+│      └── Step 3: Forward to ME (via Ring Buffer)                                │
+│                                                                                  │
+│  [3] ME                                                                          │
+│      │                                                                           │
+│      ├── 收到有效订单                                                            │
+│      ├── 撮合: 价格-时间优先                                                      │
+│      └── 输出: Trade Events                                                      │
+│                                                                                  │
+│  [4] Trade Events → Fan-out                                                      │
+│      │                                                                           │
+│      ├── → UBSCore: Balance Update                                              │
+│      │     ├── Buyer: spend_frozen(quote, cost), deposit(base, qty)             │
+│      │     └── Seller: spend_frozen(base, qty), deposit(quote, cost)            │
+│      │                                                                           │
+│      └── → Settlement: Persist                                                   │
+│            ├── 持久化 Trade Events                                               │
+│            ├── 持久化 Order Events (状态变更)                                    │
+│            └── 写审计日志 (Ledger)                                               │
+│                                                                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 7.7 为什么这样设计？
+
+| 设计决策 | 原因 |
+|---------|------|
+| UBSCore 单线程 | 余额操作天然原子，无双花 |
+| ME 不关心余额 | 职责分离，ME 只做撮合 |
+| Trade Events 驱动 | Balance update 从 events 生成，可重放 |
+| Settlement 只持久化 | 与余额操作解耦，方便扩展 |
+| Pre-Check 只读 | 无副作用，可水平扩展 |
+
+### 7.8 恢复流程
+
+```
+系统重启后：
+
+1. UBSCore 从 Snapshot 恢复 Balance State
+   └── 最近的 checkpoint
+
+2. UBSCore 重放 Order WAL
+   └── 从 checkpoint 之后的订单开始
+   └── 重新执行 Lock Balance + Forward to ME
+
+3. ME 重新撮合
+   └── 生成 Trade Events
+
+4. Trade Events → Balance Update
+   └── UBSCore 执行余额更新
+
+5. 系统恢复到崩溃前状态
 ```
 
 ---
@@ -528,21 +729,49 @@ impl<T, const N: usize> RingBuffer<T, N> {
 |--------|------------|------|
 | 订单丢失 | 系统崩溃后无法恢复 | 先持久化，后撮合 |
 | 顺序不一致 | 分布式节点顺序不同 | 单点 Sequencer + 全局序号 |
-| 无效订单 | 浪费持久化空间 | Pre-Check 余额校验 |
+| 无效订单 | 浪费持久化空间 | Pre-Check 余额校验 (只读) |
 | 持久化性能 | 数据库太慢 | WAL 追加写 + Group Commit |
 | 锁竞争 | 多线程同步开销 | 单线程 + Lock-Free |
 | 服务间通信 | 网络调用延迟高 | Shared Memory Ring Buffer |
+| **双花风险** | 并发修改余额 | **UBSCore 单线程处理所有余额操作** |
+| **职责不清** | ME 既撮合又管余额 | **ME 纯撮合，UBSCore 管余额** |
+
+**核心服务职责**：
+
+| 服务 | 职责 |
+|------|------|
+| **Pre-Check** | 只读查询 UBSCore，过滤无效订单 |
+| **UBSCore** | 所有余额操作 + Order WAL (单线程) |
+| **ME** | 纯撮合，生成 Trade Events |
+| **Settlement** | 持久化 events，写 DB |
 
 **核心理念**：
 
 > 在 HFT 领域，**简单就是快**。单线程 + 顺序写 + 无锁设计，
 > 比复杂的多线程 + 随机写 + 加锁设计，往往快 10-100 倍。
+>
+> **职责分离**：UBSCore 管余额，ME 管撮合，Settlement 管持久化。
+> 每个服务单线程，自然原子，无需分布式锁。
 
 ---
 
 ## 9. 下一步
 
-1. **实现 WAL Writer**：`src/wal.rs`
+1. **实现 UBSCore Service**：`src/ubscore.rs`
+   - Balance state 管理
+   - Order WAL 写入
+   - Balance lock/unlock/spend_frozen/deposit
+   
 2. **实现 Ring Buffer**：`src/ringbuffer.rs`
-3. **集成到主流程**：修改 `main.rs`
-4. **性能测试**：对比有/无 WAL 的性能差异
+   - 服务间无锁通信
+   
+3. **重构 ME**：`src/engine.rs`
+   - 移除所有 balance 相关代码
+   - 只负责撮合，输出 Trade Events
+   
+4. **实现 Settlement**：`src/settlement.rs`
+   - 持久化 Trade/Order Events
+   - 写审计日志
+   
+5. **集成测试**：验证完整流程
+
