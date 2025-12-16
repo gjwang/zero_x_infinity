@@ -603,10 +603,136 @@ Trade Queue: [T1, T2]     → 严格按 trade_id 顺序消费
   - settle_version 1 永远对应 T1
 ```
 
-### 10.5 下一章任务 (0x08c)
+---
+
+## 11. 设计讨论全记录
+
+### 11.1 核心问题
+
+UBSCore 作为单线程服务，有**两个输入源**：
+
+```
+Orders Queue (from Gateway) ──┐
+                              ├──→ UBSCore (单线程) ──→ Balance Events
+Trades Queue (from ME)  ──────┘
+```
+
+**问题**：两个队列的消费顺序**不确定**：
+
+```
+Run 1: Lock(O1), Lock(O2), Settle(T1), Lock(O3), Settle(T2)
+Run 2: Lock(O1), Settle(T1), Lock(O2), Lock(O3), Settle(T2)
+
+同一个用户的 balance 变更序列不同！
+```
+
+### 11.2 方案分析
+
+#### 方案 A：确定性 Merge（按全局 seq_id 排序）
+
+```rust
+fn next_event(&self) -> Event {
+    // 总是取 seq_id 较小的
+    match (order_queue.peek(), trade_queue.peek()) {
+        (Some(o), Some(t)) if o.seq_id < t.seq_id => order_queue.pop(),
+        _ => trade_queue.pop(),
+    }
+}
+```
+
+**❌ 不可行**：无法"等待"未知的未来事件。如果 Order(seq=5) 已到，Trade(seq=3) 在路上，无法知道该不该等。
+
+#### 方案 B：DB Upsert + 幂等
+
+```sql
+INSERT INTO balance_events (...)
+ON CONFLICT (user_id, asset_id, event_source, event_id) 
+DO NOTHING;
+```
+
+**问题**：虽然最终一致，但**过程不确定**，违反 State Machine Replication 原则。
+
+#### 方案 C：批处理 + Barrier
+
+```
+Batch 1: [O1,O2,O3] → Lock all → Send to ME → Wait → Settle all → BARRIER
+Batch 2: [O4,O5,O6] → ...
+```
+
+**❌ 不可行**：停顿破坏了 Pipeline 的意义，失去并行度。
+
+#### 方案 D：两阶段处理（Hot Path + Cold Path）
+
+```
+Hot Path: 只写 Order WAL + 更新内存
+Cold Path: 单线程按 seq_id 顺序处理，写 DB
+```
+
+**问题**：Hot Path 中 Lock 和 Settle 仍然交错，内存状态仍然不确定。
+
+### 11.3 最终选择：分离 Version 空间（方案 B 改进）
+
+**关键洞察**：
+
+1. **Order Queue** 内部严格按 `order_seq_id` 顺序消费
+2. **Trade Queue** 内部严格按 `trade_id` 顺序消费
+3. 两个队列**各自独立有序**，只是**彼此交错不确定**
+
+**解决方案**：为每种事件类型维护独立的 version：
+
+```rust
+struct Balance {
+    avail: u64,
+    frozen: u64,
+    lock_version: u64,    // 只追踪 Order Queue
+    settle_version: u64,  // 只追踪 Trade Queue
+}
+```
+
+**为什么有效**：
+
+| 事件类型 | Version | 排序依据 | 确定性 |
+|----------|---------|----------|--------|
+| Lock/Unlock | lock_version | order_seq_id | ✅ 完全确定 |
+| Settle | settle_version | trade_id | ✅ 完全确定 |
+
+### 11.4 验证策略
+
+**不验证**：某时刻的快照是否一致（Pipeline 下不可能一致）
+
+**验证**：处理完成后的最终集合
+
+```
+1. Lock 事件集合（按 lock_version 排序）
+   → lock_version 应该 1:1 对应 order_seq_id
+   → 两次运行完全相同
+   
+2. Settle 事件集合（按 settle_version 排序）
+   → settle_version 应该 1:1 对应 trade_id
+   → 两次运行完全相同
+   
+3. 最终余额
+   → avail, frozen 完全相同
+```
+
+### 11.5 关键结论
+
+```
+Pipeline 并发 ⟺ 过程顺序不确定（不可避免）
+确定性过程 ⟺ 串行处理（性能损失）
+
+妥协方案：
+  - 接受 Lock/Settle 交错不确定
+  - 但保证各自类型内部确定
+  - 分类验证取代全局验证
+```
+
+---
+
+## 12. 下一章任务 (0x08c)
 
 1. **实现分离 Version 空间** - lock_version / settle_version
 2. **扩展 BalanceEvent** - 添加 event_type, version, source_id
 3. **记录所有余额操作** - lock/unlock/settle
 4. **分类验证测试** - Lock 集合验证 / Settle 集合验证 / 最终余额验证
-
+5. **Ring Buffer 集成** - crossbeam-queue 连接各阶段
