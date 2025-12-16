@@ -144,25 +144,4 @@ impl SymbolManager {
             .find(|a| a.name == name)
             .map(|a| a.asset_id)
     }
-
-    /// Load initial state (simulating DB load)
-    pub fn load_from_db() -> Self {
-        let mut manager = SymbolManager::new();
-        //TODO: refactor: we do NOT need quantity decimal any more,juse use get_asset_decimal
-        // Add Assets FIRST (symbols depend on them)
-        manager.add_asset(1, 8, 3, "BTC"); // BTC: 8 decimals, 3 precision
-        manager.add_asset(2, 8, 2, "USDT"); // USDT: 8 decimals, 2 precision
-        manager.add_asset(3, 8, 4, "ETH"); // ETH: 8 decimals, 4 precision
-
-        // BTC_USDT: Base 1 (BTC), Quote 2 (USDT), Price Decimal 2
-        manager
-            .insert_symbol("BTC_USDT", 0, 1, 2, 2, 2)
-            .expect("BTC_USDT init failed");
-        // ETH_USDT: Base 3 (ETH), Quote 2 (USDT), Price Decimal 2
-        manager
-            .insert_symbol("ETH_USDT", 1, 3, 2, 2, 2)
-            .expect("ETH_USDT init failed");
-
-        manager
-    }
 }
