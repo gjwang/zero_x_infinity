@@ -136,12 +136,15 @@ impl UBSCore {
 
         // 3. Calculate cost and check balance (read-only!)
         let lock_asset = self.lock_asset_for_order(order);
-        let lock_amount = order.calculate_cost(symbol_info.qty_unit());
+        let lock_amount = order
+            .calculate_cost(symbol_info.qty_unit())
+            .map_err(|_| RejectReason::InvalidQuantity)?; // CostError::Overflow → InvalidQuantity
 
         // Check balance is sufficient (no mutation)
         let balance = account
             .get_balance(lock_asset)
-            .ok_or(RejectReason::InsufficientBalance)?;
+            .ok_or(RejectReason::AssetNotFound)?;
+
         if balance.avail() < lock_amount {
             return Err(RejectReason::InsufficientBalance);
         }
@@ -155,7 +158,10 @@ impl UBSCore {
         let lock_asset = self.lock_asset_for_order(order);
         let symbol_info = self.manager.get_symbol_info_by_id(order.symbol_id);
         let qty_unit = symbol_info.map(|s| s.qty_unit()).unwrap_or(100_000_000);
-        let lock_amount = order.calculate_cost(qty_unit);
+        // Safe to unwrap: pre_check already validated this won't overflow
+        let lock_amount = order
+            .calculate_cost(qty_unit)
+            .expect("pre_check should have caught overflow");
 
         if let Some(account) = self.accounts.get_mut(&order.user_id) {
             if let Ok(balance) = account.get_balance_mut(lock_asset) {

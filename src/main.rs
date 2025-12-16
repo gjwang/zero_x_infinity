@@ -267,7 +267,6 @@ fn execute_orders_with_ubscore(
         let valid_order = match ubscore.process_order(order) {
             Ok(vo) => vo,
             Err(_reason) => {
-                // InternalOrder rejected (insufficient balance, etc.)
                 rejected += 1;
                 continue;
             }

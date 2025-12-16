@@ -44,7 +44,7 @@ pub use engine::MatchingEngine;
 pub use messages::{
     BalanceOp, BalanceUpdate, OrderEvent, OrderMessage, RejectReason, TradeEvent, ValidOrder,
 };
-pub use models::{InternalOrder, OrderResult, OrderStatus, OrderType, Side, Trade};
+pub use models::{CostError, InternalOrder, OrderResult, OrderStatus, OrderType, Side, Trade};
 pub use orderbook::OrderBook;
 pub use symbol_manager::{SymbolInfo, SymbolManager};
 pub use ubscore::UBSCore;

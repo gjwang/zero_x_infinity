@@ -108,20 +108,60 @@ impl InternalOrder {
     ///   cost = 1_00000000 (1 BTC, lock base asset directly)
     /// ```
     ///
-    /// # Overflow handling
-    /// Uses checked_mul to detect overflow → returns u64::MAX → order rejected later
+    /// # Errors
+    /// Returns `CostError::Overflow` if the calculated cost exceeds u64::MAX
     #[inline]
-    pub fn calculate_cost(&self, qty_unit: u64) -> u64 {
+    pub fn calculate_cost(&self, qty_unit: u64) -> Result<u64, CostError> {
         match self.side {
-            Side::Buy => self
-                .price
-                .checked_mul(self.qty)
-                .map(|v| v / qty_unit)
-                .unwrap_or(u64::MAX),
-            Side::Sell => self.qty,
+            Side::Buy => {
+                // Use u128 to avoid overflow: price * qty can exceed u64::MAX
+                let cost_128 = (self.price as u128) * (self.qty as u128) / (qty_unit as u128);
+                // Return explicit error if result exceeds u64 range
+                if cost_128 > u64::MAX as u128 {
+                    Err(CostError::Overflow {
+                        price: self.price,
+                        qty: self.qty,
+                        qty_unit,
+                    })
+                } else {
+                    Ok(cost_128 as u64)
+                }
+            }
+            Side::Sell => Ok(self.qty),
         }
     }
 }
+
+// ============================================================
+// COST ERROR - Explicit error types for cost calculation
+// ============================================================
+
+/// Cost calculation error - explicit error types for financial-grade systems
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CostError {
+    /// Cost calculation overflowed u64 range
+    Overflow { price: u64, qty: u64, qty_unit: u64 },
+}
+
+impl std::fmt::Display for CostError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CostError::Overflow {
+                price,
+                qty,
+                qty_unit,
+            } => {
+                write!(
+                    f,
+                    "Cost overflow: price={} * qty={} / qty_unit={} exceeds u64::MAX",
+                    price, qty, qty_unit
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for CostError {}
 
 // ============================================================
 // TRADE
@@ -210,7 +250,7 @@ mod tests {
         let order = buy_order(price, qty);
 
         let cost = order.calculate_cost(QTY_UNIT);
-        assert_eq!(cost, 30_000_000_000); // 30000 USDT in internal units
+        assert_eq!(cost, Ok(30_000_000_000)); // 30000 USDT in internal units
     }
 
     #[test]
@@ -224,7 +264,7 @@ mod tests {
         let order = buy_order(price, qty);
 
         let cost = order.calculate_cost(QTY_UNIT);
-        assert_eq!(cost, 3_000_000_000); // 3000 USDT
+        assert_eq!(cost, Ok(3_000_000_000)); // 3000 USDT
     }
 
     #[test]
@@ -238,7 +278,7 @@ mod tests {
         let order = buy_order(price, qty);
 
         let cost = order.calculate_cost(QTY_UNIT);
-        assert_eq!(cost, 500_000); // 0.5 USDT
+        assert_eq!(cost, Ok(500_000)); // 0.5 USDT
     }
 
     #[test]
@@ -252,7 +292,7 @@ mod tests {
         let order = buy_order(price, qty);
 
         let cost = order.calculate_cost(QTY_UNIT);
-        assert_eq!(cost, 30_000_500_000); // 30000.50 USDT
+        assert_eq!(cost, Ok(30_000_500_000)); // 30000.50 USDT
     }
 
     // ============================================================
@@ -266,7 +306,7 @@ mod tests {
         let order = sell_order(30_000_000_000, qty);
 
         let cost = order.calculate_cost(QTY_UNIT);
-        assert_eq!(cost, 100_000_000); // 1 BTC in satoshi
+        assert_eq!(cost, Ok(100_000_000)); // 1 BTC in satoshi
     }
 
     #[test]
@@ -276,7 +316,7 @@ mod tests {
         let order = sell_order(25_000_000_000, qty);
 
         let cost = order.calculate_cost(QTY_UNIT);
-        assert_eq!(cost, 50_000_000); // 0.5 BTC
+        assert_eq!(cost, Ok(50_000_000)); // 0.5 BTC
     }
 
     #[test]
@@ -286,8 +326,8 @@ mod tests {
         let order1 = sell_order(10_000_000_000, qty); // @ 10000 USDT
         let order2 = sell_order(100_000_000_000, qty); // @ 100000 USDT
 
-        assert_eq!(order1.calculate_cost(QTY_UNIT), qty);
-        assert_eq!(order2.calculate_cost(QTY_UNIT), qty);
+        assert_eq!(order1.calculate_cost(QTY_UNIT), Ok(qty));
+        assert_eq!(order2.calculate_cost(QTY_UNIT), Ok(qty));
     }
 
     // ============================================================
@@ -295,44 +335,83 @@ mod tests {
     // ============================================================
 
     #[test]
-    fn test_buy_cost_overflow_returns_max() {
+    fn test_buy_cost_overflow_returns_error() {
         // Test overflow protection
-        // price = u64::MAX, qty = u64::MAX → overflow → u64::MAX
+        // price = u64::MAX, qty = u64::MAX → even with u128 intermediate,
+        // result exceeds u64::MAX → returns explicit error
         let order = buy_order(u64::MAX, u64::MAX);
-        let cost = order.calculate_cost(QTY_UNIT);
-        assert_eq!(cost, u64::MAX);
+        let result = order.calculate_cost(QTY_UNIT);
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            CostError::Overflow {
+                price: u64::MAX,
+                qty: u64::MAX,
+                qty_unit: QTY_UNIT,
+            }
+        );
     }
 
     #[test]
     fn test_buy_cost_near_overflow_boundary() {
-        // Test near overflow boundary
-        // price = 10^18, qty = 10^8 → 10^26 (overflows u64::MAX ~1.8×10^19)
+        // Test near overflow boundary - but with u128 intermediate, this works
+        // price = 10^18, qty = 10^8 → 10^26 / 10^8 = 10^18 (fits in u64)
         let price = 1_000_000_000_000_000_000u64; // 10^18
         let qty = 100_000_000u64; // 10^8
         let order = buy_order(price, qty);
         let cost = order.calculate_cost(QTY_UNIT);
-        assert_eq!(cost, u64::MAX); // Overflow detected
+        // 10^18 * 10^8 / 10^8 = 10^18 = 1_000_000_000_000_000_000
+        assert_eq!(cost, Ok(1_000_000_000_000_000_000));
+    }
+
+    #[test]
+    fn test_buy_cost_real_world_overflow_case() {
+        // CRITICAL: Real-world case from production test data
+        // Order #21: Buy 2.562844 BTC @ 84956.01 USDT
+        //
+        // With naive u64: price * qty = 2.177×10^19 > u64::MAX (1.84×10^19)
+        //   → wrapping overflow → 33,261,559,755 (WRONG!)
+        //
+        // With u128 intermediate: 217,729,000,492 (CORRECT!)
+        //
+        // This test ensures we don't silently under-lock funds due to overflow.
+        let price = 84_956_010_000u64; // 84956.01 USDT (6 decimals)
+        let qty = 256_284_400u64; // 2.562844 BTC (8 decimals)
+        let qty_unit = 100_000_000u64; // 10^8
+
+        let order = buy_order(price, qty);
+        let cost = order.calculate_cost(qty_unit);
+
+        // Correct result: 217,729,000,492 (about 217,729 USDT)
+        // NOT 33,261,559,755 (which would be from u64 wrapping overflow)
+        assert_eq!(cost, Ok(217_729_000_492));
+
+        // Verify this would overflow in naive u64 multiplication
+        assert!(
+            price.checked_mul(qty).is_none(),
+            "This case should overflow u64"
+        );
     }
 
     #[test]
     fn test_buy_cost_zero_price() {
         // Zero price → cost = 0
         let order = buy_order(0, 100_000_000);
-        assert_eq!(order.calculate_cost(QTY_UNIT), 0);
+        assert_eq!(order.calculate_cost(QTY_UNIT), Ok(0));
     }
 
     #[test]
     fn test_buy_cost_zero_qty() {
         // Zero qty → cost = 0
         let order = buy_order(30_000_000_000, 0);
-        assert_eq!(order.calculate_cost(QTY_UNIT), 0);
+        assert_eq!(order.calculate_cost(QTY_UNIT), Ok(0));
     }
 
     #[test]
     fn test_sell_cost_zero_qty() {
         // Zero qty → cost = 0
         let order = sell_order(30_000_000_000, 0);
-        assert_eq!(order.calculate_cost(QTY_UNIT), 0);
+        assert_eq!(order.calculate_cost(QTY_UNIT), Ok(0));
     }
 
     // ============================================================
@@ -352,6 +431,6 @@ mod tests {
 
         // Manual calculation (same as main.rs)
         let expected_cost = price * qty / qty_unit;
-        assert_eq!(calculated_cost, expected_cost);
+        assert_eq!(calculated_cost, Ok(expected_cost));
     }
 }
