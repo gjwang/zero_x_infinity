@@ -6,6 +6,7 @@
 //! 3. Execute all orders through the matching engine
 //! 4. Output results to CSV (trades, order states, balances)
 //! 5. Save final state snapshot
+//! 6. Collect performance metrics (Chapter 7b)
 
 mod enforced_balance;
 mod engine;
@@ -118,6 +119,87 @@ struct InputOrder {
     side: Side,
     price: u64,
     qty: u64,
+}
+
+// ============================================================
+// PERFORMANCE METRICS
+// ============================================================
+
+/// Performance metrics for execution analysis
+/// Collects timing breakdown and latency samples for percentile calculation
+#[derive(Default)]
+struct PerfMetrics {
+    // Timing breakdown (nanoseconds)
+    total_balance_check_ns: u64,  // Account lookup + balance check + lock
+    total_matching_ns: u64,       // OrderBook.add_order()
+    total_settlement_ns: u64,     // Balance updates after trade
+    total_ledger_ns: u64,         // Ledger file I/O
+    
+    // Per-order latency samples (nanoseconds)
+    // We sample every Nth order to keep memory bounded
+    latency_samples: Vec<u64>,
+    sample_rate: usize,
+    sample_counter: usize,
+}
+
+impl PerfMetrics {
+    fn new(sample_rate: usize) -> Self {
+        PerfMetrics {
+            sample_rate,
+            latency_samples: Vec::with_capacity(10_000),
+            ..Default::default()
+        }
+    }
+    
+    fn add_order_latency(&mut self, latency_ns: u64) {
+        self.sample_counter += 1;
+        if self.sample_counter >= self.sample_rate {
+            self.latency_samples.push(latency_ns);
+            self.sample_counter = 0;
+        }
+    }
+    
+    fn add_balance_check_time(&mut self, ns: u64) {
+        self.total_balance_check_ns += ns;
+    }
+    
+    fn add_matching_time(&mut self, ns: u64) {
+        self.total_matching_ns += ns;
+    }
+    
+    fn add_settlement_time(&mut self, ns: u64) {
+        self.total_settlement_ns += ns;
+    }
+    
+    fn add_ledger_time(&mut self, ns: u64) {
+        self.total_ledger_ns += ns;
+    }
+    
+    /// Calculate percentile from sorted samples
+    fn percentile(&self, p: f64) -> Option<u64> {
+        if self.latency_samples.is_empty() {
+            return None;
+        }
+        let mut sorted = self.latency_samples.clone();
+        sorted.sort_unstable();
+        let idx = ((p / 100.0) * (sorted.len() - 1) as f64).round() as usize;
+        Some(sorted[idx.min(sorted.len() - 1)])
+    }
+    
+    fn min_latency(&self) -> Option<u64> {
+        self.latency_samples.iter().copied().min()
+    }
+    
+    fn max_latency(&self) -> Option<u64> {
+        self.latency_samples.iter().copied().max()
+    }
+    
+    fn avg_latency(&self) -> Option<u64> {
+        if self.latency_samples.is_empty() {
+            return None;
+        }
+        Some(self.latency_samples.iter().sum::<u64>() / self.latency_samples.len() as u64)
+    }
 }
 
 // ============================================================
@@ -406,7 +488,7 @@ fn execute_orders(
     book: &mut OrderBook,
     ledger: &mut LedgerWriter,
     config: &TradingConfig,
-) -> (u64, u64, u64) {
+) -> (u64, u64, u64, PerfMetrics) {
     let qty_unit = 10u64.pow(config.base_decimals);
     let base_id = config.active_symbol.base_asset_id;
     let quote_id = config.active_symbol.quote_asset_id;
@@ -415,11 +497,19 @@ fn execute_orders(
     let mut rejected = 0u64;
     let mut total_trades = 0u64;
     
+    // Performance metrics: sample every 10th order for latency percentiles
+    let mut perf = PerfMetrics::new(10);
+    
     for (i, input) in orders.iter().enumerate() {
+        let order_start = Instant::now();
+        
         // Progress every 100k orders
         if (i + 1) % 100_000 == 0 {
             println!("Processed {} / {} orders...", i + 1, orders.len());
         }
+        
+        // PRE-ORDER VALIDATION: Account lookup + balance check + lock
+        let balance_check_start = Instant::now();
         
         let account = match accounts.get_mut(&input.user_id) {
             Some(acc) => acc,
@@ -442,12 +532,15 @@ fn execute_orders(
             }
         };
         
+        perf.add_balance_check_time(balance_check_start.elapsed().as_nanos() as u64);
+        
         if lock_result.is_err() {
             rejected += 1;
             continue;
         }
         
-        // Submit order to matching engine
+        // Submit order to matching engine (MATCHING)
+        let match_start = Instant::now();
         let order = Order::new(
             input.order_id,
             input.user_id,
@@ -456,16 +549,22 @@ fn execute_orders(
             input.side.clone(),
         );
         let result = book.add_order(order);
+        perf.add_matching_time(match_start.elapsed().as_nanos() as u64);
         
-        // Process trades (settlement) and write ledger entries
+        // Process trades: settlement + ledger write per trade (interleaved)
         for trade in &result.trades {
             let trade_cost = trade.price * trade.qty / qty_unit;
             
             // Buyer settlement: debit quote (frozen -> out), credit base (in)
+            let settle_start = Instant::now();
             if let Some(buyer_acc) = accounts.get_mut(&trade.buyer_user_id) {
                 let _ = buyer_acc.settle_as_buyer(quote_id, base_id, trade_cost, trade.qty, 0);
-                
-                // Ledger: buyer debits quote asset
+            }
+            perf.add_settlement_time(settle_start.elapsed().as_nanos() as u64);
+            
+            // Buyer ledger entries (immediately after settlement)
+            let ledger_start = Instant::now();
+            if let Some(buyer_acc) = accounts.get(&trade.buyer_user_id) {
                 if let Some(b) = buyer_acc.get_balance(quote_id) {
                     ledger.write_entry(&LedgerEntry {
                         trade_id: trade.id,
@@ -476,7 +575,6 @@ fn execute_orders(
                         balance_after: b.avail() + b.frozen(),
                     });
                 }
-                // Ledger: buyer credits base asset
                 if let Some(b) = buyer_acc.get_balance(base_id) {
                     ledger.write_entry(&LedgerEntry {
                         trade_id: trade.id,
@@ -488,12 +586,18 @@ fn execute_orders(
                     });
                 }
             }
+            perf.add_ledger_time(ledger_start.elapsed().as_nanos() as u64);
             
             // Seller settlement: debit base (frozen -> out), credit quote (in)
+            let settle_start = Instant::now();
             if let Some(seller_acc) = accounts.get_mut(&trade.seller_user_id) {
                 let _ = seller_acc.settle_as_seller(base_id, quote_id, trade.qty, trade_cost, 0);
-                
-                // Ledger: seller debits base asset
+            }
+            perf.add_settlement_time(settle_start.elapsed().as_nanos() as u64);
+            
+            // Seller ledger entries (immediately after settlement)
+            let ledger_start = Instant::now();
+            if let Some(seller_acc) = accounts.get(&trade.seller_user_id) {
                 if let Some(b) = seller_acc.get_balance(base_id) {
                     ledger.write_entry(&LedgerEntry {
                         trade_id: trade.id,
@@ -504,7 +608,6 @@ fn execute_orders(
                         balance_after: b.avail() + b.frozen(),
                     });
                 }
-                // Ledger: seller credits quote asset
                 if let Some(b) = seller_acc.get_balance(quote_id) {
                     ledger.write_entry(&LedgerEntry {
                         trade_id: trade.id,
@@ -516,13 +619,17 @@ fn execute_orders(
                     });
                 }
             }
+            perf.add_ledger_time(ledger_start.elapsed().as_nanos() as u64);
         }
         
         total_trades += result.trades.len() as u64;
         accepted += 1;
+        
+        // Sample per-order latency
+        perf.add_order_latency(order_start.elapsed().as_nanos() as u64);
     }
     
-    (accepted, rejected, total_trades)
+    (accepted, rejected, total_trades, perf)
 }
 
 // ============================================================
@@ -584,7 +691,7 @@ fn main() {
     println!("\n[6] Executing orders...");
     let exec_start = Instant::now();
     
-    let (accepted, rejected, total_trades) = execute_orders(
+    let (accepted, rejected, total_trades, perf) = execute_orders(
         &orders,
         &mut accounts,
         &mut book,
@@ -599,9 +706,17 @@ fn main() {
     dump_balances(&accounts, &config, &balances_t2);
     dump_orderbook_snapshot(&book, &orderbook_t2);
     
-    // Step 7: Summary
+    // Step 8: Summary with performance metrics
     let total_time = start_time.elapsed();
     let orders_per_sec = orders.len() as f64 / exec_time.as_secs_f64();
+    let trades_per_sec = total_trades as f64 / exec_time.as_secs_f64();
+    
+    // Calculate timing breakdown percentages
+    let total_ns = perf.total_balance_check_ns + perf.total_matching_ns + perf.total_settlement_ns + perf.total_ledger_ns;
+    let balance_pct = if total_ns > 0 { perf.total_balance_check_ns as f64 / total_ns as f64 * 100.0 } else { 0.0 };
+    let match_pct = if total_ns > 0 { perf.total_matching_ns as f64 / total_ns as f64 * 100.0 } else { 0.0 };
+    let settle_pct = if total_ns > 0 { perf.total_settlement_ns as f64 / total_ns as f64 * 100.0 } else { 0.0 };
+    let ledger_pct = if total_ns > 0 { perf.total_ledger_ns as f64 / total_ns as f64 * 100.0 } else { 0.0 };
     
     let summary = format!(
         r#"=== Execution Summary ===
@@ -611,7 +726,7 @@ Total Orders: {}
   Rejected: {}
 Total Trades: {}
 Execution Time: {:.2?}
-Throughput: {:.0} orders/sec
+Throughput: {:.0} orders/sec | {:.0} trades/sec
 
 Final Orderbook:
   Best Bid: {:?}
@@ -620,6 +735,21 @@ Final Orderbook:
   Ask Depth: {} levels
 
 Total Time: {:.2?}
+
+=== Performance Breakdown ===
+Balance Check:    {:>8.2}ms ({:>5.1}%)
+Matching Engine:  {:>8.2}ms ({:>5.1}%)
+Settlement:       {:>8.2}ms ({:>5.1}%)
+Ledger I/O:       {:>8.2}ms ({:>5.1}%)
+
+=== Latency Percentiles (sampled) ===
+  Min:   {:>8} ns
+  Avg:   {:>8} ns
+  P50:   {:>8} ns
+  P99:   {:>8} ns
+  P99.9: {:>8} ns
+  Max:   {:>8} ns
+Samples: {}
 "#,
         config.active_symbol.symbol,
         orders.len(),
@@ -628,11 +758,23 @@ Total Time: {:.2?}
         total_trades,
         exec_time,
         orders_per_sec,
+        trades_per_sec,
         book.best_bid(),
         book.best_ask(),
         book.depth().0,
         book.depth().1,
         total_time,
+        perf.total_balance_check_ns as f64 / 1_000_000.0, balance_pct,
+        perf.total_matching_ns as f64 / 1_000_000.0, match_pct,
+        perf.total_settlement_ns as f64 / 1_000_000.0, settle_pct,
+        perf.total_ledger_ns as f64 / 1_000_000.0, ledger_pct,
+        perf.min_latency().unwrap_or(0),
+        perf.avg_latency().unwrap_or(0),
+        perf.percentile(50.0).unwrap_or(0),
+        perf.percentile(99.0).unwrap_or(0),
+        perf.percentile(99.9).unwrap_or(0),
+        perf.max_latency().unwrap_or(0),
+        perf.latency_samples.len(),
     );
     
     println!("\n{}", summary);
@@ -642,5 +784,41 @@ Total Time: {:.2?}
     summary_file.write_all(summary.as_bytes()).unwrap();
     println!("Summary written to {}", summary_path);
     
+    // Write perf baseline to separate file
+    let perf_path = format!("{}/t2_perf.txt", output_dir);
+    let mut perf_file = File::create(&perf_path).unwrap();
+    writeln!(perf_file, "# Performance Baseline - 0xInfinity").unwrap();
+    writeln!(perf_file, "# Generated: {}", chrono_lite_now()).unwrap();
+    writeln!(perf_file, "orders={}", orders.len()).unwrap();
+    writeln!(perf_file, "trades={}", total_trades).unwrap();
+    writeln!(perf_file, "exec_time_ms={:.2}", exec_time.as_secs_f64() * 1000.0).unwrap();
+    writeln!(perf_file, "throughput_ops={:.0}", orders_per_sec).unwrap();
+    writeln!(perf_file, "throughput_tps={:.0}", trades_per_sec).unwrap();
+    writeln!(perf_file, "balance_check_ns={}", perf.total_balance_check_ns).unwrap();
+    writeln!(perf_file, "matching_ns={}", perf.total_matching_ns).unwrap();
+    writeln!(perf_file, "settlement_ns={}", perf.total_settlement_ns).unwrap();
+    writeln!(perf_file, "ledger_ns={}", perf.total_ledger_ns).unwrap();
+    writeln!(perf_file, "latency_min_ns={}", perf.min_latency().unwrap_or(0)).unwrap();
+    writeln!(perf_file, "latency_avg_ns={}", perf.avg_latency().unwrap_or(0)).unwrap();
+    writeln!(perf_file, "latency_p50_ns={}", perf.percentile(50.0).unwrap_or(0)).unwrap();
+    writeln!(perf_file, "latency_p99_ns={}", perf.percentile(99.0).unwrap_or(0)).unwrap();
+    writeln!(perf_file, "latency_p999_ns={}", perf.percentile(99.9).unwrap_or(0)).unwrap();
+    writeln!(perf_file, "latency_max_ns={}", perf.max_latency().unwrap_or(0)).unwrap();
+    println!("Perf baseline written to {}", perf_path);
+    
     println!("\n=== Done ===");
+}
+
+/// Simple timestamp without external dependency
+fn chrono_lite_now() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let duration = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+    let secs = duration.as_secs();
+    // Convert to approximate date (not accounting for leap years/etc, just for display)
+    let days = secs / 86400;
+    let years = 1970 + days / 365;
+    let remaining_days = days % 365;
+    let months = remaining_days / 30 + 1;
+    let day = remaining_days % 30 + 1;
+    format!("{}-{:02}-{:02}", years, months, day)
 }
