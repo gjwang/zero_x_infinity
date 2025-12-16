@@ -33,6 +33,7 @@ This is a pilgrimage from `Hello World` to `Microsecond Latency`.
 | 0x06 | [Enforced Balance](./docs/src/0x06-enforced-balance.md) | 类型安全的强制余额 |
 | 0x07a | [Testing Framework](./docs/src/0x07a-testing-framework.md) | 100万订单批量测试框架 |
 | 0x07b | [Performance Baseline](./docs/src/0x07b-perf-baseline.md) | 性能基线与瓶颈分析 |
+| 0x08 | [Order WAL Persistence](./docs/src/0x08-order-wal-persistence.md) | 订单WAL持久化与单线程架构 |
 
 ---
 
