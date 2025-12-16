@@ -11,7 +11,7 @@
 //! └──────────┘    └──────────┘    └──────────┘    └──────────┘
 //!
 //! UBSCore responsibilities:
-//! - Order WAL (persistence first!)
+//! - InternalOrder WAL (persistence first!)
 //! - Balance Lock/Unlock/Settle
 //! - Single-threaded atomic operations
 //! ```
@@ -29,7 +29,7 @@ use zero_x_infinity::csv_io::{
 use zero_x_infinity::engine::MatchingEngine;
 use zero_x_infinity::ledger::{LedgerEntry, LedgerWriter};
 use zero_x_infinity::messages::TradeEvent;
-use zero_x_infinity::models::{InternalOrder, Order, Side};
+use zero_x_infinity::models::{InternalOrder, Side};
 use zero_x_infinity::orderbook::OrderBook;
 use zero_x_infinity::perf::PerfMetrics;
 use zero_x_infinity::ubscore::UBSCore;
@@ -112,9 +112,10 @@ fn execute_orders(
         // ========================================
         let match_start = Instant::now();
 
-        let order = Order::new(
+        let order = InternalOrder::new(
             input.order_id,
             input.user_id,
+            config.active_symbol.symbol_id,
             input.price,
             input.qty,
             input.side,
@@ -244,26 +245,19 @@ fn execute_orders_with_ubscore(
         // ========================================
         let balance_check_start = Instant::now();
 
-        let order = Order::new(
+        let order = InternalOrder::new(
             input.order_id,
             input.user_id,
+            config.active_symbol.symbol_id,
             input.price,
             input.qty,
             input.side,
         );
 
-        // Convert to InternalOrder (self-contained)
-        let internal_order = InternalOrder::from_order(
-            &order,
-            config.qty_unit(),
-            config.base_asset_id(),
-            config.quote_asset_id(),
-        );
-
-        let valid_order = match ubscore.process_order(internal_order) {
+        let valid_order = match ubscore.process_order(order) {
             Ok(vo) => vo,
             Err(_reason) => {
-                // Order rejected (insufficient balance, etc.)
+                // InternalOrder rejected (insufficient balance, etc.)
                 rejected += 1;
                 continue;
             }
@@ -447,7 +441,8 @@ fn main() {
             sync_on_flush: false,        // Faster for benchmarks
         };
 
-        let mut ubscore = UBSCore::new(wal_config).expect("Failed to create UBSCore");
+        let mut ubscore =
+            UBSCore::new(config.clone(), wal_config).expect("Failed to create UBSCore");
 
         // Transfer initial balances to UBSCore via deposit()
         for (user_id, account) in &accounts {

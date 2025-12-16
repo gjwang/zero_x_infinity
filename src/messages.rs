@@ -11,13 +11,13 @@
 //! ```
 
 use crate::core_types::{AssetId, OrderId, SeqNum, TradeId, UserId};
-use crate::models::{Order, Side, Trade};
+use crate::models::{InternalOrder, Side, Trade};
 
 // ============================================================
 // ORDER MESSAGES (Gateway → UBSCore)
 // ============================================================
 
-/// Order message - submitted by Gateway, processed by UBSCore
+/// InternalOrder message - submitted by Gateway, processed by UBSCore
 ///
 /// This is the raw order before WAL persistence and balance locking.
 #[derive(Debug, Clone)]
@@ -25,13 +25,13 @@ pub struct OrderMessage {
     /// Sequence number assigned by UBSCore after WAL write
     pub seq_id: SeqNum,
     /// The order content
-    pub order: Order,
+    pub order: InternalOrder,
     /// Timestamp in nanoseconds (from std::time::Instant or TSC)
     pub timestamp_ns: u64,
 }
 
 impl OrderMessage {
-    pub fn new(seq_id: SeqNum, order: Order, timestamp_ns: u64) -> Self {
+    pub fn new(seq_id: SeqNum, order: InternalOrder, timestamp_ns: u64) -> Self {
         Self {
             seq_id,
             order,
@@ -52,11 +52,11 @@ pub struct ValidOrder {
     /// Sequence number (from WAL)
     pub seq_id: SeqNum,
     /// The order (balance already locked)
-    pub order: Order,
+    pub order: InternalOrder,
 }
 
 impl ValidOrder {
-    pub fn new(seq_id: SeqNum, order: Order) -> Self {
+    pub fn new(seq_id: SeqNum, order: InternalOrder) -> Self {
         Self { seq_id, order }
     }
 }
@@ -120,7 +120,7 @@ impl TradeEvent {
 // ORDER EVENT (状态变更事件)
 // ============================================================
 
-/// Order event - order state changes
+/// InternalOrder event - order state changes
 ///
 /// Used for:
 /// 1. Audit logging
@@ -128,14 +128,14 @@ impl TradeEvent {
 /// 3. Settlement persistence
 #[derive(Debug, Clone)]
 pub enum OrderEvent {
-    /// Order accepted and balance locked
+    /// InternalOrder accepted and balance locked
     Accepted {
         seq_id: SeqNum,
         order_id: OrderId,
         user_id: UserId,
     },
 
-    /// Order rejected (insufficient balance, etc.)
+    /// InternalOrder rejected (insufficient balance, etc.)
     Rejected {
         seq_id: SeqNum,
         order_id: OrderId,
@@ -143,7 +143,7 @@ pub enum OrderEvent {
         reason: RejectReason,
     },
 
-    /// Order fully filled
+    /// InternalOrder fully filled
     Filled {
         order_id: OrderId,
         user_id: UserId,
@@ -151,7 +151,7 @@ pub enum OrderEvent {
         avg_price: u64,
     },
 
-    /// Order partially filled
+    /// InternalOrder partially filled
     PartialFilled {
         order_id: OrderId,
         user_id: UserId,
@@ -159,7 +159,7 @@ pub enum OrderEvent {
         remaining_qty: u64,
     },
 
-    /// Order cancelled by user
+    /// InternalOrder cancelled by user
     Cancelled {
         order_id: OrderId,
         user_id: UserId,
@@ -186,7 +186,7 @@ pub enum RejectReason {
     AssetNotFound,
     /// Symbol not found
     SymbolNotFound,
-    /// Order already exists
+    /// InternalOrder already exists
     DuplicateOrderId,
     /// System overloaded
     SystemBusy,
@@ -281,7 +281,7 @@ mod tests {
 
     #[test]
     fn test_order_message() {
-        let order = Order::new(1, 100, 10000, 1000, Side::Buy);
+        let order = InternalOrder::new(1, 100, 0, 10000, 1000, Side::Buy);
         let msg = OrderMessage::new(1, order, 1234567890);
 
         assert_eq!(msg.seq_id, 1);

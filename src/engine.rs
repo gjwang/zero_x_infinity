@@ -1,11 +1,11 @@
-//! Matching Engine - Order matching and trade execution
+//! Matching Engine - InternalOrder matching and trade execution
 //!
 //! The engine handles:
 //! 1. Matching incoming orders against the order book
 //! 2. Generating trades
 //! 3. Updating order status
 
-use crate::models::{Order, OrderResult, OrderStatus, OrderType, Side, Trade};
+use crate::models::{InternalOrder, OrderResult, OrderStatus, OrderType, Side, Trade};
 use crate::orderbook::OrderBook;
 
 /// Pending trade info (before final Trade creation)
@@ -29,7 +29,7 @@ impl MatchingEngine {
     /// 2. Update order status based on fill result
     /// 3. If partially filled or unfilled, rest in book
     /// 4. Return order status and any trades generated
-    pub fn process_order(book: &mut OrderBook, mut order: Order) -> OrderResult {
+    pub fn process_order(book: &mut OrderBook, mut order: InternalOrder) -> OrderResult {
         let pending_trades = match order.side {
             Side::Buy => Self::match_buy(book, &mut order),
             Side::Sell => Self::match_sell(book, &mut order),
@@ -73,7 +73,7 @@ impl MatchingEngine {
 
     /// Match a buy order against asks (sell orders)
     /// NOTE: Does NOT update status - that's done in process_order
-    fn match_buy(book: &mut OrderBook, buy_order: &mut Order) -> Vec<PendingTrade> {
+    fn match_buy(book: &mut OrderBook, buy_order: &mut InternalOrder) -> Vec<PendingTrade> {
         let mut pending_trades = Vec::new();
         let mut prices_to_remove = Vec::new();
 
@@ -136,7 +136,7 @@ impl MatchingEngine {
 
     /// Match a sell order against bids (buy orders)
     /// NOTE: Does NOT update status - that's done in process_order
-    fn match_sell(book: &mut OrderBook, sell_order: &mut Order) -> Vec<PendingTrade> {
+    fn match_sell(book: &mut OrderBook, sell_order: &mut InternalOrder) -> Vec<PendingTrade> {
         let mut pending_trades = Vec::new();
         let mut keys_to_remove = Vec::new();
 
@@ -203,8 +203,8 @@ impl MatchingEngine {
 mod tests {
     use super::*;
 
-    fn make_order(id: u64, user_id: u64, price: u64, qty: u64, side: Side) -> Order {
-        Order::new(id, user_id, price, qty, side)
+    fn make_order(id: u64, user_id: u64, price: u64, qty: u64, side: Side) -> InternalOrder {
+        InternalOrder::new(id, user_id, 0, price, qty, side) // symbol_id=0
     }
 
     #[test]

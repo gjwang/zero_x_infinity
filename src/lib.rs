@@ -6,7 +6,7 @@
 //!
 //! - [`types`] - Core type definitions (AssetId, UserId, etc.)
 //! - [`config`] - Trading configuration (assets, symbols)
-//! - [`models`] - Order and Trade types
+//! - [`models`] - InternalOrder and Trade types
 //! - [`messages`] - Inter-service communication types
 //! - [`ubscore`] - User Balance Core Service (single-threaded balance ops)
 //! - [`orderbook`] - BTreeMap-based order book
@@ -48,7 +48,7 @@ pub use engine::MatchingEngine;
 pub use messages::{
     BalanceOp, BalanceUpdate, OrderEvent, OrderMessage, RejectReason, TradeEvent, ValidOrder,
 };
-pub use models::{Order, OrderResult, OrderStatus, OrderType, Side, Trade};
+pub use models::{InternalOrder, OrderResult, OrderStatus, OrderType, Side, Trade};
 pub use orderbook::OrderBook;
 pub use ubscore::UBSCore;
 pub use user_account::UserAccount;
