@@ -550,9 +550,42 @@ diff baseline/sorted.csv output/sorted.csv
 
 这样无论执行顺序如何，排序后结果相同。
 
-### 10.4 下一章任务 (0x08c)
+### 10.4 生产环境：DB Upsert + 幂等设计
+
+**问题**：Crash 后 Replay，事件到达顺序可能与原运行不同，导致 DB version 检查失败。
+
+**解决方案**：DB 使用 Upsert + 幂等操作
+
+```sql
+-- 主键使用 (user_id, asset_id, event_source, event_id)
+-- 不依赖 version 做写入校验
+
+INSERT INTO balance_events (
+    user_id, asset_id, 
+    event_source, event_id,  -- 'order:123' 或 'trade:456'
+    op_type, delta, balance_after
+)
+ON CONFLICT (user_id, asset_id, event_source, event_id) 
+DO NOTHING;  -- 幂等：重复到达直接忽略
+```
+
+**设计原则**：
+
+1. **幂等写入** - 相同 (user_id, asset_id, event_source, event_id) 只会写一次
+2. **乱序容忍** - 事件可以任意顺序到达 DB
+3. **version 仅用于审计** - 不用于写入校验，读取时按 event_id 排序重建顺序
+4. **最终一致** - 无论到达顺序如何，最终状态相同
+
+```
+事件到达顺序：[E3, E1, E5, E2, E4]
+DB 存储后：   {E1, E2, E3, E4, E5}  -- 主键保证唯一
+读取排序：    [E1, E2, E3, E4, E5]  -- ORDER BY event_id
+```
+
+### 10.5 下一章任务 (0x08c)
 
 1. **扩展 LedgerEntry** - 添加 `event_source` 和 `op_type`
 2. **记录所有余额操作** - lock/unlock/spend_frozen
 3. **验证 version 连续性** - per-user-per-asset
 4. **更新 E2E 测试** - 排序后比较
+5. **实现 Upsert 幂等写入** - 乱序容忍
