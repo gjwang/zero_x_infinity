@@ -11,6 +11,7 @@
 - [0x07a 测试框架 (Testing Framework)](./0x07a-testing-framework.md)
 - [0x07b 性能基线 (Performance Baseline)](./0x07b-perf-baseline.md)
 - [0x08a 交易流水线设计 (Trading Pipeline Design)](./0x08a-trading-pipeline-design.md)
+- [0x08b UBSCore 实现 (UBSCore Implementation)](./0x08b-ubscore-implementation.md)
 
 ---
 
