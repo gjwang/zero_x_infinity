@@ -6,7 +6,7 @@
 use rustc_hash::FxHashMap;
 
 // Re-export types for backwards compatibility
-pub use crate::types::{AssetId, UserId};
+pub use crate::core_types::{AssetId, UserId};
 
 /// Asset configuration from assets_config.csv
 ///

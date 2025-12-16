@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 // Import core types from types module
-pub use crate::types::{AssetId, UserId};
+pub use crate::core_types::{AssetId, UserId};
 
 // Import the ENFORCED Balance type from balance module
 pub use crate::balance::Balance;

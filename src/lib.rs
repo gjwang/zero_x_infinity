@@ -16,7 +16,7 @@
 //! - [`csv_io`] - CSV loading/saving
 
 // Core types - must be first!
-pub mod types;
+pub mod core_types;
 
 // Configuration
 pub mod config;
@@ -37,8 +37,8 @@ pub mod symbol_manager;
 // Convenient re-exports at crate root
 pub use balance::Balance;
 pub use config::TradingConfig;
+pub use core_types::{AssetId, OrderId, SeqNum, TradeId, UserId};
 pub use engine::MatchingEngine;
 pub use models::{Order, OrderResult, OrderStatus, OrderType, Side, Trade};
 pub use orderbook::OrderBook;
-pub use types::{AssetId, OrderId, SeqNum, TradeId, UserId};
 pub use user_account::UserAccount;
