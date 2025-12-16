@@ -96,6 +96,92 @@ impl Order {
     }
 }
 
+// ============================================================
+// INTERNAL ORDER (self-contained for UBSCore)
+// ============================================================
+
+use crate::core_types::{AssetId, OrderId, UserId};
+
+/// Internal order - self-contained, used by UBSCore
+///
+/// Contains all info needed for balance operations without external config.
+/// Created from Order + symbol config when entering UBSCore.
+#[derive(Debug, Clone)]
+pub struct InternalOrder {
+    pub id: OrderId,
+    pub user_id: UserId,
+    pub price: u64,
+    pub qty: u64,
+    pub side: Side,
+    pub order_type: OrderType,
+    /// qty_unit for cost calculation (e.g., 10^8 for BTC)
+    pub qty_unit: u64,
+    /// Asset IDs for locking
+    pub base_asset_id: AssetId,
+    pub quote_asset_id: AssetId,
+}
+
+impl InternalOrder {
+    /// Create from Order + symbol config
+    pub fn from_order(
+        order: &Order,
+        qty_unit: u64,
+        base_asset_id: AssetId,
+        quote_asset_id: AssetId,
+    ) -> Self {
+        Self {
+            id: order.id,
+            user_id: order.user_id as UserId,
+            price: order.price,
+            qty: order.qty,
+            side: order.side,
+            order_type: order.order_type,
+            qty_unit,
+            base_asset_id,
+            quote_asset_id,
+        }
+    }
+
+    /// Calculate order cost (amount to lock) - no parameters needed!
+    ///
+    /// - Buy: price × qty / qty_unit (lock quote asset)
+    /// - Sell: qty (lock base asset)
+    #[inline]
+    pub fn calculate_cost(&self) -> u64 {
+        match self.side {
+            Side::Buy => self
+                .price
+                .checked_mul(self.qty)
+                .map(|v| v / self.qty_unit)
+                .unwrap_or(u64::MAX),
+            Side::Sell => self.qty,
+        }
+    }
+
+    /// Asset to lock
+    #[inline]
+    pub fn lock_asset_id(&self) -> AssetId {
+        match self.side {
+            Side::Buy => self.quote_asset_id,
+            Side::Sell => self.base_asset_id,
+        }
+    }
+
+    /// Convert back to Order for ME
+    pub fn to_order(&self) -> Order {
+        Order {
+            id: self.id,
+            user_id: self.user_id as u64,
+            price: self.price,
+            qty: self.qty,
+            filled_qty: 0,
+            side: self.side,
+            order_type: self.order_type,
+            status: OrderStatus::New,
+        }
+    }
+}
+
 /// A trade that occurred when orders matched
 #[derive(Debug, Clone)]
 pub struct Trade {

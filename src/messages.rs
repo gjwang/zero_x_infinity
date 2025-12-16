@@ -84,6 +84,8 @@ pub struct TradeEvent {
     pub base_asset_id: AssetId,
     /// Quote asset ID (e.g., USDT in BTC_USDT)
     pub quote_asset_id: AssetId,
+    /// qty_unit for quote amount calculation
+    pub qty_unit: u64,
 }
 
 impl TradeEvent {
@@ -94,6 +96,7 @@ impl TradeEvent {
         taker_side: Side,
         base_asset_id: AssetId,
         quote_asset_id: AssetId,
+        qty_unit: u64,
     ) -> Self {
         Self {
             trade,
@@ -102,13 +105,14 @@ impl TradeEvent {
             taker_side,
             base_asset_id,
             quote_asset_id,
+            qty_unit,
         }
     }
 
-    /// Calculate quote amount (price * qty / qty_unit)
+    /// Calculate quote amount (price * qty / qty_unit) - self-contained
     #[inline]
-    pub fn quote_amount(&self, qty_unit: u64) -> u64 {
-        self.trade.price * self.trade.qty / qty_unit
+    pub fn quote_amount(&self) -> u64 {
+        self.trade.price * self.trade.qty / self.qty_unit
     }
 }
 

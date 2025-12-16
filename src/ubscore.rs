@@ -25,10 +25,9 @@
 //! TradeEvent → settle_trade() → spend_frozen + deposit → BalanceUpdate events
 //! ```
 
-use crate::config::TradingConfig;
 use crate::core_types::{AssetId, SeqNum, UserId};
 use crate::messages::{RejectReason, TradeEvent, ValidOrder};
-use crate::models::{Order, Side};
+use crate::models::InternalOrder;
 use crate::user_account::UserAccount;
 use crate::wal::{WalConfig, WalWriter};
 
@@ -43,26 +42,24 @@ use std::io;
 ///
 /// ALL balance operations go through this service.
 /// Trust Balance.frozen to track locked amounts - no separate tracking needed.
+/// No config needed - InternalOrder is self-contained.
 pub struct UBSCore {
     /// User accounts - the authoritative balance state
     accounts: FxHashMap<UserId, UserAccount>,
     /// Write-Ahead Log for order persistence
     wal: WalWriter,
-    /// Trading configuration (symbols, assets)
-    config: TradingConfig,
 }
 
 impl UBSCore {
-    /// Create a new UBSCore with given configuration
+    /// Create a new UBSCore with given WAL config
     ///
     /// Use `deposit()` to add initial balances after creation.
-    pub fn new(config: TradingConfig, wal_config: WalConfig) -> io::Result<Self> {
+    pub fn new(wal_config: WalConfig) -> io::Result<Self> {
         let wal = WalWriter::new(wal_config)?;
 
         Ok(Self {
             accounts: FxHashMap::default(),
             wal,
-            config,
         })
     }
 
@@ -103,7 +100,7 @@ impl UBSCore {
     /// 1. Order validation (price, qty)
     /// 2. Account exists check
     /// 3. Balance sufficiency check (read-only)
-    fn pre_check(&self, order: &Order) -> Result<(AssetId, u64), RejectReason> {
+    fn pre_check(&self, order: &InternalOrder) -> Result<(), RejectReason> {
         // 1. Validate order fields
         if order.price == 0 && order.order_type == crate::models::OrderType::Limit {
             return Err(RejectReason::InvalidPrice);
@@ -119,30 +116,29 @@ impl UBSCore {
             .ok_or(RejectReason::UserNotFound)?;
 
         // 3. Calculate cost and check balance (read-only!)
-        let (asset_id, lock_amount) = match order.side {
-            Side::Buy => (
-                self.config.quote_asset_id(),
-                order.calculate_cost(self.config.qty_unit()),
-            ),
-            Side::Sell => (self.config.base_asset_id(), order.qty),
-        };
+        // InternalOrder is self-contained - no need for config!
+        let lock_asset = order.lock_asset_id();
+        let lock_amount = order.calculate_cost();
 
         // Check balance is sufficient (no mutation)
         let balance = account
-            .get_balance(asset_id)
+            .get_balance(lock_asset)
             .ok_or(RejectReason::InsufficientBalance)?;
         if balance.avail() < lock_amount {
             return Err(RejectReason::InsufficientBalance);
         }
 
-        Ok((asset_id, lock_amount))
+        Ok(())
     }
 
     /// Lock funds (state mutation, call AFTER WAL write)
-    fn lock_funds(&mut self, order: &Order, asset_id: AssetId, lock_amount: u64) {
+    fn lock_funds(&mut self, order: &InternalOrder) {
         // This should never fail if pre_check passed
+        let lock_asset = order.lock_asset_id();
+        let lock_amount = order.calculate_cost();
+
         if let Some(account) = self.accounts.get_mut(&order.user_id) {
-            if let Ok(balance) = account.get_balance_mut(asset_id) {
+            if let Ok(balance) = account.get_balance_mut(lock_asset) {
                 let _ = balance.lock(lock_amount);
             }
         }
@@ -158,22 +154,24 @@ impl UBSCore {
     /// TODO: Add deduplication guard (prevent replay attacks)
     /// - Check order_id not seen before
     /// - Use time-windowed bloom filter or LRU cache
-    pub fn process_order(&mut self, order: Order) -> Result<ValidOrder, RejectReason> {
+    pub fn process_order(&mut self, order: InternalOrder) -> Result<ValidOrder, RejectReason> {
         // TODO: dedup_guard.check_and_record(order.id)?;
 
         // 1. Pre-check (no side effects, can safely reject)
-        let (asset_id, lock_amount) = self.pre_check(&order)?;
+        self.pre_check(&order)?;
 
         // 2. Persist to WAL FIRST (before any state mutation!)
+        // Note: WAL writes InternalOrder for full context
+        let me_order = order.to_order();
         let seq_id = self
             .wal
-            .append(&order)
+            .append(&me_order)
             .map_err(|_| RejectReason::SystemBusy)?;
 
         // 3. Lock funds (safe now, order is persisted)
-        self.lock_funds(&order, asset_id, lock_amount);
+        self.lock_funds(&order);
 
-        Ok(ValidOrder::new(seq_id, order))
+        Ok(ValidOrder::new(seq_id, me_order))
     }
 
     // ============================================================
@@ -187,7 +185,7 @@ impl UBSCore {
     /// - Seller: spend_frozen(base), deposit(quote)
     pub fn settle_trade(&mut self, event: &TradeEvent) -> Result<(), &'static str> {
         let trade = &event.trade;
-        let quote_amount = trade.price * trade.qty / self.config.qty_unit();
+        let quote_amount = event.quote_amount(); // Self-contained!
 
         // Buyer settlement: spend USDT, receive BTC
         {
@@ -285,51 +283,7 @@ impl UBSCore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::Side;
-
-    fn test_config() -> TradingConfig {
-        // Create a minimal test config
-        use crate::config::{AssetConfig, SymbolConfig};
-
-        let mut assets = FxHashMap::default();
-        assets.insert(
-            1,
-            AssetConfig {
-                asset_id: 1,
-                asset: "BTC".to_string(),
-                decimals: 8,
-                display_decimals: 6,
-            },
-        );
-        assets.insert(
-            2,
-            AssetConfig {
-                asset_id: 2,
-                asset: "USDT".to_string(),
-                decimals: 6,
-                display_decimals: 4,
-            },
-        );
-
-        let active_symbol = SymbolConfig {
-            symbol_id: 0,
-            symbol: "BTC_USDT".to_string(),
-            base_asset_id: 1,
-            quote_asset_id: 2,
-            price_decimal: 6,
-            price_display_decimal: 2,
-        };
-
-        TradingConfig {
-            assets,
-            symbols: vec![active_symbol.clone()],
-            active_symbol,
-            base_decimals: 8,
-            quote_decimals: 6,
-            qty_display_decimals: 6,
-            price_display_decimals: 2,
-        }
-    }
+    use crate::models::{Order, Side};
 
     fn test_wal_config() -> WalConfig {
         WalConfig {
@@ -339,11 +293,15 @@ mod tests {
         }
     }
 
+    /// Create InternalOrder from Order with test defaults
+    fn test_internal_order(order: &Order) -> InternalOrder {
+        InternalOrder::from_order(order, 100_000_000, 1, 2) // qty_unit=10^8, base=1(BTC), quote=2(USDT)
+    }
+
     #[test]
     fn test_deposit_and_query() {
-        let config = test_config();
         let wal_config = test_wal_config();
-        let mut ubs = UBSCore::new(config, wal_config).unwrap();
+        let mut ubs = UBSCore::new(wal_config).unwrap();
 
         // Deposit 100 BTC (in satoshi)
         ubs.deposit(1, 1, 100_0000_0000).unwrap();
@@ -356,18 +314,18 @@ mod tests {
 
     #[test]
     fn test_process_order_success() {
-        let config = test_config();
         let wal_config = test_wal_config();
-        let mut ubs = UBSCore::new(config, wal_config).unwrap();
+        let mut ubs = UBSCore::new(wal_config).unwrap();
 
         // Setup: deposit 100 BTC to user 1
         ubs.deposit(1, 1, 100_0000_0000).unwrap();
 
         // Create sell order for 10 BTC
         let order = Order::new(1, 1, 10000, 10_0000_0000, Side::Sell);
+        let internal_order = test_internal_order(&order);
 
         // Process order
-        let result = ubs.process_order(order);
+        let result = ubs.process_order(internal_order);
         assert!(result.is_ok());
 
         let valid_order = result.unwrap();
@@ -382,16 +340,16 @@ mod tests {
 
     #[test]
     fn test_process_order_insufficient_balance() {
-        let config = test_config();
         let wal_config = test_wal_config();
-        let mut ubs = UBSCore::new(config, wal_config).unwrap();
+        let mut ubs = UBSCore::new(wal_config).unwrap();
 
         // Setup: deposit only 5 BTC
         ubs.deposit(1, 1, 5_0000_0000).unwrap();
 
         // Try to sell 10 BTC
         let order = Order::new(1, 1, 10000, 10_0000_0000, Side::Sell);
-        let result = ubs.process_order(order);
+        let internal_order = test_internal_order(&order);
+        let result = ubs.process_order(internal_order);
 
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), RejectReason::InsufficientBalance);
@@ -399,14 +357,14 @@ mod tests {
 
     #[test]
     fn test_unlock() {
-        let config = test_config();
         let wal_config = test_wal_config();
-        let mut ubs = UBSCore::new(config, wal_config).unwrap();
+        let mut ubs = UBSCore::new(wal_config).unwrap();
 
         // Setup and process order
         ubs.deposit(1, 1, 100_0000_0000).unwrap();
         let order = Order::new(1, 1, 10000, 10_0000_0000, Side::Sell);
-        ubs.process_order(order).unwrap();
+        let internal_order = test_internal_order(&order);
+        ubs.process_order(internal_order).unwrap();
 
         // Check: 90 avail, 10 frozen
         let b = ubs.get_balance(1, 1).unwrap();
