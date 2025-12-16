@@ -25,10 +25,10 @@
 //! TradeEvent → settle_trade() → spend_frozen + deposit → BalanceUpdate events
 //! ```
 
-use crate::config::TradingConfig;
 use crate::core_types::{AssetId, SeqNum, UserId};
 use crate::messages::{RejectReason, TradeEvent, ValidOrder};
 use crate::models::{InternalOrder, Side};
+use crate::symbol_manager::SymbolManager;
 use crate::user_account::UserAccount;
 use crate::wal::{WalConfig, WalWriter};
 
@@ -48,21 +48,21 @@ pub struct UBSCore {
     accounts: FxHashMap<UserId, UserAccount>,
     /// Write-Ahead Log for order persistence
     wal: WalWriter,
-    /// Trading configuration (for symbol → asset lookup)
-    config: TradingConfig,
+    /// Symbol manager for symbol → asset lookup
+    manager: SymbolManager,
 }
 
 impl UBSCore {
-    /// Create a new UBSCore with given config
+    /// Create a new UBSCore with given symbol manager
     ///
     /// Use `deposit()` to add initial balances after creation.
-    pub fn new(config: TradingConfig, wal_config: WalConfig) -> io::Result<Self> {
+    pub fn new(manager: SymbolManager, wal_config: WalConfig) -> io::Result<Self> {
         let wal = WalWriter::new(wal_config)?;
 
         Ok(Self {
             accounts: FxHashMap::default(),
             wal,
-            config,
+            manager,
         })
     }
 
@@ -97,11 +97,13 @@ impl UBSCore {
     // ORDER PROCESSING
     // ============================================================
 
-    /// Get asset to lock based on order side
+    /// Get asset to lock based on order side and symbol
     fn lock_asset_for_order(&self, order: &InternalOrder) -> AssetId {
-        match order.side {
-            Side::Buy => self.config.quote_asset_id(),
-            Side::Sell => self.config.base_asset_id(),
+        let symbol_info = self.manager.get_symbol_info_by_id(order.symbol_id);
+        match (order.side, symbol_info) {
+            (Side::Buy, Some(s)) => s.quote_asset_id,
+            (Side::Sell, Some(s)) => s.base_asset_id,
+            _ => 0, // Invalid symbol_id - will fail later
         }
     }
 
@@ -112,6 +114,12 @@ impl UBSCore {
     /// 2. Account exists check
     /// 3. Balance sufficiency check (read-only)
     fn pre_check(&self, order: &InternalOrder) -> Result<(), RejectReason> {
+        // 0. Validate symbol exists
+        let symbol_info = self
+            .manager
+            .get_symbol_info_by_id(order.symbol_id)
+            .ok_or(RejectReason::SymbolNotFound)?;
+
         // 1. Validate order fields
         if order.price == 0 && order.order_type == crate::models::OrderType::Limit {
             return Err(RejectReason::InvalidPrice);
@@ -128,7 +136,7 @@ impl UBSCore {
 
         // 3. Calculate cost and check balance (read-only!)
         let lock_asset = self.lock_asset_for_order(order);
-        let lock_amount = order.calculate_cost();
+        let lock_amount = order.calculate_cost(symbol_info.qty_unit());
 
         // Check balance is sufficient (no mutation)
         let balance = account
@@ -145,7 +153,9 @@ impl UBSCore {
     fn lock_funds(&mut self, order: &InternalOrder) {
         // This should never fail if pre_check passed
         let lock_asset = self.lock_asset_for_order(order);
-        let lock_amount = order.calculate_cost();
+        let symbol_info = self.manager.get_symbol_info_by_id(order.symbol_id);
+        let qty_unit = symbol_info.map(|s| s.qty_unit()).unwrap_or(100_000_000);
+        let lock_amount = order.calculate_cost(qty_unit);
 
         if let Some(account) = self.accounts.get_mut(&order.user_id) {
             if let Ok(balance) = account.get_balance_mut(lock_asset) {
@@ -291,48 +301,21 @@ impl UBSCore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{AssetConfig, SymbolConfig};
     use crate::models::InternalOrder;
 
-    fn test_config() -> TradingConfig {
-        let mut assets = FxHashMap::default();
-        assets.insert(
-            1,
-            AssetConfig {
-                asset_id: 1,
-                asset: "BTC".to_string(),
-                decimals: 8,
-                display_decimals: 6,
-            },
-        );
-        assets.insert(
-            2,
-            AssetConfig {
-                asset_id: 2,
-                asset: "USDT".to_string(),
-                decimals: 6,
-                display_decimals: 4,
-            },
-        );
+    fn test_manager() -> SymbolManager {
+        let mut manager = SymbolManager::new();
 
-        let active_symbol = SymbolConfig {
-            symbol_id: 0,
-            symbol: "BTC_USDT".to_string(),
-            base_asset_id: 1,
-            quote_asset_id: 2,
-            price_decimal: 6,
-            price_display_decimal: 2,
-        };
+        // Add assets first
+        manager.add_asset(1, 8, 6, "BTC"); // BTC: 8 decimals
+        manager.add_asset(2, 6, 4, "USDT"); // USDT: 6 decimals
 
-        TradingConfig {
-            assets,
-            symbols: vec![active_symbol.clone()],
-            active_symbol,
-            base_decimals: 8,
-            quote_decimals: 6,
-            qty_display_decimals: 6,
-            price_display_decimals: 2,
-        }
+        // Add symbol (BTC_USDT)
+        manager
+            .insert_symbol("BTC_USDT", 0, 1, 2, 6, 2)
+            .expect("Failed to insert symbol");
+
+        manager
     }
 
     fn test_wal_config() -> WalConfig {
@@ -345,9 +328,9 @@ mod tests {
 
     #[test]
     fn test_deposit_and_query() {
-        let config = test_config();
+        let manager = test_manager();
         let wal_config = test_wal_config();
-        let mut ubs = UBSCore::new(config, wal_config).unwrap();
+        let mut ubs = UBSCore::new(manager, wal_config).unwrap();
 
         // Deposit 100 BTC (in satoshi)
         ubs.deposit(1, 1, 100_0000_0000).unwrap();
@@ -360,9 +343,9 @@ mod tests {
 
     #[test]
     fn test_process_order_success() {
-        let config = test_config();
+        let manager = test_manager();
         let wal_config = test_wal_config();
-        let mut ubs = UBSCore::new(config, wal_config).unwrap();
+        let mut ubs = UBSCore::new(manager, wal_config).unwrap();
 
         // Setup: deposit 100 BTC to user 1
         ubs.deposit(1, 1, 100_0000_0000).unwrap();
@@ -386,9 +369,9 @@ mod tests {
 
     #[test]
     fn test_process_order_insufficient_balance() {
-        let config = test_config();
+        let manager = test_manager();
         let wal_config = test_wal_config();
-        let mut ubs = UBSCore::new(config, wal_config).unwrap();
+        let mut ubs = UBSCore::new(manager, wal_config).unwrap();
 
         // Setup: deposit only 5 BTC
         ubs.deposit(1, 1, 5_0000_0000).unwrap();
@@ -403,9 +386,9 @@ mod tests {
 
     #[test]
     fn test_unlock() {
-        let config = test_config();
+        let manager = test_manager();
         let wal_config = test_wal_config();
-        let mut ubs = UBSCore::new(config, wal_config).unwrap();
+        let mut ubs = UBSCore::new(manager, wal_config).unwrap();
 
         // Setup and process order
         ubs.deposit(1, 1, 100_0000_0000).unwrap();

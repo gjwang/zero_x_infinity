@@ -21,10 +21,10 @@ use std::io::Write;
 use std::time::Instant;
 
 use rustc_hash::FxHashMap;
-use zero_x_infinity::config::{TradingConfig, UserId};
+use zero_x_infinity::core_types::UserId;
 use zero_x_infinity::csv_io::{
     InputOrder, chrono_lite_now, dump_balances, dump_orderbook_snapshot, load_balances_and_deposit,
-    load_orders, load_trading_config,
+    load_orders, load_symbol_manager,
 };
 use zero_x_infinity::engine::MatchingEngine;
 use zero_x_infinity::ledger::{LedgerEntry, LedgerWriter};
@@ -32,6 +32,7 @@ use zero_x_infinity::messages::TradeEvent;
 use zero_x_infinity::models::{InternalOrder, Side};
 use zero_x_infinity::orderbook::OrderBook;
 use zero_x_infinity::perf::PerfMetrics;
+use zero_x_infinity::symbol_manager::SymbolManager;
 use zero_x_infinity::ubscore::UBSCore;
 use zero_x_infinity::user_account::UserAccount;
 use zero_x_infinity::wal::WalConfig;
@@ -58,11 +59,15 @@ fn execute_orders(
     accounts: &mut FxHashMap<UserId, UserAccount>,
     book: &mut OrderBook,
     ledger: &mut LedgerWriter,
-    config: &TradingConfig,
+    symbol_mgr: &SymbolManager,
+    active_symbol_id: u32,
 ) -> (u64, u64, u64, PerfMetrics) {
-    let qty_unit = config.qty_unit();
-    let base_id = config.base_asset_id();
-    let quote_id = config.quote_asset_id();
+    let symbol_info = symbol_mgr
+        .get_symbol_info_by_id(active_symbol_id)
+        .expect("Active symbol not found");
+    let qty_unit = symbol_info.qty_unit();
+    let base_id = symbol_info.base_asset_id;
+    let quote_id = symbol_info.quote_asset_id;
 
     let mut accepted = 0u64;
     let mut rejected = 0u64;
@@ -115,7 +120,7 @@ fn execute_orders(
         let order = InternalOrder::new(
             input.order_id,
             input.user_id,
-            config.active_symbol.symbol_id,
+            active_symbol_id,
             input.price,
             input.qty,
             input.side,
@@ -223,10 +228,15 @@ fn execute_orders_with_ubscore(
     ubscore: &mut UBSCore,
     book: &mut OrderBook,
     ledger: &mut LedgerWriter,
-    config: &TradingConfig,
+    symbol_mgr: &SymbolManager,
+    active_symbol_id: u32,
 ) -> (u64, u64, u64, PerfMetrics) {
-    let base_id = config.base_asset_id();
-    let quote_id = config.quote_asset_id();
+    let symbol_info = symbol_mgr
+        .get_symbol_info_by_id(active_symbol_id)
+        .expect("Active symbol not found");
+    let qty_unit = symbol_info.qty_unit();
+    let base_id = symbol_info.base_asset_id;
+    let quote_id = symbol_info.quote_asset_id;
 
     let mut accepted = 0u64;
     let mut rejected = 0u64;
@@ -248,7 +258,7 @@ fn execute_orders_with_ubscore(
         let order = InternalOrder::new(
             input.order_id,
             input.user_id,
-            config.active_symbol.symbol_id,
+            active_symbol_id,
             input.price,
             input.qty,
             input.side,
@@ -294,7 +304,7 @@ fn execute_orders_with_ubscore(
                 input.side,
                 base_id,
                 quote_id,
-                config.qty_unit(), // self-contained
+                qty_unit, // self-contained
             );
 
             // UBSCore handles all balance updates
@@ -308,7 +318,7 @@ fn execute_orders_with_ubscore(
             // STEP 4: Write ledger entries
             // ========================================
             let ledger_start = Instant::now();
-            let trade_cost = trade.price * trade.qty / config.qty_unit();
+            let trade_cost = trade.price * trade.qty / qty_unit;
 
             // Buyer ledger entries
             if let Some(b) = ubscore.get_balance(trade.buyer_user_id, quote_id) {
@@ -395,7 +405,7 @@ fn main() {
 
     // Step 1: Load configuration
     println!("[1] Loading configuration...");
-    let config = load_trading_config();
+    let (symbol_mgr, active_symbol_id) = load_symbol_manager();
 
     // Generate output paths
     let balances_t1 = format!("{}/t1_balances_deposited.csv", output_dir);
@@ -409,15 +419,15 @@ fn main() {
 
     // Step 2: Load balances
     println!("\n[2] Loading balances and depositing...");
-    let mut accounts = load_balances_and_deposit("fixtures/balances_init.csv", &config);
+    let mut accounts = load_balances_and_deposit("fixtures/balances_init.csv");
 
     // Step 3: Snapshot after deposit
     println!("\n[3] Dumping balance snapshot after deposit...");
-    dump_balances(&accounts, &config, &balances_t1);
+    dump_balances(&accounts, &symbol_mgr, active_symbol_id, &balances_t1);
 
     // Step 4: Load orders
     println!("\n[4] Loading orders...");
-    let orders = load_orders("fixtures/orders.csv", &config);
+    let orders = load_orders("fixtures/orders.csv", &symbol_mgr, active_symbol_id);
 
     let load_time = start_time.elapsed();
     println!("\n    Data loading completed in {:.2?}", load_time);
@@ -431,6 +441,12 @@ fn main() {
     println!("\n[6] Executing orders...");
     let exec_start = Instant::now();
 
+    let symbol_info = symbol_mgr
+        .get_symbol_info_by_id(active_symbol_id)
+        .expect("Active symbol not found");
+    let base_id = symbol_info.base_asset_id;
+    let quote_id = symbol_info.quote_asset_id;
+
     let (accepted, rejected, total_trades, perf, final_accounts) = if ubscore_mode {
         println!("    Using UBSCore pipeline (WAL + Balance Lock)...");
 
@@ -442,11 +458,11 @@ fn main() {
         };
 
         let mut ubscore =
-            UBSCore::new(config.clone(), wal_config).expect("Failed to create UBSCore");
+            UBSCore::new(symbol_mgr.clone(), wal_config).expect("Failed to create UBSCore");
 
         // Transfer initial balances to UBSCore via deposit()
         for (user_id, account) in &accounts {
-            for asset_id in [config.base_asset_id(), config.quote_asset_id()] {
+            for asset_id in [base_id, quote_id] {
                 if let Some(balance) = account.get_balance(asset_id) {
                     if balance.avail() > 0 {
                         ubscore
@@ -457,8 +473,14 @@ fn main() {
             }
         }
 
-        let (acc, rej, trades, perf) =
-            execute_orders_with_ubscore(&orders, &mut ubscore, &mut book, &mut ledger, &config);
+        let (acc, rej, trades, perf) = execute_orders_with_ubscore(
+            &orders,
+            &mut ubscore,
+            &mut book,
+            &mut ledger,
+            &symbol_mgr,
+            active_symbol_id,
+        );
 
         // Get final accounts from UBSCore
         let final_accs = ubscore.accounts().clone();
@@ -469,8 +491,14 @@ fn main() {
 
         (acc, rej, trades, perf, final_accs)
     } else {
-        let (acc, rej, trades, perf) =
-            execute_orders(&orders, &mut accounts, &mut book, &mut ledger, &config);
+        let (acc, rej, trades, perf) = execute_orders(
+            &orders,
+            &mut accounts,
+            &mut book,
+            &mut ledger,
+            &symbol_mgr,
+            active_symbol_id,
+        );
         (acc, rej, trades, perf, accounts)
     };
 
@@ -478,7 +506,7 @@ fn main() {
 
     // Step 7: Dump final state
     println!("\n[7] Dumping final state...");
-    dump_balances(&final_accounts, &config, &balances_t2);
+    dump_balances(&final_accounts, &symbol_mgr, active_symbol_id, &balances_t2);
     dump_orderbook_snapshot(&book, &orderbook_t2);
 
     // Step 8: Summary
@@ -520,7 +548,7 @@ Ledger I/O:       {:>8.2}ms ({:>5.1}%)
   Max:   {:>8} ns
 Samples: {}
 "#,
-        config.active_symbol.symbol,
+        symbol_info.symbol,
         orders.len(),
         accepted,
         rejected,
