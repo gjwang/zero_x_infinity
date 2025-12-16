@@ -76,6 +76,24 @@ impl Order {
     pub fn is_filled(&self) -> bool {
         self.filled_qty >= self.qty
     }
+
+    /// Calculate order cost (amount to lock)
+    ///
+    /// Uses checked_mul to detect overflow:
+    /// - Buy: price × qty / qty_unit (quote asset)
+    /// - Sell: qty (base asset)
+    /// - overflow → u64::MAX → order rejected later
+    #[inline]
+    pub fn calculate_cost(&self, qty_unit: u64) -> u64 {
+        match self.side {
+            Side::Buy => self
+                .price
+                .checked_mul(self.qty)
+                .map(|v| v / qty_unit)
+                .unwrap_or(u64::MAX),
+            Side::Sell => self.qty,
+        }
+    }
 }
 
 /// A trade that occurred when orders matched

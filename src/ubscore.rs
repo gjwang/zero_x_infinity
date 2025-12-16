@@ -27,7 +27,7 @@
 
 use crate::config::TradingConfig;
 use crate::core_types::{AssetId, SeqNum, UserId};
-use crate::messages::{OrderEvent, RejectReason, TradeEvent, ValidOrder};
+use crate::messages::{RejectReason, TradeEvent, ValidOrder};
 use crate::models::{Order, Side};
 use crate::user_account::UserAccount;
 use crate::wal::{WalConfig, WalWriter};
@@ -50,18 +50,6 @@ pub struct UBSCore {
     wal: WalWriter,
     /// Trading configuration (symbols, assets)
     config: TradingConfig,
-    /// Statistics
-    stats: UBSCoreStats,
-}
-
-/// UBSCore statistics
-#[derive(Debug, Default, Clone)]
-pub struct UBSCoreStats {
-    pub orders_processed: u64,
-    pub orders_accepted: u64,
-    pub orders_rejected: u64,
-    pub trades_settled: u64,
-    pub balance_operations: u64,
 }
 
 impl UBSCore {
@@ -75,7 +63,6 @@ impl UBSCore {
             accounts: FxHashMap::default(),
             wal,
             config,
-            stats: UBSCoreStats::default(),
         })
     }
 
@@ -83,24 +70,12 @@ impl UBSCore {
     // QUERY OPERATIONS (Read-Only)
     // ============================================================
 
-    /// Query user's balance for an asset (read-only)
+    /// Get user's balance for an asset (read-only)
     #[inline]
-    pub fn query_balance(&self, user_id: UserId, asset_id: AssetId) -> Option<(u64, u64)> {
-        self.accounts.get(&user_id).and_then(|account| {
-            account
-                .get_balance(asset_id)
-                .map(|b| (b.avail(), b.frozen()))
-        })
-    }
-
-    /// Query user's available balance for an asset
-    #[inline]
-    pub fn query_avail(&self, user_id: UserId, asset_id: AssetId) -> u64 {
+    pub fn get_balance(&self, user_id: UserId, asset_id: AssetId) -> Option<&crate::Balance> {
         self.accounts
             .get(&user_id)
             .and_then(|a| a.get_balance(asset_id))
-            .map(|b| b.avail())
-            .unwrap_or(0)
     }
 
     /// Get all accounts (read-only, for serialization)
@@ -113,11 +88,6 @@ impl UBSCore {
         &mut self.accounts
     }
 
-    /// Get statistics
-    pub fn stats(&self) -> &UBSCoreStats {
-        &self.stats
-    }
-
     /// Get current WAL sequence number
     pub fn current_seq(&self) -> SeqNum {
         self.wal.current_seq()
@@ -127,111 +97,83 @@ impl UBSCore {
     // ORDER PROCESSING
     // ============================================================
 
+    /// Pre-check order (validation only, NO state mutation)
+    ///
+    /// Performs:
+    /// 1. Order validation (price, qty)
+    /// 2. Account exists check
+    /// 3. Balance sufficiency check (read-only)
+    fn pre_check(&self, order: &Order) -> Result<(AssetId, u64), RejectReason> {
+        // 1. Validate order fields
+        if order.price == 0 && order.order_type == crate::models::OrderType::Limit {
+            return Err(RejectReason::InvalidPrice);
+        }
+        if order.qty == 0 {
+            return Err(RejectReason::InvalidQuantity);
+        }
+
+        // 2. Check account exists
+        let account = self
+            .accounts
+            .get(&order.user_id)
+            .ok_or(RejectReason::UserNotFound)?;
+
+        // 3. Calculate cost and check balance (read-only!)
+        let (asset_id, lock_amount) = match order.side {
+            Side::Buy => (
+                self.config.quote_asset_id(),
+                order.calculate_cost(self.config.qty_unit()),
+            ),
+            Side::Sell => (self.config.base_asset_id(), order.qty),
+        };
+
+        // Check balance is sufficient (no mutation)
+        let balance = account
+            .get_balance(asset_id)
+            .ok_or(RejectReason::InsufficientBalance)?;
+        if balance.avail() < lock_amount {
+            return Err(RejectReason::InsufficientBalance);
+        }
+
+        Ok((asset_id, lock_amount))
+    }
+
+    /// Lock funds (state mutation, call AFTER WAL write)
+    fn lock_funds(&mut self, order: &Order, asset_id: AssetId, lock_amount: u64) {
+        // This should never fail if pre_check passed
+        if let Some(account) = self.accounts.get_mut(&order.user_id) {
+            if let Ok(balance) = account.get_balance_mut(asset_id) {
+                let _ = balance.lock(lock_amount);
+            }
+        }
+    }
+
     /// Process an incoming order
     ///
-    /// # Flow
-    /// 1. Write to WAL (persist first!)
-    /// 2. Calculate required amount
-    /// 3. Lock balance
-    /// 4. Return ValidOrder on success, OrderEvent::Rejected on failure
+    /// Flow (CRITICAL ordering):
+    /// 1. pre_check - validation only, NO state mutation
+    /// 2. WAL write - persist order
+    /// 3. lock_funds - state mutation (safe, WAL already written)
     ///
-    /// # Returns
-    /// - `Ok(ValidOrder)` - Order accepted, balance locked, ready for ME
-    /// - `Err(OrderEvent::Rejected)` - Order rejected (still logged to WAL)
-    pub fn process_order(&mut self, order: Order) -> Result<ValidOrder, OrderEvent> {
-        self.stats.orders_processed += 1;
+    /// TODO: Add deduplication guard (prevent replay attacks)
+    /// - Check order_id not seen before
+    /// - Use time-windowed bloom filter or LRU cache
+    pub fn process_order(&mut self, order: Order) -> Result<ValidOrder, RejectReason> {
+        // TODO: dedup_guard.check_and_record(order.id)?;
 
-        // Step 1: Write to WAL FIRST (persist before any state change)
-        let seq_id = match self.wal.append(&order) {
-            Ok(seq) => seq,
-            Err(_) => {
-                // WAL write failure is critical - should never happen in prod
-                return Err(OrderEvent::Rejected {
-                    seq_id: 0,
-                    order_id: order.id,
-                    user_id: order.user_id,
-                    reason: RejectReason::SystemBusy,
-                });
-            }
-        };
+        // 1. Pre-check (no side effects, can safely reject)
+        let (asset_id, lock_amount) = self.pre_check(&order)?;
 
-        // Step 2: Validate order
-        if order.price == 0 && order.order_type == crate::models::OrderType::Limit {
-            self.stats.orders_rejected += 1;
-            return Err(OrderEvent::Rejected {
-                seq_id,
-                order_id: order.id,
-                user_id: order.user_id,
-                reason: RejectReason::InvalidPrice,
-            });
-        }
+        // 2. Persist to WAL FIRST (before any state mutation!)
+        let seq_id = self
+            .wal
+            .append(&order)
+            .map_err(|_| RejectReason::SystemBusy)?;
 
-        if order.qty == 0 {
-            self.stats.orders_rejected += 1;
-            return Err(OrderEvent::Rejected {
-                seq_id,
-                order_id: order.id,
-                user_id: order.user_id,
-                reason: RejectReason::InvalidQuantity,
-            });
-        }
+        // 3. Lock funds (safe now, order is persisted)
+        self.lock_funds(&order, asset_id, lock_amount);
 
-        // Step 3: Get account
-        let account = match self.accounts.get_mut(&order.user_id) {
-            Some(a) => a,
-            None => {
-                self.stats.orders_rejected += 1;
-                return Err(OrderEvent::Rejected {
-                    seq_id,
-                    order_id: order.id,
-                    user_id: order.user_id,
-                    reason: RejectReason::UserNotFound,
-                });
-            }
-        };
-
-        // Step 4: Calculate required amount and determine asset to lock
-        let (locked_asset_id, locked_amount) = match order.side {
-            Side::Buy => {
-                // Buy: lock quote asset (e.g., USDT)
-                let quote_asset_id = self.config.quote_asset_id();
-                let cost = order.price * order.qty / self.config.qty_unit();
-                (quote_asset_id, cost)
-            }
-            Side::Sell => {
-                // Sell: lock base asset (e.g., BTC)
-                let base_asset_id = self.config.base_asset_id();
-                (base_asset_id, order.qty)
-            }
-        };
-
-        // Step 5: Try to lock balance
-        let lock_result = account
-            .get_balance_mut(locked_asset_id)
-            .and_then(|balance| balance.lock(locked_amount));
-
-        match lock_result {
-            Ok(()) => {
-                self.stats.orders_accepted += 1;
-                self.stats.balance_operations += 1;
-
-                Ok(ValidOrder::new(
-                    seq_id,
-                    order,
-                    locked_amount,
-                    locked_asset_id,
-                ))
-            }
-            Err(_) => {
-                self.stats.orders_rejected += 1;
-                Err(OrderEvent::Rejected {
-                    seq_id,
-                    order_id: order.id,
-                    user_id: order.user_id,
-                    reason: RejectReason::InsufficientBalance,
-                })
-            }
-        }
+        Ok(ValidOrder::new(seq_id, order))
     }
 
     // ============================================================
@@ -260,8 +202,6 @@ impl UBSCore {
             buyer
                 .get_balance_mut(event.base_asset_id)?
                 .deposit(trade.qty)?;
-
-            self.stats.balance_operations += 2;
         }
 
         // Seller settlement: spend BTC, receive USDT
@@ -277,11 +217,8 @@ impl UBSCore {
             seller
                 .get_balance_mut(event.quote_asset_id)?
                 .deposit(quote_amount)?;
-
-            self.stats.balance_operations += 2;
         }
 
-        self.stats.trades_settled += 1;
         Ok(())
     }
 
@@ -301,7 +238,6 @@ impl UBSCore {
     ) -> Result<(), &'static str> {
         let account = self.accounts.get_mut(&user_id).ok_or("User not found")?;
         account.get_balance_mut(asset_id)?.unlock(amount)?;
-        self.stats.balance_operations += 1;
         Ok(())
     }
 
@@ -324,7 +260,6 @@ impl UBSCore {
             .or_insert_with(|| UserAccount::new(user_id));
 
         account.deposit(asset_id, amount)?;
-        self.stats.balance_operations += 1;
         Ok(())
     }
 
@@ -414,9 +349,9 @@ mod tests {
         ubs.deposit(1, 1, 100_0000_0000).unwrap();
 
         // Query balance
-        let (avail, frozen) = ubs.query_balance(1, 1).unwrap();
-        assert_eq!(avail, 100_0000_0000);
-        assert_eq!(frozen, 0);
+        let b = ubs.get_balance(1, 1).unwrap();
+        assert_eq!(b.avail(), 100_0000_0000);
+        assert_eq!(b.frozen(), 0);
     }
 
     #[test]
@@ -437,13 +372,12 @@ mod tests {
 
         let valid_order = result.unwrap();
         assert_eq!(valid_order.seq_id, 1);
-        assert_eq!(valid_order.locked_amount, 10_0000_0000);
-        assert_eq!(valid_order.locked_asset_id, 1); // BTC
+        assert_eq!(valid_order.order.qty, 10_0000_0000);
 
         // Check balance: 90 avail, 10 frozen
-        let (avail, frozen) = ubs.query_balance(1, 1).unwrap();
-        assert_eq!(avail, 90_0000_0000);
-        assert_eq!(frozen, 10_0000_0000);
+        let b = ubs.get_balance(1, 1).unwrap();
+        assert_eq!(b.avail(), 90_0000_0000);
+        assert_eq!(b.frozen(), 10_0000_0000);
     }
 
     #[test]
@@ -460,9 +394,7 @@ mod tests {
         let result = ubs.process_order(order);
 
         assert!(result.is_err());
-        if let Err(OrderEvent::Rejected { reason, .. }) = result {
-            assert_eq!(reason, RejectReason::InsufficientBalance);
-        }
+        assert_eq!(result.unwrap_err(), RejectReason::InsufficientBalance);
     }
 
     #[test]
@@ -477,16 +409,16 @@ mod tests {
         ubs.process_order(order).unwrap();
 
         // Check: 90 avail, 10 frozen
-        let (avail, frozen) = ubs.query_balance(1, 1).unwrap();
-        assert_eq!(avail, 90_0000_0000);
-        assert_eq!(frozen, 10_0000_0000);
+        let b = ubs.get_balance(1, 1).unwrap();
+        assert_eq!(b.avail(), 90_0000_0000);
+        assert_eq!(b.frozen(), 10_0000_0000);
 
         // Unlock (e.g., order cancelled by ME)
         ubs.unlock(1, 1, 10_0000_0000).unwrap();
 
         // Balance should be restored
-        let (avail, frozen) = ubs.query_balance(1, 1).unwrap();
-        assert_eq!(avail, 100_0000_0000);
-        assert_eq!(frozen, 0);
+        let b = ubs.get_balance(1, 1).unwrap();
+        assert_eq!(b.avail(), 100_0000_0000);
+        assert_eq!(b.frozen(), 0);
     }
 }
