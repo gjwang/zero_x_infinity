@@ -166,16 +166,18 @@ impl OrderBook {
     }
 
     /// Get all orders as a Vec (for final dump/snapshot)
-    /// NOTE: Sorted by order_id for deterministic output
+    ///
+    /// Returns orders in price priority order:
+    /// - Bids first (highest price first, then FIFO within price)
+    /// - Asks second (lowest price first, then FIFO within price)
+    ///
+    /// This matches the natural market depth view.
     pub fn all_orders(&self) -> Vec<&Order> {
-        let mut orders: Vec<&Order> = self
-            .bids
+        self.bids
             .values()
             .flat_map(|level| level.iter())
             .chain(self.asks.values().flat_map(|level| level.iter()))
-            .collect();
-        orders.sort_by_key(|o| o.id);
-        orders
+            .collect()
     }
 
     /// Iterate over all orders in the book
