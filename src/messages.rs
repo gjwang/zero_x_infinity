@@ -53,20 +53,11 @@ pub struct ValidOrder {
     pub seq_id: SeqNum,
     /// The order (balance already locked)
     pub order: Order,
-    /// Amount locked (for cost calculation on settlement)
-    pub locked_amount: u64,
-    /// Asset that was locked
-    pub locked_asset_id: AssetId,
 }
 
 impl ValidOrder {
-    pub fn new(seq_id: SeqNum, order: Order, locked_amount: u64, locked_asset_id: AssetId) -> Self {
-        Self {
-            seq_id,
-            order,
-            locked_amount,
-            locked_asset_id,
-        }
+    pub fn new(seq_id: SeqNum, order: Order) -> Self {
+        Self { seq_id, order }
     }
 }
 

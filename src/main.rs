@@ -254,7 +254,7 @@ fn execute_orders_with_ubscore(
 
         let valid_order = match ubscore.process_order(order.clone()) {
             Ok(vo) => vo,
-            Err(_event) => {
+            Err(_reason) => {
                 // Order rejected (insufficient balance, etc.)
                 rejected += 1;
                 continue;
@@ -308,46 +308,46 @@ fn execute_orders_with_ubscore(
             let trade_cost = trade.price * trade.qty / config.qty_unit();
 
             // Buyer ledger entries
-            if let Some((avail, frozen)) = ubscore.query_balance(trade.buyer_user_id, quote_id) {
+            if let Some(b) = ubscore.get_balance(trade.buyer_user_id, quote_id) {
                 ledger.write_entry(&LedgerEntry {
                     trade_id: trade.id,
                     user_id: trade.buyer_user_id,
                     asset_id: quote_id,
                     op: "debit",
                     delta: trade_cost,
-                    balance_after: avail + frozen,
+                    balance_after: b.avail() + b.frozen(),
                 });
             }
-            if let Some((avail, frozen)) = ubscore.query_balance(trade.buyer_user_id, base_id) {
+            if let Some(b) = ubscore.get_balance(trade.buyer_user_id, base_id) {
                 ledger.write_entry(&LedgerEntry {
                     trade_id: trade.id,
                     user_id: trade.buyer_user_id,
                     asset_id: base_id,
                     op: "credit",
                     delta: trade.qty,
-                    balance_after: avail + frozen,
+                    balance_after: b.avail() + b.frozen(),
                 });
             }
 
             // Seller ledger entries
-            if let Some((avail, frozen)) = ubscore.query_balance(trade.seller_user_id, base_id) {
+            if let Some(b) = ubscore.get_balance(trade.seller_user_id, base_id) {
                 ledger.write_entry(&LedgerEntry {
                     trade_id: trade.id,
                     user_id: trade.seller_user_id,
                     asset_id: base_id,
                     op: "debit",
                     delta: trade.qty,
-                    balance_after: avail + frozen,
+                    balance_after: b.avail() + b.frozen(),
                 });
             }
-            if let Some((avail, frozen)) = ubscore.query_balance(trade.seller_user_id, quote_id) {
+            if let Some(b) = ubscore.get_balance(trade.seller_user_id, quote_id) {
                 ledger.write_entry(&LedgerEntry {
                     trade_id: trade.id,
                     user_id: trade.seller_user_id,
                     asset_id: quote_id,
                     op: "credit",
                     delta: trade_cost,
-                    balance_after: avail + frozen,
+                    balance_after: b.avail() + b.frozen(),
                 });
             }
 
