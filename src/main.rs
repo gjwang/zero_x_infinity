@@ -133,7 +133,8 @@ fn execute_orders(
         // STEP 3: Settlement + Ledger per Trade
         // ========================================
         for trade in &result.trades {
-            let trade_cost = trade.price * trade.qty / qty_unit;
+            let trade_cost =
+                ((trade.price as u128) * (trade.qty as u128) / (qty_unit as u128)) as u64;
 
             // Buyer settlement
             let settle_start = Instant::now();
@@ -317,7 +318,8 @@ fn execute_orders_with_ubscore(
             // STEP 4: Write ledger entries
             // ========================================
             let ledger_start = Instant::now();
-            let trade_cost = trade.price * trade.qty / qty_unit;
+            let trade_cost =
+                ((trade.price as u128) * (trade.qty as u128) / (qty_unit as u128)) as u64;
 
             // Buyer ledger entries
             if let Some(b) = ubscore.get_balance(trade.buyer_user_id, quote_id) {
