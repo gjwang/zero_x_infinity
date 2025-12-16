@@ -263,18 +263,30 @@ Step 6: 测试 + 文档
 
 | Phase | 预计时间 |
 |-------|---------|
-| Phase 1: Ring Buffer | ✅ 已完成 (使用 rtrb) |
-| Phase 2: Messages | 15 min |
-| Phase 3: WAL | 45 min |
-| Phase 4: UBSCore | 60 min |
-| Phase 5: 集成 | 45 min |
-| Phase 6: 文档 | 30 min |
-| **Total** | **~3.5 hours** |
+| Phase 1: Ring Buffer | ✅ 已完成 (使用 crossbeam-queue) |
+| Phase 2: Messages | ✅ 已完成 (messages.rs) |
+| Phase 3: WAL | ✅ 已完成 (wal.rs) |
+| Phase 4: UBSCore | ✅ 已完成 (ubscore.rs) |
+| Phase 5: 集成 | ⏳ 待完成 |
+| Phase 6: 文档 | ⏳ 待完成 |
+
+---
+
+## 当前进度 (Current Progress)
+
+**Commit**: `917e0b2`
+
+**Tests**: 31 tests passing ✅
+
+**新增文件**:
+- `src/messages.rs` - 服务间消息类型
+- `src/wal.rs` - Write-Ahead Log
+- `src/ubscore.rs` - User Balance Core Service
 
 ---
 
 ## 下一步 (Next Step)
 
-开始 **Phase 1: Ring Buffer 实现**
+开始 **Phase 5: 集成到 main.rs**
 
-准备好开始实现吗？
+需要将现有的 `execute_orders()` 函数改为使用 UBSCore 处理订单。

@@ -1,14 +1,19 @@
 //! 0xInfinity - High-Frequency Trading Engine
 //!
-//! Chapter 7: Testing Framework with Performance Metrics
+//! Chapter 8b: UBSCore Integration
 //!
-//! This is the main entry point. Architecture is simple:
+//! This is the main entry point. Architecture:
 //!
 //! ```text
 //! ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
-//! │  Config  │───▶│ Accounts │───▶│  Engine  │───▶│  Output  │
-//! │  (CSV)   │    │ (Deposit)│    │ (Match)  │    │  (CSV)   │
+//! │  Config  │───▶│ UBSCore  │───▶│  Engine  │───▶│  Output  │
+//! │  (CSV)   │    │(WAL+Lock)│    │ (Match)  │    │  (CSV)   │
 //! └──────────┘    └──────────┘    └──────────┘    └──────────┘
+//!
+//! UBSCore responsibilities:
+//! - Order WAL (persistence first!)
+//! - Balance Lock/Unlock/Settle
+//! - Single-threaded atomic operations
 //! ```
 
 use std::fs::File;
@@ -23,10 +28,13 @@ use zero_x_infinity::csv_io::{
 };
 use zero_x_infinity::engine::MatchingEngine;
 use zero_x_infinity::ledger::{LedgerEntry, LedgerWriter};
+use zero_x_infinity::messages::TradeEvent;
 use zero_x_infinity::models::{Order, Side};
 use zero_x_infinity::orderbook::OrderBook;
 use zero_x_infinity::perf::PerfMetrics;
+use zero_x_infinity::ubscore::UBSCore;
 use zero_x_infinity::user_account::UserAccount;
+use zero_x_infinity::wal::WalConfig;
 
 // ============================================================
 // OUTPUT DIRECTORY
@@ -197,12 +205,190 @@ fn execute_orders(
 }
 
 // ============================================================
+// ORDER EXECUTION WITH UBSCORE (New Pipeline)
+// ============================================================
+
+/// Execute orders using UBSCore service
+///
+/// This is the new pipeline that follows the 0x08a architecture:
+/// 1. UBSCore writes to WAL first (persistence)
+/// 2. UBSCore locks balance
+/// 3. ME matches (pure matching, no balance logic)
+/// 4. UBSCore settles trades
+/// 5. Ledger writes audit log
+#[allow(dead_code)] // Will be used when we switch to full pipeline
+fn execute_orders_with_ubscore(
+    orders: &[InputOrder],
+    ubscore: &mut UBSCore,
+    book: &mut OrderBook,
+    ledger: &mut LedgerWriter,
+    config: &TradingConfig,
+) -> (u64, u64, u64, PerfMetrics) {
+    let base_id = config.base_asset_id();
+    let quote_id = config.quote_asset_id();
+
+    let mut accepted = 0u64;
+    let mut rejected = 0u64;
+    let mut total_trades = 0u64;
+    let mut perf = PerfMetrics::new(10);
+
+    for (i, input) in orders.iter().enumerate() {
+        let order_start = Instant::now();
+
+        if (i + 1) % 100_000 == 0 {
+            println!("Processed {} / {} orders...", i + 1, orders.len());
+        }
+
+        // ========================================
+        // STEP 1: UBSCore processes order (WAL + Lock)
+        // ========================================
+        let balance_check_start = Instant::now();
+
+        let order = Order::new(
+            input.order_id,
+            input.user_id,
+            input.price,
+            input.qty,
+            input.side,
+        );
+
+        let valid_order = match ubscore.process_order(order.clone()) {
+            Ok(vo) => vo,
+            Err(_event) => {
+                // Order rejected (insufficient balance, etc.)
+                rejected += 1;
+                continue;
+            }
+        };
+
+        perf.add_balance_check_time(balance_check_start.elapsed().as_nanos() as u64);
+
+        // ========================================
+        // STEP 2: ME matches (pure matching)
+        // ========================================
+        let match_start = Instant::now();
+        let result = MatchingEngine::process_order(book, valid_order.order);
+        perf.add_matching_time(match_start.elapsed().as_nanos() as u64);
+
+        // ========================================
+        // STEP 3: UBSCore settles each trade
+        // ========================================
+        for trade in &result.trades {
+            let settle_start = Instant::now();
+
+            // Create TradeEvent for UBSCore
+            let trade_event = TradeEvent::new(
+                trade.clone(),
+                if input.side == Side::Buy {
+                    trade.buyer_order_id
+                } else {
+                    trade.seller_order_id
+                },
+                if input.side == Side::Buy {
+                    trade.seller_order_id
+                } else {
+                    trade.buyer_order_id
+                },
+                input.side,
+                base_id,
+                quote_id,
+            );
+
+            // UBSCore handles all balance updates
+            if let Err(e) = ubscore.settle_trade(&trade_event) {
+                eprintln!("Trade settlement error: {}", e);
+            }
+
+            perf.add_settlement_time(settle_start.elapsed().as_nanos() as u64);
+
+            // ========================================
+            // STEP 4: Write ledger entries
+            // ========================================
+            let ledger_start = Instant::now();
+            let trade_cost = trade.price * trade.qty / config.qty_unit();
+
+            // Buyer ledger entries
+            if let Some((avail, frozen)) = ubscore.query_balance(trade.buyer_user_id, quote_id) {
+                ledger.write_entry(&LedgerEntry {
+                    trade_id: trade.id,
+                    user_id: trade.buyer_user_id,
+                    asset_id: quote_id,
+                    op: "debit",
+                    delta: trade_cost,
+                    balance_after: avail + frozen,
+                });
+            }
+            if let Some((avail, frozen)) = ubscore.query_balance(trade.buyer_user_id, base_id) {
+                ledger.write_entry(&LedgerEntry {
+                    trade_id: trade.id,
+                    user_id: trade.buyer_user_id,
+                    asset_id: base_id,
+                    op: "credit",
+                    delta: trade.qty,
+                    balance_after: avail + frozen,
+                });
+            }
+
+            // Seller ledger entries
+            if let Some((avail, frozen)) = ubscore.query_balance(trade.seller_user_id, base_id) {
+                ledger.write_entry(&LedgerEntry {
+                    trade_id: trade.id,
+                    user_id: trade.seller_user_id,
+                    asset_id: base_id,
+                    op: "debit",
+                    delta: trade.qty,
+                    balance_after: avail + frozen,
+                });
+            }
+            if let Some((avail, frozen)) = ubscore.query_balance(trade.seller_user_id, quote_id) {
+                ledger.write_entry(&LedgerEntry {
+                    trade_id: trade.id,
+                    user_id: trade.seller_user_id,
+                    asset_id: quote_id,
+                    op: "credit",
+                    delta: trade_cost,
+                    balance_after: avail + frozen,
+                });
+            }
+
+            perf.add_ledger_time(ledger_start.elapsed().as_nanos() as u64);
+        }
+
+        // Handle order completion
+        if result.order.is_filled() {
+            ubscore.order_filled(input.order_id);
+        }
+
+        total_trades += result.trades.len() as u64;
+        accepted += 1;
+        perf.add_order_latency(order_start.elapsed().as_nanos() as u64);
+    }
+
+    // Flush WAL at the end
+    if let Err(e) = ubscore.flush_wal() {
+        eprintln!("WAL flush error: {}", e);
+    }
+
+    (accepted, rejected, total_trades, perf)
+}
+
+// ============================================================
 // MAIN
 // ============================================================
 
+fn use_ubscore_mode() -> bool {
+    std::env::args().any(|a| a == "--ubscore")
+}
+
 fn main() {
     let output_dir = get_output_dir();
-    println!("=== 0xInfinity: Chapter 7 - Testing Framework ===");
+    let ubscore_mode = use_ubscore_mode();
+
+    if ubscore_mode {
+        println!("=== 0xInfinity: Chapter 8b - UBSCore Pipeline ===");
+    } else {
+        println!("=== 0xInfinity: Chapter 7 - Testing Framework ===");
+    }
     println!("Output directory: {}/\n", output_dir);
 
     let start_time = Instant::now();
@@ -217,6 +403,7 @@ fn main() {
     let orderbook_t2 = format!("{}/t2_orderbook.csv", output_dir);
     let ledger_path = format!("{}/t2_ledger.csv", output_dir);
     let summary_path = format!("{}/t2_summary.txt", output_dir);
+    let wal_path = format!("{}/orders.wal", output_dir);
 
     std::fs::create_dir_all(output_dir).unwrap();
 
@@ -243,13 +430,42 @@ fn main() {
     // Step 6: Execute orders
     println!("\n[6] Executing orders...");
     let exec_start = Instant::now();
-    let (accepted, rejected, total_trades, perf) =
-        execute_orders(&orders, &mut accounts, &mut book, &mut ledger, &config);
+
+    let (accepted, rejected, total_trades, perf, final_accounts) = if ubscore_mode {
+        println!("    Using UBSCore pipeline (WAL + Balance Lock)...");
+
+        // Create UBSCore with the loaded accounts
+        let wal_config = WalConfig {
+            path: wal_path.clone(),
+            flush_interval_entries: 100, // Group commit every 100 orders
+            sync_on_flush: false,        // Faster for benchmarks
+        };
+
+        let mut ubscore = UBSCore::with_accounts(accounts.clone(), config.clone(), wal_config)
+            .expect("Failed to create UBSCore");
+
+        let (acc, rej, trades, perf) =
+            execute_orders_with_ubscore(&orders, &mut ubscore, &mut book, &mut ledger, &config);
+
+        // Get final accounts from UBSCore
+        let final_accs = ubscore.accounts().clone();
+
+        // Print WAL stats
+        let (wal_entries, wal_bytes) = ubscore.wal_stats();
+        println!("    WAL: {} entries, {} bytes", wal_entries, wal_bytes);
+
+        (acc, rej, trades, perf, final_accs)
+    } else {
+        let (acc, rej, trades, perf) =
+            execute_orders(&orders, &mut accounts, &mut book, &mut ledger, &config);
+        (acc, rej, trades, perf, accounts)
+    };
+
     let exec_time = exec_start.elapsed();
 
     // Step 7: Dump final state
     println!("\n[7] Dumping final state...");
-    dump_balances(&accounts, &config, &balances_t2);
+    dump_balances(&final_accounts, &config, &balances_t2);
     dump_orderbook_snapshot(&book, &orderbook_t2);
 
     // Step 8: Summary
