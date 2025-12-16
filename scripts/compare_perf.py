@@ -115,8 +115,9 @@ def main():
     # Timing Breakdown
     print()
     print_separator("Timing Breakdown (lower is better):")
-    print(f"{'Metric':25} {'Baseline':>15} {'Current':>15} {'Change':>12}")
+    print(f"{'Metric':25} {'Baseline':>15} {'Current':>15} {'Change':>10} {'OPS':>10}")
     
+    orders = int(current.get('orders', 100000))
     timing_metrics = [
         ("Balance Check", "balance_check_ns"),
         ("Matching Engine", "matching_ns"),
@@ -129,7 +130,10 @@ def main():
         c_val = current.get(key, 0)
         if b_val > 0:
             change = calc_change(b_val, c_val)
-            print_row(label, format_ns(b_val), format_ns(c_val), format_change(change, "time"))
+            # Calculate OPS: orders / (time_ns / 1e9)
+            ops = int(orders / (c_val / 1e9)) if c_val > 0 else 0
+            ops_str = f"{ops/1e6:.1f}M" if ops >= 1e6 else f"{ops/1e3:.0f}K"
+            print(f"{label:25} {format_ns(b_val):>15} {format_ns(c_val):>15} {format_change(change, 'time'):>10} {ops_str:>10}")
             if change > 10:  # >10% slower = notable regression
                 regressions.append((label, change))
     
