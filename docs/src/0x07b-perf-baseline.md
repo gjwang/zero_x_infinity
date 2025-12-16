@@ -262,8 +262,48 @@ cargo run --release -- --baseline
 # 查看性能数据
 cat output/t2_perf.txt
 
-# 比较基线
-diff baseline/t2_perf.txt output/t2_perf.txt
+# 对比性能变化
+python3 scripts/compare_perf.py
+```
+
+### compare_perf.py 输出示例
+
+```
+╔════════════════════════════════════════════════════════════════════════╗
+║                    Performance Comparison Report                       ║
+╚════════════════════════════════════════════════════════════════════════╝
+
+Metric                           Baseline         Current       Change
+───────────────────────────────────────────────────────────────────────────
+Orders                             100000          100000            -
+Trades                              47886           47886            -
+
+Exec Time                       3753.87ms       3484.37ms        -7.2%
+Throughput (orders)               26639/s         28700/s        +7.7%
+Throughput (trades)               12756/s         13743/s        +7.7%
+
+───────────────────────────────────────────────────────────────────────────
+Timing Breakdown (lower is better):
+
+Metric                           Baseline         Current     Change        OPS
+Balance Check                     17.68ms         16.51ms      -6.6%       6.1M
+Matching Engine                   36.04ms         35.01ms      -2.8%       2.9M
+Settlement                         4.77ms          5.22ms      +9.4%      19.2M
+Ledger I/O                      3678.68ms       3411.49ms      -7.3%        29K
+
+───────────────────────────────────────────────────────────────────────────
+Latency Percentiles (lower is better):
+
+Metric                           Baseline         Current       Change
+Latency MIN                         125ns           125ns        +0.0%
+Latency AVG                        37.9µs          34.8µs        -8.2%
+Latency P50                         584ns           541ns        -7.4%
+Latency P99                       420.2µs         398.9µs        -5.1%
+Latency P99.9                      1.63ms          1.24ms       -24.3%
+Latency MAX                        9.76ms          3.53ms       -63.9%
+
+───────────────────────────────────────────────────────────────────────────
+✅ No significant regressions detected
 ```
 
 ---
@@ -272,10 +312,9 @@ diff baseline/t2_perf.txt output/t2_perf.txt
 
 本章完成了以下工作：
 
-1. ✅ **PerfMetrics 结构**：收集时间分解和延迟样本
-2. ✅ **时间分解**：Balance Check / Matching / Settlement / Ledger I/O
-3. ✅ **延迟百分位数**：P50 / P99 / P99.9 / Max
-4. ✅ **t2_perf.txt**：机器可读的性能基线文件
-5. ✅ **关键发现**：Ledger I/O 是 98.4% 的瓶颈
-
-**下一步**：0x07c 将优化 Ledger I/O，使用 BufWriter 和批量写入。
+1. **PerfMetrics 结构**：收集时间分解和延迟样本
+2. **时间分解**：Balance Check / Matching / Settlement / Ledger I/O
+3. **延迟百分位数**：P50 / P99 / P99.9 / Max
+4. **t2_perf.txt**：机器可读的性能基线文件
+5. **compare_perf.py**：对比工具，检测性能回归
+6. **关键发现**：Ledger I/O 占 98.4%，是主要瓶颈
