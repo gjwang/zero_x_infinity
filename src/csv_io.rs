@@ -4,9 +4,9 @@
 //! orders, balances, and output snapshots.
 
 use crate::config::{AssetConfig, SymbolConfig, TradingConfig};
+use crate::core_types::{AssetId, UserId};
 use crate::models::{OrderType, Side};
 use crate::orderbook::OrderBook;
-use crate::types::{AssetId, UserId};
 use crate::user_account::UserAccount;
 use rustc_hash::FxHashMap;
 use std::fs::File;
