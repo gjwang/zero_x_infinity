@@ -15,3 +15,4 @@
 
 - [Performance Report (Latest)](./perf-report.md)
 - [Performance History](./perf-history/README.md)
+  - [2025-12-16-0x07b](./perf-history/2025-12-16-0x07b.md)
