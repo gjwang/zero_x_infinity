@@ -304,9 +304,11 @@ def main():
     
     os.makedirs(args.fixtures_dir, exist_ok=True)
     
-    print("Generating orders (using display_decimals for client format)...")
+    print("Generating orders (qty from asset display_decimals, price from symbol)...")
+    # qty precision: base_asset.display_decimals
+    # price precision: symbol.price_display_decimal (NOT quote_asset.display_decimals!)
     orders = generate_orders(args.orders, args.accounts, args.price,
-                             base_asset.display_decimals, quote_asset.display_decimals)
+                             base_asset.display_decimals, symbol.price_display_decimal)
     
     print("Generating balances...")
     balances = generate_balances(args.accounts, symbol, base_asset.decimals, quote_asset.decimals)
