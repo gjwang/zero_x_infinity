@@ -104,8 +104,10 @@ struct TradingConfig {
     base_decimals: u32,
     quote_decimals: u32,
     // Client-facing display decimals (for parsing orders)
-    base_display_decimals: u32,
-    quote_display_decimals: u32,
+    // qty_display_decimals: from base_asset.display_decimals
+    // price_display_decimals: from symbol.price_display_decimal
+    qty_display_decimals: u32,
+    price_display_decimals: u32,
 }
 
 /// Input order from CSV
@@ -184,11 +186,12 @@ fn load_trading_config() -> TradingConfig {
     let quote_decimals = assets.get(&active_symbol.quote_asset_id)
         .map(|a| a.decimals).unwrap_or(6);
     
-    // Client-facing display decimals (for parsing orders)
+    // Client-facing display decimals for parsing orders:
+    // - qty precision: from base_asset.display_decimals
+    // - price precision: from symbol.price_display_decimal (NOT quote_asset!)
     let base_display_decimals = assets.get(&active_symbol.base_asset_id)
-        .map(|a| a.display_decimals).unwrap_or(8);
-    let quote_display_decimals = assets.get(&active_symbol.quote_asset_id)
-        .map(|a| a.display_decimals).unwrap_or(2);
+        .map(|a| a.display_decimals).unwrap_or(6);
+    let price_display_decimals = active_symbol.price_display_decimal;
     
     println!("Active symbol: {} (base={}, quote={})", 
         active_symbol.symbol, 
@@ -196,7 +199,7 @@ fn load_trading_config() -> TradingConfig {
         assets.get(&active_symbol.quote_asset_id).map(|a| a.asset.as_str()).unwrap_or("?")
     );
     println!("  Internal decimals: base={}, quote={}", base_decimals, quote_decimals);
-    println!("  Display decimals:  base={}, quote={}", base_display_decimals, quote_display_decimals);
+    println!("  Display decimals:  qty={}, price={}", base_display_decimals, price_display_decimals);
     
     TradingConfig {
         assets,
@@ -204,8 +207,8 @@ fn load_trading_config() -> TradingConfig {
         active_symbol,
         base_decimals,
         quote_decimals,
-        base_display_decimals,
-        quote_display_decimals,
+        qty_display_decimals: base_display_decimals,
+        price_display_decimals,
     }
 }
 

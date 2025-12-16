@@ -3,14 +3,14 @@ Symbol: BTC_USDT
 Total Orders: 100000
   Accepted: 100000
   Rejected: 0
-Total Trades: 46536
-Execution Time: 3.76s
-Throughput: 26566 orders/sec
+Total Trades: 47886
+Execution Time: 3.87s
+Throughput: 25845 orders/sec
 
 Final Orderbook:
   Best Bid: Some(84991260000)
   Best Ask: Some(85023830000)
-  Bid Depth: 20299 levels
-  Ask Depth: 20641 levels
+  Bid Depth: 20678 levels
+  Ask Depth: 20993 levels
 
-Total Time: 5.25s
+Total Time: 5.49s
