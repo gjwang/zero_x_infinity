@@ -57,8 +57,8 @@ pub type UserId = u64;
 /// 3. All mutations go through validated operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserAccount {
-    user_id: UserId,       // PRIVATE - use user_id()
-    assets: Vec<Balance>,  // PRIVATE - O(1) index by asset_id: assets[asset_id]
+    user_id: UserId,      // PRIVATE - use user_id()
+    assets: Vec<Balance>, // PRIVATE - O(1) index by asset_id: assets[asset_id]
 }
 
 impl UserAccount {
@@ -170,7 +170,8 @@ impl UserAccount {
         refund_quote: u64,
     ) -> Result<(), &'static str> {
         // Debit Quote (Frozen)
-        self.get_balance_mut(quote_asset_id)?.spend_frozen(spend_quote)?;
+        self.get_balance_mut(quote_asset_id)?
+            .spend_frozen(spend_quote)?;
 
         // Credit Base (Available)
         self.get_balance_mut(base_asset_id)?.deposit(gain_base)?;
@@ -191,7 +192,8 @@ impl UserAccount {
         refund_base: u64,
     ) -> Result<(), &'static str> {
         // Debit Base (Frozen)
-        self.get_balance_mut(base_asset_id)?.spend_frozen(spend_base)?;
+        self.get_balance_mut(base_asset_id)?
+            .spend_frozen(spend_base)?;
 
         // Credit Quote (Available)
         self.get_balance_mut(quote_asset_id)?.deposit(gain_quote)?;
