@@ -26,7 +26,7 @@
 //! ```
 
 use crate::config::TradingConfig;
-use crate::core_types::{AssetId, OrderId, SeqNum, UserId};
+use crate::core_types::{AssetId, SeqNum, UserId};
 use crate::messages::{OrderEvent, RejectReason, TradeEvent, ValidOrder};
 use crate::models::{Order, Side};
 use crate::user_account::UserAccount;
@@ -42,6 +42,7 @@ use std::io;
 /// UBSCore - User Balance Core Service
 ///
 /// ALL balance operations go through this service.
+/// Trust Balance.frozen to track locked amounts - no separate tracking needed.
 pub struct UBSCore {
     /// User accounts - the authoritative balance state
     accounts: FxHashMap<UserId, UserAccount>,
@@ -49,20 +50,8 @@ pub struct UBSCore {
     wal: WalWriter,
     /// Trading configuration (symbols, assets)
     config: TradingConfig,
-    /// Pending orders (locked but not yet matched)
-    pending_orders: FxHashMap<OrderId, PendingOrder>,
     /// Statistics
     stats: UBSCoreStats,
-}
-
-/// Pending order info - tracks locked amount for settlement/cancel
-#[derive(Debug, Clone)]
-struct PendingOrder {
-    #[allow(dead_code)] // Will be used for logging/debugging
-    order_id: OrderId,
-    user_id: UserId,
-    locked_asset_id: AssetId,
-    locked_amount: u64,
 }
 
 /// UBSCore statistics
@@ -77,6 +66,8 @@ pub struct UBSCoreStats {
 
 impl UBSCore {
     /// Create a new UBSCore with given configuration
+    ///
+    /// Use `deposit()` to add initial balances after creation.
     pub fn new(config: TradingConfig, wal_config: WalConfig) -> io::Result<Self> {
         let wal = WalWriter::new(wal_config)?;
 
@@ -84,24 +75,6 @@ impl UBSCore {
             accounts: FxHashMap::default(),
             wal,
             config,
-            pending_orders: FxHashMap::default(),
-            stats: UBSCoreStats::default(),
-        })
-    }
-
-    /// Create UBSCore with pre-existing accounts (for testing/recovery)
-    pub fn with_accounts(
-        accounts: FxHashMap<UserId, UserAccount>,
-        config: TradingConfig,
-        wal_config: WalConfig,
-    ) -> io::Result<Self> {
-        let wal = WalWriter::new(wal_config)?;
-
-        Ok(Self {
-            accounts,
-            wal,
-            config,
-            pending_orders: FxHashMap::default(),
             stats: UBSCoreStats::default(),
         })
     }
@@ -242,17 +215,6 @@ impl UBSCore {
                 self.stats.orders_accepted += 1;
                 self.stats.balance_operations += 1;
 
-                // Track pending order for settlement/cancel
-                self.pending_orders.insert(
-                    order.id,
-                    PendingOrder {
-                        order_id: order.id,
-                        user_id: order.user_id,
-                        locked_asset_id,
-                        locked_amount,
-                    },
-                );
-
                 Ok(ValidOrder::new(
                     seq_id,
                     order,
@@ -324,61 +286,23 @@ impl UBSCore {
     }
 
     // ============================================================
-    // ORDER COMPLETION
+    // BALANCE OPERATIONS (Direct unlock for cancel)
     // ============================================================
 
-    /// Handle order filled (cleanup pending)
-    pub fn order_filled(&mut self, order_id: OrderId) {
-        self.pending_orders.remove(&order_id);
-    }
-
-    /// Handle order partially filled - update remaining locked amount
-    pub fn order_partial_filled(
+    /// Unlock frozen balance (e.g., for order cancellation)
+    ///
+    /// The caller (ME or OrderBook) knows how much to unlock.
+    /// We trust Balance.frozen, no separate tracking needed.
+    pub fn unlock(
         &mut self,
-        order_id: OrderId,
-        filled_qty: u64,
-        side: Side,
+        user_id: UserId,
+        asset_id: AssetId,
+        amount: u64,
     ) -> Result<(), &'static str> {
-        let pending = self
-            .pending_orders
-            .get_mut(&order_id)
-            .ok_or("Pending order not found")?;
-
-        // Calculate consumed amount
-        let consumed = match side {
-            Side::Buy => {
-                // For buy orders, we need to calculate based on actual trade price
-                // This is a simplification - in reality, we'd track exact amounts
-                filled_qty * pending.locked_amount / filled_qty.max(1)
-            }
-            Side::Sell => filled_qty,
-        };
-
-        pending.locked_amount = pending.locked_amount.saturating_sub(consumed);
+        let account = self.accounts.get_mut(&user_id).ok_or("User not found")?;
+        account.get_balance_mut(asset_id)?.unlock(amount)?;
+        self.stats.balance_operations += 1;
         Ok(())
-    }
-
-    /// Cancel an order - unlock remaining frozen balance
-    pub fn cancel_order(&mut self, order_id: OrderId) -> Result<u64, &'static str> {
-        let pending = self
-            .pending_orders
-            .remove(&order_id)
-            .ok_or("Pending order not found")?;
-
-        if pending.locked_amount > 0 {
-            let account = self
-                .accounts
-                .get_mut(&pending.user_id)
-                .ok_or("User not found")?;
-
-            account
-                .get_balance_mut(pending.locked_asset_id)?
-                .unlock(pending.locked_amount)?;
-
-            self.stats.balance_operations += 1;
-        }
-
-        Ok(pending.locked_amount)
     }
 
     // ============================================================
@@ -542,7 +466,7 @@ mod tests {
     }
 
     #[test]
-    fn test_cancel_order() {
+    fn test_unlock() {
         let config = test_config();
         let wal_config = test_wal_config();
         let mut ubs = UBSCore::new(config, wal_config).unwrap();
@@ -552,9 +476,13 @@ mod tests {
         let order = Order::new(1, 1, 10000, 10_0000_0000, Side::Sell);
         ubs.process_order(order).unwrap();
 
-        // Cancel order
-        let refunded = ubs.cancel_order(1).unwrap();
-        assert_eq!(refunded, 10_0000_0000);
+        // Check: 90 avail, 10 frozen
+        let (avail, frozen) = ubs.query_balance(1, 1).unwrap();
+        assert_eq!(avail, 90_0000_0000);
+        assert_eq!(frozen, 10_0000_0000);
+
+        // Unlock (e.g., order cancelled by ME)
+        ubs.unlock(1, 1, 10_0000_0000).unwrap();
 
         // Balance should be restored
         let (avail, frozen) = ubs.query_balance(1, 1).unwrap();
