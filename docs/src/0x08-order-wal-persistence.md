@@ -5,10 +5,18 @@
 This document describes the order processing pipeline architecture for 0xInfinity, 
 a high-frequency trading matching engine. The design emphasizes:
 
-- **Durability**: Orders are persisted to WAL before matching
+- **Durability**: Orders are persisted to WAL before any state changes
 - **Correctness**: Pure state machine for matching, deterministic replay
-- **Performance**: Batching and minimal I/O in critical path
+- **Simplicity**: Single-threaded execution per service (no locks, no double-spend)
 - **Modularity**: Clear separation of concerns
+
+## Core Design Principle: Single-Threaded Execution
+
+Each service runs in a **single thread** for its critical path:
+- No concurrency issues within a service
+- No locks needed for balance operations
+- Atomic operations are naturally achieved
+- **Double-spend is impossible** after WAL write
 
 ## Pipeline Stages
 
@@ -24,51 +32,63 @@ a high-frequency trading matching engine. The design emphasizes:
                                               │
                                               ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│  1. PRE-CHECK                                                                    │
-│  ├── User exists?                                                                │
-│  ├── Balance sufficient?                                                         │
-│  └── Lock funds (freeze)                                                         │
+│  1. PRE-CHECK (Soft Filter, NO SIDE EFFECTS)                                     │
+│  ├── User exists? (optional quick check)                                         │
+│  ├── Basic format validation                                                     │
+│  └── Rate limiting (optional)                                                    │
 │                                                                                   │
-│  Result: ValidatedOrder or Reject                                                │
+│  Purpose: Reduce garbage orders entering the system                              │
+│  NOTE: Some invalid orders may still pass through!                               │
+│  Result: Pass or Early Reject (no side effects)                                  │
 └─────────────────────────────────────────────────────────────────────────────────┘
                                               │
-                              ┌───────────────┴───────────────┐
-                              │         REJECT                 │──────────► Response
-                              └───────────────────────────────┘
-                                              │ ACCEPT
                                               ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │  2. ORDER BUFFER (Pre-WAL)                                                       │
-│  ├── Validated orders queue                                                      │
+│  ├── Orders queue (may include some invalid orders)                              │
 │  └── Batch for WAL write efficiency                                              │
 └─────────────────────────────────────────────────────────────────────────────────┘
                                               │
                                               ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│  3. WRITE ORDER_WAL                                                              │
+│  3. WRITE ORDER_WAL  ★ POINT OF NO RETURN ★                                     │
 │  ├── Append to WAL (sequential write)                                            │
 │  ├── fsync / group commit                                                        │
 │  └── Assign seq_num                                                              │
 │                                                                                   │
+│  After this point: Order MUST go through full lifecycle!                         │
 │  Format: [seq_num | op_type | order_id | user_id | side | price | qty | ts]     │
 └─────────────────────────────────────────────────────────────────────────────────┘
                                               │
                                               ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│  4. ORDER BUFFER (Post-WAL)                                                      │
-│  ├── WAL confirmed orders                                                        │
-│  └── Ready for matching                                                          │
+│  4. BALANCE CHECK + LOCK (Atomic, Single-Threaded)                               │
+│  ├── Check user exists                                                           │
+│  ├── Check balance sufficient                                                    │
+│  └── Lock funds (freeze)                                                         │
+│                                                                                   │
+│  If FAIL: Order status = Rejected (still recorded in WAL)                        │
+│  If PASS: Order status = Accepted, proceed to matching                           │
+│                                                                                   │
+│  ★ Single-threaded = atomic = no double-spend ★                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
                                               │
+                              ┌───────────────┴───────────────┐
+                              │      REJECTED (lock failed)   │
+                              │  - Record rejection in state  │
+                              │  - Emit rejection event       │
+                              │  - Continue (order completed) │
+                              └───────────────────────────────┘
+                                              │ ACCEPTED
                                               ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│  5. MATCHING ENGINE (ME)                                                         │
-│  ├── Pure state machine (no I/O, no balance ops)                                 │
+│  5. MATCHING ENGINE (ME) - Pure State Machine                                    │
 │  ├── OrderBook (BTreeMap-based)                                                  │
 │  ├── Price-Time priority matching                                                │
 │  └── Generate trades list                                                        │
 │                                                                                   │
-│  Input:  ValidatedOrder                                                          │
+│  ME does NOT: check balance, update balance, write I/O                          │
+│  Input:  Order (already validated)                                               │
 │  Output: OrderResult { order, trades: Vec<Trade> }                               │
 └─────────────────────────────────────────────────────────────────────────────────┘
                                               │
@@ -82,10 +102,12 @@ a high-frequency trading matching engine. The design emphasizes:
                                               ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │  7. SETTLEMENT                                                                   │
-│  ├── Update buyer balance: -quote(frozen), +base(avail)                         │
-│  ├── Update seller balance: -base(frozen), +quote(avail)                        │
-│  ├── Write ledger entries (audit trail)                                          │
-│  └── Emit balance events (for downstream systems)                                │
+│  ├── For each trade:                                                             │
+│  │   ├── Buyer: spend_frozen(quote, cost), deposit(base, qty)                   │
+│  │   ├── Seller: spend_frozen(base, qty), deposit(quote, cost)                  │
+│  │   ├── Write ledger entries (audit trail)                                      │
+│  │   └── Emit balance events                                                     │
+│  └── Update order status (Filled/PartiallyFilled)                                │
 └─────────────────────────────────────────────────────────────────────────────────┘
                                               │
                                               ▼
@@ -97,20 +119,33 @@ a high-frequency trading matching engine. The design emphasizes:
                     └──────────────────────────────────────────────────────────────┘
 ```
 
+## Key Insight: WAL is the Point of No Return
+
+```
+PRE-CHECK                    WAL WRITE                 BALANCE LOCK
+    │                            │                          │
+    │  [no side effects]         │  [persisted]             │  [atomic lock]
+    │                            │                          │
+    ▼                            ▼                          ▼
+ Soft filter              ORDER ACCEPTED           Execute or Reject
+ (may miss)               into system              (must complete)
+```
+
+**Before WAL**: Order can be silently dropped
+**After WAL**: Order MUST complete its lifecycle (accept or reject)
+
 ## Component Responsibilities
 
-### 1. PreChecker
-**Location**: `pre_check.rs` (to be created)
+### 1. PreChecker (Soft Filter)
+**Location**: `pre_check.rs` (optional, can be skipped for simplicity)
 
 | Responsibility | Description |
 |----------------|-------------|
-| User validation | Verify user exists and is active |
-| Balance check | Ensure sufficient available balance |
-| Fund locking | Freeze required amount for the order |
-| Risk checks | Optional: position limits, rate limits |
+| Format validation | Basic sanity checks |
+| Fast rejection | Obvious bad orders |
+| Rate limiting | Optional DoS protection |
 
-**Input**: Raw order request  
-**Output**: `ValidatedOrder` (with locked_amount) or `Reject`
+**Key**: NO SIDE EFFECTS! No balance changes, no state changes.
 
 ### 2. OrderWAL
 **Location**: `order_wal.rs` (to be created)
@@ -118,7 +153,7 @@ a high-frequency trading matching engine. The design emphasizes:
 | Responsibility | Description |
 |----------------|-------------|
 | Sequence assignment | Monotonically increasing seq_num |
-| Durability | Write to disk before matching |
+| Durability | Write to disk before any state change |
 | Group commit | Batch multiple orders for efficiency |
 | Recovery | Replay from last checkpoint |
 
@@ -131,7 +166,19 @@ a high-frequency trading matching engine. The design emphasizes:
 Total: 50 bytes per entry
 ```
 
-### 3. MatchingEngine (ME)
+### 3. BalanceChecker (Post-WAL)
+**Location**: Part of order processing, after WAL
+
+| Responsibility | Description |
+|----------------|-------------|
+| User validation | Verify user exists |
+| Balance check | Ensure sufficient available balance |
+| Fund locking | Freeze required amount |
+| Rejection handling | Mark order as rejected if check fails |
+
+**Critical**: This runs in single thread, making it naturally atomic.
+
+### 4. MatchingEngine (ME)
 **Location**: `engine.rs`
 
 | Responsibility | Description |
@@ -146,7 +193,7 @@ Total: 50 bytes per entry
 - Deterministic: same input → same output
 - Replayable from WAL
 
-### 4. Settlement
+### 5. Settlement
 **Location**: `settlement.rs` (to be created)
 
 | Responsibility | Description |
@@ -155,23 +202,16 @@ Total: 50 bytes per entry
 | Ledger writing | Audit trail of all balance changes |
 | Event emission | Notify downstream systems |
 
-**Per Trade Settlement**:
-```
-Buyer:
-  spend_frozen(quote_asset, trade_cost)
-  deposit(base_asset, trade_qty)
-
-Seller:
-  spend_frozen(base_asset, trade_qty)
-  deposit(quote_asset, trade_cost)
-```
-
 ## Data Flow
 
 ```
-Order → PreCheck → [balance locked] → WAL → ME → [trades] → Settlement → [balance updated]
-                         ↓                              ↓
-                   Reject Response              Ledger + Events
+Order → [PreCheck] → [OrderBuffer] → WAL → BalanceLock → ME → [TradesBuffer] → Settlement
+              │                       │         │                                   │
+         (soft filter)           (persisted)  [reject]                        [ledger]
+              │                       │         │                                   │
+              ▼                       ▼         ▼                                   ▼
+         early reject            committed  rejected              balance updated + events
+         (no record)              to WAL    (recorded)
 ```
 
 ## Recovery Process
@@ -188,13 +228,29 @@ Order → PreCheck → [balance locked] → WAL → ME → [trades] → Settleme
 
 2. Replay WAL from seq_num = N+1
    ├── For each WAL entry:
-   │   ├── Skip pre-check (already passed)
-   │   ├── Apply to ME
+   │   ├── Check balance & lock (may reject)
+   │   ├── If accepted: apply to ME
    │   └── Apply settlement
    └── Continue until end of WAL
 
 3. Ready to accept new orders
+
+Note: Recovery replays the FULL order lifecycle, including
+possible rejections due to insufficient balance.
 ```
+
+## Why Single-Threaded?
+
+| Concern | Multi-threaded | Single-threaded |
+|---------|----------------|-----------------|
+| Double-spend | Need locks/CAS | Impossible |
+| Complexity | High | Low |
+| Debugging | Hard | Easy |
+| Latency | May have lock contention | Predictable |
+| Throughput | Can be higher | Limited by CPU |
+
+For most trading systems, **single-threaded is sufficient** and simpler.
+Horizontal scaling is done by sharding (each symbol on different service).
 
 ## Module Structure
 
@@ -204,14 +260,13 @@ src/
 ├── types.rs            # Core type aliases
 ├── config.rs           # Trading configuration
 │
-├── pre_check.rs        # [NEW] Balance check and lock
 ├── order_wal.rs        # [NEW] Write-ahead log
 │
 ├── orderbook.rs        # Order book data structure
 ├── engine.rs           # Matching engine (pure)
 │
-├── settlement.rs       # [NEW] Trade settlement
-├── ledger.rs           # Audit log
+├── settlement.rs       # [NEW] Trade settlement + ledger
+├── ledger.rs           # Ledger entry types
 │
 ├── balance.rs          # Balance type
 ├── user_account.rs     # User account management
@@ -225,40 +280,38 @@ src/
 
 ### 1. ME is Pure
 The Matching Engine does NOT:
-- Check balances (done in PreCheck)
+- Check balances (done after WAL)
 - Update balances (done in Settlement)
 - Write to disk (done in WAL)
 - Emit events (done in Settlement)
 
-Benefits:
-- Deterministic replay
-- Easy to test
-- Clear responsibility
+### 2. WAL Before Balance Lock
+Why not lock before WAL?
+- Pre-check is just a soft filter (no side effects)
+- Real validation happens after WAL
+- This allows batch WAL writes
+- Rejected orders are still properly recorded
 
-### 2. Lock Before WAL
-Funds are locked before writing to WAL, ensuring:
-- No double-spend if crash after WAL write
-- Failed orders don't consume WAL space
-- Rejection is fast (no I/O)
+### 3. Single-Threaded Execution
+Why single-threaded?
+- Natural atomicity for balance operations
+- No double-spend risk
+- Simpler to reason about
+- Easier recovery
 
-### 3. WAL Before Matching
-Order is persisted before matching:
-- Guaranteed durability
-- Can replay on crash
-- Sequence number provides ordering
-
-### 4. Settlement After Matching
-Balance updates happen after matching:
-- Only executed trades affect balances
-- Ledger reflects actual trades
-- Atomic commit possible
+### 4. Full Lifecycle for WAL'd Orders
+Once in WAL, an order MUST:
+- Complete balance check (accept or reject)
+- If accepted: go through ME and Settlement
+- Be properly recorded in final state
 
 ## Performance Considerations
 
 | Stage | Latency Target | Notes |
 |-------|----------------|-------|
-| PreCheck | < 1µs | In-memory hash lookup |
+| PreCheck | < 1µs | Optional soft filter |
 | WAL Write | < 10µs | Sequential write, group commit |
+| Balance Lock | < 1µs | In-memory, single-threaded |
 | Matching | < 10µs | BTreeMap O(log n) |
 | Settlement | < 1µs | In-memory balance update |
 | Ledger | < 100µs | Can be async/batched |
