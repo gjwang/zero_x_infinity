@@ -799,6 +799,49 @@ WHERE e.event_type = 'Settle'
 | **settle_version** | 保证 Settle 事件顺序一致 | 分类验证 |
 | **source_id** | 追溯到触发源 | 因果链审计 |
 
+#### 扩展：UBSCore 追踪 Active Orders
+
+因果链不仅用于离线审计，也可以在 UBSCore 中实时追踪：
+
+```rust
+struct PendingOrder {
+    order_id: u64,           // 8 bytes
+    order_seq_id: u64,       // 8 bytes (因果链)
+    user_id: u64,            // 8 bytes
+    locked_asset_id: u32,    // 4 bytes
+    locked_amount: u64,      // 8 bytes
+    original_qty: u64,       // 8 bytes
+    filled_qty: u64,         // 8 bytes
+    side: Side,              // 1 byte + padding
+}
+// ~60 bytes per order + HashMap overhead (~16 bytes) = ~76 bytes
+
+pub struct UBSCore {
+    accounts: FxHashMap<UserId, UserAccount>,
+    wal: WalWriter,
+    manager: SymbolManager,
+    pending_orders: FxHashMap<OrderId, PendingOrder>,  // 新增
+}
+```
+
+**内存估算**：
+
+| 活跃订单数 | 内存用量 | 评估 |
+|-----------|----------|------|
+| 10,000 | 742 KB | 可忽略 |
+| 100,000 | **7.2 MB** | 典型场景，很小 |
+| 1,000,000 | 72.5 MB | 可接受 |
+| 10,000,000 | 725 MB | 需要考虑 |
+
+**追踪 Active Orders 的好处**：
+
+1. **实时因果验证** - Settle 时检查对应 Lock 存在
+2. **去重** - 拒绝重复 order_id（防止重放攻击）
+3. **追踪未完成订单** - 快速查询用户活跃订单
+4. **正确 Unlock** - 取消或部分成交时知道原始锁定金额
+
+**结论**：对于典型的交易系统（10万级活跃订单），仅需 **7MB 内存**，完全可以接受。
+
 #### 总结
 
 因果链让每个余额变更都有"来源证明"，出问题时可以快速追溯到具体的订单或成交。
