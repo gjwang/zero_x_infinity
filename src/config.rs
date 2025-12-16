@@ -44,7 +44,7 @@ pub struct SymbolConfig {
 ///
 /// Loaded from CSV files and provides all precision/config info
 /// needed for order processing.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TradingConfig {
     /// All assets indexed by asset_id
     pub assets: FxHashMap<AssetId, AssetConfig>,
