@@ -7,3 +7,4 @@ description = "Order book matching engine"
 [dependencies]
 rustc-hash = "2"
 serde = { version = "1", features = ["derive"] }
+crossbeam-queue = "0.3"  # Bank-grade: ArrayQueue, used by tokio/actix/rayon
