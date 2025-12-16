@@ -24,6 +24,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build and run perf test
+        run: |
+          cargo build --release
+          cargo run --release
+          cargo run --release -- --baseline
+
+      - name: Generate performance report
+        run: python3 scripts/generate_perf_report.py > docs/src/perf-report.md
+
       - name: Setup mdBook
         uses: peaceiris/actions-mdbook@v2
         with:
