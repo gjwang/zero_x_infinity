@@ -354,10 +354,7 @@ fn execute_orders_with_ubscore(
             perf.add_ledger_time(ledger_start.elapsed().as_nanos() as u64);
         }
 
-        // Handle order completion
-        if result.order.is_filled() {
-            ubscore.order_filled(input.order_id);
-        }
+        // No need to track order completion - Balance.frozen is the source of truth
 
         total_trades += result.trades.len() as u64;
         accepted += 1;
@@ -434,15 +431,28 @@ fn main() {
     let (accepted, rejected, total_trades, perf, final_accounts) = if ubscore_mode {
         println!("    Using UBSCore pipeline (WAL + Balance Lock)...");
 
-        // Create UBSCore with the loaded accounts
+        // Create UBSCore and initialize with deposits
         let wal_config = WalConfig {
             path: wal_path.clone(),
             flush_interval_entries: 100, // Group commit every 100 orders
             sync_on_flush: false,        // Faster for benchmarks
         };
 
-        let mut ubscore = UBSCore::with_accounts(accounts.clone(), config.clone(), wal_config)
-            .expect("Failed to create UBSCore");
+        let mut ubscore =
+            UBSCore::new(config.clone(), wal_config).expect("Failed to create UBSCore");
+
+        // Transfer initial balances to UBSCore via deposit()
+        for (user_id, account) in &accounts {
+            for asset_id in [config.base_asset_id(), config.quote_asset_id()] {
+                if let Some(balance) = account.get_balance(asset_id) {
+                    if balance.avail() > 0 {
+                        ubscore
+                            .deposit(*user_id, asset_id, balance.avail())
+                            .unwrap();
+                    }
+                }
+            }
+        }
 
         let (acc, rej, trades, perf) =
             execute_orders_with_ubscore(&orders, &mut ubscore, &mut book, &mut ledger, &config);
