@@ -124,14 +124,19 @@ pub fn load_symbol_manager() -> (SymbolManager, u32) {
         .get_asset_name(symbol_info.base_asset_id)
         .unwrap_or("BASE".to_string());
 
-    println!(
-        "  ⚠️  Max tradeable @ ${}: {:.2} {} per order (u64 safe)",
-        ref_price_human, max_qty_display, base_name
-    );
-
-    // Warn if max tradeable is suspiciously low
+    // Always print max tradeable value
     if max_qty_display < 100.0 {
-        println!("  ⚠️  WARNING: Max tradeable is LOW! Consider reducing quote asset decimals.");
+        // Low value - show warning
+        println!(
+            "  ⚠️  Max tradeable @ ${}: {:.2} {} per order (u64 safe) ⚠️ LOW!",
+            ref_price_human, max_qty_display, base_name
+        );
+    } else {
+        // Normal value
+        println!(
+            "  Max tradeable @ ${}: {:.2} {} per order (u64 safe)",
+            ref_price_human, max_qty_display, base_name
+        );
     }
 
     (manager, active_symbol_id)
