@@ -10,7 +10,7 @@
 - [0x06 强制余额管理 (Enforced Balance)](./0x06-enforced-balance.md)
 - [0x07a 测试框架 (Testing Framework)](./0x07a-testing-framework.md)
 - [0x07b 性能基线 (Performance Baseline)](./0x07b-perf-baseline.md)
-- [0x08 订单WAL持久化 (Order WAL Persistence)](./0x08-order-wal-persistence.md)
+- [0x08a 交易流水线设计 (Trading Pipeline Design)](./0x08a-trading-pipeline-design.md)
 
 ---
 
