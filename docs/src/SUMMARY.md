@@ -8,3 +8,4 @@
 - [0x04 Orderbook数据结构重构 (BTree OrderBook)](./0x04-btree-orderbook.md)
 - [0x05 用户账户与余额管理 (User Balance)](./0x05-user-balance.md)
 - [0x06 强制余额管理 (Enforced Balance)](./0x06-enforced-balance.md)
+- [0x07a 测试框架 (Testing Framework)](./0x07a-testing-framework.md)
