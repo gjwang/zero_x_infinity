@@ -1,4 +1,4 @@
-//! Write-Ahead Log (WAL) - Order persistence
+//! Write-Ahead Log (WAL) - InternalOrder persistence
 //!
 //! The WAL is the Single Source of Truth for order processing.
 //! All orders are persisted to WAL BEFORE balance locking and matching.
@@ -18,7 +18,7 @@
 //! | Group commit (1ms) | ~1µs amortized | ~1M/s |
 
 use crate::core_types::SeqNum;
-use crate::models::Order;
+use crate::models::InternalOrder;
 use std::fs::{File, OpenOptions};
 use std::io::{self, BufWriter, Write};
 use std::path::Path;
@@ -47,11 +47,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub struct WalEntry {
     pub seq_id: SeqNum,
     pub timestamp_ns: u64,
-    pub order: Order,
+    pub order: InternalOrder,
 }
 
 impl WalEntry {
-    pub fn new(seq_id: SeqNum, order: Order) -> Self {
+    pub fn new(seq_id: SeqNum, order: InternalOrder) -> Self {
         let timestamp_ns = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -67,11 +67,12 @@ impl WalEntry {
     /// Serialize to CSV line (development format)
     pub fn to_csv_line(&self) -> String {
         format!(
-            "{},{},{},{},{},{},{:?},{:?}\n",
+            "{},{},{},{},{},{},{},{:?},{:?}\n",
             self.seq_id,
             self.timestamp_ns,
             self.order.id,
             self.order.user_id,
+            self.order.symbol_id,
             self.order.price,
             self.order.qty,
             self.order.side,
@@ -158,7 +159,7 @@ impl WalWriter {
     ///
     /// Returns the assigned sequence number.
     /// Does NOT flush immediately (use group commit).
-    pub fn append(&mut self, order: &Order) -> io::Result<SeqNum> {
+    pub fn append(&mut self, order: &InternalOrder) -> io::Result<SeqNum> {
         let seq_id = self.next_seq;
         self.next_seq += 1;
 
@@ -281,7 +282,7 @@ impl WalReader {
         use crate::models::{OrderStatus, OrderType, Side};
 
         let parts: Vec<&str> = line.split(',').collect();
-        if parts.len() < 8 {
+        if parts.len() < 9 {
             return None;
         }
 
@@ -289,24 +290,26 @@ impl WalReader {
         let timestamp_ns: u64 = parts[1].parse().ok()?;
         let order_id: u64 = parts[2].parse().ok()?;
         let user_id: u64 = parts[3].parse().ok()?;
-        let price: u64 = parts[4].parse().ok()?;
-        let qty: u64 = parts[5].parse().ok()?;
+        let symbol_id: u32 = parts[4].parse().ok()?;
+        let price: u64 = parts[5].parse().ok()?;
+        let qty: u64 = parts[6].parse().ok()?;
 
-        let side = match parts[6] {
+        let side = match parts[7] {
             "Buy" => Side::Buy,
             "Sell" => Side::Sell,
             _ => return None,
         };
 
-        let order_type = match parts[7].trim() {
+        let order_type = match parts[8].trim() {
             "Limit" => OrderType::Limit,
             "Market" => OrderType::Market,
             _ => return None,
         };
 
-        let order = Order {
+        let order = InternalOrder {
             id: order_id,
             user_id,
+            symbol_id,
             price,
             qty,
             filled_qty: 0,
@@ -354,8 +357,8 @@ mod tests {
 
             let mut wal = WalWriter::new(config).unwrap();
 
-            let order1 = Order::new(1, 100, 10000, 1000, Side::Buy);
-            let order2 = Order::new(2, 101, 11000, 2000, Side::Sell);
+            let order1 = InternalOrder::new(1, 100, 0, 10000, 1000, Side::Buy);
+            let order2 = InternalOrder::new(2, 101, 0, 11000, 2000, Side::Sell);
 
             let seq1 = wal.append(&order1).unwrap();
             let seq2 = wal.append(&order2).unwrap();
@@ -402,14 +405,14 @@ mod tests {
         let mut wal = WalWriter::new(config).unwrap();
 
         // Add 2 entries - should not auto-flush
-        wal.append(&Order::new(1, 100, 10000, 1000, Side::Buy))
+        wal.append(&InternalOrder::new(1, 100, 0, 10000, 1000, Side::Buy))
             .unwrap();
-        wal.append(&Order::new(2, 100, 10000, 1000, Side::Buy))
+        wal.append(&InternalOrder::new(2, 100, 0, 10000, 1000, Side::Buy))
             .unwrap();
         assert_eq!(wal.pending_count(), 2);
 
         // Add 3rd entry - should trigger auto-flush
-        wal.append(&Order::new(3, 100, 10000, 1000, Side::Buy))
+        wal.append(&InternalOrder::new(3, 100, 0, 10000, 1000, Side::Buy))
             .unwrap();
         assert_eq!(wal.pending_count(), 0); // Flushed!
 
@@ -418,7 +421,7 @@ mod tests {
 
     #[test]
     fn test_wal_entry_format() {
-        let order = Order::new(42, 100, 50000, 1000, Side::Buy);
+        let order = InternalOrder::new(42, 100, 0, 50000, 1000, Side::Buy);
         let entry = WalEntry {
             seq_id: 1,
             timestamp_ns: 1234567890,
@@ -426,6 +429,7 @@ mod tests {
         };
 
         let csv = entry.to_csv_line();
-        assert!(csv.contains("1,1234567890,42,100,50000,1000,Buy,Limit"));
+        // Format: seq_id,timestamp,order_id,user_id,symbol_id,price,qty,side,type
+        assert!(csv.contains("1,1234567890,42,100,0,50000,1000,Buy,Limit"));
     }
 }

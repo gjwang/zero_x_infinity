@@ -3,7 +3,7 @@
 //! This module contains only the OrderBook data structure.
 //! The matching logic lives in the Engine module.
 
-use crate::models::{Order, Side};
+use crate::models::{InternalOrder, Side};
 use std::collections::{BTreeMap, VecDeque};
 
 /// The OrderBook using BTreeMap for O(log n) operations
@@ -21,9 +21,9 @@ use std::collections::{BTreeMap, VecDeque};
 #[derive(Debug)]
 pub struct OrderBook {
     /// Sell orders: price -> orders (ascending, lowest = best)
-    asks: BTreeMap<u64, VecDeque<Order>>,
+    asks: BTreeMap<u64, VecDeque<InternalOrder>>,
     /// Buy orders: (MAX - price) -> orders (so highest price first)
-    bids: BTreeMap<u64, VecDeque<Order>>,
+    bids: BTreeMap<u64, VecDeque<InternalOrder>>,
     /// Trade ID counter
     pub(crate) trade_id_counter: u64,
 }
@@ -73,25 +73,25 @@ impl OrderBook {
 
     /// Get mutable reference to asks (for matching engine)
     #[inline]
-    pub fn asks_mut(&mut self) -> &mut BTreeMap<u64, VecDeque<Order>> {
+    pub fn asks_mut(&mut self) -> &mut BTreeMap<u64, VecDeque<InternalOrder>> {
         &mut self.asks
     }
 
     /// Get mutable reference to bids (for matching engine)
     #[inline]
-    pub fn bids_mut(&mut self) -> &mut BTreeMap<u64, VecDeque<Order>> {
+    pub fn bids_mut(&mut self) -> &mut BTreeMap<u64, VecDeque<InternalOrder>> {
         &mut self.bids
     }
 
     /// Get immutable reference to asks
     #[inline]
-    pub fn asks(&self) -> &BTreeMap<u64, VecDeque<Order>> {
+    pub fn asks(&self) -> &BTreeMap<u64, VecDeque<InternalOrder>> {
         &self.asks
     }
 
     /// Get immutable reference to bids
     #[inline]
-    pub fn bids(&self) -> &BTreeMap<u64, VecDeque<Order>> {
+    pub fn bids(&self) -> &BTreeMap<u64, VecDeque<InternalOrder>> {
         &self.bids
     }
 
@@ -99,7 +99,7 @@ impl OrderBook {
     ///
     /// NOTE: The order status should already be set correctly by the caller.
     /// This method does NOT modify the order status - it just stores the order.
-    pub fn rest_order(&mut self, order: Order) {
+    pub fn rest_order(&mut self, order: InternalOrder) {
         match order.side {
             Side::Buy => {
                 let key = u64::MAX - order.price;
@@ -172,7 +172,7 @@ impl OrderBook {
     /// - Asks second (lowest price first, then FIFO within price)
     ///
     /// This matches the natural market depth view.
-    pub fn all_orders(&self) -> Vec<&Order> {
+    pub fn all_orders(&self) -> Vec<&InternalOrder> {
         self.bids
             .values()
             .flat_map(|level| level.iter())
@@ -181,7 +181,7 @@ impl OrderBook {
     }
 
     /// Iterate over all orders in the book
-    pub fn iter_orders(&self) -> impl Iterator<Item = (&Order,)> + '_ {
+    pub fn iter_orders(&self) -> impl Iterator<Item = (&InternalOrder,)> + '_ {
         self.bids
             .values()
             .flat_map(|v| v.iter())
@@ -200,8 +200,8 @@ impl Default for OrderBook {
 mod tests {
     use super::*;
 
-    fn make_order(id: u64, price: u64, qty: u64, side: Side) -> Order {
-        Order::new(id, 1, price, qty, side)
+    fn make_order(id: u64, price: u64, qty: u64, side: Side) -> InternalOrder {
+        InternalOrder::new(id, 1, 0, price, qty, side) // symbol_id=0
     }
 
     #[test]
