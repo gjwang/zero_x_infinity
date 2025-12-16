@@ -1,459 +1,273 @@
-# 0x08 订单WAL持久化 (Order WAL Persistence)
+# Chapter 0x08: Order Processing Pipeline Architecture
 
-> **核心目的**：确保每个订单在进入撮合引擎前被持久化，保证订单的完整生命周期。
+## Overview
 
-本章解决撮合引擎最关键的问题：**订单的持久化和确定性排序**。
+This document describes the order processing pipeline architecture for 0xInfinity, 
+a high-frequency trading matching engine. The design emphasizes:
 
----
+- **Durability**: Orders are persisted to WAL before matching
+- **Correctness**: Pure state machine for matching, deterministic replay
+- **Performance**: Batching and minimal I/O in critical path
+- **Modularity**: Clear separation of concerns
 
-## 1. 为什么需要持久化？
-
-### 1.1 问题场景
-
-假设系统在撮合过程中崩溃：
-
-```
-用户 A 发送买单 → ME 接收并成交 → 系统崩溃
-                                    ↓
-                            用户 A 的钱扣了
-                            但没有成交记录
-                            订单丢失!
-```
-
-**没有持久化的后果**：
-- **订单丢失**：用户下的单消失了
-- **状态不一致**：资金变动了但没有记录
-- **无法恢复**：重启后不知道有哪些订单
-
-### 1.2 解决方案：先持久化，后撮合
+## Pipeline Stages
 
 ```
-用户 A 发送买单 → WAL 持久化 → ME 撮合 → 系统崩溃
-                    ↓              ↓
-               订单已保存      可以重放恢复!
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                            ORDER PROCESSING PIPELINE                             │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+                    ┌──────────────────────────────────────────────────────────────┐
+                    │                      INPUT STAGE                              │
+                    │  Order { order_id, user_id, side, price, qty }               │
+                    └──────────────────────────────────────────────────────────────┘
+                                              │
+                                              ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│  1. PRE-CHECK                                                                    │
+│  ├── User exists?                                                                │
+│  ├── Balance sufficient?                                                         │
+│  └── Lock funds (freeze)                                                         │
+│                                                                                   │
+│  Result: ValidatedOrder or Reject                                                │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                              │
+                              ┌───────────────┴───────────────┐
+                              │         REJECT                 │──────────► Response
+                              └───────────────────────────────┘
+                                              │ ACCEPT
+                                              ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│  2. ORDER BUFFER (Pre-WAL)                                                       │
+│  ├── Validated orders queue                                                      │
+│  └── Batch for WAL write efficiency                                              │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                              │
+                                              ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│  3. WRITE ORDER_WAL                                                              │
+│  ├── Append to WAL (sequential write)                                            │
+│  ├── fsync / group commit                                                        │
+│  └── Assign seq_num                                                              │
+│                                                                                   │
+│  Format: [seq_num | op_type | order_id | user_id | side | price | qty | ts]     │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                              │
+                                              ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│  4. ORDER BUFFER (Post-WAL)                                                      │
+│  ├── WAL confirmed orders                                                        │
+│  └── Ready for matching                                                          │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                              │
+                                              ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│  5. MATCHING ENGINE (ME)                                                         │
+│  ├── Pure state machine (no I/O, no balance ops)                                 │
+│  ├── OrderBook (BTreeMap-based)                                                  │
+│  ├── Price-Time priority matching                                                │
+│  └── Generate trades list                                                        │
+│                                                                                   │
+│  Input:  ValidatedOrder                                                          │
+│  Output: OrderResult { order, trades: Vec<Trade> }                               │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                              │
+                                              ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│  6. TRADES BUFFER                                                                │
+│  ├── Generated trades queue                                                      │
+│  └── Batch for settlement efficiency                                             │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                              │
+                                              ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│  7. SETTLEMENT                                                                   │
+│  ├── Update buyer balance: -quote(frozen), +base(avail)                         │
+│  ├── Update seller balance: -base(frozen), +quote(avail)                        │
+│  ├── Write ledger entries (audit trail)                                          │
+│  └── Emit balance events (for downstream systems)                                │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                              │
+                                              ▼
+                    ┌──────────────────────────────────────────────────────────────┐
+                    │                      OUTPUT STAGE                             │
+                    │  ├── Order Response (accepted/rejected, fills)               │
+                    │  ├── Trade Events (for market data feed)                     │
+                    │  └── Balance Events (for user notifications)                 │
+                    └──────────────────────────────────────────────────────────────┘
 ```
 
----
+## Component Responsibilities
 
-## 2. 唯一排序 (Unique Ordering)
+### 1. PreChecker
+**Location**: `pre_check.rs` (to be created)
 
-### 2.1 为什么需要唯一排序？
+| Responsibility | Description |
+|----------------|-------------|
+| User validation | Verify user exists and is active |
+| Balance check | Ensure sufficient available balance |
+| Fund locking | Freeze required amount for the order |
+| Risk checks | Optional: position limits, rate limits |
 
-在分布式系统中，多个节点必须对订单顺序达成一致：
+**Input**: Raw order request  
+**Output**: `ValidatedOrder` (with locked_amount) or `Reject`
 
-| 场景 | 问题 |
-|------|------|
-| 节点 A 先收到订单 1，再收到订单 2 | |
-| 节点 B 先收到订单 2，再收到订单 1 | 顺序不一致！ |
+### 2. OrderWAL
+**Location**: `order_wal.rs` (to be created)
 
-**结果**：两个节点的撮合结果可能不同！
+| Responsibility | Description |
+|----------------|-------------|
+| Sequence assignment | Monotonically increasing seq_num |
+| Durability | Write to disk before matching |
+| Group commit | Batch multiple orders for efficiency |
+| Recovery | Replay from last checkpoint |
 
-### 2.2 解决方案：单点排序 + 全局序号
-
+**WAL Entry Format** (binary):
 ```
-所有订单 → Sequencer → 分配全局 sequence_id → 持久化 → 分发到 ME
-              ↓
-         唯一的到达顺序
-```
-
-| 字段 | 说明 |
-|------|------|
-| `sequence_id` | 单调递增的全局序号 |
-| `timestamp` | 精确到纳秒的时间戳 |
-| `order_id` | 业务层订单 ID |
-
----
-
-## 3. 订单生命周期
-
-### 3.1 先持久化，后执行
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         订单生命周期                                      │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│   ┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐             │
-│   │ Gateway │───▶│Pre-Check│───▶│   WAL   │───▶│   ME    │             │
-│   │(接收订单)│    │(余额校验)│    │ (持久化)│    │ (撮合) │             │
-│   └─────────┘    └─────────┘    └─────────┘    └─────────┘             │
-│        │              │              │              │                   │
-│        ▼              ▼              ▼              ▼                   │
-│    接收订单      余额不足?        写入磁盘        执行撮合               │
-│                  提前拒绝        分配seq_id      保证执行               │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
+┌─────────┬─────────┬──────────┬─────────┬──────┬───────┬─────┬───────────┐
+│ seq_num │ op_type │ order_id │ user_id │ side │ price │ qty │ timestamp │
+│  8B     │  1B     │  8B      │  8B     │  1B  │  8B   │ 8B  │  8B       │
+└─────────┴─────────┴──────────┴─────────┴──────┴───────┴─────┴───────────┘
+Total: 50 bytes per entry
 ```
 
-### 3.2 Pre-Check：减少无效订单
+### 3. MatchingEngine (ME)
+**Location**: `engine.rs`
 
-在持久化前进行余额校验：
+| Responsibility | Description |
+|----------------|-------------|
+| Order matching | Price-time priority algorithm |
+| Trade generation | Create trade records |
+| Order book management | Maintain bid/ask levels |
 
-```rust
-fn pre_check_order(order: &Order, accounts: &AccountManager) -> Result<(), RejectReason> {
-    let user = accounts.get(order.user_id)?;
-    
-    match order.side {
-        Side::Buy => {
-            // 买单：检查 Quote 资产余额
-            let cost = order.price * order.qty / QTY_UNIT;
-            if user.avail(QUOTE_ASSET) < cost {
-                return Err(RejectReason::InsufficientBalance);
-            }
-        }
-        Side::Sell => {
-            // 卖单：检查 Base 资产余额
-            if user.avail(BASE_ASSET) < order.qty {
-                return Err(RejectReason::InsufficientBalance);
-            }
-        }
-    }
-    Ok(())
-}
+**Key Principle**: ME is a **pure state machine**
+- No I/O operations
+- No balance operations
+- Deterministic: same input → same output
+- Replayable from WAL
+
+### 4. Settlement
+**Location**: `settlement.rs` (to be created)
+
+| Responsibility | Description |
+|----------------|-------------|
+| Balance transfer | Execute the trade financially |
+| Ledger writing | Audit trail of all balance changes |
+| Event emission | Notify downstream systems |
+
+**Per Trade Settlement**:
+```
+Buyer:
+  spend_frozen(quote_asset, trade_cost)
+  deposit(base_asset, trade_qty)
+
+Seller:
+  spend_frozen(base_asset, trade_qty)
+  deposit(quote_asset, trade_cost)
 ```
 
-**为什么需要 Pre-Check？**
-
-| 不 Pre-Check | 有 Pre-Check |
-|--------------|--------------|
-| 无效订单也被持久化 | 无效订单提前拒绝 |
-| 浪费 WAL 空间 | 节省存储 |
-| ME 还要再次检查 | 保证进入 ME 的订单有效 |
-
-### 3.3 一旦持久化，必须完整执行
+## Data Flow
 
 ```
-订单被持久化后，无论发生什么，都必须有以下其中一个结果：
-
-┌─────────────────────┐
-│ 订单已持久化         │
-└─────────────────────┘
-           │
-           ├──▶ 成交 (Filled)
-           ├──▶ 部分成交 (PartialFilled)
-           ├──▶ 挂单中 (New/Open)
-           ├──▶ 用户取消 (Cancelled)
-           └──▶ 系统过期 (Expired)
-
-❌ 绝对不能：订单消失 / 状态未知
+Order → PreCheck → [balance locked] → WAL → ME → [trades] → Settlement → [balance updated]
+                         ↓                              ↓
+                   Reject Response              Ledger + Events
 ```
 
----
-
-## 4. WAL：为什么是最佳选择？
-
-### 4.1 什么是 WAL (Write-Ahead Log)?
-
-WAL 是一种**追加写** (Append-Only) 的日志结构：
+## Recovery Process
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                          WAL File                               │
-├─────────────────────────────────────────────────────────────────┤
-│  Entry 1  │  Entry 2  │  Entry 3  │  Entry 4  │  ...  │ ← 追加  │
-│ (seq=1)   │ (seq=2)   │ (seq=3)   │ (seq=4)   │       │         │
-└─────────────────────────────────────────────────────────────────┘
-                                                          ↑
-                                                     只追加，不修改
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                              RECOVERY FLOW                                       │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+1. Load latest snapshot (checkpoint)
+   ├── OrderBook state
+   ├── User balances
+   └── Last processed seq_num = N
+
+2. Replay WAL from seq_num = N+1
+   ├── For each WAL entry:
+   │   ├── Skip pre-check (already passed)
+   │   ├── Apply to ME
+   │   └── Apply settlement
+   └── Continue until end of WAL
+
+3. Ready to accept new orders
 ```
 
-### 4.2 为什么 WAL 是 HFT 最佳实践？
-
-| 持久化方式 | 写入模式 | 延迟 | 吞吐量 | HFT 适用性 |
-|-----------|----------|------|--------|-----------|
-| 数据库 (MySQL/Postgres) | 随机写 + 事务 | ~1-10ms | ~1K ops/s | ❌ 太慢 |
-| KV 存储 (Redis/RocksDB) | 随机写 | ~0.1-1ms | ~10K ops/s | ⚠️ 一般 |
-| **WAL 追加写** | **顺序写** | **~1-10µs** | **~1M ops/s** | ✅ **最佳** |
-
-**为什么 WAL 这么快？**
-
-#### 4.2.1 顺序写 vs 随机写
+## Module Structure
 
 ```
-随机写 (数据库):
-┌─────┐     ┌─────┐     ┌─────┐
-│ 写1 │     │ 写2 │     │ 写3 │
-└──┬──┘     └──┬──┘     └──┬──┘
-   │           │           │
-   ▼           ▼           ▼
- 磁盘位置 A  磁盘位置 X  磁盘位置 M   ← 磁头需要频繁移动 (寻道)
-
-顺序写 (WAL):
-┌─────┬─────┬─────┐
-│ 写1 │ 写2 │ 写3 │ ← 追加到文件末尾，磁头不移动
-└─────┴─────┴─────┘
+src/
+├── lib.rs              # Public API
+├── types.rs            # Core type aliases
+├── config.rs           # Trading configuration
+│
+├── pre_check.rs        # [NEW] Balance check and lock
+├── order_wal.rs        # [NEW] Write-ahead log
+│
+├── orderbook.rs        # Order book data structure
+├── engine.rs           # Matching engine (pure)
+│
+├── settlement.rs       # [NEW] Trade settlement
+├── ledger.rs           # Audit log
+│
+├── balance.rs          # Balance type
+├── user_account.rs     # User account management
+│
+├── models.rs           # Order, Trade structs
+├── perf.rs             # Performance metrics
+└── csv_io.rs           # CSV utilities (testing)
 ```
 
-即使是 SSD，顺序写也比随机写快 **10-100 倍**。
+## Key Design Decisions
 
-#### 4.2.2 无事务开销
+### 1. ME is Pure
+The Matching Engine does NOT:
+- Check balances (done in PreCheck)
+- Update balances (done in Settlement)
+- Write to disk (done in WAL)
+- Emit events (done in Settlement)
 
-```
-数据库写入:
-1. 开启事务
-2. 获取锁
-3. 写 redo log
-4. 写数据页
-5. 写 binlog
-6. 提交事务，释放锁
-→ 多次磁盘操作，多次同步
+Benefits:
+- Deterministic replay
+- Easy to test
+- Clear responsibility
 
-WAL 写入:
-1. 序列化数据
-2. 追加写入
-3. (可选) fsync
-→ 最少一次磁盘操作
-```
+### 2. Lock Before WAL
+Funds are locked before writing to WAL, ensuring:
+- No double-spend if crash after WAL write
+- Failed orders don't consume WAL space
+- Rejection is fast (no I/O)
 
-#### 4.2.3 批量刷盘 (Group Commit)
+### 3. WAL Before Matching
+Order is persisted before matching:
+- Guaranteed durability
+- Can replay on crash
+- Sequence number provides ordering
 
-```rust
-/// 批量提交 WAL
-impl WalWriter {
-    /// 写入但不立即刷盘
-    pub fn append(&mut self, entry: &[u8]) -> u64 {
-        self.buffer.extend_from_slice(entry);
-        self.pending_count += 1;
-        self.next_seq()
-    }
-    
-    /// 批量刷盘（每 N 个订单或每 T 毫秒）
-    pub fn flush(&mut self) -> io::Result<()> {
-        self.file.write_all(&self.buffer)?;
-        self.file.sync_data()?;  // fsync
-        self.buffer.clear();
-        Ok(())
-    }
-}
-```
+### 4. Settlement After Matching
+Balance updates happen after matching:
+- Only executed trades affect balances
+- Ledger reflects actual trades
+- Atomic commit possible
 
-**Group Commit 效果**：
+## Performance Considerations
 
-| 刷盘策略 | 延迟 | 吞吐量 | 数据安全 |
-|----------|------|--------|----------|
-| 每条 fsync | ~50µs | ~20K/s | 最高 |
-| 每 100 条 fsync | ~5µs (均摊) | ~200K/s | 高 |
-| 每 1ms fsync | ~1µs (均摊) | ~1M/s | 中 |
+| Stage | Latency Target | Notes |
+|-------|----------------|-------|
+| PreCheck | < 1µs | In-memory hash lookup |
+| WAL Write | < 10µs | Sequential write, group commit |
+| Matching | < 10µs | BTreeMap O(log n) |
+| Settlement | < 1µs | In-memory balance update |
+| Ledger | < 100µs | Can be async/batched |
 
----
+**Total target**: < 50µs per order (P99)
 
-## 5. 单线程 + Lock-Free 架构
+## Future Enhancements
 
-### 5.1 为什么选择单线程？
-
-大多数人直觉认为：并发 = 快。但在 HFT 领域，**单线程往往更快**：
-
-| 多线程 | 单线程 |
-|--------|--------|
-| 需要锁保护共享状态 | 无锁，无竞争 |
-| 缓存失效 (cache invalidation) | 缓存友好 |
-| 上下文切换开销 | 无切换开销 |
-| 顺序难以保证 | 天然有序 |
-| 复杂的同步逻辑 | 代码简单直观 |
-
-### 5.2 Mechanical Sympathy
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    CPU Cache Hierarchy                          │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│   ┌─────────┐                                                   │
-│   │   CPU   │  L1 Cache: ~1ns (32KB)                           │
-│   │  Core 0 │  L2 Cache: ~4ns (256KB)                          │
-│   └────┬────┘  L3 Cache: ~12ns (shared, MB级)                  │
-│        │                                                        │
-│        ▼                                                        │
-│   ┌─────────┐                                                   │
-│   │   RAM   │  ~100ns                                          │
-│   └─────────┘                                                   │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-
-单线程优势：
-- 数据始终在 L1/L2 缓存中（热数据）
-- 无 cache line 争用
-- 无 false sharing
-```
-
-### 5.3 LMAX Disruptor 模式
-
-这种单线程 + Ring Buffer 的架构源自 **LMAX Exchange**（伦敦多资产交易所），号称能在单线程上处理 **600 万订单/秒**：
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    LMAX Disruptor Architecture                  │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│   Publisher ───▶ Ring Buffer ───▶ Consumer                     │
-│   (单线程写)      (无锁队列)       (单线程读)                    │
-│                                                                 │
-│   关键特性：                                                     │
-│   1. 单一 Writer（避免写竞争）                                   │
-│   2. 预分配内存（避免 GC/malloc）                                │
-│   3. 缓存行填充（避免 false sharing）                           │
-│   4. 批量消费（减少同步点）                                      │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 6. Ring Buffer：服务间通信
-
-### 6.1 为什么使用 Ring Buffer？
-
-服务间通信的选择：
-
-| 方式 | 延迟 | 吞吐量 | 复杂度 |
-|------|------|--------|--------|
-| HTTP/gRPC | ~1ms | ~10K/s | 低 |
-| Kafka | ~1-10ms | ~1M/s | 中 |
-| Socket/ZMQ | ~100µs | ~100K/s | 中 |
-| **Shared Memory Ring Buffer** | **~100ns** | **~10M/s** | 高 |
-
-### 6.2 Ring Buffer 原理
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Ring Buffer                              │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│      write_idx                       read_idx                   │
-│          ↓                               ↓                      │
-│   ┌───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┐            │
-│   │ 8 │ 9 │ 10│ 11│ 12│ 13│ 14│ 15│ 0 │ 1 │ 2 │ 3 │ ...        │
-│   └───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┘            │
-│         ↑                               ↑                       │
-│     新数据写入                        消费者读取                  │
-│                                                                 │
-│   特性：                                                         │
-│   - 固定大小，循环使用                                           │
-│   - 无需动态分配                                                 │
-│   - Single Producer, Single Consumer (SPSC) 可完全无锁          │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### 6.3 为什么 Ring Buffer 这么快？
-
-```rust
-/// SPSC Ring Buffer 核心实现
-pub struct RingBuffer<T, const N: usize> {
-    buffer: [MaybeUninit<T>; N],
-    write_idx: AtomicUsize,  // 生产者独占
-    read_idx: AtomicUsize,   // 消费者独占
-}
-
-impl<T, const N: usize> RingBuffer<T, N> {
-    /// 生产者写入（无锁）
-    pub fn push(&self, item: T) -> bool {
-        let write = self.write_idx.load(Ordering::Relaxed);
-        let read = self.read_idx.load(Ordering::Acquire);
-        
-        if (write + 1) % N == read {
-            return false;  // 满了
-        }
-        
-        unsafe {
-            self.buffer[write].as_mut_ptr().write(item);
-        }
-        
-        self.write_idx.store((write + 1) % N, Ordering::Release);
-        true
-    }
-    
-    /// 消费者读取（无锁）
-    pub fn pop(&self) -> Option<T> {
-        let read = self.read_idx.load(Ordering::Relaxed);
-        let write = self.write_idx.load(Ordering::Acquire);
-        
-        if read == write {
-            return None;  // 空的
-        }
-        
-        let item = unsafe { self.buffer[read].as_ptr().read() };
-        
-        self.read_idx.store((read + 1) % N, Ordering::Release);
-        Some(item)
-    }
-}
-```
-
-**关键点**：
-- **无锁**：使用 Atomic 操作代替互斥锁
-- **无分配**：预分配固定大小的数组
-- **缓存友好**：连续内存布局
-- **批量操作**：可以一次读取多个条目
-
----
-
-## 7. 整体架构
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                    0xInfinity HFT Architecture                          │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│   Client Orders                                                         │
-│        │                                                                │
-│        ▼                                                                │
-│   ┌─────────────┐                                                       │
-│   │   Gateway   │  ← 多线程接收网络请求                                  │
-│   │  (Receiver) │                                                       │
-│   └──────┬──────┘                                                       │
-│          │ Ring Buffer                                                  │
-│          ▼                                                              │
-│   ┌─────────────┐                                                       │
-│   │  Sequencer  │  ← 单线程：分配 sequence_id                           │
-│   │  + PreCheck │     + 余额预检查                                       │
-│   └──────┬──────┘                                                       │
-│          │ Ring Buffer                                                  │
-│          ▼                                                              │
-│   ┌─────────────┐                                                       │
-│   │  WAL Writer │  ← 单线程：持久化 + Group Commit                       │
-│   └──────┬──────┘                                                       │
-│          │ Ring Buffer                                                  │
-│          ▼                                                              │
-│   ┌─────────────┐                                                       │
-│   │  Matching   │  ← 单线程：核心撮合逻辑                                │
-│   │   Engine    │                                                       │
-│   └──────┬──────┘                                                       │
-│          │ Ring Buffer                                                  │
-│          ▼                                                              │
-│   ┌─────────────┐                                                       │
-│   │ Settlement  │  ← 单线程：余额更新 + 成交记录                         │
-│   │  + Ledger   │                                                       │
-│   └─────────────┘                                                       │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 8. Summary
-
-本章核心设计：
-
-| 设计点 | 解决的问题 | 方案 |
-|--------|------------|------|
-| 订单丢失 | 系统崩溃后无法恢复 | 先持久化，后撮合 |
-| 顺序不一致 | 分布式节点顺序不同 | 单点 Sequencer + 全局序号 |
-| 无效订单 | 浪费持久化空间 | Pre-Check 余额校验 |
-| 持久化性能 | 数据库太慢 | WAL 追加写 + Group Commit |
-| 锁竞争 | 多线程同步开销 | 单线程 + Lock-Free |
-| 服务间通信 | 网络调用延迟高 | Shared Memory Ring Buffer |
-
-**核心理念**：
-
-> 在 HFT 领域，**简单就是快**。单线程 + 顺序写 + 无锁设计，
-> 比复杂的多线程 + 随机写 + 加锁设计，往往快 10-100 倍。
-
----
-
-## 9. 下一步
-
-1. **实现 WAL Writer**：`src/wal.rs`
-2. **实现 Ring Buffer**：`src/ringbuffer.rs`
-3. **集成到主流程**：修改 `main.rs`
-4. **性能测试**：对比有/无 WAL 的性能差异
+1. **Async Settlement**: Process trades in background
+2. **Checkpointing**: Periodic snapshots for faster recovery
+3. **Sharding**: Multiple order books for different symbols
+4. **Replication**: WAL shipping to replicas
