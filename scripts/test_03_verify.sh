@@ -6,7 +6,7 @@ echo "=== Step 3: Run Test and Verify ==="
 cd "$(dirname "$0")/.."
 
 echo "Running test (output to output/)..."
-cargo run --release
+cargo run --release -- --ubscore
 
 echo ""
 echo "Comparing output/ vs baseline/..."
