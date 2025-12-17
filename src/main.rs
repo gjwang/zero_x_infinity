@@ -44,7 +44,7 @@ use zero_x_infinity::wal::WalConfig;
 fn get_output_dir() -> &'static str {
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--baseline") {
-        "baseline"
+        "baseline/default"
     } else {
         "output"
     }
