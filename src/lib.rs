@@ -18,6 +18,7 @@
 //! - [`perf`] - Performance metrics
 //! - [`csv_io`] - CSV loading/saving
 //! - [`pipeline`] - Ring Buffer based service pipeline
+//! - [`pipeline_runner`] - Pipeline execution logic
 
 // Core types - must be first!
 pub mod core_types;
@@ -35,6 +36,7 @@ pub mod models;
 pub mod orderbook;
 pub mod perf;
 pub mod pipeline;
+pub mod pipeline_runner;
 pub mod ubscore;
 pub mod user_account;
 pub mod wal;
@@ -58,3 +60,4 @@ pub use pipeline::{
     PipelineQueues, PipelineStats, PipelineStatsSnapshot, SequencedOrder, ShutdownSignal,
     SingleThreadPipeline,
 };
+pub use pipeline_runner::{PipelineResult, run_pipeline_single_thread};
