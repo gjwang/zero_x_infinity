@@ -4,6 +4,7 @@
 //! The matching logic lives in the Engine module.
 
 use crate::models::{InternalOrder, Side};
+use rustc_hash::FxHashMap;
 use std::collections::{BTreeMap, VecDeque};
 
 /// The OrderBook using BTreeMap for O(log n) operations
@@ -17,13 +18,15 @@ use std::collections::{BTreeMap, VecDeque};
 /// |-----------|------|
 /// | Insert | O(log n) |
 /// | Best price | O(1) amortized |
-/// | Cancel | O(log n + k) where k = orders at price |
+/// | Cancel by ID | O(1) lookup + O(log n + k) removal |
 #[derive(Debug)]
 pub struct OrderBook {
     /// Sell orders: price -> orders (ascending, lowest = best)
     asks: BTreeMap<u64, VecDeque<InternalOrder>>,
     /// Buy orders: (MAX - price) -> orders (so highest price first)
     bids: BTreeMap<u64, VecDeque<InternalOrder>>,
+    /// Order index: OrderId -> (Price, Side) for O(1) cancel lookup
+    order_index: FxHashMap<u64, (u64, Side)>,
     /// Trade ID counter
     pub(crate) trade_id_counter: u64,
 }
@@ -34,6 +37,7 @@ impl OrderBook {
         Self {
             asks: BTreeMap::new(),
             bids: BTreeMap::new(),
+            order_index: FxHashMap::default(),
             trade_id_counter: 0,
         }
     }
@@ -95,11 +99,22 @@ impl OrderBook {
         &self.bids
     }
 
+    /// Remove an order from the index (call when order is filled via pop_front)
+    /// This is needed to keep the index in sync with the order book.
+    #[inline]
+    pub fn remove_from_index(&mut self, order_id: u64) {
+        self.order_index.remove(&order_id);
+    }
+
     /// Rest an unfilled/partially filled order in the book
     ///
     /// NOTE: The order status should already be set correctly by the caller.
     /// This method does NOT modify the order status - it just stores the order.
     pub fn rest_order(&mut self, order: InternalOrder) {
+        // Maintain order index for O(1) cancel lookup
+        self.order_index
+            .insert(order.order_id, (order.price, order.side));
+
         match order.side {
             Side::Buy => {
                 let key = u64::MAX - order.price;
@@ -148,6 +163,8 @@ impl OrderBook {
         if let Some(orders) = book {
             if let Some(pos) = orders.iter().position(|o| o.order_id == order_id) {
                 orders.remove(pos);
+                // Remove from index
+                self.order_index.remove(&order_id);
                 // Clean up empty price level
                 if orders.is_empty() {
                     match side {
@@ -165,40 +182,35 @@ impl OrderBook {
         false
     }
 
-    /// Remove an order by ID only (searches entire book)
+    /// Remove an order by ID only (uses order index for fast lookup)
     ///
     /// Returns the removed order if found. Use this when you don't know
     /// the price/side of the order (e.g., cancel by order_id from API).
     ///
-    /// Complexity: O(n) where n = total orders (must search entire book)
+    /// Complexity: O(1) index lookup + O(log n) tree access + O(k) queue scan
+    /// where k = orders at that price level (typically small)
     pub fn remove_order_by_id(&mut self, order_id: u64) -> Option<InternalOrder> {
-        // Search bids first
-        for (key, orders) in self.bids.iter_mut() {
-            if let Some(pos) = orders.iter().position(|o| o.order_id == order_id) {
-                let order = orders.remove(pos).unwrap();
-                let price = u64::MAX - *key;
-                // Clean up empty price level
-                if orders.is_empty() {
-                    self.bids.remove(&(u64::MAX - price));
-                }
-                return Some(order);
-            }
+        // O(1) - lookup price and side from index
+        let (price, side) = self.order_index.remove(&order_id)?;
+
+        // O(log n) - get the price level
+        let (book, key) = match side {
+            Side::Buy => (&mut self.bids, u64::MAX - price),
+            Side::Sell => (&mut self.asks, price),
+        };
+
+        let orders = book.get_mut(&key)?;
+
+        // O(k) - find order in the queue at this price level
+        let pos = orders.iter().position(|o| o.order_id == order_id)?;
+        let order = orders.remove(pos)?;
+
+        // Clean up empty price level
+        if orders.is_empty() {
+            book.remove(&key);
         }
 
-        // Search asks
-        for (key, orders) in self.asks.iter_mut() {
-            if let Some(pos) = orders.iter().position(|o| o.order_id == order_id) {
-                let order = orders.remove(pos).unwrap();
-                let price = *key;
-                // Clean up empty price level
-                if orders.is_empty() {
-                    self.asks.remove(&price);
-                }
-                return Some(order);
-            }
-        }
-
-        None
+        Some(order)
     }
 
     /// Get all orders as a Vec (for final dump/snapshot)
