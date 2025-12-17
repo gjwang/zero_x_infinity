@@ -46,13 +46,19 @@ def canonical_key(event: dict) -> tuple:
 
 
 def canonical_value(event: dict) -> tuple:
-    """Extract canonical value (excludes version which may vary)."""
+    """
+    Extract canonical value for comparison.
+    
+    With separated version spaces (lock_version vs settle_version),
+    version is now deterministic and should be strictly compared.
+    """
     return (
         event['event_type'],
         int(event['user_id']),
         int(event['asset_id']),
         event['source_type'],
         int(event['source_id']),
+        int(event['version']),    # Now included: deterministic with separated spaces
         int(event['delta']),
         int(event['avail_after']),
         int(event['frozen_after']),
