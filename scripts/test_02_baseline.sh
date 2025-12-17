@@ -9,8 +9,8 @@ echo "Building release..."
 cargo build --release 2>&1 | grep -v "^$" | tail -5
 
 echo ""
-echo "Running with --baseline..."
-cargo run --release -- --baseline
+echo "Running with --ubscore --baseline..."
+cargo run --release -- --ubscore --baseline
 
 echo ""
 echo "Baseline files:"
