@@ -1,0 +1,31 @@
+=== Execution Summary ===
+Symbol: BTC_USDT
+Total Orders: 1294
+  Accepted: 1000
+  Rejected: 0
+Total Trades: 616
+Execution Time: 11.56ms
+Throughput: 111935 orders/sec | 53286 trades/sec
+
+Final Orderbook:
+  Best Bid: Some(8466182)
+  Best Ask: Some(8483957)
+  Bid Depth: 99 levels
+  Ask Depth: 161 levels
+
+Total Time: 26.33ms
+
+=== Performance Breakdown ===
+Balance Check:        1.89ms ( 22.5%)
+Matching Engine:      3.88ms ( 46.0%)
+Settlement:           0.44ms (  5.3%)
+Ledger I/O:           2.21ms ( 26.3%)
+
+=== Latency Percentiles (sampled) ===
+  Min:       2500 ns
+  Avg:      10139 ns
+  P50:       6625 ns
+  P99:      37792 ns
+  P99.9:   214041 ns
+  Max:     214041 ns
+Samples: 100

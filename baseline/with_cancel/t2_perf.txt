@@ -1,0 +1,17 @@
+# Performance Baseline - 0xInfinity
+# Generated: 2025-13-05
+orders=1294
+trades=616
+exec_time_ms=11.56
+throughput_ops=111935
+throughput_tps=53286
+balance_check_ns=1892832
+matching_ns=3875359
+settlement_ns=443333
+ledger_ns=2211050
+latency_min_ns=2500
+latency_avg_ns=10139
+latency_p50_ns=6625
+latency_p99_ns=37792
+latency_p999_ns=214041
+latency_max_ns=214041
