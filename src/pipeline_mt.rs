@@ -187,6 +187,14 @@ pub fn run_pipeline_multi_thread(
             // PRIORITY 1: Post-Trade (balance updates from ME)
             // Drain balance_update_queue first to ensure settlements
             // complete before processing new orders.
+            //
+            // TODO: Production Optimization - Weighted Priority
+            // Current: Full drain of balance_update_queue before any new order.
+            // Future: Implement weighted round-robin for better interleaving:
+            //   - Option 1: Process N settlements per 1 order (e.g., 3:1 ratio)
+            //   - Option 2: Batch processing (10 settle, 3 order per round)
+            //   - Option 3: Adaptive ratio based on queue depth
+            // See docs/src/0x08-g-multi-thread-pipeline.md for details.
             // ============================================
             while let Some(balance_update) = ubscore_queues.balance_update_queue.pop() {
                 did_work = true;
