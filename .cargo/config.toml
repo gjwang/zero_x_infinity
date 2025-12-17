@@ -1,0 +1,29 @@
+# Rust build optimization configuration
+# Reference: https://doc.rust-lang.org/cargo/reference/config.html
+#
+# NOTE: sccache is configured in ~/.cargo/config.toml (local only, not committed)
+# Or set via environment variable: export RUSTC_WRAPPER=sccache
+
+[target.aarch64-apple-darwin]
+# macOS ARM64 specific configuration
+# Note: mold linker doesn't support macOS, using system default linker
+# For faster linking, try:
+# rustflags = ["-C", "link-arg=-fuse-ld=/opt/homebrew/opt/llvm/bin/lld"]
+
+[profile.dev]
+# Development mode optimization
+debug = 0              # Disable debug symbols for faster compilation and linking
+incremental = true     # Enable incremental compilation (enabled by default)
+# opt-level = 0        # No optimization, fastest compilation (default)
+
+[profile.dev.package."*"]
+# Compile third-party dependencies with opt-level 2
+# Pros: Dependencies run faster, compiled only once
+# Cons: Slightly slower first compilation
+opt-level = 2
+
+[profile.release]
+# Release mode configuration
+lto = "thin"           # Use thin LTO, faster than fat LTO but still optimized
+codegen-units = 16     # Parallel code generation units (default: 16)
+# lto = true           # Full LTO, slowest but produces most optimized code
