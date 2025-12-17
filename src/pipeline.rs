@@ -74,6 +74,23 @@ impl SequencedOrder {
     }
 }
 
+/// Order action in the pipeline
+///
+/// Unified type for the order queue, supporting both new orders and cancel requests.
+/// This maintains FIFO ordering between place and cancel operations.
+#[derive(Debug, Clone)]
+pub enum OrderAction {
+    /// Place a new order
+    Place(SequencedOrder),
+    /// Cancel an existing order
+    Cancel {
+        /// The order ID to cancel
+        order_id: u64,
+        /// The user ID (for validation/logging)
+        user_id: u64,
+    },
+}
+
 /// Result from UBSCore processing
 #[derive(Debug)]
 pub enum PreTradeResult {
@@ -85,6 +102,23 @@ pub enum PreTradeResult {
         order_id: u64,
         user_id: u64,
         reason: RejectReason,
+    },
+}
+
+/// Action for ME thread (UBSCore → ME)
+///
+/// Unified type for the action queue between UBSCore and ME.
+/// Both place orders and cancel requests go through the same path.
+#[derive(Debug, Clone)]
+pub enum ValidAction {
+    /// Valid order ready for matching (balance already locked)
+    Order(ValidOrder),
+    /// Cancel request (no balance lock needed, ME will remove from book)
+    Cancel {
+        /// The order ID to cancel
+        order_id: u64,
+        /// The user ID (for validation/logging)
+        user_id: u64,
     },
 }
 
@@ -327,11 +361,17 @@ pub const EVENT_QUEUE_CAPACITY: usize = 65536;
 /// - ME → balance_update_queue → UBSCore (余额更新)
 /// - UBSCore → balance_event_queue → Settlement (余额事件持久化)
 pub struct MultiThreadQueues {
-    /// Orders from Ingestion → UBSCore (Pre-Trade)
-    pub order_queue: Arc<ArrayQueue<SequencedOrder>>,
+    /// Order actions from Ingestion → UBSCore (Pre-Trade)
+    ///
+    /// Unified queue for both place and cancel orders.
+    /// Single queue ensures deterministic ordering (single source of truth).
+    pub order_queue: Arc<ArrayQueue<OrderAction>>,
 
-    /// Valid orders from UBSCore → ME
-    pub valid_order_queue: Arc<ArrayQueue<ValidOrder>>,
+    /// Actions from UBSCore → ME
+    ///
+    /// Unified queue for both valid orders and cancel requests.
+    /// Same path for all commands, each service does what it needs.
+    pub action_queue: Arc<ArrayQueue<ValidAction>>,
 
     /// Trade events from ME → Settlement (for persistence)
     ///
@@ -357,35 +397,63 @@ pub struct MultiThreadQueues {
 }
 
 /// Balance update request from ME to UBSCore
+///
+/// Unified type for balance updates after ME processing.
+/// Same queue for both trade settlements and cancel unlocks.
 #[derive(Debug, Clone)]
-pub struct BalanceUpdateRequest {
-    /// The trade event that triggered this update
-    pub trade_event: TradeEvent,
-    /// Price improvement refund (for limit buy orders filled at better price)
-    pub price_improvement: Option<PriceImprovement>,
+pub enum BalanceUpdateRequest {
+    /// Trade settlement: spend frozen, credit counterparty
+    Trade {
+        /// The trade event that triggered this update
+        trade_event: TradeEvent,
+        /// Price improvement refund (for limit buy orders filled at better price)
+        price_improvement: Option<PriceImprovement>,
+    },
+    /// Cancel result: unlock frozen balance
+    Cancel {
+        /// The cancelled order (contains all info needed for unlock)
+        order_id: u64,
+        user_id: u64,
+        /// Asset to unlock
+        asset_id: u32,
+        /// Amount to unlock
+        unlock_amount: u64,
+    },
 }
 
 impl BalanceUpdateRequest {
-    pub fn new(trade_event: TradeEvent) -> Self {
-        Self {
+    /// Create a trade settlement request
+    pub fn trade(trade_event: TradeEvent) -> Self {
+        Self::Trade {
             trade_event,
             price_improvement: None,
         }
     }
 
-    pub fn with_price_improvement(
+    /// Create a trade settlement request with price improvement
+    pub fn trade_with_price_improvement(
         trade_event: TradeEvent,
         user_id: u64,
         asset_id: u32,
         amount: u64,
     ) -> Self {
-        Self {
+        Self::Trade {
             trade_event,
             price_improvement: Some(PriceImprovement {
                 user_id,
                 asset_id,
                 amount,
             }),
+        }
+    }
+
+    /// Create a cancel unlock request
+    pub fn cancel(order_id: u64, user_id: u64, asset_id: u32, unlock_amount: u64) -> Self {
+        Self::Cancel {
+            order_id,
+            user_id,
+            asset_id,
+            unlock_amount,
         }
     }
 }
@@ -506,7 +574,7 @@ impl MultiThreadQueues {
     pub fn new() -> Self {
         Self {
             order_queue: Arc::new(ArrayQueue::new(ORDER_QUEUE_CAPACITY)),
-            valid_order_queue: Arc::new(ArrayQueue::new(VALID_ORDER_QUEUE_CAPACITY)),
+            action_queue: Arc::new(ArrayQueue::new(VALID_ORDER_QUEUE_CAPACITY)),
             trade_queue: Arc::new(ArrayQueue::new(TRADE_QUEUE_CAPACITY)),
             balance_update_queue: Arc::new(ArrayQueue::new(BALANCE_UPDATE_QUEUE_CAPACITY)),
             balance_event_queue: Arc::new(ArrayQueue::new(BALANCE_EVENT_QUEUE_CAPACITY)),
@@ -516,7 +584,7 @@ impl MultiThreadQueues {
     /// Check if all processing queues are empty (for shutdown)
     pub fn all_empty(&self) -> bool {
         self.order_queue.is_empty()
-            && self.valid_order_queue.is_empty()
+            && self.action_queue.is_empty()
             && self.trade_queue.is_empty()
             && self.balance_update_queue.is_empty()
             && self.balance_event_queue.is_empty()
