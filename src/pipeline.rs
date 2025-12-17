@@ -300,6 +300,117 @@ pub fn try_pop<T>(queue: &ArrayQueue<T>) -> Option<T> {
 }
 
 // ============================================================
+// SINGLE-THREAD PIPELINE RUNNER
+// ============================================================
+
+/// Single-thread pipeline runner for validation
+///
+/// This runs all pipeline stages in a single thread, polling each queue
+/// in round-robin fashion. Useful for validating correctness before
+/// implementing multi-threaded version.
+///
+/// # Flow
+/// 1. Pop from order_queue → UBSCore → push to valid_order_queue (or reject)
+/// 2. Pop from valid_order_queue → ME → push trades to trade_queue
+/// 3. Pop from trade_queue → Settlement (persist) + UBSCore (settle balance)
+pub struct SingleThreadPipeline {
+    pub queues: PipelineQueues,
+    pub stats: Arc<PipelineStats>,
+    pub shutdown: Arc<ShutdownSignal>,
+}
+
+impl SingleThreadPipeline {
+    /// Create a new single-thread pipeline
+    pub fn new() -> Self {
+        Self {
+            queues: PipelineQueues::new(),
+            stats: Arc::new(PipelineStats::new()),
+            shutdown: Arc::new(ShutdownSignal::new()),
+        }
+    }
+
+    /// Create with custom queue capacities
+    pub fn with_capacity(
+        order_capacity: usize,
+        valid_order_capacity: usize,
+        trade_capacity: usize,
+    ) -> Self {
+        Self {
+            queues: PipelineQueues::with_capacity(
+                order_capacity,
+                valid_order_capacity,
+                trade_capacity,
+            ),
+            stats: Arc::new(PipelineStats::new()),
+            shutdown: Arc::new(ShutdownSignal::new()),
+        }
+    }
+
+    /// Ingest an order into the pipeline
+    pub fn ingest(&self, seq_id: u64, order: InternalOrder, timestamp_ns: u64) -> bool {
+        let seq_order = SequencedOrder::new(seq_id, order, timestamp_ns);
+        match self.queues.order_queue.push(seq_order) {
+            Ok(()) => {
+                self.stats.incr_ingested();
+                true
+            }
+            Err(_) => {
+                self.stats.incr_backpressure();
+                false
+            }
+        }
+    }
+
+    /// Check if pipeline has pending work
+    pub fn has_pending_work(&self) -> bool {
+        !self.queues.order_queue.is_empty()
+            || !self.queues.valid_order_queue.is_empty()
+            || !self.queues.trade_queue.is_empty()
+    }
+
+    /// Request graceful shutdown
+    pub fn request_shutdown(&self) {
+        self.shutdown.request_shutdown();
+    }
+
+    /// Check if shutdown was requested
+    pub fn is_shutdown_requested(&self) -> bool {
+        self.shutdown.is_shutdown_requested()
+    }
+
+    /// Get current stats snapshot
+    pub fn get_stats(&self) -> PipelineStatsSnapshot {
+        self.stats.snapshot()
+    }
+
+    /// Get reference to order queue (for external processing)
+    pub fn order_queue(&self) -> &Arc<ArrayQueue<SequencedOrder>> {
+        &self.queues.order_queue
+    }
+
+    /// Get reference to valid order queue (for external processing)
+    pub fn valid_order_queue(&self) -> &Arc<ArrayQueue<ValidOrder>> {
+        &self.queues.valid_order_queue
+    }
+
+    /// Get reference to trade queue (for external processing)
+    pub fn trade_queue(&self) -> &Arc<ArrayQueue<TradeEvent>> {
+        &self.queues.trade_queue
+    }
+
+    /// Get reference to stats (for external update)
+    pub fn stats(&self) -> &Arc<PipelineStats> {
+        &self.stats
+    }
+}
+
+impl Default for SingleThreadPipeline {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ============================================================
 // TESTS
 // ============================================================
 
@@ -390,5 +501,70 @@ mod tests {
         let result = push_with_backpressure(&queue, 42, &stats);
         assert!(result);
         assert_eq!(stats.snapshot().backpressure_events, 0);
+    }
+
+    #[test]
+    fn test_single_thread_pipeline_creation() {
+        let pipeline = SingleThreadPipeline::new();
+
+        assert!(!pipeline.has_pending_work());
+        assert!(!pipeline.is_shutdown_requested());
+
+        let stats = pipeline.get_stats();
+        assert_eq!(stats.orders_ingested, 0);
+    }
+
+    #[test]
+    fn test_single_thread_pipeline_ingest() {
+        let pipeline = SingleThreadPipeline::new();
+        let order = make_test_order(1, 100);
+
+        // Ingest order
+        let success = pipeline.ingest(1, order, 0);
+        assert!(success);
+        assert!(pipeline.has_pending_work());
+
+        let stats = pipeline.get_stats();
+        assert_eq!(stats.orders_ingested, 1);
+
+        // Pop from order queue
+        let seq_order = pipeline.order_queue().pop();
+        assert!(seq_order.is_some());
+        assert_eq!(seq_order.unwrap().seq_id, 1);
+
+        // Now no pending work
+        assert!(!pipeline.has_pending_work());
+    }
+
+    #[test]
+    fn test_single_thread_pipeline_shutdown() {
+        let pipeline = SingleThreadPipeline::new();
+
+        assert!(!pipeline.is_shutdown_requested());
+        pipeline.request_shutdown();
+        assert!(pipeline.is_shutdown_requested());
+    }
+
+    #[test]
+    fn test_single_thread_pipeline_multiple_orders() {
+        let pipeline = SingleThreadPipeline::new();
+
+        // Ingest multiple orders
+        for i in 1..=5 {
+            let order = make_test_order(i, 100 + i);
+            assert!(pipeline.ingest(i, order, i * 1000));
+        }
+
+        let stats = pipeline.get_stats();
+        assert_eq!(stats.orders_ingested, 5);
+
+        // Pop all and verify order
+        for i in 1..=5 {
+            let seq_order = pipeline.order_queue().pop().unwrap();
+            assert_eq!(seq_order.seq_id, i);
+            assert_eq!(seq_order.order.order_id, i);
+        }
+
+        assert!(!pipeline.has_pending_work());
     }
 }
