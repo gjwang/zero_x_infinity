@@ -76,6 +76,7 @@ impl MatchingEngine {
     fn match_buy(book: &mut OrderBook, buy_order: &mut InternalOrder) -> Vec<PendingTrade> {
         let mut pending_trades = Vec::new();
         let mut prices_to_remove = Vec::new();
+        let mut filled_order_ids = Vec::new(); // Track filled orders to remove from index
 
         // Get sorted prices first to avoid borrow issues
         let prices: Vec<u64> = book.asks().keys().copied().collect();
@@ -116,6 +117,7 @@ impl MatchingEngine {
 
                     // Remove filled sell order from book
                     if sell_order.is_filled() {
+                        filled_order_ids.push(sell_order.order_id);
                         orders.pop_front();
                     }
                 }
@@ -131,6 +133,11 @@ impl MatchingEngine {
             book.asks_mut().remove(&price);
         }
 
+        // Remove filled orders from index
+        for order_id in filled_order_ids {
+            book.remove_from_index(order_id);
+        }
+
         pending_trades
     }
 
@@ -139,6 +146,7 @@ impl MatchingEngine {
     fn match_sell(book: &mut OrderBook, sell_order: &mut InternalOrder) -> Vec<PendingTrade> {
         let mut pending_trades = Vec::new();
         let mut keys_to_remove = Vec::new();
+        let mut filled_order_ids = Vec::new(); // Track filled orders to remove from index
 
         // Get sorted keys first to avoid borrow issues
         let keys: Vec<u64> = book.bids().keys().copied().collect();
@@ -180,6 +188,7 @@ impl MatchingEngine {
 
                     // Remove filled buy order from book
                     if buy_order.is_filled() {
+                        filled_order_ids.push(buy_order.order_id);
                         orders.pop_front();
                     }
                 }
@@ -193,6 +202,11 @@ impl MatchingEngine {
         // Clean up empty price levels
         for key in keys_to_remove {
             book.bids_mut().remove(&key);
+        }
+
+        // Remove filled orders from index
+        for order_id in filled_order_ids {
+            book.remove_from_index(order_id);
         }
 
         pending_trades
