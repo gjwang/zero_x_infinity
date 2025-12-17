@@ -161,19 +161,19 @@ impl LedgerWriter {
 
 ---
 
-### Phase 2: 分离 Version 空间
+### Phase 2: 分离 Version 空间 ✅ 已完成
 
 **目标**：解决 Pipeline 确定性问题
 
 #### 2.1 修改 Balance 结构
 
 ```rust
-// src/user_account.rs
+// src/balance.rs
 pub struct Balance {
     avail: u64,
     frozen: u64,
-    lock_version: u64,    // 新增
-    settle_version: u64,  // 新增
+    lock_version: u64,    // 新增：lock/unlock/deposit/withdraw 操作递增
+    settle_version: u64,  // 新增：spend_frozen/deposit 操作递增
 }
 ```
 
@@ -181,15 +181,85 @@ pub struct Balance {
 
 | 操作 | 递增的 Version |
 |------|----------------|
+| `deposit()` | lock_version AND settle_version |
+| `withdraw()` | lock_version |
 | `lock()` | lock_version |
 | `unlock()` | lock_version |
-| `spend_frozen()` + `deposit()` | settle_version |
+| `spend_frozen()` | settle_version |
 
-#### 2.3 验收标准
+#### 2.3 新增 BalanceEvent 类型
 
-- [ ] Balance 结构包含两个 version 字段
-- [ ] 每种操作递增正确的 version
-- [ ] 单元测试验证
+```rust
+// src/messages.rs
+pub enum BalanceEventType { Deposit, Withdraw, Lock, Unlock, Settle }
+pub enum SourceType { Order, Trade, External }
+
+pub struct BalanceEvent {
+    pub user_id: u64,
+    pub asset_id: u32,
+    pub event_type: BalanceEventType,
+    pub version: u64,           // 在对应 version 空间内
+    pub source_type: SourceType,
+    pub source_id: u64,         // 因果链 ID
+    pub delta: i64,
+    pub avail_after: u64,
+    pub frozen_after: u64,
+}
+```
+
+#### 2.4 等效性验证 ✅
+
+**验证脚本**：`scripts/verify_baseline_equivalence.py`
+
+```bash
+$ python3 scripts/verify_baseline_equivalence.py
+
+╔════════════════════════════════════════════════════════════╗
+║     Baseline Equivalence Verification                      ║
+╚════════════════════════════════════════════════════════════╝
+
+=== Step 1: Extract old baseline from v0.8b-ubscore-implementation ===
+Old baseline: 2000 rows
+
+=== Step 2: Load current baseline ===
+New baseline: 2000 rows
+
+=== Step 3: Compare avail and frozen values ===
+✅ EQUIVALENT: avail and frozen values are IDENTICAL
+
+=== Sample version differences (expected) ===
+Format: user_id, asset_id | old_version -> new_version
+--------------------------------------------------
+     1,  1 |   127 ->    79
+     1,  2 |   125 ->    95
+     2,  1 |   150 ->    84
+     2,  2 |   136 ->   109
+     3,  1 |   129 ->    86
+  ...
+
+=== Explanation ===
+Old version = all operations (lock + settle + deposit)
+New version = lock_version only (lock + unlock + deposit)
+
+The settle operations now increment a separate settle_version field.
+
+╔════════════════════════════════════════════════════════════╗
+║     ✅ Baseline equivalence verified!                      ║
+╚════════════════════════════════════════════════════════════╝
+```
+
+**关键结论**：
+- `avail` 和 `frozen` 值 **完全一致** ✅
+- `version` 数值变化 **符合预期**（旧版本 > 新版本）
+- 差值 = settle 操作数（现在计入单独的 `settle_version`）
+
+#### 2.5 验收标准 ✅
+
+- [x] Balance 结构包含两个 version 字段
+- [x] 每种操作递增正确的 version
+- [x] 单元测试验证（50 tests passed）
+- [x] E2E 测试通过（4/4 baselines match）
+- [x] 等效性验证脚本确认新旧 baseline 等效
 
 ---
 
