@@ -18,6 +18,8 @@ pub enum OrderType {
 ///
 /// Per 0x08a design doc, once an order is persisted, it MUST reach
 /// one of these terminal states (never disappear or become unknown).
+///
+/// Reference: Binance API order status enums
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OrderStatus {
     New,             // Just created, waiting in orderbook
@@ -25,7 +27,11 @@ pub enum OrderStatus {
     Filled,          // Fully filled
     Cancelled,       // Cancelled by user
     Rejected,        // Rejected after persistence (e.g., balance check failed)
-    Expired,         // Expired by system (e.g., GTD order timeout)
+    Expired,         // Expired by system (e.g., GTD order timeout, IOC/FOK no fill)
+                     // TODO: Future implementation
+                     // PendingNew,      // Pending in order list (OCO orders) - not implemented
+                     // PendingCancel,   // Pending cancel - not implemented (unused in Binance)
+                     // ExpiredInMatch,  // Expired due to STP (Self-Trade Prevention) - not implemented
 }
 
 // ============================================================
