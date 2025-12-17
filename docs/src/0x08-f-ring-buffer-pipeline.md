@@ -372,61 +372,145 @@ cargo run --release -- --pipeline # Pipeline 并行
 
 ### 架构
 
+根据 0x08-a 原始设计，完整的多线程 Pipeline 数据流如下：
+
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                        Multi-Thread Pipeline                              │
-├──────────────────────────────────────────────────────────────────────────┤
-│                                                                           │
-│   Thread 1: Ingestion              Thread 2: UBSCore (Pre-Trade + Settle)│
-│   ┌─────────────────┐              ┌─────────────────┐                   │
-│   │ Read orders     │              │ Lock balance    │                   │
-│   │ Push to queue   │ ──────────▶  │ WAL write       │                   │
-│   └─────────────────┘  order_queue │ Settle trades   │                   │
-│                                    └────────┬────────┘                   │
-│                                             │ valid_order_queue          │
-│                                             ▼                             │
-│   Thread 3: Matching Engine        ┌─────────────────┐                   │
-│   ┌─────────────────┐              │ Match orders    │                   │
-│   │ OrderBook       │◀─────────────│ Generate trades │                   │
-│   └─────────────────┘              └────────┬────────┘                   │
-│                                             │ settle_request_queue       │
-│                                             ▼                             │
-│   Thread 4: Ledger Writer          event_queue (from all threads)        │
-│   ┌─────────────────┐              ┌─────────────────┐                   │
-│   │ Write events    │◀─────────────│ Centralized log │                   │
-│   └─────────────────┘              └─────────────────┘                   │
-│                                                                           │
-└──────────────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────────────────┐
+│                          Multi-Thread Pipeline (完整版)                                │
+├───────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                        │
+│  Thread 1: Ingestion       Thread 2: UBSCore              Thread 3: ME                │
+│  ┌─────────────────┐       ┌──────────────────────┐       ┌─────────────────┐         │
+│  │ Read orders     │       │  PRE-TRADE:          │       │ Match Order     │         │
+│  │ Assign SeqNum   │──────▶│  - Write WAL         │──────▶│ in OrderBook    │         │
+│  │                 │   ①   │  - process_order()   │  ③    │                 │         │
+│  └─────────────────┘       │  - lock_balance()    │       │ Generate        │         │
+│                            │                      │       │ TradeEvents     │         │
+│                            └──────────┬───────────┘       └────────┬────────┘         │
+│                                       ▲                            │                  │
+│                                       │                            │                  │
+│                                       │ ⑤ balance_update_queue     │ ④ trade_queue   │
+│                                       └────────────────────────────┤                  │
+│                                                                    │                  │
+│                            ┌──────────────────────┐                ▼                  │
+│                            │  POST-TRADE:         │       ┌─────────────────┐         │
+│                            │  - settle_trade()    │       │ Thread 4:       │         │
+│                            │  - spend_frozen()    │──────▶│ Settlement      │         │
+│                            │  - deposit()         │  ⑥    │                 │         │
+│                            │  - Generate Balance  │       │ Persist:        │         │
+│                            │    Update Events     │       │ - Trade Events  │         │
+│                            └──────────────────────┘       │ - Balance Events│         │
+│                                                           │ - Ledger        │         │
+│                                                           └─────────────────┘         │
+│                                                                                        │
+└───────────────────────────────────────────────────────────────────────────────────────┘
+
+队列说明:
+① order_queue:           Ingestion → UBSCore           SequencedOrder
+③ valid_order_queue:     UBSCore   → ME                ValidOrder
+④ trade_queue:           ME        → Settlement        TradeEvent
+⑤ balance_update_queue:  ME        → UBSCore           BalanceUpdateRequest
+⑥ balance_event_queue:   UBSCore   → Settlement        BalanceEvent  (NEW!)
 ```
+
+### 关键设计点
+
+1. **ME Fan-out**: ME 将 `TradeEvent` **并行**发送到：
+   - `trade_queue` → Settlement (持久化交易记录)
+   - `balance_update_queue` → UBSCore (余额结算)
+
+2. **UBSCore 是余额操作的唯一入口**:
+   - **Pre-Trade**: `process_order()` - 验证订单、锁定余额 → 生成 `Lock` 事件
+   - **Post-Trade**: `settle_trade()` - 结算成交 → 生成 `SpendFrozen` + `Credit` 事件
+   - **Cancel/Reject**: `unlock()` - 解锁余额 → 生成 `Unlock` 事件
+   - **Deposit/Withdraw**: 充值提现 → 生成 `Deposit`/`Withdraw` 事件
+
+3. **Settlement 接收两个队列**:
+   - `trade_queue`: 交易事件 (来自 ME)
+   - `balance_event_queue`: **所有**余额变更事件 (来自 UBSCore) - **需要新增**
+
+4. **BalanceEvent 是完整的审计日志**:
+   - 每一笔余额变更都生成 BalanceEvent
+   - Settlement 持久化到 DB/Ledger
+   - 支持完整的余额重建和审计
 
 ### 新增类型
 
 ```rust
-/// 结算请求 (ME → UBSCore)
-pub struct SettleRequest {
+/// 余额更新请求 (ME → UBSCore)
+#[derive(Clone)]
+pub struct BalanceUpdateRequest {
     pub trade_event: TradeEvent,
     pub price_improvement: Option<PriceImprovement>,
 }
 
-/// Pipeline 事件 (All → Ledger)
-pub enum PipelineEvent {
-    OrderAccepted { seq_id, order_id, user_id },
-    OrderRejected { order_id, reason },
-    BalanceLocked { user_id, asset_id, amount, ... },
-    SettleSpend { ... },
-    SettleReceive { ... },
-    // ...
+/// 余额变更事件 (UBSCore → Settlement) - NEW!
+/// 
+/// 重要：这是 **所有** 余额变更事件的通道，包括但不限于：
+/// - Deposit/Withdraw (充值/提现)
+/// - Pre-Trade Lock (下单锁定)
+/// - Post-Trade Settle (成交结算: spend_frozen + deposit)
+/// - Cancel/Reject Unlock (取消/拒绝解锁)
+#[derive(Clone)]
+pub struct BalanceEvent {
+    pub user_id: u64,
+    pub asset_id: u32,
+    pub event_type: BalanceEventType,
+    pub amount: u64,
+    pub order_id: Option<u64>,      // 关联订单 (如有)
+    pub trade_id: Option<u64>,      // 关联成交 (如有)
+    pub ref_id: Option<String>,     // 外部参考ID (充值/提现)
+    pub timestamp: u64,
 }
 
-/// 多线程队列
+/// 余额事件类型 - 覆盖所有余额变更场景
+pub enum BalanceEventType {
+    // === External Operations ===
+    Deposit,        // 充值: avail += amount
+    Withdraw,       // 提现: avail -= amount
+    
+    // === Pre-Trade (Lock) ===
+    Lock,           // 下单锁定: avail -= amount, frozen += amount
+    
+    // === Post-Trade (Settle) ===
+    SpendFrozen,    // 成交扣减冻结: frozen -= amount
+    Credit,         // 成交入账: avail += amount
+    
+    // === Cancel/Reject ===
+    Unlock,         // 取消/拒绝解锁: frozen -= amount, avail += amount
+    
+    // === Price Improvement ===
+    RefundFrozen,   // 价格改善退款: frozen -= amount, avail += amount
+}
+
+/// 多线程队列 (完整版)
 pub struct MultiThreadQueues {
+    // Pre-Trade Flow
     pub order_queue: Arc<ArrayQueue<SequencedOrder>>,
     pub valid_order_queue: Arc<ArrayQueue<ValidOrder>>,
+    
+    // ME → Settlement (Trade Events)
     pub trade_queue: Arc<ArrayQueue<TradeEvent>>,
-    pub settle_request_queue: Arc<ArrayQueue<SettleRequest>>,
-    pub event_queue: Arc<ArrayQueue<PipelineEvent>>,
+    
+    // ME → UBSCore (Balance Update Requests)
+    pub balance_update_queue: Arc<ArrayQueue<BalanceUpdateRequest>>,
+    
+    // UBSCore → Settlement (Balance Events) - NEW!
+    pub balance_event_queue: Arc<ArrayQueue<BalanceEvent>>,
 }
 ```
+
+### 实现状态
+
+| 组件 | 状态 |
+|------|------|
+| `order_queue` | ✅ 已实现 |
+| `valid_order_queue` | ✅ 已实现 |
+| `trade_queue` | ✅ 已实现 |
+| `balance_update_queue` | ✅ 已实现 |
+| `balance_event_queue` | ⏳ **待实现** |
+| UBSCore 生成 BalanceEvent | ⏳ **待实现** |
+| Settlement 消费 BalanceEvent | ⏳ **待实现** |
 
 ### 运行命令
 

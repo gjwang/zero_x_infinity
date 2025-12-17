@@ -58,8 +58,8 @@ pub use wal::{WalConfig, WalWriter};
 
 // Pipeline re-exports
 pub use pipeline::{
-    MultiThreadQueues, PipelineEvent, PipelineQueues, PipelineStats, PipelineStatsSnapshot,
-    PriceImprovement, SequencedOrder, SettleRequest, ShutdownSignal, SingleThreadPipeline,
+    BalanceUpdateRequest, MultiThreadQueues, PipelineQueues, PipelineStats, PipelineStatsSnapshot,
+    PriceImprovement, SequencedOrder, ShutdownSignal, SingleThreadPipeline,
 };
 pub use pipeline_mt::{MultiThreadPipelineResult, run_pipeline_multi_thread};
 pub use pipeline_runner::{PipelineResult, run_pipeline_single_thread};
