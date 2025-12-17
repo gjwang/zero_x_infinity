@@ -775,10 +775,16 @@ fn main() {
             active_symbol_id,
         );
 
-        // Print stats
+        // Print stats (use snapshot to get place/cancel counts)
+        let stats_snap = result.stats.snapshot();
         println!(
-            "    Pipeline: accepted={}, rejected={}, trades={}",
-            result.accepted, result.rejected, result.total_trades
+            "    Pipeline: ingested={} (place={}, cancel={}), accepted={}, rejected={}, trades={}",
+            stats_snap.orders_ingested,
+            stats_snap.places_count,
+            stats_snap.cancels_count,
+            result.accepted,
+            result.rejected,
+            result.total_trades
         );
 
         (

@@ -92,6 +92,7 @@ pub fn run_pipeline_single_thread(
             handle_cancel_order(
                 input, ubscore, book, ledger, base_id, quote_id, qty_unit, &mut perf,
             );
+            pipeline.stats().incr_cancel();
             pipeline.stats().incr_ingested();
             continue;
         }
@@ -257,6 +258,7 @@ pub fn run_pipeline_single_thread(
             }
         }
 
+        pipeline.stats().incr_place();
         pipeline.stats().incr_ingested();
         perf.add_order_latency(order_start.elapsed().as_nanos() as u64);
     }
