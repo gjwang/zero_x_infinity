@@ -179,14 +179,62 @@ for order_id in filled_order_ids {
 - 数据集：130万订单（100万 Place + 30万 Cancel）
 - 机器：MacBook Pro M1
 
-### 5.2 结果对比
+### 5.2 详细测试结果
 
-| 指标 | 优化前 | 优化后 | 改进 |
-|------|--------|--------|------|
-| **执行时间** | 7+ 分钟 | **102 秒** | **~4.2x** |
-| **吞吐量** | ~3k ops/s | **12.7k ops/s** | **~4x** |
+**Cancel 测试 (UBSCore Pipeline)**:
+```
+=== Execution Summary ===
+Symbol: BTC_USDT
+Total Orders: 1300000
+  Accepted: 903107
+  Rejected: 96893
+Total Trades: 538487
+Execution Time: 102.05s
+Throughput: 12739 orders/sec | 5277 trades/sec
 
-### 5.3 验证通过
+Final Orderbook:
+  Best Bid: Some(8534925)
+  Best Ask: Some(8538446)
+  Bid Depth: 98178 levels
+  Ask Depth: 16323 levels
+
+=== Performance Breakdown ===
+Balance Check:     1329.40ms (  1.3%)
+Matching Engine:  98581.51ms ( 97.1%)
+Settlement:         141.09ms (  0.1%)
+Ledger I/O:        1472.63ms (  1.5%)
+
+=== Latency Percentiles (sampled) ===
+  Min:       1084 ns
+  Avg:     114412 ns
+  P50:      48084 ns
+  P99:     710667 ns
+  P99.9:  1375833 ns
+  Max:   21157125 ns
+```
+
+**对比基准 (Baseline - 无 UBSCore)**:
+```
+Total Orders: 100000
+Execution Time: 2.93s
+Throughput: 34171 orders/sec
+
+=== Performance Breakdown ===
+Balance Check:       16.23ms (  0.6%)
+Matching Engine:   2870.91ms ( 98.6%)
+Settlement:           3.63ms (  0.1%)
+Ledger I/O:          20.67ms (  0.7%)
+```
+
+### 5.3 性能对比表
+
+| 测试场景 | 订单数 | ME 时间 | 总时间 | 吞吐量 |
+|----------|--------|---------|--------|--------|
+| Baseline (无 UBS, 无 Cancel) | 100k | 2.87s | 4.5s | **34k/s** |
+| Order Index + UBS + Cancel | 1.3M | 98.6s | 102s | **12.7k/s** |
+| 优化前 (O(N) 撤单) | 1M | 7+ min | 7+ min | ~3k/s |
+
+### 5.4 验证通过
 ```
 === Step 2: Verify Balance Events ===
 ✅ Lock events (903107) = Accepted orders (903107)
@@ -200,15 +248,80 @@ for order_id in filled_order_ids {
 
 ---
 
-## 6. 总结
+## 6. 剩余性能问题分析
 
-### 6.1 关键收获
+### 6.1 VecDeque 不是瓶颈
+
+经过分析，每个价格层级的订单数分布：
+```bash
+# 最多只有 13 个订单在同一价格
+$ awk -F',' 'NR>1 {print $5}' output/t2_orderbook.csv | sort | uniq -c | sort -rn | head -5
+  13 8471263
+  11 8506461
+  11 8502051
+  ...
+```
+
+**K 值很小 (≤13)**，O(K) 的影响微乎其微。
+
+### 6.2 真正的瓶颈：UBSCore Pipeline 开销
+
+| 组件 | Baseline | UBSCore | 差异原因 |
+|------|----------|---------|----------|
+| 每订单延迟 | ~29µs | ~114µs | **~4x 额外开销** |
+| 瓶颈占比 | ME 98.6% | ME 97.1% | 看似相同，但 ME 包含 UBS 逻辑 |
+
+**额外开销来源**:
+
+1. **WAL 写入** (每订单)
+   ```rust
+   ubscore.process_order() // 写入 WAL
+   ```
+
+2. **多次余额查询** (每笔交易)
+   ```rust
+   ubscore.get_balance(buyer, quote_id)  // 查询 1
+   ubscore.get_balance(buyer, base_id)   // 查询 2
+   ubscore.get_balance(seller, base_id)  // 查询 3
+   ubscore.get_balance(seller, quote_id) // 查询 4
+   // + 额外的 settle, refund 查询
+   ```
+
+3. **事件记录** (每笔交易)
+   ```rust
+   ledger.write_balance_event(&settle_event)  // 4次
+   ledger.write_entry(&LedgerEntry)           // 4次
+   // Cancel 还有 unlock_event + order_event
+   ```
+
+4. **Price Improvement Refund** (买单成交)
+   ```rust
+   if valid_order.order.price > trade.price {
+       // 计算 refund + settle_unlock + 记录事件
+   }
+   ```
+
+### 6.3 优化方向
+
+| 优化项 | 预期收益 | 复杂度 |
+|--------|----------|--------|
+| 批量 WAL 写入 | ~10-20% | 低 |
+| 减少余额查询 (缓存) | ~15-25% | 中 |
+| 异步 Ledger I/O | ~5-10% | 中 |
+| 移除重复事件 (Legacy + Event) | ~5% | 低 |
+
+---
+
+## 7. 总结
+
+### 7.1 关键收获
 
 1. **算法复杂度至关重要**：O(N) vs O(1) 在大规模数据下差异巨大
 2. **索引是空间换时间的经典策略**：额外 24 bytes/订单换取 4x 性能提升
 3. **Rust 借用检查器**：强制我们写出更安全的代码，但需要理解其规则
+4. **性能分析要精确**：VecDeque 看似可疑，实际不是瓶颈
 
-### 6.2 设计模式
+### 7.2 设计模式
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -230,12 +343,26 @@ for order_id in filled_order_ids {
 
 ---
 
-## 7. 下一步
+## 8. 下一步优化计划
 
-- [ ] 考虑 `VecDeque` 内的 O(K) 查找优化（如使用 `IndexMap`）
-- [ ] 添加索引健康检查和自动修复机制
-- [ ] 性能监控：索引命中率、平均 K 值等
+### 8.1 已完成 ✅
+- [x] Order Index 实现 (O(1) 撤单查找)
+- [x] 性能从 ~3k/s 提升到 ~12.7k/s
+
+### 8.2 待优化 📋
+- [ ] 减少 `get_balance` 调用次数 (缓存或合并)
+- [ ] 批量 WAL flush (已有 100 条/批，可调优)
+- [ ] 移除重复的 Legacy Ledger 写入
+- [ ] 考虑异步事件记录
+
+### 8.3 未来考虑 🔮
+- [ ] SIMD 优化数值计算
+- [ ] 内存池减少分配
+- [ ] Lock-free 数据结构
 
 ---
 
-**优化完成，撤单性能提升 4 倍！** 🚀
+**Order Index 优化完成，撤单性能提升 4 倍！**
+
+**下一步重点：减少 UBSCore Pipeline 的中间开销。** 🚀
+
