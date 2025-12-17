@@ -36,6 +36,7 @@ pub mod models;
 pub mod orderbook;
 pub mod perf;
 pub mod pipeline;
+pub mod pipeline_mt;
 pub mod pipeline_runner;
 pub mod ubscore;
 pub mod user_account;
@@ -57,7 +58,8 @@ pub use wal::{WalConfig, WalWriter};
 
 // Pipeline re-exports
 pub use pipeline::{
-    PipelineQueues, PipelineStats, PipelineStatsSnapshot, SequencedOrder, ShutdownSignal,
-    SingleThreadPipeline,
+    MultiThreadQueues, PipelineEvent, PipelineQueues, PipelineStats, PipelineStatsSnapshot,
+    PriceImprovement, SequencedOrder, SettleRequest, ShutdownSignal, SingleThreadPipeline,
 };
+pub use pipeline_mt::{MultiThreadPipelineResult, run_pipeline_multi_thread};
 pub use pipeline_runner::{PipelineResult, run_pipeline_single_thread};
