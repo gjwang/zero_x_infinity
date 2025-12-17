@@ -1,6 +1,6 @@
-# 0x08c Ring Buffer Pipeline
+# 0x08c 完整事件流与验证
 
-> **核心目标**：用 Ring Buffer 连接各服务，优化 Ledger I/O，实现完整的事件溯源架构。
+> **核心目标**：实现完整的事件溯源架构，验证与旧版本的等效性，升级 baseline。
 
 ---
 
@@ -8,19 +8,7 @@
 
 上一章（0x08b）我们实现了 UBSCore 服务，但发现了几个问题：
 
-### 1. Ledger I/O 是性能瓶颈
-
-```
-=== Performance Breakdown ===
-Balance Check:       23.64ms (  0.4%)
-Matching Engine:   2857.50ms ( 46.0%)
-Settlement:           8.45ms (  0.1%)
-Ledger I/O:        3325.39ms ( 53.5%)  ← 超过一半时间在这里！
-```
-
-**Ledger I/O 占用 53.5% 的时间**，成为最大的性能瓶颈。
-
-### 2. Ledger 不完整
+### 1. Ledger 不完整
 
 当前 Ledger 只记录结算操作（Credit/Debit），缺失其他余额变更：
 
@@ -29,11 +17,9 @@ Ledger I/O:        3325.39ms ( 53.5%)  ← 超过一半时间在这里！
 | Deposit | ❌ | ✅ |
 | **Lock** | ❌ | ✅ |
 | **Unlock** | ❌ | ✅ |
-| Spend Frozen | ❌ | ✅ |
-| Credit | ✅ | ✅ |
-| Debit | ✅ | ✅ |
+| Settle | ❌ | ✅ |
 
-### 3. Pipeline 确定性问题
+### 2. Pipeline 确定性问题
 
 当采用 Ring Buffer 多阶段 Pipeline 时，Lock 和 Settle 的交错顺序不确定：
 
@@ -48,18 +34,7 @@ Ledger I/O:        3325.39ms ( 53.5%)  ← 超过一半时间在这里！
 
 ## 本章目标
 
-### 1. 优化 Ledger I/O 性能
-
-将 53.5% 降到 < 20%，目标方案：
-
-| 方案 | 优化点 | 预期收益 |
-|------|--------|----------|
-| **批量写入** | 减少系统调用次数 | 3-5x |
-| **BufWriter** | 利用缓冲区 | 2-3x |
-| **异步写入** | 不阻塞主线程 | 2x |
-| **二进制格式** | 替代 CSV | 2x |
-
-### 2. 实现分离 Version 空间
+### 1. 实现分离 Version 空间
 
 ```rust
 struct Balance {
@@ -70,23 +45,23 @@ struct Balance {
 }
 ```
 
-### 3. 扩展 BalanceEvent
+### 2. 扩展 BalanceEvent
 
 ```rust
 struct BalanceEvent {
     user_id: u64,
     asset_id: u32,
-    event_type: EventType,  // Lock | Unlock | Settle
-    version: u64,           // 只在同类型内递增
-    source_id: u64,         // order_seq_id | trade_id
+    event_type: EventType,  // Deposit | Lock | Unlock | Settle
+    version: u64,           // 在对应 version 空间内递增
+    source_type: SourceType,// Order | Trade | External
+    source_id: u64,         // order_seq_id | trade_id | ref_id
     delta: i64,
-    balance_after: u64,
+    avail_after: u64,
+    frozen_after: u64,
 }
 ```
 
-### 4. 记录所有余额操作
-
-确保每个余额变更都有审计记录：
+### 3. 记录所有余额操作
 
 ```
 Order(seq=5) ──触发──→ Lock(buyer USDT, lock_version=1)
@@ -97,87 +72,31 @@ Order(seq=5) ──触发──→ Lock(buyer USDT, lock_version=1)
               └──触发──→ Settle(seller: -BTC, +USDT, settle_version=1)
 ```
 
-### 5. 分类验证测试
+### 4. 验证等效性并升级 Baseline
 
-```
-不验证：某时刻的"快照"是否一致（Pipeline 下不可能一致）
-验证：  处理完成后的"最终集合"是否一致
-
-分别验证：
-  1. Lock 事件集合（按 lock_version 排序）→ 1:1 对应 order_seq_id
-  2. Settle 事件集合（按 settle_version 排序）→ 1:1 对应 trade_id
-  3. 最终余额 → 完全相同
-```
+确保重构后的系统与重构前产生相同的最终状态。
 
 ---
 
-## 实现计划
+## 实现进度
 
-### Phase 1: Ledger I/O 优化
-
-**目标**：将 Ledger I/O 从 53% 降到 < 20%
-
-#### 1.1 分析当前瓶颈
-
-当前实现每次写入都是独立操作：
-
-```rust
-// 当前：每笔交易都写一次
-for trade in trades {
-    ledger.write_entry(&trade);  // 系统调用
-}
-```
-
-#### 1.2 批量写入优化
-
-```rust
-// 优化后：批量缓冲，定期刷盘
-impl LedgerWriter {
-    buffer: Vec<LedgerEntry>,
-    
-    pub fn append(&mut self, entry: LedgerEntry) {
-        self.buffer.push(entry);
-        if self.buffer.len() >= BATCH_SIZE {
-            self.flush();
-        }
-    }
-    
-    pub fn flush(&mut self) {
-        // 一次性写入所有缓冲条目
-        for entry in &self.buffer {
-            writeln!(self.writer, "{}", entry.to_csv());
-        }
-        self.writer.flush();
-        self.buffer.clear();
-    }
-}
-```
-
-#### 1.3 验收标准
-
-- [ ] Ledger I/O 占比 < 20%
-- [ ] 整体吞吐量提升 > 30%
-- [ ] E2E 测试通过
-
----
-
-### Phase 2: 分离 Version 空间 ✅ 已完成
+### Phase 1: 分离 Version 空间 ✅ 已完成
 
 **目标**：解决 Pipeline 确定性问题
 
-#### 2.1 修改 Balance 结构
+#### 1.1 修改 Balance 结构
 
 ```rust
 // src/balance.rs
 pub struct Balance {
     avail: u64,
     frozen: u64,
-    lock_version: u64,    // 新增：lock/unlock/deposit/withdraw 操作递增
-    settle_version: u64,  // 新增：spend_frozen/deposit 操作递增
+    lock_version: u64,    // lock/unlock/deposit/withdraw 操作递增
+    settle_version: u64,  // spend_frozen/deposit 操作递增
 }
 ```
 
-#### 2.2 Version 递增逻辑
+#### 1.2 Version 递增逻辑
 
 | 操作 | 递增的 Version |
 |------|----------------|
@@ -187,27 +106,7 @@ pub struct Balance {
 | `unlock()` | lock_version |
 | `spend_frozen()` | settle_version |
 
-#### 2.3 新增 BalanceEvent 类型
-
-```rust
-// src/messages.rs
-pub enum BalanceEventType { Deposit, Withdraw, Lock, Unlock, Settle }
-pub enum SourceType { Order, Trade, External }
-
-pub struct BalanceEvent {
-    pub user_id: u64,
-    pub asset_id: u32,
-    pub event_type: BalanceEventType,
-    pub version: u64,           // 在对应 version 空间内
-    pub source_type: SourceType,
-    pub source_id: u64,         // 因果链 ID
-    pub delta: i64,
-    pub avail_after: u64,
-    pub frozen_after: u64,
-}
-```
-
-#### 2.4 等效性验证 ✅
+#### 1.3 等效性验证 ✅
 
 **验证脚本**：`scripts/verify_baseline_equivalence.py`
 
@@ -227,47 +126,18 @@ New baseline: 2000 rows
 === Step 3: Compare avail and frozen values ===
 ✅ EQUIVALENT: avail and frozen values are IDENTICAL
 
-=== Sample version differences (expected) ===
-Format: user_id, asset_id | old_version -> new_version
---------------------------------------------------
-     1,  1 |   127 ->    79
-     1,  2 |   125 ->    95
-     2,  1 |   150 ->    84
-     2,  2 |   136 ->   109
-     3,  1 |   129 ->    86
-  ...
-
-=== Explanation ===
-Old version = all operations (lock + settle + deposit)
-New version = lock_version only (lock + unlock + deposit)
-
-The settle operations now increment a separate settle_version field.
-
 ╔════════════════════════════════════════════════════════════╗
 ║     ✅ Baseline equivalence verified!                      ║
 ╚════════════════════════════════════════════════════════════╝
 ```
 
-**关键结论**：
-- `avail` 和 `frozen` 值 **完全一致** ✅
-- `version` 数值变化 **符合预期**（旧版本 > 新版本）
-- 差值 = settle 操作数（现在计入单独的 `settle_version`）
-
-#### 2.5 验收标准 ✅
-
-- [x] Balance 结构包含两个 version 字段
-- [x] 每种操作递增正确的 version
-- [x] 单元测试验证（50 tests passed）
-- [x] E2E 测试通过（4/4 baselines match）
-- [x] 等效性验证脚本确认新旧 baseline 等效
-
 ---
 
-### Phase 3: 扩展 BalanceEvent ✅ 已完成
+### Phase 2: 扩展 BalanceEvent ✅ 已完成
 
 **目标**：完整的事件溯源
 
-#### 3.1 事件类型和结构
+#### 2.1 事件类型和结构
 
 已在 `src/messages.rs` 中实现：
 
@@ -280,40 +150,34 @@ pub struct BalanceEvent {
     pub user_id: u64,
     pub asset_id: u32,
     pub event_type: BalanceEventType,
-    pub version: u64,           // 在对应 version 空间内
-    pub source_type: SourceType,// Order | Trade | External
-    pub source_id: u64,         // order_seq_id | trade_id | ref_id
-    pub delta: i64,             // 变更量（可正可负）
-    pub avail_after: u64,       // 变更后可用余额
-    pub frozen_after: u64,      // 变更后冻结余额
+    pub version: u64,
+    pub source_type: SourceType,
+    pub source_id: u64,
+    pub delta: i64,
+    pub avail_after: u64,
+    pub frozen_after: u64,
 }
 ```
 
-#### 3.2 工厂方法
+#### 2.2 工厂方法
 
 ```rust
 impl BalanceEvent {
-    pub fn lock(user_id, asset_id, order_seq_id, amount, ...) -> Self;
-    pub fn unlock(user_id, asset_id, order_seq_id, amount, ...) -> Self;
-    pub fn settle_spend(user_id, asset_id, trade_id, amount, ...) -> Self;
-    pub fn settle_receive(user_id, asset_id, trade_id, amount, ...) -> Self;
-    pub fn deposit(user_id, asset_id, ref_id, amount, ...) -> Self;
+    pub fn lock(...) -> Self;
+    pub fn unlock(...) -> Self;
+    pub fn settle_spend(...) -> Self;
+    pub fn settle_receive(...) -> Self;
+    pub fn deposit(...) -> Self;
 }
 ```
 
-#### 3.3 验收标准 ✅
-
-- [x] BalanceEvent 定义完整
-- [x] 支持 CSV 序列化 (`to_csv()`, `csv_header()`)
-- [x] 能从 Order/Trade 正确生成事件
-
 ---
 
-### Phase 4: Ledger 记录所有操作 ✅ 已完成
+### Phase 3: Ledger 记录所有操作 ✅ 已完成
 
 **目标**：每个余额变更都有记录
 
-#### 4.1 事件日志文件
+#### 3.1 事件日志文件
 
 UBSCore 模式下生成 `output/t2_events.csv`：
 
@@ -321,82 +185,37 @@ UBSCore 模式下生成 `output/t2_events.csv`：
 user_id,asset_id,event_type,version,source_type,source_id,delta,avail_after,frozen_after
 655,2,lock,2,order,1,-3315478,996684522,3315478
 96,2,settle,2,trade,1,-92889,999907111,0
-96,1,settle,2,trade,1,1093200,10001093200,0
+604,1,deposit,1,external,1,10000000000,10000000000,0
 ```
 
-#### 4.2 当前记录的操作
+#### 3.2 当前记录的操作
 
 | 操作 | 状态 | 说明 |
 |------|------|------|
-| **Lock** | ✅ | 下单锁定后记录 |
-| **Settle** | ✅ | 成交结算后记录（spend_frozen + receive）|
 | **Deposit** | ✅ | 初始充值时记录 |
+| **Lock** | ✅ | 下单锁定后记录 |
+| **Settle** | ✅ | 成交结算后记录 |
 | Unlock | ⏳ | 取消订单时记录（当前测试无取消）|
 | Withdraw | ⏳ | 提现时记录（当前测试无提现）|
 
-#### 4.3 事件统计
+#### 3.3 事件统计
 
 ```
 Total events: 293,544
+  Deposit events: 2,000 (= users × 2 assets)
   Lock events: 100,000 (= accepted orders)
   Settle events: 191,544 (= trades × 4)
-  Deposit events: 2,000 (= users × 2 assets)
 ```
-
-#### 4.4 验收标准 ✅
-
-- [x] Lock 操作生成 BalanceEvent
-- [x] Settle 操作生成 BalanceEvent
-- [x] 事件写入独立的事件日志文件
 
 ---
 
-### Phase 5: 分类验证测试 ✅ 已完成
+### Phase 4: 验证测试 ✅ 已完成
 
 **目标**：验证事件正确性
 
-#### 5.1 验证脚本
+#### 4.1 事件正确性验证
 
-`scripts/verify_balance_events.py`
-
-```bash
-$ python3 scripts/verify_balance_events.py
-
-╔════════════════════════════════════════════════════════════╗
-║     Balance Events Verification                           ║
-╚════════════════════════════════════════════════════════════╝
-
-Loaded 291544 events
-  Lock events: 100000
-  Settle events: 191544
-  Unlock events: 0
-  Deposit events: 0
-
-=== Check 1: Lock events vs Accepted orders ===
-✅ Lock events (100000) = Accepted orders (100000)
-
-=== Check 2: Settle events vs Trades ===
-✅ Settle events (191544) = Trades * 4 (191544)
-
-=== Check 3: Lock version continuity ===
-✅ All lock versions are increasing (2000 user-asset pairs)
-
-=== Check 4: Settle version continuity ===
-✅ All settle versions are increasing (2000 user-asset pairs)
-
-=== Check 5: Settle delta conservation by trade ===
-✅ All trades have zero sum delta (47886 trades)
-
-=== Check 6: Source type consistency ===
-✅ All lock events have source_type='order'
-✅ All settle events have source_type='trade'
-
-╔════════════════════════════════════════════════════════════╗
-║     ✅ All balance event checks passed!                   ║
-╚════════════════════════════════════════════════════════════╝
-```
-
-#### 5.2 验证项目
+`scripts/verify_balance_events.py` - 7 项检查：
 
 | 检查项 | 说明 | 状态 |
 |--------|------|------|
@@ -408,9 +227,9 @@ Loaded 291544 events
 | Source 类型一致性 | Lock→Order, Settle→Trade | ✅ |
 | Deposit 事件 | 正 delta + source_type=external | ✅ |
 
-#### 5.3 Events Baseline 验证
+#### 4.2 Events Baseline 验证
 
-`scripts/verify_events_baseline.py` 按 canonical key 比较事件：
+`scripts/verify_events_baseline.py` - 严格比较所有 9 个字段：
 
 ```bash
 $ python3 scripts/verify_events_baseline.py
@@ -418,10 +237,6 @@ $ python3 scripts/verify_events_baseline.py
 ╔════════════════════════════════════════════════════════════╗
 ║     Events Baseline Verification                          ║
 ╚════════════════════════════════════════════════════════════╝
-
-Loading events...
-  Output: 293544 events
-  Baseline: 293544 events
 
 Comparing by event type...
   deposit: output=2000, baseline=2000 ✅
@@ -433,7 +248,7 @@ Comparing by event type...
 ╚════════════════════════════════════════════════════════════╝
 ```
 
-#### 5.4 完整 E2E 测试
+#### 4.3 完整 E2E 测试
 
 运行 `scripts/test_ubscore_e2e.sh`：
 
@@ -446,7 +261,6 @@ $ bash scripts/test_ubscore_e2e.sh
   t1_balances_deposited.csv: ✅ MATCH
   t2_balances_final.csv: ✅ MATCH
   t2_orderbook.csv: ✅ MATCH
-  t2_ledger.csv: ⏭️ SKIP (legacy format, use t2_events.csv instead)
 
 === Step 3: Verify balance events correctness ===
   ✅ All 7 checks passed!
@@ -459,65 +273,26 @@ $ bash scripts/test_ubscore_e2e.sh
 ╚════════════════════════════════════════════════════════════╝
 ```
 
-#### 5.5 验收标准 ✅
-
-- [x] 验证脚本完成
-- [x] Lock 事件数量正确 (100,000)
-- [x] Settle 事件数量正确 (191,544)
-- [x] Deposit 事件数量正确 (2,000)
-- [x] Version 连续性验证通过
-- [x] Delta 守恒验证通过
-- [x] Events baseline 匹配
-
 ---
 
-### Phase 6: Ring Buffer 集成（可选）
+## Baseline 文件
 
-**目标**：完整的多阶段 Pipeline
-
-> ⚠️ 这是可选任务，当前单线程模式已满足性能需求。
-
-```
-Gateway → [Ring Buffer] → UBSCore → [Ring Buffer] → ME → [Ring Buffer] → Settlement
-```
-
-如果需要实现：
-
-```rust
-use crossbeam_queue::ArrayQueue;
-
-// UBSCore → ME
-let order_queue: Arc<ArrayQueue<ValidOrder>> = Arc::new(ArrayQueue::new(1024));
-
-// ME → Settlement
-let trade_queue: Arc<ArrayQueue<TradeEvent>> = Arc::new(ArrayQueue::new(1024));
-```
-
----
-
-## 预期成果
-
-| 指标 | 当前 (0x08b) | 目标 (0x08c) |
-|------|--------------|--------------|
-| Ledger I/O 占比 | 53.5% | < 20% |
-| 整体吞吐量 | ~16K ops/s | > 20K ops/s |
-| Ledger 完整性 | Credit/Debit only | All ops |
-| 确定性验证 | 全局 diff | 分类验证 |
+| 文件 | 说明 |
+|------|------|
+| `baseline/t2_balances_final.csv` | 最终余额状态 |
+| `baseline/t2_orderbook.csv` | 最终订单簿状态 |
+| `baseline/t2_events.csv` | 事件日志 (293,544 事件) |
 
 ---
 
 ## 下一步
 
-完成本章后，可以进入：
-
+- **0x08d: 多线程 Pipeline** - 实现 Ring Buffer 连接各服务
 - **0x09: 多 Symbol 支持** - 扩展到多交易对
-- **0x0A: 网络层** - 真实的 Gateway 服务
-- **0x0B: 持久化** - 数据库集成
 
 ---
 
 ## 参考
 
-- [LMAX Disruptor](https://lmax-exchange.github.io/disruptor/) - Ring Buffer 架构原型
 - [Event Sourcing](https://martinfowler.com/eaaDev/EventSourcing.html) - 事件溯源模式
-- [crossbeam-queue](https://docs.rs/crossbeam-queue/) - Rust 无锁队列
+- [LMAX Disruptor](https://lmax-exchange.github.io/disruptor/) - Ring Buffer 架构原型
