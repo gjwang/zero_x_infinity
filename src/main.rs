@@ -29,7 +29,7 @@ use zero_x_infinity::csv_io::{
 use zero_x_infinity::engine::MatchingEngine;
 use zero_x_infinity::ledger::{LedgerEntry, LedgerWriter};
 use zero_x_infinity::messages::{BalanceEvent, TradeEvent};
-use zero_x_infinity::models::{InternalOrder, Side};
+use zero_x_infinity::models::{InternalOrder, OrderStatus, OrderType, Side};
 use zero_x_infinity::orderbook::OrderBook;
 use zero_x_infinity::perf::PerfMetrics;
 use zero_x_infinity::symbol_manager::SymbolManager;
@@ -244,6 +244,7 @@ fn execute_orders_with_ubscore(
     let mut total_trades = 0u64;
     let mut perf = PerfMetrics::new(10);
 
+    // Use full pipeline
     for (i, input) in orders.iter().enumerate() {
         let order_start = Instant::now();
 
@@ -251,200 +252,300 @@ fn execute_orders_with_ubscore(
             println!("Processed {} / {} orders...", i + 1, orders.len());
         }
 
-        // ========================================
-        // STEP 1: UBSCore processes order (WAL + Lock)
-        // ========================================
-        let balance_check_start = Instant::now();
+        match input.action.as_str() {
+            "cancel" => {
+                // ========================================
+                // CANCEL FLOW
+                // ========================================
+                // 1. Remove from OrderBook (OrderBook is authoritative for order state)
+                if let Some(mut cancelled_order) = book.remove_order_by_id(input.order_id) {
+                    cancelled_order.status = OrderStatus::CANCELED;
 
-        let order = InternalOrder::new(
-            input.order_id,
-            input.user_id,
-            active_symbol_id,
-            input.price,
-            input.qty,
-            input.side,
-        );
+                    // 2. Calculate remaining cost to unlock
+                    let remaining_qty = cancelled_order.remaining_qty();
+                    if remaining_qty > 0 {
+                        // Create temp order to use existing cost calculation logic
+                        let mut temp_order = cancelled_order.clone();
+                        temp_order.qty = remaining_qty;
 
-        // Calculate lock amount for Lock event logging
-        let lock_asset_id = match input.side {
-            Side::Buy => quote_id,
-            Side::Sell => base_id,
-        };
-        let lock_amount = match input.side {
-            Side::Buy => input.price * input.qty / qty_unit, // Buy: lock quote
-            Side::Sell => input.qty,                         // Sell: lock base
-        };
+                        // Safe strict calculation
+                        let unlock_amount = temp_order.calculate_cost(qty_unit).unwrap_or(0); // Should not fail if original passed
 
-        let valid_order = match ubscore.process_order(order) {
-            Ok(vo) => vo,
-            Err(_reason) => {
-                rejected += 1;
-                continue;
+                        let lock_asset_id = match cancelled_order.side {
+                            Side::Buy => quote_id,
+                            Side::Sell => base_id,
+                        };
+
+                        // 3. Unlock Balance (Lock Version)
+                        if let Err(e) =
+                            ubscore.unlock(cancelled_order.user_id, lock_asset_id, unlock_amount)
+                        {
+                            eprintln!("Cancel unlock failed: {}", e);
+                        }
+
+                        // 4. Log BalanceEvent (Unlock)
+                        if let Some(b) = ubscore.get_balance(cancelled_order.user_id, lock_asset_id)
+                        {
+                            let unlock_event = BalanceEvent::unlock(
+                                cancelled_order.user_id,
+                                lock_asset_id,
+                                cancelled_order.order_id, // source = cancelled order
+                                unlock_amount,
+                                b.lock_version(),
+                                b.avail(),
+                                b.frozen(),
+                            );
+                            ledger.write_balance_event(&unlock_event);
+                        }
+                    }
+
+                    // 5. Log OrderEvent (Cancelled)
+                    // Note: OrderEvent enum in basic impl doesn't track seq_id for cancel, dummy 0 used
+                    // In a real system, cancel request would have its own seq_id
+                    // For now we assume cancel logic is immediate/synchronous
+                    /*
+                    // Uncomment when OrderEvent is extended and used
+                    let order_event = OrderEvent::Cancelled {
+                         order_id: cancelled_order.order_id,
+                         user_id: cancelled_order.user_id,
+                         unfilled_qty: remaining_qty,
+                    };
+                    */
+                }
+                // If not found, it's already filled or cancelled - ignore
             }
-        };
+            "place" | _ => {
+                // ========================================
+                // PLACE FLOW
+                // ========================================
+                // STEP 1: UBSCore processes order (WAL + Lock)
+                let balance_check_start = Instant::now();
 
-        // Record Lock event (after successful balance lock)
-        if let Some(b) = ubscore.get_balance(input.user_id, lock_asset_id) {
-            let lock_event = BalanceEvent::lock(
-                input.user_id,
-                lock_asset_id,
-                valid_order.seq_id, // source_id = order seq_id
-                lock_amount,
-                b.lock_version(),
-                b.avail(),
-                b.frozen(),
-            );
-            ledger.write_balance_event(&lock_event);
+                let order = InternalOrder::new(
+                    input.order_id,
+                    input.user_id,
+                    active_symbol_id,
+                    input.price,
+                    input.qty,
+                    input.side,
+                );
+
+                // Calculate lock amount for Lock event logging
+                let lock_asset_id = match input.side {
+                    Side::Buy => quote_id,
+                    Side::Sell => base_id,
+                };
+                let lock_amount = match input.side {
+                    Side::Buy => input.price * input.qty / qty_unit,
+                    Side::Sell => input.qty,
+                };
+
+                let valid_order = match ubscore.process_order(order) {
+                    Ok(vo) => vo,
+                    Err(_reason) => {
+                        rejected += 1;
+                        continue;
+                    }
+                };
+
+                // Record Lock event (after successful balance lock)
+                if let Some(b) = ubscore.get_balance(input.user_id, lock_asset_id) {
+                    let lock_event = BalanceEvent::lock(
+                        input.user_id,
+                        lock_asset_id,
+                        valid_order.seq_id,
+                        lock_amount,
+                        b.lock_version(),
+                        b.avail(),
+                        b.frozen(),
+                    );
+                    ledger.write_balance_event(&lock_event);
+                }
+                perf.add_balance_check_time(balance_check_start.elapsed().as_nanos() as u64);
+
+                // STEP 2: ME matches (pure matching)
+                let match_start = Instant::now();
+                let result = MatchingEngine::process_order(book, valid_order.order.clone());
+                perf.add_matching_time(match_start.elapsed().as_nanos() as u64);
+
+                // STEP 3: UBSCore settles each trade
+                for trade in &result.trades {
+                    let settle_start = Instant::now();
+
+                    // Create TradeEvent for UBSCore
+                    let trade_event = TradeEvent::new(
+                        trade.clone(),
+                        if input.side == Side::Buy {
+                            trade.buyer_order_id
+                        } else {
+                            trade.seller_order_id
+                        },
+                        if input.side == Side::Buy {
+                            trade.seller_order_id
+                        } else {
+                            trade.buyer_order_id
+                        },
+                        input.side,
+                        base_id,
+                        quote_id,
+                        qty_unit,
+                    );
+
+                    // UBSCore handles all balance updates (spend_frozen, deposit)
+                    if let Err(e) = ubscore.settle_trade(&trade_event) {
+                        eprintln!("Trade settlement error: {}", e);
+                    }
+
+                    // Trigger Refund if Price Improvement (Buy side)
+                    // If Buyer limited at 100, matched at 90 -> refund 10 * qty
+                    // Trade price is trade.price. Order price is input.price
+                    // Only applicable if Taker is Buyer (Limit Buy vs Resting Sell)
+                    // OR Maker is Buyer (Resting Buy vs Taker Sell) - wait.
+                    // If Maker Buyer (Resting @ 100), Taker Sell @ 90? No.
+                    // Matching engine matches at MAKER price (Resting Order).
+                    // If Taking Buy @ 100 hits Resting Sell @ 90 -> Match @ 90. Buyer saves 10. -> Refund needed.
+                    // If Taking Sell @ 90 hits Resting Buy @ 100 -> Match @ 100. Seller gets 100. Buyer pays 100. No refund.
+                    // So refund only applies to TAKING BUY order matching BETTER/LOWER asks.
+
+                    // Check if VALID_ORDER (the one being placed) is the Buyer and got improvement
+                    if input.side == Side::Buy && valid_order.order.order_type == OrderType::Limit {
+                        if valid_order.order.price > trade.price {
+                            let diff = valid_order.order.price - trade.price;
+                            let refund = diff * trade.qty / qty_unit;
+
+                            if refund > 0 {
+                                // Refund is triggered by SETTLEMENT (Settle Queue)
+                                // Use settle_unlock (increments settle_version)
+                                if let Ok(_) = ubscore
+                                    .accounts_mut()
+                                    .get_mut(&input.user_id)
+                                    .unwrap()
+                                    .settle_unlock(quote_id, refund)
+                                {
+                                    // Record SettleRestore event (VersionSpace::Settle)
+                                    if let Some(b) = ubscore.get_balance(input.user_id, quote_id) {
+                                        let restore_event = BalanceEvent::settle_restore(
+                                            input.user_id,
+                                            quote_id,
+                                            trade.trade_id,
+                                            refund,
+                                            b.settle_version(),
+                                            b.avail(),
+                                            b.frozen(),
+                                        );
+                                        ledger.write_balance_event(&restore_event);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    perf.add_settlement_time(settle_start.elapsed().as_nanos() as u64);
+
+                    // STEP 4: Write ledger entries
+                    let ledger_start = Instant::now();
+                    let trade_cost =
+                        ((trade.price as u128) * (trade.qty as u128) / (qty_unit as u128)) as u64;
+
+                    // Buyer Ledger (Event Sourcing)
+                    if let Some(b) = ubscore.get_balance(trade.buyer_user_id, quote_id) {
+                        // Settle event (spend frozen)
+                        let settle_event = BalanceEvent::settle_spend(
+                            trade.buyer_user_id,
+                            quote_id,
+                            trade.trade_id,
+                            trade_cost,
+                            b.settle_version(),
+                            b.avail(),
+                            b.frozen(),
+                        );
+                        ledger.write_balance_event(&settle_event);
+
+                        // Legacy Writer
+                        ledger.write_entry(&LedgerEntry {
+                            trade_id: trade.trade_id,
+                            user_id: trade.buyer_user_id,
+                            asset_id: quote_id,
+                            op: "debit",
+                            delta: trade_cost,
+                            balance_after: b.avail() + b.frozen(),
+                        });
+                    }
+                    if let Some(b) = ubscore.get_balance(trade.buyer_user_id, base_id) {
+                        // Settle event (receive)
+                        let settle_event = BalanceEvent::settle_receive(
+                            trade.buyer_user_id,
+                            base_id,
+                            trade.trade_id,
+                            trade.qty,
+                            b.settle_version(),
+                            b.avail(),
+                            b.frozen(),
+                        );
+                        ledger.write_balance_event(&settle_event);
+
+                        // Legacy Writer
+                        ledger.write_entry(&LedgerEntry {
+                            trade_id: trade.trade_id,
+                            user_id: trade.buyer_user_id,
+                            asset_id: base_id,
+                            op: "credit",
+                            delta: trade.qty,
+                            balance_after: b.avail() + b.frozen(),
+                        });
+                    }
+
+                    // Seller Ledger
+                    if let Some(b) = ubscore.get_balance(trade.seller_user_id, base_id) {
+                        let settle_event = BalanceEvent::settle_spend(
+                            trade.seller_user_id,
+                            base_id,
+                            trade.trade_id,
+                            trade.qty,
+                            b.settle_version(),
+                            b.avail(),
+                            b.frozen(),
+                        );
+                        ledger.write_balance_event(&settle_event);
+
+                        ledger.write_entry(&LedgerEntry {
+                            trade_id: trade.trade_id,
+                            user_id: trade.seller_user_id,
+                            asset_id: base_id,
+                            op: "debit",
+                            delta: trade.qty,
+                            balance_after: b.avail() + b.frozen(),
+                        });
+                    }
+                    if let Some(b) = ubscore.get_balance(trade.seller_user_id, quote_id) {
+                        let settle_event = BalanceEvent::settle_receive(
+                            trade.seller_user_id,
+                            quote_id,
+                            trade.trade_id,
+                            trade_cost,
+                            b.settle_version(),
+                            b.avail(),
+                            b.frozen(),
+                        );
+                        ledger.write_balance_event(&settle_event);
+
+                        ledger.write_entry(&LedgerEntry {
+                            trade_id: trade.trade_id,
+                            user_id: trade.seller_user_id,
+                            asset_id: quote_id,
+                            op: "credit",
+                            delta: trade_cost,
+                            balance_after: b.avail() + b.frozen(),
+                        });
+                    }
+                    perf.add_ledger_time(ledger_start.elapsed().as_nanos() as u64);
+                }
+
+                total_trades += result.trades.len() as u64;
+                accepted += 1;
+                perf.add_order_latency(order_start.elapsed().as_nanos() as u64);
+            }
         }
-
-        perf.add_balance_check_time(balance_check_start.elapsed().as_nanos() as u64);
-
-        // ========================================
-        // STEP 2: ME matches (pure matching)
-        // ========================================
-        let match_start = Instant::now();
-        let result = MatchingEngine::process_order(book, valid_order.order);
-        perf.add_matching_time(match_start.elapsed().as_nanos() as u64);
-
-        // ========================================
-        // STEP 3: UBSCore settles each trade
-        // ========================================
-        for trade in &result.trades {
-            let settle_start = Instant::now();
-
-            // Create TradeEvent for UBSCore
-            let trade_event = TradeEvent::new(
-                trade.clone(),
-                if input.side == Side::Buy {
-                    trade.buyer_order_id
-                } else {
-                    trade.seller_order_id
-                },
-                if input.side == Side::Buy {
-                    trade.seller_order_id
-                } else {
-                    trade.buyer_order_id
-                },
-                input.side,
-                base_id,
-                quote_id,
-                qty_unit, // self-contained
-            );
-
-            // UBSCore handles all balance updates
-            if let Err(e) = ubscore.settle_trade(&trade_event) {
-                eprintln!("Trade settlement error: {}", e);
-            }
-
-            perf.add_settlement_time(settle_start.elapsed().as_nanos() as u64);
-
-            // ========================================
-            // STEP 4: Write ledger entries
-            // ========================================
-            let ledger_start = Instant::now();
-            let trade_cost =
-                ((trade.price as u128) * (trade.qty as u128) / (qty_unit as u128)) as u64;
-
-            // Buyer ledger entries (legacy format)
-            if let Some(b) = ubscore.get_balance(trade.buyer_user_id, quote_id) {
-                ledger.write_entry(&LedgerEntry {
-                    trade_id: trade.trade_id,
-                    user_id: trade.buyer_user_id,
-                    asset_id: quote_id,
-                    op: "debit",
-                    delta: trade_cost,
-                    balance_after: b.avail() + b.frozen(),
-                });
-
-                // New: Settle event (spend frozen)
-                let settle_event = BalanceEvent::settle_spend(
-                    trade.buyer_user_id,
-                    quote_id,
-                    trade.trade_id,
-                    trade_cost,
-                    b.settle_version(),
-                    b.avail(),
-                    b.frozen(),
-                );
-                ledger.write_balance_event(&settle_event);
-            }
-            if let Some(b) = ubscore.get_balance(trade.buyer_user_id, base_id) {
-                ledger.write_entry(&LedgerEntry {
-                    trade_id: trade.trade_id,
-                    user_id: trade.buyer_user_id,
-                    asset_id: base_id,
-                    op: "credit",
-                    delta: trade.qty,
-                    balance_after: b.avail() + b.frozen(),
-                });
-
-                // New: Settle event (receive)
-                let settle_event = BalanceEvent::settle_receive(
-                    trade.buyer_user_id,
-                    base_id,
-                    trade.trade_id,
-                    trade.qty,
-                    b.settle_version(),
-                    b.avail(),
-                    b.frozen(),
-                );
-                ledger.write_balance_event(&settle_event);
-            }
-
-            // Seller ledger entries (legacy format)
-            if let Some(b) = ubscore.get_balance(trade.seller_user_id, base_id) {
-                ledger.write_entry(&LedgerEntry {
-                    trade_id: trade.trade_id,
-                    user_id: trade.seller_user_id,
-                    asset_id: base_id,
-                    op: "debit",
-                    delta: trade.qty,
-                    balance_after: b.avail() + b.frozen(),
-                });
-
-                // New: Settle event (spend frozen)
-                let settle_event = BalanceEvent::settle_spend(
-                    trade.seller_user_id,
-                    base_id,
-                    trade.trade_id,
-                    trade.qty,
-                    b.settle_version(),
-                    b.avail(),
-                    b.frozen(),
-                );
-                ledger.write_balance_event(&settle_event);
-            }
-            if let Some(b) = ubscore.get_balance(trade.seller_user_id, quote_id) {
-                ledger.write_entry(&LedgerEntry {
-                    trade_id: trade.trade_id,
-                    user_id: trade.seller_user_id,
-                    asset_id: quote_id,
-                    op: "credit",
-                    delta: trade_cost,
-                    balance_after: b.avail() + b.frozen(),
-                });
-
-                // New: Settle event (receive)
-                let settle_event = BalanceEvent::settle_receive(
-                    trade.seller_user_id,
-                    quote_id,
-                    trade.trade_id,
-                    trade_cost,
-                    b.settle_version(),
-                    b.avail(),
-                    b.frozen(),
-                );
-                ledger.write_balance_event(&settle_event);
-            }
-
-            perf.add_ledger_time(ledger_start.elapsed().as_nanos() as u64);
-        }
-
-        // No need to track order completion - Balance.frozen is the source of truth
-
-        total_trades += result.trades.len() as u64;
-        accepted += 1;
-        perf.add_order_latency(order_start.elapsed().as_nanos() as u64);
     }
 
     // Flush WAL and ledger at the end

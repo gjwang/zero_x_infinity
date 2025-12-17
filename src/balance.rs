@@ -235,6 +235,35 @@ impl Balance {
         self.lock_version = self.lock_version.wrapping_add(1);
         Ok(())
     }
+
+    /// Unlock frozen funds during settlement (e.g. refund unused lock from price improvement)
+    ///
+    /// # Effects
+    /// - Decreases frozen
+    /// - Increases avail
+    /// - Increments ONLY settle_version
+    ///
+    /// # Versioning Note
+    /// "settle triggered unlock, should belong to settle queue, version".
+    /// We do not increment lock_version here to avoid creating gaps in the Lock Event stream.
+    /// This means `avail` changes from settlement are "out-of-band" for lock_version,
+    /// which is acceptable as increasing avail is safe (no double-spend risk).
+    pub fn settle_unlock(&mut self, amount: u64) -> Result<(), &'static str> {
+        if self.frozen < amount {
+            return Err("Insufficient frozen funds");
+        }
+        self.frozen = self
+            .frozen
+            .checked_sub(amount)
+            .ok_or("Settle unlock frozen underflow")?;
+        self.avail = self
+            .avail
+            .checked_add(amount)
+            .ok_or("Settle unlock avail overflow")?;
+        // lock_version UNCHANGED - implicit update to avail
+        self.settle_version = self.settle_version.wrapping_add(1);
+        Ok(())
+    }
 }
 
 // ============================================================

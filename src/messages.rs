@@ -299,6 +299,8 @@ pub enum BalanceEventType {
     Unlock,
     /// Settle - trade settlement (spend_frozen + deposit on counterparty)
     Settle,
+    /// SettleRestore - unused frozen funds restored to available (price improvement)
+    SettleRestore,
 }
 
 impl BalanceEventType {
@@ -309,6 +311,7 @@ impl BalanceEventType {
             Self::Lock => "lock",
             Self::Unlock => "unlock",
             Self::Settle => "settle",
+            Self::SettleRestore => "settle_restore",
         }
     }
 
@@ -320,6 +323,7 @@ impl BalanceEventType {
             Self::Lock => VersionSpace::Lock,
             Self::Unlock => VersionSpace::Lock,
             Self::Settle => VersionSpace::Settle,
+            Self::SettleRestore => VersionSpace::Settle,
         }
     }
 }
@@ -502,6 +506,29 @@ impl BalanceEvent {
             user_id,
             asset_id,
             BalanceEventType::Settle,
+            settle_version,
+            SourceType::Trade,
+            trade_id,
+            amount as i64, // Positive: avail increases
+            avail_after,
+            frozen_after,
+        )
+    }
+
+    /// Create a SettleRestore event (refund unused frozen from settlement)
+    pub fn settle_restore(
+        user_id: UserId,
+        asset_id: AssetId,
+        trade_id: u64,
+        amount: u64,
+        settle_version: u64,
+        avail_after: u64,
+        frozen_after: u64,
+    ) -> Self {
+        Self::new(
+            user_id,
+            asset_id,
+            BalanceEventType::SettleRestore,
             settle_version,
             SourceType::Trade,
             trade_id,

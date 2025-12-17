@@ -154,6 +154,7 @@ pub struct InputOrder {
     pub side: Side,
     pub price: u64,
     pub qty: u64,
+    pub action: String, // "place" or "cancel"
 }
 
 /// Load balances from CSV and create user accounts with deposits
@@ -208,20 +209,58 @@ pub fn load_orders(path: &str, manager: &SymbolManager, active_symbol_id: u32) -
     for line in reader.lines().skip(1) {
         let line = line.unwrap();
         let parts: Vec<&str> = line.split(',').collect();
+        // Support both:
+        // Legacy: order_id,user_id,side,price,qty
+        // New:    order_id,user_id,action,side,price,qty
         if parts.len() >= 5 {
             let order_id: u64 = parts[0].parse().unwrap();
             let user_id: u64 = parts[1].parse().unwrap();
-            let side = if parts[2] == "buy" {
-                Side::Buy
+
+            let col2 = parts[2].trim().to_lowercase();
+            let is_action = col2 == "place" || col2 == "cancel";
+
+            let (action, side_idx, price_idx, qty_idx) = if is_action {
+                (col2, 3, 4, 5)
             } else {
-                Side::Sell
+                ("place".to_string(), 2, 3, 4)
             };
 
-            let price_float: f64 = parts[3].parse().unwrap();
-            let qty_float: f64 = parts[4].parse().unwrap();
+            // For cancel, side/price/qty might be empty/missing
+            let side_str = if side_idx < parts.len() {
+                parts[side_idx].trim()
+            } else {
+                ""
+            };
+            let side = if side_str == "sell" {
+                Side::Sell
+            } else {
+                Side::Buy // Default for cancel if missing
+            };
 
-            let price = (price_float * quote_multiplier as f64).round() as u64;
-            let qty = (qty_float * base_multiplier as f64).round() as u64;
+            let price_str = if price_idx < parts.len() {
+                parts[price_idx].trim()
+            } else {
+                ""
+            };
+            let qty_str = if qty_idx < parts.len() {
+                parts[qty_idx].trim()
+            } else {
+                ""
+            };
+
+            let price = if price_str.is_empty() {
+                0
+            } else {
+                let price_float: f64 = price_str.parse().unwrap_or(0.0);
+                (price_float * quote_multiplier as f64).round() as u64
+            };
+
+            let qty = if qty_str.is_empty() {
+                0
+            } else {
+                let qty_float: f64 = qty_str.parse().unwrap_or(0.0);
+                (qty_float * base_multiplier as f64).round() as u64
+            };
 
             orders.push(InputOrder {
                 order_id,
@@ -229,6 +268,7 @@ pub fn load_orders(path: &str, manager: &SymbolManager, active_symbol_id: u32) -
                 side,
                 price,
                 qty,
+                action,
             });
         }
     }

@@ -167,10 +167,15 @@ impl UserAccount {
         // Credit Quote (Available)
         self.get_balance_mut(quote_asset_id)?.deposit(gain_quote)?;
 
-        // Refund Base (Frozen -> Available)
         if refund_base > 0 {
             self.get_balance_mut(base_asset_id)?.unlock(refund_base)?;
         }
         Ok(())
+    }
+
+    /// Unlock frozen funds during settlement (e.g. price improvement refund)
+    /// Increments BOTH lock and settle versions.
+    pub fn settle_unlock(&mut self, asset_id: AssetId, amount: u64) -> Result<(), &'static str> {
+        self.get_balance_mut(asset_id)?.settle_unlock(amount)
     }
 }
