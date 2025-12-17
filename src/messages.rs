@@ -272,6 +272,284 @@ impl BalanceUpdate {
 }
 
 // ============================================================
+// BALANCE EVENT (Complete Event Sourcing)
+// ============================================================
+
+/// Balance event type - categorizes what triggered the balance change
+///
+/// This enables separated version spaces:
+/// - Lock/Unlock operations use `lock_version`
+/// - Settle operations use `settle_version`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BalanceEventType {
+    /// Deposit - funds added (both versions increment)
+    Deposit,
+    /// Withdraw - funds removed
+    Withdraw,
+    /// Lock - funds moved from avail to frozen (order placement)
+    Lock,
+    /// Unlock - funds moved from frozen to avail (order cancel/partial fill refund)
+    Unlock,
+    /// Settle - trade settlement (spend_frozen + deposit on counterparty)
+    Settle,
+}
+
+impl BalanceEventType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Deposit => "deposit",
+            Self::Withdraw => "withdraw",
+            Self::Lock => "lock",
+            Self::Unlock => "unlock",
+            Self::Settle => "settle",
+        }
+    }
+
+    /// Which version space does this event type affect?
+    pub fn version_space(&self) -> VersionSpace {
+        match self {
+            Self::Deposit => VersionSpace::Both,
+            Self::Withdraw => VersionSpace::Lock,
+            Self::Lock => VersionSpace::Lock,
+            Self::Unlock => VersionSpace::Lock,
+            Self::Settle => VersionSpace::Settle,
+        }
+    }
+}
+
+/// Version space indicator
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VersionSpace {
+    Lock,   // Uses lock_version
+    Settle, // Uses settle_version
+    Both,   // Uses both (e.g., deposit)
+}
+
+/// Source type - what triggered this balance event
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SourceType {
+    /// Triggered by an order (order placement/cancel)
+    Order,
+    /// Triggered by a trade (settlement)
+    Trade,
+    /// Triggered by external deposit/withdraw
+    External,
+}
+
+impl SourceType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Order => "order",
+            Self::Trade => "trade",
+            Self::External => "external",
+        }
+    }
+}
+
+/// Balance event - complete audit record of a balance change
+///
+/// This is the core event type for event sourcing. Each balance change
+/// generates one BalanceEvent with:
+/// - Who: user_id, asset_id
+/// - What: event_type, delta
+/// - When: version (in the appropriate version space)
+/// - Why: source_type + source_id (causal chain)
+/// - Result: avail_after, frozen_after
+///
+/// # Event Sourcing
+/// All balance state can be reconstructed by replaying BalanceEvents.
+///
+/// # Deterministic Verification
+/// Events can be grouped by event_type and sorted by source_id for
+/// deterministic comparison, even when actual execution order varies
+/// in pipelined architectures.
+#[derive(Debug, Clone)]
+pub struct BalanceEvent {
+    /// User whose balance changed
+    pub user_id: UserId,
+    /// Asset that changed
+    pub asset_id: AssetId,
+    /// Type of balance operation
+    pub event_type: BalanceEventType,
+    /// Version in the appropriate space (lock_version or settle_version)
+    pub version: u64,
+    /// What triggered this event
+    pub source_type: SourceType,
+    /// ID of the source (order_seq_id, trade_id, or external ref)
+    pub source_id: u64,
+    /// Change amount (positive = increase, negative = decrease)
+    /// Note: stored as i64 for signed representation
+    pub delta: i64,
+    /// Available balance after this event
+    pub avail_after: u64,
+    /// Frozen balance after this event
+    pub frozen_after: u64,
+}
+
+impl BalanceEvent {
+    /// Create a new BalanceEvent
+    pub fn new(
+        user_id: UserId,
+        asset_id: AssetId,
+        event_type: BalanceEventType,
+        version: u64,
+        source_type: SourceType,
+        source_id: u64,
+        delta: i64,
+        avail_after: u64,
+        frozen_after: u64,
+    ) -> Self {
+        Self {
+            user_id,
+            asset_id,
+            event_type,
+            version,
+            source_type,
+            source_id,
+            delta,
+            avail_after,
+            frozen_after,
+        }
+    }
+
+    /// Create a Lock event (order placement)
+    pub fn lock(
+        user_id: UserId,
+        asset_id: AssetId,
+        order_seq_id: u64,
+        amount: u64,
+        lock_version: u64,
+        avail_after: u64,
+        frozen_after: u64,
+    ) -> Self {
+        Self::new(
+            user_id,
+            asset_id,
+            BalanceEventType::Lock,
+            lock_version,
+            SourceType::Order,
+            order_seq_id,
+            -(amount as i64), // Negative: avail decreases
+            avail_after,
+            frozen_after,
+        )
+    }
+
+    /// Create an Unlock event (order cancel/partial refund)
+    pub fn unlock(
+        user_id: UserId,
+        asset_id: AssetId,
+        order_seq_id: u64,
+        amount: u64,
+        lock_version: u64,
+        avail_after: u64,
+        frozen_after: u64,
+    ) -> Self {
+        Self::new(
+            user_id,
+            asset_id,
+            BalanceEventType::Unlock,
+            lock_version,
+            SourceType::Order,
+            order_seq_id,
+            amount as i64, // Positive: avail increases
+            avail_after,
+            frozen_after,
+        )
+    }
+
+    /// Create a Settle event (trade settlement - spend frozen)
+    pub fn settle_spend(
+        user_id: UserId,
+        asset_id: AssetId,
+        trade_id: u64,
+        amount: u64,
+        settle_version: u64,
+        avail_after: u64,
+        frozen_after: u64,
+    ) -> Self {
+        Self::new(
+            user_id,
+            asset_id,
+            BalanceEventType::Settle,
+            settle_version,
+            SourceType::Trade,
+            trade_id,
+            -(amount as i64), // Negative: frozen decreases
+            avail_after,
+            frozen_after,
+        )
+    }
+
+    /// Create a Settle event (trade settlement - receive)
+    pub fn settle_receive(
+        user_id: UserId,
+        asset_id: AssetId,
+        trade_id: u64,
+        amount: u64,
+        settle_version: u64,
+        avail_after: u64,
+        frozen_after: u64,
+    ) -> Self {
+        Self::new(
+            user_id,
+            asset_id,
+            BalanceEventType::Settle,
+            settle_version,
+            SourceType::Trade,
+            trade_id,
+            amount as i64, // Positive: avail increases
+            avail_after,
+            frozen_after,
+        )
+    }
+
+    /// Create a Deposit event
+    pub fn deposit(
+        user_id: UserId,
+        asset_id: AssetId,
+        ref_id: u64,
+        amount: u64,
+        lock_version: u64, // Use lock_version as primary
+        avail_after: u64,
+        frozen_after: u64,
+    ) -> Self {
+        Self::new(
+            user_id,
+            asset_id,
+            BalanceEventType::Deposit,
+            lock_version,
+            SourceType::External,
+            ref_id,
+            amount as i64,
+            avail_after,
+            frozen_after,
+        )
+    }
+
+    /// Format as CSV line
+    pub fn to_csv(&self) -> String {
+        format!(
+            "{},{},{},{},{},{},{},{},{}",
+            self.user_id,
+            self.asset_id,
+            self.event_type.as_str(),
+            self.version,
+            self.source_type.as_str(),
+            self.source_id,
+            self.delta,
+            self.avail_after,
+            self.frozen_after,
+        )
+    }
+
+    /// CSV header
+    pub fn csv_header() -> &'static str {
+        "user_id,asset_id,event_type,version,source_type,source_id,delta,avail_after,frozen_after"
+    }
+}
+
+// ============================================================
 // TESTS
 // ============================================================
 
@@ -303,5 +581,77 @@ mod tests {
         let update = BalanceUpdate::spend_frozen(1, 100, 1, 5000);
         assert_eq!(update.operation, BalanceOp::SpendFrozen);
         assert_eq!(update.amount, 5000);
+    }
+
+    #[test]
+    fn test_balance_event_type() {
+        // Test version space assignment
+        assert_eq!(BalanceEventType::Lock.version_space(), VersionSpace::Lock);
+        assert_eq!(BalanceEventType::Unlock.version_space(), VersionSpace::Lock);
+        assert_eq!(
+            BalanceEventType::Settle.version_space(),
+            VersionSpace::Settle
+        );
+        assert_eq!(
+            BalanceEventType::Deposit.version_space(),
+            VersionSpace::Both
+        );
+
+        // Test string representation
+        assert_eq!(BalanceEventType::Lock.as_str(), "lock");
+        assert_eq!(BalanceEventType::Settle.as_str(), "settle");
+    }
+
+    #[test]
+    fn test_balance_event_lock() {
+        let event = BalanceEvent::lock(
+            100,  // user_id
+            1,    // asset_id (BTC)
+            5,    // order_seq_id
+            1000, // amount
+            3,    // lock_version
+            9000, // avail_after
+            1000, // frozen_after
+        );
+
+        assert_eq!(event.user_id, 100);
+        assert_eq!(event.asset_id, 1);
+        assert_eq!(event.event_type, BalanceEventType::Lock);
+        assert_eq!(event.version, 3);
+        assert_eq!(event.source_type, SourceType::Order);
+        assert_eq!(event.source_id, 5);
+        assert_eq!(event.delta, -1000); // Negative for lock
+        assert_eq!(event.avail_after, 9000);
+        assert_eq!(event.frozen_after, 1000);
+    }
+
+    #[test]
+    fn test_balance_event_settle() {
+        let event = BalanceEvent::settle_spend(
+            100,  // user_id
+            2,    // asset_id (USDT)
+            42,   // trade_id
+            5000, // amount
+            7,    // settle_version
+            0,    // avail_after
+            5000, // frozen_after
+        );
+
+        assert_eq!(event.event_type, BalanceEventType::Settle);
+        assert_eq!(event.source_type, SourceType::Trade);
+        assert_eq!(event.source_id, 42);
+        assert_eq!(event.delta, -5000); // Negative for spend
+    }
+
+    #[test]
+    fn test_balance_event_csv() {
+        let event = BalanceEvent::lock(100, 1, 5, 1000, 3, 9000, 1000);
+        let csv = event.to_csv();
+
+        assert_eq!(csv, "100,1,lock,3,order,5,-1000,9000,1000");
+        assert_eq!(
+            BalanceEvent::csv_header(),
+            "user_id,asset_id,event_type,version,source_type,source_id,delta,avail_after,frozen_after"
+        );
     }
 }

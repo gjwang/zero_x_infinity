@@ -253,6 +253,8 @@ pub fn dump_balances(
 ) {
     let mut file = File::create(path).unwrap();
 
+    // Note: 'version' column now contains lock_version for backward compatibility
+    // settle_version is tracked separately in the Balance struct
     writeln!(file, "user_id,asset_id,avail,frozen,version").unwrap();
 
     let mut user_ids: Vec<_> = accounts.keys().collect();
@@ -275,7 +277,7 @@ pub fn dump_balances(
                 base_id,
                 b.avail(),
                 b.frozen(),
-                b.version()
+                b.lock_version() // Now uses lock_version explicitly
             )
             .unwrap();
         }
@@ -288,7 +290,7 @@ pub fn dump_balances(
                 quote_id,
                 b.avail(),
                 b.frozen(),
-                b.version()
+                b.lock_version() // Now uses lock_version explicitly
             )
             .unwrap();
         }
