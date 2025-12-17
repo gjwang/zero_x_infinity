@@ -189,20 +189,31 @@ def write_balances_csv(records: List[BalanceRecord], filepath: str):
 # MAIN
 # ============================================================
 
+# ============================================================
+# MAIN
+# ============================================================
+
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description='Generate test orders with cancellations')
+    parser.add_argument('--orders', type=int, default=1000, help='Number of place orders to generate')
+    parser.add_argument('--accounts', type=int, default=NUM_ACCOUNTS, help='Number of user accounts')
+    
+    args = parser.parse_args()
+    
     random.seed(42)  # Reproducible
     
     print(f"\n=== Generating Test Set with Cancel Orders ===")
-    print(f"Accounts: {NUM_ACCOUNTS}")
-    print(f"Place orders: {NUM_PLACE_ORDERS}")
+    print(f"Accounts: {args.accounts}")
+    print(f"Place orders: {args.orders}")
     print(f"Cancel ratio: {CANCEL_RATIO * 100}%")
     print()
     
     # Generate orders
-    orders = generate_orders_with_cancel(NUM_PLACE_ORDERS, NUM_ACCOUNTS, CANCEL_RATIO)
+    orders = generate_orders_with_cancel(args.orders, args.accounts, CANCEL_RATIO)
     
     # Generate balances
-    balances = generate_balances(NUM_ACCOUNTS)
+    balances = generate_balances(args.accounts)
     
     # Write files
     write_orders_csv(orders, f"{OUTPUT_DIR}/orders.csv")
