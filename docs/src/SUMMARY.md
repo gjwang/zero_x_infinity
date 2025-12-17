@@ -14,9 +14,14 @@
 - [0x08b UBSCore 实现 (UBSCore Implementation)](./0x08b-ubscore-implementation.md)
 - [0x08c 完整事件流 (Complete Event Flow)](./0x08c-ring-buffer-pipeline.md)
 - [0x08d 完整订单生命周期 (Complete Order Lifecycle)](./0x08d-complete-order-lifecycle.md)
-
 ---
 
 - [Performance Report (Latest)](./perf-report.md)
 - [Performance History](./perf-history/README.md)
   - [2025-12-16-0x07b](./perf-history/2025-12-16-0x07b.md)
+
+---
+
+# Reference
+
+- [API 规范 (API Conventions)](./api-conventions.md)
