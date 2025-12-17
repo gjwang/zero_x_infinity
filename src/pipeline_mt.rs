@@ -119,12 +119,14 @@ pub fn run_pipeline_multi_thread(
             // Create OrderAction based on input action type
             let action = if input.action == "cancel" {
                 // Cancel order - no seq needed, just pass order_id
+                ingestion_stats.incr_cancel();
                 OrderAction::Cancel {
                     order_id: input.order_id,
                     user_id: input.user_id,
                 }
             } else {
                 // Place order - assign sequence number
+                ingestion_stats.incr_place();
                 seq_counter += 1;
                 let order = InternalOrder::new(
                     input.order_id,

@@ -498,6 +498,10 @@ impl Default for MultiThreadQueues {
 pub struct PipelineStats {
     /// Total orders ingested
     pub orders_ingested: AtomicU64,
+    /// Place orders count
+    pub places_count: AtomicU64,
+    /// Cancel orders count
+    pub cancels_count: AtomicU64,
     /// Orders accepted by UBSCore
     pub orders_accepted: AtomicU64,
     /// Orders rejected by UBSCore
@@ -517,6 +521,14 @@ impl PipelineStats {
 
     pub fn incr_ingested(&self) {
         self.orders_ingested.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn incr_place(&self) {
+        self.places_count.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn incr_cancel(&self) {
+        self.cancels_count.fetch_add(1, Ordering::Relaxed);
     }
 
     pub fn incr_accepted(&self) {
@@ -543,6 +555,8 @@ impl PipelineStats {
     pub fn snapshot(&self) -> PipelineStatsSnapshot {
         PipelineStatsSnapshot {
             orders_ingested: self.orders_ingested.load(Ordering::Relaxed),
+            places_count: self.places_count.load(Ordering::Relaxed),
+            cancels_count: self.cancels_count.load(Ordering::Relaxed),
             orders_accepted: self.orders_accepted.load(Ordering::Relaxed),
             orders_rejected: self.orders_rejected.load(Ordering::Relaxed),
             trades_generated: self.trades_generated.load(Ordering::Relaxed),
@@ -556,6 +570,8 @@ impl PipelineStats {
 #[derive(Debug, Clone)]
 pub struct PipelineStatsSnapshot {
     pub orders_ingested: u64,
+    pub places_count: u64,
+    pub cancels_count: u64,
     pub orders_accepted: u64,
     pub orders_rejected: u64,
     pub trades_generated: u64,
@@ -567,8 +583,10 @@ impl std::fmt::Display for PipelineStatsSnapshot {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Pipeline Stats: ingested={}, accepted={}, rejected={}, trades={}, settled={}, backpressure={}",
+            "Pipeline Stats: ingested={} (place={}, cancel={}), accepted={}, rejected={}, trades={}, settled={}, backpressure={}",
             self.orders_ingested,
+            self.places_count,
+            self.cancels_count,
             self.orders_accepted,
             self.orders_rejected,
             self.trades_generated,
