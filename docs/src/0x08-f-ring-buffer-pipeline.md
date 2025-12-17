@@ -444,14 +444,15 @@ pub struct BalanceUpdateRequest {
     pub price_improvement: Option<PriceImprovement>,
 }
 
-/// 余额变更事件 (UBSCore → Settlement) - NEW!
+/// 余额变更事件 (UBSCore → Settlement)
 /// 
 /// 重要：这是 **所有** 余额变更事件的通道，包括但不限于：
-/// - Deposit/Withdraw (充值/提现)
-/// - Pre-Trade Lock (下单锁定)
-/// - Post-Trade Settle (成交结算: spend_frozen + deposit)
-/// - Cancel/Reject Unlock (取消/拒绝解锁)
-#[derive(Clone)]
+/// - Deposit/Withdraw (充值/提现) - 待实现
+/// - Pre-Trade Lock (下单锁定) - ✅ 已实现
+/// - Post-Trade Settle (成交结算: spend_frozen + credit) - ✅ 已实现
+/// - Cancel/Reject Unlock (取消/拒绝解锁) - 待实现
+/// - Price Improvement RefundFrozen (价格改善退款) - ✅ 已实现
+#[derive(Debug, Clone)]
 pub struct BalanceEvent {
     pub user_id: u64,
     pub asset_id: u32,
@@ -459,13 +460,17 @@ pub struct BalanceEvent {
     pub amount: u64,
     pub order_id: Option<u64>,      // 关联订单 (如有)
     pub trade_id: Option<u64>,      // 关联成交 (如有)
-    pub ref_id: Option<String>,     // 外部参考ID (充值/提现)
-    pub timestamp: u64,
+    pub version: u64,               // 余额版本号 (用于审计)
+    pub avail_after: u64,           // 操作后可用余额
+    pub frozen_after: u64,          // 操作后冻结余额
+    pub timestamp_ns: u64,          // 时间戳 (纳秒)
+    // TODO: pub ref_id: Option<String>,  // 外部参考ID (充值/提现时使用)
 }
 
 /// 余额事件类型 - 覆盖所有余额变更场景
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BalanceEventType {
-    // === External Operations ===
+    // === External Operations (待实现) ===
     Deposit,        // 充值: avail += amount
     Withdraw,       // 提现: avail -= amount
     
@@ -476,7 +481,7 @@ pub enum BalanceEventType {
     SpendFrozen,    // 成交扣减冻结: frozen -= amount
     Credit,         // 成交入账: avail += amount
     
-    // === Cancel/Reject ===
+    // === Cancel/Reject (待实现) ===
     Unlock,         // 取消/拒绝解锁: frozen -= amount, avail += amount
     
     // === Price Improvement ===
@@ -495,7 +500,7 @@ pub struct MultiThreadQueues {
     // ME → UBSCore (Balance Update Requests)
     pub balance_update_queue: Arc<ArrayQueue<BalanceUpdateRequest>>,
     
-    // UBSCore → Settlement (Balance Events) - NEW!
+    // UBSCore → Settlement (Balance Events)
     pub balance_event_queue: Arc<ArrayQueue<BalanceEvent>>,
 }
 ```
@@ -508,9 +513,21 @@ pub struct MultiThreadQueues {
 | `valid_order_queue` | ✅ 已实现 |
 | `trade_queue` | ✅ 已实现 |
 | `balance_update_queue` | ✅ 已实现 |
-| `balance_event_queue` | ⏳ **待实现** |
-| UBSCore 生成 BalanceEvent | ⏳ **待实现** |
-| Settlement 消费 BalanceEvent | ⏳ **待实现** |
+| `balance_event_queue` | ✅ 已实现 |
+| UBSCore 生成 BalanceEvent | ✅ 已实现 (Lock, SpendFrozen, Credit, RefundFrozen) |
+| Settlement 消费 BalanceEvent | ✅ 已实现 (计数统计，持久化待补充) |
+
+#### BalanceEvent 类型实现状态
+
+| 事件类型 | 触发场景 | 状态 |
+|----------|----------|------|
+| `Lock` | Pre-Trade 下单锁定 | ✅ 已实现 |
+| `SpendFrozen` | Post-Trade 扣减冻结 | ✅ 已实现 |
+| `Credit` | Post-Trade 入账 | ✅ 已实现 |
+| `RefundFrozen` | Price Improvement 退款 | ✅ 已实现 |
+| `Unlock` | Cancel/Reject 解锁 | ⏳ 待实现 |
+| `Deposit` | 外部充值 | ⏳ 待实现 |
+| `Withdraw` | 外部提现 | ⏳ 待实现 |
 
 ### 运行命令
 
