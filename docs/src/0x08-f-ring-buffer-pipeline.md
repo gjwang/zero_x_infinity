@@ -360,19 +360,35 @@ cargo run --release -- --pipeline # Pipeline 并行
 | 1 | 实现 `SequencedOrder` | ✅ |
 | 1 | 实现 `PipelineStats` | ✅ |
 | 1 | 实现 `SingleThreadPipeline` | ✅ |
-| 2 | 定义 Worker Traits | ⏳ |
-| 3 | 实现单线程 Pipeline 完整流程 | ⏳ |
-| 3 | 验证正确性（baseline 对比） | ⏳ |
+| 2 | 定义 Worker Traits | ✅ (直接在 runner 中实现) |
+| 3 | 实现单线程 Pipeline 完整流程 | ✅ |
+| 3 | 验证正确性（baseline 对比） | ✅ |
 | 4 | 实现多线程 Pipeline | ⏳ |
-| 4 | 性能测试 | ⏳ |
+| 4 | 性能测试 | ✅ (单线程对比完成) |
+
+## 验证结果 (2025-12-17)
+
+### 正确性验证
+
+| 数据集 | Pipeline vs UBSCore | 结果 |
+|--------|---------------------|------|
+| 100k orders | MD5 match | ✅ |
+| 1.3M orders (含 30 万 cancel) | MD5 match | ✅ |
+
+### 性能对比 (1.3M orders)
+
+| 模式 | 执行时间 | 吞吐量 |
+|------|----------|--------|
+| UBSCore | 17.84s | 72,851 ops/s |
+| **Pipeline** | **15.72s** | **82,686 ops/s** |
+| 提升 | -12% | +13% |
 
 ## 下一步
 
 1. ~~创建 `src/pipeline.rs`~~ ✅
 2. ~~实现 `PipelineQueues`~~ ✅
 3. ~~实现单线程 Pipeline 基础框架~~ ✅
-4. **实现完整单线程 Pipeline 处理循环**
-5. 验证正确性
-6. 实现多线程 Pipeline
-7. 性能测试
-
+4. ~~实现完整单线程 Pipeline 处理循环~~ ✅
+5. ~~验证正确性~~ ✅
+6. **实现多线程 Pipeline**
+7. ~~单线程性能测试~~ ✅
