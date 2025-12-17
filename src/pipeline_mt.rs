@@ -235,7 +235,36 @@ pub fn run_pipeline_multi_thread(
                                 }
                                 ubscore_stats.incr_accepted();
                             }
-                            Err(_reason) => {
+                            Err(reason) => {
+                                // Debug: log first few rejections with balance state
+                                static REJECT_LOG_COUNT: std::sync::atomic::AtomicU64 =
+                                    std::sync::atomic::AtomicU64::new(0);
+                                let count = REJECT_LOG_COUNT
+                                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                if count < 10 {
+                                    let lock_asset = if seq_order.order.side == Side::Buy {
+                                        quote_id
+                                    } else {
+                                        base_id
+                                    };
+                                    let balance_info = ubscore
+                                        .get_balance(seq_order.order.user_id, lock_asset)
+                                        .map(|b| {
+                                            format!("avail={}, frozen={}", b.avail(), b.frozen())
+                                        })
+                                        .unwrap_or_else(|| "N/A".to_string());
+                                    let lock_amount =
+                                        seq_order.order.calculate_cost(qty_unit).unwrap_or(0);
+                                    eprintln!(
+                                        "[MT-REJECT] order_id={}, user={}, side={:?}, need={}, balance=[{}], reason={:?}",
+                                        seq_order.order.order_id,
+                                        seq_order.order.user_id,
+                                        seq_order.order.side,
+                                        lock_amount,
+                                        balance_info,
+                                        reason
+                                    );
+                                }
                                 ubscore_stats.incr_rejected();
                             }
                         }
