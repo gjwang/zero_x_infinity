@@ -181,7 +181,7 @@ impl UBSCore {
     /// - Check order_id not seen before
     /// - Use time-windowed bloom filter or LRU cache
     pub fn process_order(&mut self, order: InternalOrder) -> Result<ValidOrder, RejectReason> {
-        // TODO: dedup_guard.check_and_record(order.id)?;
+        // TODO: dedup_guard.check_and_record(order.order_id)?;
 
         // 1. Pre-check (no side effects, can safely reject)
         self.pre_check(&order)?;

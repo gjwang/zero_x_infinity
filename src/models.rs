@@ -33,7 +33,7 @@ pub enum OrderStatus {
 /// price and qty are raw u64 (already scaled by Gateway)
 #[derive(Debug, Clone)]
 pub struct InternalOrder {
-    pub id: u64,
+    pub order_id: u64,
     pub user_id: u64,
     pub symbol_id: u32, // Trading pair
     pub price: u64,     // Raw u64 (already scaled by Gateway)
@@ -46,9 +46,16 @@ pub struct InternalOrder {
 
 impl InternalOrder {
     /// Create a new limit order
-    pub fn new(id: u64, user_id: u64, symbol_id: u32, price: u64, qty: u64, side: Side) -> Self {
+    pub fn new(
+        order_id: u64,
+        user_id: u64,
+        symbol_id: u32,
+        price: u64,
+        qty: u64,
+        side: Side,
+    ) -> Self {
         Self {
-            id,
+            order_id,
             user_id,
             symbol_id,
             price,
@@ -61,9 +68,9 @@ impl InternalOrder {
     }
 
     /// Create a market order
-    pub fn market(id: u64, user_id: u64, symbol_id: u32, qty: u64, side: Side) -> Self {
+    pub fn market(order_id: u64, user_id: u64, symbol_id: u32, qty: u64, side: Side) -> Self {
         Self {
-            id,
+            order_id,
             user_id,
             symbol_id,
             price: if side == Side::Buy { u64::MAX } else { 0 },
@@ -170,7 +177,7 @@ impl std::error::Error for CostError {}
 /// A trade that occurred when orders matched
 #[derive(Debug, Clone)]
 pub struct Trade {
-    pub id: u64,
+    pub trade_id: u64,
     pub buyer_order_id: u64,
     pub seller_order_id: u64,
     pub buyer_user_id: u64,
@@ -181,7 +188,7 @@ pub struct Trade {
 
 impl Trade {
     pub fn new(
-        id: u64,
+        trade_id: u64,
         buyer_order_id: u64,
         seller_order_id: u64,
         buyer_user_id: u64,
@@ -190,7 +197,7 @@ impl Trade {
         qty: u64,
     ) -> Self {
         Self {
-            id,
+            trade_id,
             buyer_order_id,
             seller_order_id,
             buyer_user_id,
