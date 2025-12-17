@@ -12,7 +12,8 @@
 - [0x07b 性能基线 (Performance Baseline)](./0x07b-perf-baseline.md)
 - [0x08a 交易流水线设计 (Trading Pipeline Design)](./0x08a-trading-pipeline-design.md)
 - [0x08b UBSCore 实现 (UBSCore Implementation)](./0x08b-ubscore-implementation.md)
-- [0x08c Ring Buffer Pipeline](./0x08c-ring-buffer-pipeline.md)
+- [0x08c 完整事件流 (Complete Event Flow)](./0x08c-ring-buffer-pipeline.md)
+- [0x08d 完整订单生命周期 (Complete Order Lifecycle)](./0x08d-complete-order-lifecycle.md)
 
 ---
 
