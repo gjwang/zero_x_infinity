@@ -28,7 +28,7 @@ use zero_x_infinity::csv_io::{
 };
 use zero_x_infinity::engine::MatchingEngine;
 use zero_x_infinity::ledger::{LedgerEntry, LedgerWriter};
-use zero_x_infinity::messages::TradeEvent;
+use zero_x_infinity::messages::{BalanceEvent, TradeEvent};
 use zero_x_infinity::models::{InternalOrder, Side};
 use zero_x_infinity::orderbook::OrderBook;
 use zero_x_infinity::perf::PerfMetrics;
@@ -148,7 +148,7 @@ fn execute_orders(
             if let Some(buyer_acc) = accounts.get(&trade.buyer_user_id) {
                 if let Some(b) = buyer_acc.get_balance(quote_id) {
                     ledger.write_entry(&LedgerEntry {
-                        trade_id: trade.id,
+                        trade_id: trade.trade_id,
                         user_id: trade.buyer_user_id,
                         asset_id: quote_id,
                         op: "debit",
@@ -158,7 +158,7 @@ fn execute_orders(
                 }
                 if let Some(b) = buyer_acc.get_balance(base_id) {
                     ledger.write_entry(&LedgerEntry {
-                        trade_id: trade.id,
+                        trade_id: trade.trade_id,
                         user_id: trade.buyer_user_id,
                         asset_id: base_id,
                         op: "credit",
@@ -181,7 +181,7 @@ fn execute_orders(
             if let Some(seller_acc) = accounts.get(&trade.seller_user_id) {
                 if let Some(b) = seller_acc.get_balance(base_id) {
                     ledger.write_entry(&LedgerEntry {
-                        trade_id: trade.id,
+                        trade_id: trade.trade_id,
                         user_id: trade.seller_user_id,
                         asset_id: base_id,
                         op: "debit",
@@ -191,7 +191,7 @@ fn execute_orders(
                 }
                 if let Some(b) = seller_acc.get_balance(quote_id) {
                     ledger.write_entry(&LedgerEntry {
-                        trade_id: trade.id,
+                        trade_id: trade.trade_id,
                         user_id: trade.seller_user_id,
                         asset_id: quote_id,
                         op: "credit",
@@ -265,6 +265,16 @@ fn execute_orders_with_ubscore(
             input.side,
         );
 
+        // Calculate lock amount for Lock event logging
+        let lock_asset_id = match input.side {
+            Side::Buy => quote_id,
+            Side::Sell => base_id,
+        };
+        let lock_amount = match input.side {
+            Side::Buy => input.price * input.qty / qty_unit, // Buy: lock quote
+            Side::Sell => input.qty,                         // Sell: lock base
+        };
+
         let valid_order = match ubscore.process_order(order) {
             Ok(vo) => vo,
             Err(_reason) => {
@@ -272,6 +282,20 @@ fn execute_orders_with_ubscore(
                 continue;
             }
         };
+
+        // Record Lock event (after successful balance lock)
+        if let Some(b) = ubscore.get_balance(input.user_id, lock_asset_id) {
+            let lock_event = BalanceEvent::lock(
+                input.user_id,
+                lock_asset_id,
+                valid_order.seq_id, // source_id = order seq_id
+                lock_amount,
+                b.lock_version(),
+                b.avail(),
+                b.frozen(),
+            );
+            ledger.write_balance_event(&lock_event);
+        }
 
         perf.add_balance_check_time(balance_check_start.elapsed().as_nanos() as u64);
 
@@ -321,48 +345,96 @@ fn execute_orders_with_ubscore(
             let trade_cost =
                 ((trade.price as u128) * (trade.qty as u128) / (qty_unit as u128)) as u64;
 
-            // Buyer ledger entries
+            // Buyer ledger entries (legacy format)
             if let Some(b) = ubscore.get_balance(trade.buyer_user_id, quote_id) {
                 ledger.write_entry(&LedgerEntry {
-                    trade_id: trade.id,
+                    trade_id: trade.trade_id,
                     user_id: trade.buyer_user_id,
                     asset_id: quote_id,
                     op: "debit",
                     delta: trade_cost,
                     balance_after: b.avail() + b.frozen(),
                 });
+
+                // New: Settle event (spend frozen)
+                let settle_event = BalanceEvent::settle_spend(
+                    trade.buyer_user_id,
+                    quote_id,
+                    trade.trade_id,
+                    trade_cost,
+                    b.settle_version(),
+                    b.avail(),
+                    b.frozen(),
+                );
+                ledger.write_balance_event(&settle_event);
             }
             if let Some(b) = ubscore.get_balance(trade.buyer_user_id, base_id) {
                 ledger.write_entry(&LedgerEntry {
-                    trade_id: trade.id,
+                    trade_id: trade.trade_id,
                     user_id: trade.buyer_user_id,
                     asset_id: base_id,
                     op: "credit",
                     delta: trade.qty,
                     balance_after: b.avail() + b.frozen(),
                 });
+
+                // New: Settle event (receive)
+                let settle_event = BalanceEvent::settle_receive(
+                    trade.buyer_user_id,
+                    base_id,
+                    trade.trade_id,
+                    trade.qty,
+                    b.settle_version(),
+                    b.avail(),
+                    b.frozen(),
+                );
+                ledger.write_balance_event(&settle_event);
             }
 
-            // Seller ledger entries
+            // Seller ledger entries (legacy format)
             if let Some(b) = ubscore.get_balance(trade.seller_user_id, base_id) {
                 ledger.write_entry(&LedgerEntry {
-                    trade_id: trade.id,
+                    trade_id: trade.trade_id,
                     user_id: trade.seller_user_id,
                     asset_id: base_id,
                     op: "debit",
                     delta: trade.qty,
                     balance_after: b.avail() + b.frozen(),
                 });
+
+                // New: Settle event (spend frozen)
+                let settle_event = BalanceEvent::settle_spend(
+                    trade.seller_user_id,
+                    base_id,
+                    trade.trade_id,
+                    trade.qty,
+                    b.settle_version(),
+                    b.avail(),
+                    b.frozen(),
+                );
+                ledger.write_balance_event(&settle_event);
             }
             if let Some(b) = ubscore.get_balance(trade.seller_user_id, quote_id) {
                 ledger.write_entry(&LedgerEntry {
-                    trade_id: trade.id,
+                    trade_id: trade.trade_id,
                     user_id: trade.seller_user_id,
                     asset_id: quote_id,
                     op: "credit",
                     delta: trade_cost,
                     balance_after: b.avail() + b.frozen(),
                 });
+
+                // New: Settle event (receive)
+                let settle_event = BalanceEvent::settle_receive(
+                    trade.seller_user_id,
+                    quote_id,
+                    trade.trade_id,
+                    trade_cost,
+                    b.settle_version(),
+                    b.avail(),
+                    b.frozen(),
+                );
+                ledger.write_balance_event(&settle_event);
             }
 
             perf.add_ledger_time(ledger_start.elapsed().as_nanos() as u64);
@@ -375,10 +447,11 @@ fn execute_orders_with_ubscore(
         perf.add_order_latency(order_start.elapsed().as_nanos() as u64);
     }
 
-    // Flush WAL at the end
+    // Flush WAL and ledger at the end
     if let Err(e) = ubscore.flush_wal() {
         eprintln!("WAL flush error: {}", e);
     }
+    ledger.flush();
 
     (accepted, rejected, total_trades, perf)
 }
@@ -413,6 +486,7 @@ fn main() {
     let balances_t2 = format!("{}/t2_balances_final.csv", output_dir);
     let orderbook_t2 = format!("{}/t2_orderbook.csv", output_dir);
     let ledger_path = format!("{}/t2_ledger.csv", output_dir);
+    let events_path = format!("{}/t2_events.csv", output_dir); // New: BalanceEvent log
     let summary_path = format!("{}/t2_summary.txt", output_dir);
     let wal_path = format!("{}/orders.wal", output_dir);
 
@@ -438,6 +512,12 @@ fn main() {
     let mut book = OrderBook::new();
     let mut ledger = LedgerWriter::new(&ledger_path);
 
+    // Enable event logging for UBSCore mode (complete event sourcing)
+    if ubscore_mode {
+        ledger.enable_event_logging(&events_path);
+        println!("    Event logging enabled: {}", events_path);
+    }
+
     // Step 6: Execute orders
     println!("\n[6] Executing orders...");
     let exec_start = Instant::now();
@@ -462,6 +542,8 @@ fn main() {
             UBSCore::new(symbol_mgr.clone(), wal_config).expect("Failed to create UBSCore");
 
         // Transfer initial balances to UBSCore via deposit()
+        // Also record Deposit events for complete audit trail
+        let mut deposit_count = 0u64;
         for (user_id, account) in &accounts {
             for asset_id in [base_id, quote_id] {
                 if let Some(balance) = account.get_balance(asset_id) {
@@ -469,10 +551,26 @@ fn main() {
                         ubscore
                             .deposit(*user_id, asset_id, balance.avail())
                             .unwrap();
+
+                        // Record Deposit event
+                        if let Some(b) = ubscore.get_balance(*user_id, asset_id) {
+                            deposit_count += 1;
+                            let deposit_event = BalanceEvent::deposit(
+                                *user_id,
+                                asset_id,
+                                deposit_count, // ref_id = deposit sequence
+                                balance.avail(),
+                                b.lock_version(),
+                                b.avail(),
+                                b.frozen(),
+                            );
+                            ledger.write_balance_event(&deposit_event);
+                        }
                     }
                 }
             }
         }
+        println!("    Recorded {} deposit events", deposit_count);
 
         let (acc, rej, trades, perf) = execute_orders_with_ubscore(
             &orders,

@@ -70,7 +70,7 @@ impl WalEntry {
             "{},{},{},{},{},{},{},{:?},{:?}\n",
             self.seq_id,
             self.timestamp_ns,
-            self.order.id,
+            self.order.order_id,
             self.order.user_id,
             self.order.symbol_id,
             self.order.price,
@@ -307,7 +307,7 @@ impl WalReader {
         };
 
         let order = InternalOrder {
-            id: order_id,
+            order_id,
             user_id,
             symbol_id,
             price,
@@ -381,9 +381,9 @@ mod tests {
 
             assert_eq!(count, 2);
             assert_eq!(last_seq, 2);
-            assert_eq!(entries[0].order.id, 1);
+            assert_eq!(entries[0].order.order_id, 1);
             assert_eq!(entries[0].order.price, 10000);
-            assert_eq!(entries[1].order.id, 2);
+            assert_eq!(entries[1].order.order_id, 2);
             assert_eq!(entries[1].order.side, Side::Sell);
         }
 

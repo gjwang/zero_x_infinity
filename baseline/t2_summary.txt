@@ -4,28 +4,28 @@ Total Orders: 100000
   Accepted: 100000
   Rejected: 0
 Total Trades: 47886
-Execution Time: 7.25s
-Throughput: 13795 orders/sec | 6606 trades/sec
+Execution Time: 2.87s
+Throughput: 34783 orders/sec | 16656 trades/sec
 
 Final Orderbook:
-  Best Bid: Some(84991260000)
-  Best Ask: Some(85023830000)
+  Best Bid: Some(8499126)
+  Best Ask: Some(8502383)
   Bid Depth: 20678 levels
   Ask Depth: 20993 levels
 
-Total Time: 8.96s
+Total Time: 4.13s
 
 === Performance Breakdown ===
-Balance Check:       23.28ms (  0.3%)
-Matching Engine:   3465.57ms ( 47.9%)
-Settlement:           6.97ms (  0.1%)
-Ledger I/O:        3735.90ms ( 51.7%)
+Balance Check:       14.27ms (  0.5%)
+Matching Engine:   2812.03ms ( 98.3%)
+Settlement:           4.21ms (  0.1%)
+Ledger I/O:          29.21ms (  1.0%)
 
 === Latency Percentiles (sampled) ===
-  Min:        333 ns
-  Avg:      71646 ns
-  P50:      39542 ns
-  P99:     490416 ns
-  P99.9:  1961459 ns
-  Max:   10541750 ns
+  Min:        250 ns
+  Avg:      28616 ns
+  P50:      29666 ns
+  P99:      63792 ns
+  P99.9:   155000 ns
+  Max:     227291 ns
 Samples: 10000
