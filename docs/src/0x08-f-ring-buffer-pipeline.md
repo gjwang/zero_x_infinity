@@ -363,8 +363,85 @@ cargo run --release -- --pipeline # Pipeline 并行
 | 2 | 定义 Worker Traits | ✅ (直接在 runner 中实现) |
 | 3 | 实现单线程 Pipeline 完整流程 | ✅ |
 | 3 | 验证正确性（baseline 对比） | ✅ |
-| 4 | 实现多线程 Pipeline | ⏳ |
-| 4 | 性能测试 | ✅ (单线程对比完成) |
+| **4** | **实现多线程 Pipeline** | **✅** |
+| 4 | 性能测试 | ✅ |
+
+---
+
+## 多线程 Pipeline (Phase 4)
+
+### 架构
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                        Multi-Thread Pipeline                              │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                           │
+│   Thread 1: Ingestion              Thread 2: UBSCore (Pre-Trade + Settle)│
+│   ┌─────────────────┐              ┌─────────────────┐                   │
+│   │ Read orders     │              │ Lock balance    │                   │
+│   │ Push to queue   │ ──────────▶  │ WAL write       │                   │
+│   └─────────────────┘  order_queue │ Settle trades   │                   │
+│                                    └────────┬────────┘                   │
+│                                             │ valid_order_queue          │
+│                                             ▼                             │
+│   Thread 3: Matching Engine        ┌─────────────────┐                   │
+│   ┌─────────────────┐              │ Match orders    │                   │
+│   │ OrderBook       │◀─────────────│ Generate trades │                   │
+│   └─────────────────┘              └────────┬────────┘                   │
+│                                             │ settle_request_queue       │
+│                                             ▼                             │
+│   Thread 4: Ledger Writer          event_queue (from all threads)        │
+│   ┌─────────────────┐              ┌─────────────────┐                   │
+│   │ Write events    │◀─────────────│ Centralized log │                   │
+│   └─────────────────┘              └─────────────────┘                   │
+│                                                                           │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+### 新增类型
+
+```rust
+/// 结算请求 (ME → UBSCore)
+pub struct SettleRequest {
+    pub trade_event: TradeEvent,
+    pub price_improvement: Option<PriceImprovement>,
+}
+
+/// Pipeline 事件 (All → Ledger)
+pub enum PipelineEvent {
+    OrderAccepted { seq_id, order_id, user_id },
+    OrderRejected { order_id, reason },
+    BalanceLocked { user_id, asset_id, amount, ... },
+    SettleSpend { ... },
+    SettleReceive { ... },
+    // ...
+}
+
+/// 多线程队列
+pub struct MultiThreadQueues {
+    pub order_queue: Arc<ArrayQueue<SequencedOrder>>,
+    pub valid_order_queue: Arc<ArrayQueue<ValidOrder>>,
+    pub trade_queue: Arc<ArrayQueue<TradeEvent>>,
+    pub settle_request_queue: Arc<ArrayQueue<SettleRequest>>,
+    pub event_queue: Arc<ArrayQueue<PipelineEvent>>,
+}
+```
+
+### 运行命令
+
+```bash
+# 单线程 Pipeline
+cargo run --release -- --pipeline
+
+# 多线程 Pipeline
+cargo run --release -- --pipeline-mt
+
+# UBSCore 模式 (baseline)
+cargo run --release -- --ubscore
+```
+
+---
 
 ## 验证结果 (2025-12-17)
 
@@ -375,20 +452,29 @@ cargo run --release -- --pipeline # Pipeline 并行
 | 100k orders | MD5 match | ✅ |
 | 1.3M orders (含 30 万 cancel) | MD5 match | ✅ |
 
-### 性能对比 (1.3M orders)
+### 最终性能对比 (100k orders)
 
-| 模式 | 执行时间 | 吞吐量 |
-|------|----------|--------|
-| UBSCore | 17.84s | 72,851 ops/s |
-| **Pipeline** | **15.72s** | **82,686 ops/s** |
-| 提升 | -12% | +13% |
+| 模式 | 执行时间 | 吞吐量 | vs UBSCore |
+|------|----------|--------|------------|
+| UBSCore | 586ms | 170k ops/s | baseline |
+| Single-Thread Pipeline | 430ms | 232k ops/s | **+36%** |
+| **Multi-Thread Pipeline** | **412ms** | **242k ops/s** | **+42%** |
 
-## 下一步
+### 分析
 
-1. ~~创建 `src/pipeline.rs`~~ ✅
-2. ~~实现 `PipelineQueues`~~ ✅
-3. ~~实现单线程 Pipeline 基础框架~~ ✅
-4. ~~实现完整单线程 Pipeline 处理循环~~ ✅
-5. ~~验证正确性~~ ✅
-6. **实现多线程 Pipeline**
-7. ~~单线程性能测试~~ ✅
+实际加速比超过 Amdahl's Law 预测的原因：
+1. **Ledger 异步化** - 文件 I/O 不再阻塞关键路径
+2. **CPU 流水线优化** - 多线程利用现代 CPU 的并行执行单元
+3. **减少内存竞争** - 每个线程有独立的工作集
+
+---
+
+## 文件变更
+
+| 文件 | 变更 |
+|------|------|
+| `src/pipeline.rs` | 添加 `SettleRequest`, `PipelineEvent`, `MultiThreadQueues` |
+| `src/pipeline_runner.rs` | 单线程 Pipeline Runner |
+| `src/pipeline_mt.rs` | **新增**：多线程 Pipeline 实现 |
+| `src/lib.rs` | 导出新模块 |
+| `src/main.rs` | 添加 `--pipeline`, `--pipeline-mt` 模式 |
