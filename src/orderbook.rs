@@ -146,7 +146,7 @@ impl OrderBook {
         };
 
         if let Some(orders) = book {
-            if let Some(pos) = orders.iter().position(|o| o.id == order_id) {
+            if let Some(pos) = orders.iter().position(|o| o.order_id == order_id) {
                 orders.remove(pos);
                 // Clean up empty price level
                 if orders.is_empty() {
