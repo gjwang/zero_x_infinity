@@ -33,6 +33,7 @@ pub mod messages;
 pub mod models;
 pub mod orderbook;
 pub mod perf;
+pub mod pipeline;
 pub mod ubscore;
 pub mod user_account;
 pub mod wal;
