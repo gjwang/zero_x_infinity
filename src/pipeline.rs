@@ -318,28 +318,61 @@ pub const EVENT_QUEUE_CAPACITY: usize = 65536;
 
 /// Extended queues for multi-threaded pipeline
 ///
-/// Includes all base queues plus additional queues for:
-/// - Settle requests (ME → UBSCore)
-/// - Pipeline events (All → Ledger)
+/// Architecture from 0x08-a Trading Pipeline Design:
+/// - ME → trade_queue → Settlement (持久化)
+/// - ME → balance_update_queue → UBSCore (余额更新)
 pub struct MultiThreadQueues {
-    /// Orders from ingestion → UBSCore
+    /// Orders from Ingestion → UBSCore (Pre-Trade)
     pub order_queue: Arc<ArrayQueue<SequencedOrder>>,
 
     /// Valid orders from UBSCore → ME
     pub valid_order_queue: Arc<ArrayQueue<ValidOrder>>,
 
-    /// Trade events from ME (for stats tracking)
+    /// Trade events from ME → Settlement (for persistence)
+    ///
+    /// Settlement persists Trade Events, Order Events, Ledger
     pub trade_queue: Arc<ArrayQueue<TradeEvent>>,
 
-    /// Settle requests from ME → UBSCore
+    /// Balance update requests from ME → UBSCore
     ///
-    /// After matching, ME sends settle requests to UBSCore thread.
-    pub settle_request_queue: Arc<ArrayQueue<SettleRequest>>,
+    /// After matching, ME sends balance updates to UBSCore:
+    /// - Buyer: spend_frozen(quote), deposit(base)
+    /// - Seller: spend_frozen(base), deposit(quote)
+    pub balance_update_queue: Arc<ArrayQueue<BalanceUpdateRequest>>,
+}
 
-    /// Pipeline events from all threads → Ledger thread
-    ///
-    /// Centralized event logging.
-    pub event_queue: Arc<ArrayQueue<PipelineEvent>>,
+/// Balance update request from ME to UBSCore
+#[derive(Debug, Clone)]
+pub struct BalanceUpdateRequest {
+    /// The trade event that triggered this update
+    pub trade_event: TradeEvent,
+    /// Price improvement refund (for limit buy orders filled at better price)
+    pub price_improvement: Option<PriceImprovement>,
+}
+
+impl BalanceUpdateRequest {
+    pub fn new(trade_event: TradeEvent) -> Self {
+        Self {
+            trade_event,
+            price_improvement: None,
+        }
+    }
+
+    pub fn with_price_improvement(
+        trade_event: TradeEvent,
+        user_id: u64,
+        asset_id: u32,
+        amount: u64,
+    ) -> Self {
+        Self {
+            trade_event,
+            price_improvement: Some(PriceImprovement {
+                user_id,
+                asset_id,
+                amount,
+            }),
+        }
+    }
 }
 
 impl MultiThreadQueues {
@@ -349,8 +382,7 @@ impl MultiThreadQueues {
             order_queue: Arc::new(ArrayQueue::new(ORDER_QUEUE_CAPACITY)),
             valid_order_queue: Arc::new(ArrayQueue::new(VALID_ORDER_QUEUE_CAPACITY)),
             trade_queue: Arc::new(ArrayQueue::new(TRADE_QUEUE_CAPACITY)),
-            settle_request_queue: Arc::new(ArrayQueue::new(SETTLE_REQUEST_QUEUE_CAPACITY)),
-            event_queue: Arc::new(ArrayQueue::new(EVENT_QUEUE_CAPACITY)),
+            balance_update_queue: Arc::new(ArrayQueue::new(SETTLE_REQUEST_QUEUE_CAPACITY)),
         }
     }
 
@@ -359,7 +391,7 @@ impl MultiThreadQueues {
         self.order_queue.is_empty()
             && self.valid_order_queue.is_empty()
             && self.trade_queue.is_empty()
-            && self.settle_request_queue.is_empty()
+            && self.balance_update_queue.is_empty()
     }
 }
 
