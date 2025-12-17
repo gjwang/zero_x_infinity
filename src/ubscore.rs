@@ -414,4 +414,82 @@ mod tests {
         assert_eq!(b.avail(), 100_0000_0000);
         assert_eq!(b.frozen(), 0);
     }
+
+    #[test]
+    fn test_cancel_order_flow_with_version() {
+        let manager = test_manager();
+        let wal_config = test_wal_config();
+        let mut ubs = UBSCore::new(manager, wal_config).unwrap();
+
+        // Setup: deposit 100 BTC
+        ubs.deposit(1, 1, 100_0000_0000).unwrap();
+
+        // Get initial version
+        let b = ubs.get_balance(1, 1).unwrap();
+        let initial_lock_version = b.lock_version();
+        assert_eq!(initial_lock_version, 1); // deposit increments lock_version
+
+        // Process order (Lock)
+        let order = InternalOrder::new(1, 1, 0, 10000, 20_0000_0000, Side::Sell);
+        let valid_order = ubs.process_order(order).unwrap();
+        assert_eq!(valid_order.order.qty, 20_0000_0000);
+
+        // Check balance after lock
+        let b = ubs.get_balance(1, 1).unwrap();
+        assert_eq!(b.avail(), 80_0000_0000);
+        assert_eq!(b.frozen(), 20_0000_0000);
+        let lock_version_after_lock = b.lock_version();
+        assert_eq!(lock_version_after_lock, 2); // lock increments lock_version
+
+        // Simulate cancel: unlock frozen amount
+        ubs.unlock(1, 1, 20_0000_0000).unwrap();
+
+        // Check balance after unlock
+        let b = ubs.get_balance(1, 1).unwrap();
+        assert_eq!(b.avail(), 100_0000_0000);
+        assert_eq!(b.frozen(), 0);
+        let lock_version_after_unlock = b.lock_version();
+        assert_eq!(lock_version_after_unlock, 3); // unlock increments lock_version
+    }
+
+    #[test]
+    fn test_partial_fill_then_cancel() {
+        let manager = test_manager();
+        let wal_config = test_wal_config();
+        let mut ubs = UBSCore::new(manager, wal_config).unwrap();
+
+        // Setup: deposit 100 BTC
+        ubs.deposit(1, 1, 100_0000_0000).unwrap();
+
+        // Process sell order for 50 BTC
+        let order = InternalOrder::new(1, 1, 0, 10000, 50_0000_0000, Side::Sell);
+        ubs.process_order(order).unwrap();
+
+        // Check: 50 avail, 50 frozen
+        let b = ubs.get_balance(1, 1).unwrap();
+        assert_eq!(b.avail(), 50_0000_0000);
+        assert_eq!(b.frozen(), 50_0000_0000);
+
+        // Simulate partial fill: spend 20 BTC frozen
+        ubs.accounts_mut()
+            .get_mut(&1)
+            .unwrap()
+            .get_balance_mut(1)
+            .unwrap()
+            .spend_frozen(20_0000_0000)
+            .unwrap();
+
+        // Check: 50 avail, 30 frozen
+        let b = ubs.get_balance(1, 1).unwrap();
+        assert_eq!(b.avail(), 50_0000_0000);
+        assert_eq!(b.frozen(), 30_0000_0000);
+
+        // Cancel remaining: unlock 30 BTC
+        ubs.unlock(1, 1, 30_0000_0000).unwrap();
+
+        // Final: 80 avail, 0 frozen (100 - 20 spent = 80)
+        let b = ubs.get_balance(1, 1).unwrap();
+        assert_eq!(b.avail(), 80_0000_0000);
+        assert_eq!(b.frozen(), 0);
+    }
 }
