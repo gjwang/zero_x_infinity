@@ -318,7 +318,7 @@ pub fn dump_orderbook_snapshot(book: &OrderBook, path: &str) {
         writeln!(
             file,
             "{},{},{},{},{},{},{},{:?}",
-            order.id,
+            order.order_id,
             order.user_id,
             side_str,
             type_str,

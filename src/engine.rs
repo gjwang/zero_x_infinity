@@ -106,8 +106,8 @@ impl MatchingEngine {
 
                     // Record pending trade
                     pending_trades.push(PendingTrade {
-                        buyer_order_id: buy_order.id,
-                        seller_order_id: sell_order.id,
+                        buyer_order_id: buy_order.order_id,
+                        seller_order_id: sell_order.order_id,
                         buyer_user_id: buy_order.user_id,
                         seller_user_id: sell_order.user_id,
                         price: trade_price,
@@ -170,8 +170,8 @@ impl MatchingEngine {
 
                     // Record pending trade
                     pending_trades.push(PendingTrade {
-                        buyer_order_id: buy_order.id,
-                        seller_order_id: sell_order.id,
+                        buyer_order_id: buy_order.order_id,
+                        seller_order_id: sell_order.order_id,
                         buyer_user_id: buy_order.user_id,
                         seller_user_id: sell_order.user_id,
                         price: trade_price,

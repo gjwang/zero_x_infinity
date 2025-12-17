@@ -285,7 +285,7 @@ mod tests {
         let msg = OrderMessage::new(1, order, 1234567890);
 
         assert_eq!(msg.seq_id, 1);
-        assert_eq!(msg.order.id, 1);
+        assert_eq!(msg.order.order_id, 1);
         assert_eq!(msg.timestamp_ns, 1234567890);
     }
 
