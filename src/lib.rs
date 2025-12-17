@@ -17,6 +17,7 @@
 //! - [`ledger`] - Settlement audit log
 //! - [`perf`] - Performance metrics
 //! - [`csv_io`] - CSV loading/saving
+//! - [`pipeline`] - Ring Buffer based service pipeline
 
 // Core types - must be first!
 pub mod core_types;
@@ -51,3 +52,9 @@ pub use symbol_manager::{SymbolInfo, SymbolManager};
 pub use ubscore::UBSCore;
 pub use user_account::UserAccount;
 pub use wal::{WalConfig, WalWriter};
+
+// Pipeline re-exports
+pub use pipeline::{
+    PipelineQueues, PipelineStats, PipelineStatsSnapshot, SequencedOrder, ShutdownSignal,
+    SingleThreadPipeline,
+};

@@ -98,7 +98,7 @@ for order in orders:
 
 ## 3. 实现步骤
 
-### Phase 1: 定义 Ring Buffer 模块
+### Phase 1: 定义 Ring Buffer 模块 ✅ 已完成
 
 创建 `src/pipeline.rs`：
 
@@ -106,33 +106,44 @@ for order in orders:
 use crossbeam_queue::ArrayQueue;
 use std::sync::Arc;
 
-/// Pipeline 的 Ring Buffer 容量配置
-pub const ORDER_QUEUE_CAPACITY: usize = 1024;
-pub const VALID_ORDER_QUEUE_CAPACITY: usize = 1024;
-pub const TRADE_QUEUE_CAPACITY: usize = 4096;  // 1 order may generate multiple trades
+/// Pipeline 的 Ring Buffer 容量配置 (已实现)
+pub const ORDER_QUEUE_CAPACITY: usize = 4096;
+pub const VALID_ORDER_QUEUE_CAPACITY: usize = 4096;
+pub const TRADE_QUEUE_CAPACITY: usize = 16384;  // 1 order may generate multiple trades
 
-/// Pipeline 共享的 Ring Buffers
+/// Pipeline 共享的 Ring Buffers (已实现)
 pub struct PipelineQueues {
-    /// Input orders → UBSCore
-    pub order_queue: Arc<ArrayQueue<InputOrder>>,
-    
-    /// UBSCore → ME (validated orders with locked balance)
+    pub order_queue: Arc<ArrayQueue<SequencedOrder>>,
     pub valid_order_queue: Arc<ArrayQueue<ValidOrder>>,
-    
-    /// ME → Settlement + UBSCore (trade events)
     pub trade_queue: Arc<ArrayQueue<TradeEvent>>,
 }
 
-impl PipelineQueues {
-    pub fn new() -> Self {
-        Self {
-            order_queue: Arc::new(ArrayQueue::new(ORDER_QUEUE_CAPACITY)),
-            valid_order_queue: Arc::new(ArrayQueue::new(VALID_ORDER_QUEUE_CAPACITY)),
-            trade_queue: Arc::new(ArrayQueue::new(TRADE_QUEUE_CAPACITY)),
-        }
-    }
+/// Pipeline 统计 (已实现)
+pub struct PipelineStats {
+    pub orders_ingested: AtomicU64,
+    pub orders_accepted: AtomicU64,
+    pub orders_rejected: AtomicU64,
+    pub trades_generated: AtomicU64,
+    pub trades_settled: AtomicU64,
+    pub backpressure_events: AtomicU64,
+}
+
+/// 单线程 Pipeline Runner (已实现)
+pub struct SingleThreadPipeline {
+    pub queues: PipelineQueues,
+    pub stats: Arc<PipelineStats>,
+    pub shutdown: Arc<ShutdownSignal>,
 }
 ```
+
+**已实现功能**：
+- ✅ `PipelineQueues` - 三个 Ring Buffer
+- ✅ `SequencedOrder` - 带序号的订单
+- ✅ `PipelineStats` - 原子统计计数
+- ✅ `ShutdownSignal` - 优雅关闭信号
+- ✅ `SingleThreadPipeline` - 单线程 Pipeline Runner
+- ✅ `push_with_backpressure()` - 带背压的推送
+- ✅ 10 个单元测试
 
 ### Phase 2: 定义 Worker Traits
 
@@ -340,11 +351,28 @@ cargo run --release -- --pipeline # Pipeline 并行
 
 ---
 
+## 进度追踪
+
+| Phase | 任务 | 状态 |
+|-------|------|------|
+| 1 | 创建 `src/pipeline.rs` | ✅ |
+| 1 | 实现 `PipelineQueues` | ✅ |
+| 1 | 实现 `SequencedOrder` | ✅ |
+| 1 | 实现 `PipelineStats` | ✅ |
+| 1 | 实现 `SingleThreadPipeline` | ✅ |
+| 2 | 定义 Worker Traits | ⏳ |
+| 3 | 实现单线程 Pipeline 完整流程 | ⏳ |
+| 3 | 验证正确性（baseline 对比） | ⏳ |
+| 4 | 实现多线程 Pipeline | ⏳ |
+| 4 | 性能测试 | ⏳ |
+
 ## 下一步
 
-1. 创建 `src/pipeline.rs`
-2. 实现 `PipelineQueues`
-3. 实现单线程 Pipeline
-4. 验证正确性
-5. 实现多线程 Pipeline
-6. 性能测试
+1. ~~创建 `src/pipeline.rs`~~ ✅
+2. ~~实现 `PipelineQueues`~~ ✅
+3. ~~实现单线程 Pipeline 基础框架~~ ✅
+4. **实现完整单线程 Pipeline 处理循环**
+5. 验证正确性
+6. 实现多线程 Pipeline
+7. 性能测试
+
