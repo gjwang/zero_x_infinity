@@ -16,7 +16,7 @@ FAILED=0
 
 for file in t1_balances_deposited.csv t2_balances_final.csv t2_ledger.csv t2_orderbook.csv; do
     echo -n "  $file: "
-    if diff -q "baseline/$file" "output/$file" > /dev/null 2>&1; then
+    if diff -q "baseline/default/$file" "output/$file" > /dev/null 2>&1; then
         echo "✅ MATCH"
     else
         echo "❌ MISMATCH"
@@ -32,6 +32,6 @@ else
     echo "❌ Some tests failed!"
     echo ""
     echo "To see differences:"
-    echo "  diff -r baseline/ output/"
+    echo "  diff -r baseline/default/ output/"
     exit 1
 fi

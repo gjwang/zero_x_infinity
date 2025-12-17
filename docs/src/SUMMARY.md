@@ -8,12 +8,14 @@
 - [0x04 Orderbook数据结构重构 (BTree OrderBook)](./0x04-btree-orderbook.md)
 - [0x05 用户账户与余额管理 (User Balance)](./0x05-user-balance.md)
 - [0x06 强制余额管理 (Enforced Balance)](./0x06-enforced-balance.md)
-- [0x07a 测试框架 (Testing Framework)](./0x07a-testing-framework.md)
-- [0x07b 性能基线 (Performance Baseline)](./0x07b-perf-baseline.md)
-- [0x08a 交易流水线设计 (Trading Pipeline Design)](./0x08a-trading-pipeline-design.md)
-- [0x08b UBSCore 实现 (UBSCore Implementation)](./0x08b-ubscore-implementation.md)
-- [0x08c 完整事件流 (Complete Event Flow)](./0x08c-ring-buffer-pipeline.md)
-- [0x08d 完整订单生命周期 (Complete Order Lifecycle)](./0x08d-complete-order-lifecycle.md)
+- [0x07-a 测试框架 - 正确性 (Testing Framework - Correctness)](./0x07-a-testing-framework.md)
+- [0x07-b 性能基线 - 初步建立 (Performance Baseline - Initial Setup)](./0x07-b-perf-baseline.md)
+---
+- [0x08-a 交易流水线设计 (Trading Pipeline Design)](./0x08-a-trading-pipeline-design.md)
+- [0x08-b UBSCore 实现 (UBSCore Implementation)](./0x08-b-ubscore-implementation.md)
+- [0x08-c 完整事件流 (Complete Event Flow)](./0x08-c-ring-buffer-pipeline.md)
+- [0x08-d 完整订单生命周期 (Complete Order Lifecycle)](./0x08-d-complete-order-lifecycle.md)
+- [0x08-e 撤单性能优化 (Cancel Optimization: Order Index)](./0x08-e-cancel-optimization.md)
 ---
 
 - [Performance Report (Latest)](./perf-report.md)

@@ -31,9 +31,13 @@ This is a pilgrimage from `Hello World` to `Microsecond Latency`.
 | 0x04 | [BTree OrderBook](./docs/src/0x04-btree-orderbook.md) | BTreeMap 数据结构重构 |
 | 0x05 | [User Balance](./docs/src/0x05-user-balance.md) | 用户账户与余额管理 |
 | 0x06 | [Enforced Balance](./docs/src/0x06-enforced-balance.md) | 类型安全的强制余额 |
-| 0x07a | [Testing Framework](./docs/src/0x07a-testing-framework.md) | 100万订单批量测试框架 |
-| 0x07b | [Performance Baseline](./docs/src/0x07b-perf-baseline.md) | 性能基线与瓶颈分析 |
-| 0x08 | [Order WAL Persistence](./docs/src/0x08-order-wal-persistence.md) | 订单WAL持久化与单线程架构 |
+| 0x07-a | [Testing Framework](./docs/src/0x07-a-testing-framework.md) | 100万订单批量测试框架 |
+| 0x07-b | [Performance Baseline](./docs/src/0x07-b-perf-baseline.md) | 性能基线与瓶颈分析 |
+| 0x08-a | [Trading Pipeline Design](./docs/src/0x08-a-trading-pipeline-design.md) | 交易流水线设计 |
+| 0x08-b | [UBSCore Implementation](./docs/src/0x08-b-ubscore-implementation.md) | UBSCore 实现 |
+| 0x08-c | [Complete Event Flow](./docs/src/0x08-c-ring-buffer-pipeline.md) | 完整事件流 |
+| 0x08-d | [Complete Order Lifecycle](./docs/src/0x08-d-complete-order-lifecycle.md) | 完整订单生命周期 |
+| 0x08-e | [Cancel Optimization](./docs/src/0x08-e-cancel-optimization.md) | 撤单性能优化：Order Index |
 
 ---
 
