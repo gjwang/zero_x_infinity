@@ -781,17 +781,12 @@ fn main() {
             result.accepted, result.rejected, result.total_trades
         );
 
-        // Note: In multi-thread mode, we don't have access to final ubscore/book/ledger
-        // They are consumed by the threads. We return empty accounts for now.
-        // In production, the threads would return these back.
-        let empty_accounts = rustc_hash::FxHashMap::default();
-
         (
             result.accepted,
             result.rejected,
             result.total_trades,
             PerfMetrics::default(), // Multi-thread mode doesn't track perf yet
-            empty_accounts,
+            result.final_accounts,
             None, // OrderBook consumed by threads
         )
     } else if pipeline_mode {

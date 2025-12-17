@@ -50,6 +50,8 @@ use crate::pipeline::{
 };
 use crate::symbol_manager::SymbolManager;
 use crate::ubscore::UBSCore;
+use crate::user_account::UserAccount;
+use rustc_hash::FxHashMap;
 
 // ============================================================
 // MULTI-THREAD PIPELINE RESULT
@@ -61,6 +63,8 @@ pub struct MultiThreadPipelineResult {
     pub rejected: u64,
     pub total_trades: u64,
     pub stats: Arc<PipelineStats>,
+    /// Final accounts after all processing (for verification)
+    pub final_accounts: FxHashMap<u64, UserAccount>,
 }
 
 // ============================================================
@@ -697,7 +701,7 @@ pub fn run_pipeline_multi_thread(
     shutdown.request_shutdown();
 
     // Wait for all threads
-    let _final_ubscore = t2_ubscore.join().expect("UBSCore thread panicked");
+    let final_ubscore = t2_ubscore.join().expect("UBSCore thread panicked");
     let _final_book = t3_me.join().expect("ME thread panicked");
     let _final_ledger = t4_settlement.join().expect("Settlement thread panicked");
 
@@ -712,6 +716,7 @@ pub fn run_pipeline_multi_thread(
             .trades_generated
             .load(std::sync::atomic::Ordering::Relaxed),
         stats,
+        final_accounts: final_ubscore.accounts().clone(),
     }
 }
 
