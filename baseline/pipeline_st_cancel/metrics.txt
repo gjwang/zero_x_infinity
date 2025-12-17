@@ -1,0 +1,7 @@
+# Single-Thread Pipeline Baseline
+# Dataset: 1.3M with cancel
+# Input: fixtures/test_with_cancel
+# Generated: 2025-12-17T11:43:16Z
+accepted=903107
+rejected=96893
+trades=538487

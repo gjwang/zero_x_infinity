@@ -697,7 +697,16 @@ pub fn run_pipeline_multi_thread(
     // Wait for ingestion to complete
     t1_ingestion.join().expect("Ingestion thread panicked");
 
-    // Signal shutdown (will drain queues first)
+    // Wait for all processing queues to drain before signaling shutdown
+    // This ensures all orders are fully processed through the pipeline
+    loop {
+        if queues.all_empty() {
+            break;
+        }
+        std::hint::spin_loop();
+    }
+
+    // Now signal shutdown (all threads should notice queues empty and exit)
     shutdown.request_shutdown();
 
     // Wait for all threads
