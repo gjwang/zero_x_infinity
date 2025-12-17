@@ -26,7 +26,7 @@
 
 ---
 
-## 2. Order Index 优化（第一次修复）
+## 2. Order Index 优化（第一次优化）
 
 ### 2.1 问题
 
@@ -100,13 +100,13 @@ pub fn remove_order_by_id(&mut self, order_id: u64) -> Option<InternalOrder> {
 | 吞吐量 | ~3k ops/s | **15k ops/s** |
 | 提升 | - | **5x** |
 
-**初步成功！** 但 87s 处理 130万订单仍然偏慢。需要进一步分析。
+**提升巨大！** 但 87s 处理 130万订单仍然很慢。需要继续分析。
 
 ---
 
 ## 3. 架构级 Profiling（定位真正瓶颈）
 
-### 3.1 正确的 Profiling 方法
+### 3.1 Profiling 设计
 
 按照订单生命周期的顶层架构分阶段计时：
 
@@ -154,7 +154,7 @@ pub struct PerfMetrics {
 }
 ```
 
-## 4. Matching Engine 优化（第二次修复）
+## 4. Matching Engine 优化（第二次优化）
 
 ### 4.1 问题定位
 
@@ -266,5 +266,5 @@ Total Tracked:     17864.33ms
 
 ---
 
-**优化完成！从 7 分钟到 18 秒，吞吐量提升 24 倍！** �
+**本次优化先到此为止！从 7 分钟到 18 秒，吞吐量提升 24 倍！** �
 
