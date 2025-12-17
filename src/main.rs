@@ -32,6 +32,7 @@ use zero_x_infinity::messages::{BalanceEvent, OrderEvent, TradeEvent};
 use zero_x_infinity::models::{InternalOrder, OrderStatus, OrderType, Side};
 use zero_x_infinity::orderbook::OrderBook;
 use zero_x_infinity::perf::PerfMetrics;
+use zero_x_infinity::pipeline_runner::run_pipeline_single_thread;
 use zero_x_infinity::symbol_manager::SymbolManager;
 use zero_x_infinity::ubscore::UBSCore;
 use zero_x_infinity::user_account::UserAccount;
@@ -625,12 +626,19 @@ fn use_ubscore_mode() -> bool {
     std::env::args().any(|a| a == "--ubscore")
 }
 
+fn use_pipeline_mode() -> bool {
+    std::env::args().any(|a| a == "--pipeline")
+}
+
 fn main() {
     let output_dir = get_output_dir();
     let input_dir = get_input_dir();
     let ubscore_mode = use_ubscore_mode();
+    let pipeline_mode = use_pipeline_mode();
 
-    if ubscore_mode {
+    if pipeline_mode {
+        println!("=== 0xInfinity: Chapter 8f - Ring Buffer Pipeline ===");
+    } else if ubscore_mode {
         println!("=== 0xInfinity: Chapter 8b - UBSCore Pipeline ===");
     } else {
         println!("=== 0xInfinity: Chapter 7 - Testing Framework ===");
@@ -700,7 +708,75 @@ fn main() {
     let base_id = symbol_info.base_asset_id;
     let quote_id = symbol_info.quote_asset_id;
 
-    let (accepted, rejected, total_trades, perf, final_accounts) = if ubscore_mode {
+    let (accepted, rejected, total_trades, perf, final_accounts) = if pipeline_mode {
+        println!("    Using Ring Buffer Pipeline (Single Thread)...");
+
+        // Create UBSCore and initialize with deposits
+        let wal_config = WalConfig {
+            path: wal_path.clone(),
+            flush_interval_entries: 100,
+            sync_on_flush: false,
+        };
+
+        let mut ubscore =
+            UBSCore::new(symbol_mgr.clone(), wal_config).expect("Failed to create UBSCore");
+
+        // Transfer initial balances to UBSCore via deposit()
+        let mut deposit_count = 0u64;
+        for (user_id, account) in &accounts {
+            for asset_id in [base_id, quote_id] {
+                if let Some(balance) = account.get_balance(asset_id) {
+                    if balance.avail() > 0 {
+                        ubscore
+                            .deposit(*user_id, asset_id, balance.avail())
+                            .unwrap();
+
+                        // Record Deposit event
+                        if let Some(b) = ubscore.get_balance(*user_id, asset_id) {
+                            deposit_count += 1;
+                            let deposit_event = BalanceEvent::deposit(
+                                *user_id,
+                                asset_id,
+                                deposit_count,
+                                balance.avail(),
+                                b.lock_version(),
+                                b.avail(),
+                                b.frozen(),
+                            );
+                            ledger.write_balance_event(&deposit_event);
+                        }
+                    }
+                }
+            }
+        }
+        println!("    Recorded {} deposit events", deposit_count);
+
+        // Run pipeline
+        let result = run_pipeline_single_thread(
+            &orders,
+            &mut ubscore,
+            &mut book,
+            &mut ledger,
+            &symbol_mgr,
+            active_symbol_id,
+        );
+
+        // Get final accounts from UBSCore
+        let final_accs = ubscore.accounts().clone();
+
+        // Print stats
+        let (wal_entries, wal_bytes) = ubscore.wal_stats();
+        println!("    WAL: {} entries, {} bytes", wal_entries, wal_bytes);
+        println!("    Pipeline: {}", result.pipeline_stats);
+
+        (
+            result.accepted,
+            result.rejected,
+            result.total_trades,
+            result.perf,
+            final_accs,
+        )
+    } else if ubscore_mode {
         println!("    Using UBSCore pipeline (WAL + Balance Lock)...");
 
         // Create UBSCore and initialize with deposits
