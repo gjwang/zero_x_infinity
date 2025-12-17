@@ -30,7 +30,7 @@ use crossbeam_queue::ArrayQueue;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use crate::messages::{RejectReason, TradeEvent, ValidOrder};
+use crate::messages::{BalanceEvent, RejectReason, TradeEvent, ValidOrder};
 use crate::models::InternalOrder;
 
 // ============================================================
@@ -458,116 +458,8 @@ impl BalanceUpdateRequest {
     }
 }
 
-// ============================================================
-// BALANCE EVENT (UBSCore → Settlement)
-// ============================================================
-
-/// Balance change event for persistence
-///
-/// This represents ALL balance changes that UBSCore performs.
-/// Settlement thread receives these events and persists them to DB/Ledger.
-///
-/// Event types:
-/// - External: Deposit, Withdraw
-/// - Pre-Trade: Lock
-/// - Post-Trade: SpendFrozen, Credit
-/// - Cancel/Reject: Unlock
-/// - Price Improvement: RefundFrozen
-#[derive(Debug, Clone)]
-pub struct BalanceEvent {
-    /// User ID
-    pub user_id: u64,
-    /// Asset ID
-    pub asset_id: u32,
-    /// Event type
-    pub event_type: BalanceEventType,
-    /// Amount changed
-    pub amount: u64,
-    /// Related order ID (if applicable)
-    pub order_id: Option<u64>,
-    /// Related trade ID (if applicable)
-    pub trade_id: Option<u64>,
-    /// Balance version after this change
-    pub version: u64,
-    /// Available balance after this change
-    pub avail_after: u64,
-    /// Frozen balance after this change
-    pub frozen_after: u64,
-    /// Timestamp (nanoseconds)
-    pub timestamp_ns: u64,
-}
-
-/// Balance event type - covers all balance change scenarios
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BalanceEventType {
-    // === External Operations ===
-    /// Deposit: avail += amount
-    Deposit,
-    /// Withdraw: avail -= amount
-    Withdraw,
-
-    // === Pre-Trade (Order Placement) ===
-    /// Lock: avail -= amount, frozen += amount
-    Lock,
-
-    // === Post-Trade (Settlement) ===
-    /// SpendFrozen: frozen -= amount (buyer spends quote, seller spends base)
-    SpendFrozen,
-    /// Credit: avail += amount (buyer receives base, seller receives quote)
-    Credit,
-
-    // === Cancel/Reject ===
-    /// Unlock: frozen -= amount, avail += amount
-    Unlock,
-
-    // === Price Improvement ===
-    /// RefundFrozen: frozen -= amount, avail += amount (better fill price)
-    RefundFrozen,
-}
-
-impl BalanceEvent {
-    /// Create a new balance event
-    pub fn new(
-        user_id: u64,
-        asset_id: u32,
-        event_type: BalanceEventType,
-        amount: u64,
-        version: u64,
-        avail_after: u64,
-        frozen_after: u64,
-    ) -> Self {
-        Self {
-            user_id,
-            asset_id,
-            event_type,
-            amount,
-            order_id: None,
-            trade_id: None,
-            version,
-            avail_after,
-            frozen_after,
-            timestamp_ns: 0,
-        }
-    }
-
-    /// Set order ID
-    pub fn with_order_id(mut self, order_id: u64) -> Self {
-        self.order_id = Some(order_id);
-        self
-    }
-
-    /// Set trade ID
-    pub fn with_trade_id(mut self, trade_id: u64) -> Self {
-        self.trade_id = Some(trade_id);
-        self
-    }
-
-    /// Set timestamp
-    pub fn with_timestamp(mut self, timestamp_ns: u64) -> Self {
-        self.timestamp_ns = timestamp_ns;
-        self
-    }
-}
+// Note: BalanceEvent is now imported from messages module for unified type
+// Use messages::BalanceEvent::lock(), unlock(), settle_spend(), settle_receive() etc.
 
 impl MultiThreadQueues {
     /// Create new multi-thread queues with default capacities

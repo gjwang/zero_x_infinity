@@ -41,12 +41,12 @@ use std::time::Instant;
 use crate::csv_io::InputOrder;
 use crate::engine::MatchingEngine;
 use crate::ledger::{LedgerEntry, LedgerWriter};
-use crate::messages::TradeEvent;
+use crate::messages::{BalanceEvent, TradeEvent};
 use crate::models::{InternalOrder, OrderStatus, OrderType, Side};
 use crate::orderbook::OrderBook;
 use crate::pipeline::{
-    BalanceEvent, BalanceEventType, BalanceUpdateRequest, MultiThreadQueues, OrderAction,
-    PipelineStats, PriceImprovement, SequencedOrder, ShutdownSignal, ValidAction,
+    BalanceUpdateRequest, MultiThreadQueues, OrderAction, PipelineStats, PriceImprovement,
+    SequencedOrder, ShutdownSignal, ValidAction,
 };
 use crate::symbol_manager::SymbolManager;
 use crate::ubscore::UBSCore;
@@ -202,16 +202,16 @@ pub fn run_pipeline_multi_thread(
                                 if let Some(balance) = ubscore.get_balance(user_id, lock_asset) {
                                     let lock_amount = order.calculate_cost(qty_unit).unwrap_or(0);
 
-                                    let event = BalanceEvent::new(
+                                    // Use messages::BalanceEvent::lock()
+                                    let event = BalanceEvent::lock(
                                         user_id,
                                         lock_asset,
-                                        BalanceEventType::Lock,
+                                        order_id, // order_seq_id
                                         lock_amount,
                                         balance.lock_version(),
                                         balance.avail(),
                                         balance.frozen(),
-                                    )
-                                    .with_order_id(order_id);
+                                    );
 
                                     push_balance_event(&ubscore_queues, event, &ubscore_stats);
                                 }
@@ -279,16 +279,15 @@ pub fn run_pipeline_multi_thread(
                             {
                                 push_balance_event(
                                     &ubscore_queues,
-                                    BalanceEvent::new(
+                                    BalanceEvent::settle_spend(
                                         trade.buyer_user_id,
                                         trade_event.quote_asset_id,
-                                        BalanceEventType::SpendFrozen,
+                                        trade_id,
                                         quote_amount,
                                         balance.settle_version(),
                                         balance.avail(),
                                         balance.frozen(),
-                                    )
-                                    .with_trade_id(trade_id),
+                                    ),
                                     &ubscore_stats,
                                 );
                             }
@@ -297,16 +296,15 @@ pub fn run_pipeline_multi_thread(
                             {
                                 push_balance_event(
                                     &ubscore_queues,
-                                    BalanceEvent::new(
+                                    BalanceEvent::settle_receive(
                                         trade.buyer_user_id,
                                         trade_event.base_asset_id,
-                                        BalanceEventType::Credit,
+                                        trade_id,
                                         trade.qty,
                                         balance.settle_version(),
                                         balance.avail(),
                                         balance.frozen(),
-                                    )
-                                    .with_trade_id(trade_id),
+                                    ),
                                     &ubscore_stats,
                                 );
                             }
@@ -318,16 +316,15 @@ pub fn run_pipeline_multi_thread(
                             {
                                 push_balance_event(
                                     &ubscore_queues,
-                                    BalanceEvent::new(
+                                    BalanceEvent::settle_spend(
                                         trade.seller_user_id,
                                         trade_event.base_asset_id,
-                                        BalanceEventType::SpendFrozen,
+                                        trade_id,
                                         trade.qty,
                                         balance.settle_version(),
                                         balance.avail(),
                                         balance.frozen(),
-                                    )
-                                    .with_trade_id(trade_id),
+                                    ),
                                     &ubscore_stats,
                                 );
                             }
@@ -336,16 +333,15 @@ pub fn run_pipeline_multi_thread(
                             {
                                 push_balance_event(
                                     &ubscore_queues,
-                                    BalanceEvent::new(
+                                    BalanceEvent::settle_receive(
                                         trade.seller_user_id,
                                         trade_event.quote_asset_id,
-                                        BalanceEventType::Credit,
+                                        trade_id,
                                         quote_amount,
                                         balance.settle_version(),
                                         balance.avail(),
                                         balance.frozen(),
-                                    )
-                                    .with_trade_id(trade_id),
+                                    ),
                                     &ubscore_stats,
                                 );
                             }
@@ -359,16 +355,15 @@ pub fn run_pipeline_multi_thread(
                                         {
                                             push_balance_event(
                                                 &ubscore_queues,
-                                                BalanceEvent::new(
+                                                BalanceEvent::settle_restore(
                                                     pi.user_id,
                                                     pi.asset_id,
-                                                    BalanceEventType::RefundFrozen,
+                                                    trade_id,
                                                     pi.amount,
                                                     balance.lock_version(),
                                                     balance.avail(),
                                                     balance.frozen(),
-                                                )
-                                                .with_trade_id(trade_id),
+                                                ),
                                                 &ubscore_stats,
                                             );
                                         }
@@ -392,16 +387,15 @@ pub fn run_pipeline_multi_thread(
                             if let Some(balance) = ubscore.get_balance(user_id, asset_id) {
                                 push_balance_event(
                                     &ubscore_queues,
-                                    BalanceEvent::new(
+                                    BalanceEvent::unlock(
                                         user_id,
                                         asset_id,
-                                        BalanceEventType::Unlock,
+                                        order_id,
                                         unlock_amount,
                                         balance.lock_version(),
                                         balance.avail(),
                                         balance.frozen(),
-                                    )
-                                    .with_order_id(order_id),
+                                    ),
                                     &ubscore_stats,
                                 );
                             }
