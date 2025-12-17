@@ -13,7 +13,7 @@
 - [0x08a 交易流水线设计 (Trading Pipeline Design)](./0x08a-trading-pipeline-design.md)
 - [0x08b UBSCore 实现 (UBSCore Implementation)](./0x08b-ubscore-implementation.md)
 - [0x08c 完整事件流 (Complete Event Flow)](./0x08c-ring-buffer-pipeline.md)
-- [0x08d 完整订单生命周期与撤单优化教程 (Complete Order Lifecycle & Cancel Optimization)](./0x08d-complete-order-lifecycle.md)
+- [0x08d 完整订单生命周期与撤单优化 (Complete Order Lifecycle & Cancel Optimization)](./0x08d-complete-order-lifecycle.md)
 ---
 
 - [Performance Report (Latest)](./perf-report.md)
