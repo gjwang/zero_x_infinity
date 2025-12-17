@@ -1,15 +1,34 @@
-# 0x08-e 撤单优化与性能分析
+# 0x08-e 性能瓶颈定位与优化
 
-> **本章目标**：
-> 1. 实现 Order Index 优化撤单查找
-> 2. 建立正确的架构级 Profiling
-> 3. 精确定位性能瓶颈
+> **背景**：引入 Cancel 功能后，执行时间从 ~30s 暴涨到 7+ 分钟，需要定位并解决问题。
+>
+> **本章目的**：
+> 1. 建立正确的架构级 Profiling 方法
+> 2. 通过 Profiling 精确定位性能瓶颈
+> 3. 针对性修复发现的问题
+>
+> **关键点**：直觉可以指导方向，但必须用 Profiling 数据验证。
 
 ---
 
-## 1. Order Index 优化
+## 1. 问题现象
 
-### 1.1 问题
+引入 Cancel 后性能急剧下降：
+- 执行时间：~30s → 7+ 分钟
+- 吞吐量：~34k ops/s → ~3k ops/s
+
+**初始假设可能的原因：**
+- Cancel 的 O(N) 查找？
+- VecDeque 删除开销？
+- 其他未知问题？
+
+**但在 Profile 之前，这些都只是猜测。**
+
+---
+
+## 2. Order Index 优化（第一次修复）
+
+### 2.1 问题
 
 撤单操作需要在 OrderBook 中查找订单。原始实现 `remove_order_by_id` 需要遍历整个订单簿：
 
@@ -25,7 +44,7 @@ pub fn remove_order_by_id(&mut self, order_id: u64) -> Option<InternalOrder> {
 }
 ```
 
-### 1.2 解决方案
+### 2.2 解决方案
 
 引入 `order_index: FxHashMap<OrderId, (Price, Side)>` 实现 O(1) 查找：
 
@@ -38,7 +57,7 @@ pub struct OrderBook {
 }
 ```
 
-### 1.3 索引维护
+### 2.3 索引维护
 
 | 操作 | 索引动作 |
 |------|----------|
@@ -47,7 +66,7 @@ pub struct OrderBook {
 | `remove_order_by_id()` | 移除 |
 | 撮合成交 | 移除 |
 
-### 1.4 优化后实现
+### 2.4 优化后实现
 
 ```rust
 pub fn remove_order_by_id(&mut self, order_id: u64) -> Option<InternalOrder> {
@@ -75,9 +94,9 @@ pub fn remove_order_by_id(&mut self, order_id: u64) -> Option<InternalOrder> {
 
 ---
 
-## 2. 架构级 Profiling
+## 3. 架构级 Profiling（定位真正瓶颈）
 
-### 2.1 正确的 Profiling 方法
+### 3.1 正确的 Profiling 方法
 
 按照订单生命周期的顶层架构分阶段计时：
 
@@ -105,7 +124,7 @@ Order Input
 └─────────────────┘
 ```
 
-### 2.2 PerfMetrics 设计
+### 3.2 PerfMetrics 设计
 
 ```rust
 pub struct PerfMetrics {
@@ -125,9 +144,9 @@ pub struct PerfMetrics {
 }
 ```
 
-## 3. Matching Engine 优化
+## 4. Matching Engine 优化（第二次修复）
 
-### 3.1 问题定位
+### 4.1 问题定位
 
 通过架构级 Profiling 发现 Matching Engine 占用 96% 时间。深入分析发现：
 
@@ -141,7 +160,7 @@ let prices: Vec<u64> = book.asks().keys().copied().collect();
 2. 分配 Vec 存储 - 内存分配开销
 3. 再遍历 Vec 进行匹配
 
-### 3.2 优化方案
+### 4.2 优化方案
 
 使用 `BTreeMap::range()` 只收集匹配范围内的 keys：
 
@@ -157,13 +176,13 @@ let prices: Vec<u64> = book.asks().range(..=max_price).map(|(&k, _)| k).collect(
 
 ---
 
-## 4. 性能测试结果
+## 5. 性能测试结果
 
-### 4.1 测试环境
+### 5.1 测试环境
 - 数据集：130万订单（100万 Place + 30万 Cancel）
 - 机器：MacBook Pro M1
 
-### 4.2 最终 Breakdown
+### 5.2 最终 Breakdown
 
 ```
 === Performance Breakdown ===
@@ -180,7 +199,7 @@ Total Tracked:     17864.33ms
   Cancel Lookup:      87.93ms  [0.29 µs/cancel]
 ```
 
-### 4.3 优化效果
+### 5.3 优化效果
 
 | 阶段 | 优化前 | 优化后 | 提升 |
 |------|--------|--------|------|
@@ -189,7 +208,7 @@ Total Tracked:     17864.33ms
 
 ---
 
-## 5. 执行性能对比
+## 6. 执行性能对比
 
 | 版本 | 执行时间 | 吞吐量 | 改进 |
 |------|----------|--------|------|
@@ -199,22 +218,22 @@ Total Tracked:     17864.33ms
 
 ---
 
-## 6. 总结
+## 7. 总结
 
-### 6.1 优化成果
+### 7.1 优化成果
 
 | 优化 | 问题 | 解决方案 | 效果 |
 |------|------|----------|------|
 | Order Index | O(N) 撤单查找 | FxHashMap 索引 | 0.29 µs/cancel |
 | BTreeMap range | 全量 keys 复制 | range() 范围查询 | 83→15 µs/order |
 
-### 6.2 最终性能
+### 7.2 最终性能
 
 - **执行时间**: 7+ 分钟 → **18 秒** (24x 提升)
 - **吞吐量**: ~3k → **72k ops/s** (24x 提升)
 - **ME 延迟**: 83 µs → **15 µs/order** (5.6x 提升)
 
-### 6.3 设计模式
+### 7.3 设计模式
 
 ```
 ┌─────────────────────────────────────────────────────────┐
