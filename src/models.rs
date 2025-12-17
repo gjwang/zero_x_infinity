@@ -14,13 +14,18 @@ pub enum OrderType {
     Market, // Market order: execute at best avail price
 }
 
-/// Order status
+/// Order status - all possible terminal states for a persisted order
+///
+/// Per 0x08a design doc, once an order is persisted, it MUST reach
+/// one of these terminal states (never disappear or become unknown).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OrderStatus {
-    New,             // Just created
-    PartiallyFilled, // Some quantity filled
+    New,             // Just created, waiting in orderbook
+    PartiallyFilled, // Some quantity filled, rest in orderbook
     Filled,          // Fully filled
     Cancelled,       // Cancelled by user
+    Rejected,        // Rejected after persistence (e.g., balance check failed)
+    Expired,         // Expired by system (e.g., GTD order timeout)
 }
 
 // ============================================================

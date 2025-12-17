@@ -165,6 +165,13 @@ pub enum OrderEvent {
         user_id: UserId,
         unfilled_qty: u64,
     },
+
+    /// InternalOrder expired by system (e.g., GTD timeout)
+    Expired {
+        order_id: OrderId,
+        user_id: UserId,
+        unfilled_qty: u64,
+    },
 }
 
 // ============================================================
