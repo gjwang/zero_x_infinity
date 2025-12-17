@@ -28,7 +28,7 @@ use zero_x_infinity::csv_io::{
 };
 use zero_x_infinity::engine::MatchingEngine;
 use zero_x_infinity::ledger::{LedgerEntry, LedgerWriter};
-use zero_x_infinity::messages::{BalanceEvent, TradeEvent};
+use zero_x_infinity::messages::{BalanceEvent, OrderEvent, TradeEvent};
 use zero_x_infinity::models::{InternalOrder, OrderStatus, OrderType, Side};
 use zero_x_infinity::orderbook::OrderBook;
 use zero_x_infinity::perf::PerfMetrics;
@@ -48,6 +48,16 @@ fn get_output_dir() -> &'static str {
     } else {
         "output"
     }
+}
+
+fn get_input_dir() -> String {
+    let args: Vec<String> = std::env::args().collect();
+    for i in 0..args.len() {
+        if args[i] == "--input" && i + 1 < args.len() {
+            return args[i + 1].clone();
+        }
+    }
+    "fixtures".to_string()
 }
 
 // ============================================================
@@ -300,17 +310,12 @@ fn execute_orders_with_ubscore(
                     }
 
                     // 5. Log OrderEvent (Cancelled)
-                    // Note: OrderEvent enum in basic impl doesn't track seq_id for cancel, dummy 0 used
-                    // In a real system, cancel request would have its own seq_id
-                    // For now we assume cancel logic is immediate/synchronous
-                    /*
-                    // Uncomment when OrderEvent is extended and used
                     let order_event = OrderEvent::Cancelled {
-                         order_id: cancelled_order.order_id,
-                         user_id: cancelled_order.user_id,
-                         unfilled_qty: remaining_qty,
+                        order_id: cancelled_order.order_id,
+                        user_id: cancelled_order.user_id,
+                        unfilled_qty: remaining_qty,
                     };
-                    */
+                    ledger.write_order_event(&order_event);
                 }
                 // If not found, it's already filled or cancelled - ignore
             }
@@ -342,11 +347,26 @@ fn execute_orders_with_ubscore(
 
                 let valid_order = match ubscore.process_order(order) {
                     Ok(vo) => vo,
-                    Err(_reason) => {
+                    Err(reason) => {
                         rejected += 1;
+                        let reject_event = OrderEvent::Rejected {
+                            seq_id: 0,
+                            order_id: input.order_id,
+                            user_id: input.user_id,
+                            reason,
+                        };
+                        ledger.write_order_event(&reject_event);
                         continue;
                     }
                 };
+
+                // Record Accepted event
+                let accept_event = OrderEvent::Accepted {
+                    seq_id: valid_order.seq_id,
+                    order_id: input.order_id,
+                    user_id: input.user_id,
+                };
+                ledger.write_order_event(&accept_event);
 
                 // Record Lock event (after successful balance lock)
                 if let Some(b) = ubscore.get_balance(input.user_id, lock_asset_id) {
@@ -541,6 +561,42 @@ fn execute_orders_with_ubscore(
                     perf.add_ledger_time(ledger_start.elapsed().as_nanos() as u64);
                 }
 
+                // Log OrderEvent (Filled/PartialFilled)
+                if result.order.filled_qty > 0 {
+                    let avg_price = if result.trades.is_empty() {
+                        0
+                    } else {
+                        let total_value: u128 = result
+                            .trades
+                            .iter()
+                            .map(|t| (t.price as u128) * (t.qty as u128))
+                            .sum();
+                        let total_qty: u128 = result.trades.iter().map(|t| t.qty as u128).sum();
+                        if total_qty > 0 {
+                            (total_value / total_qty) as u64
+                        } else {
+                            0
+                        }
+                    };
+
+                    let event = if result.order.remaining_qty() == 0 {
+                        OrderEvent::Filled {
+                            order_id: result.order.order_id,
+                            user_id: result.order.user_id,
+                            filled_qty: result.order.filled_qty,
+                            avg_price,
+                        }
+                    } else {
+                        OrderEvent::PartialFilled {
+                            order_id: result.order.order_id,
+                            user_id: result.order.user_id,
+                            filled_qty: result.order.filled_qty,
+                            remaining_qty: result.order.remaining_qty(),
+                        }
+                    };
+                    ledger.write_order_event(&event);
+                }
+
                 total_trades += result.trades.len() as u64;
                 accepted += 1;
                 perf.add_order_latency(order_start.elapsed().as_nanos() as u64);
@@ -567,6 +623,7 @@ fn use_ubscore_mode() -> bool {
 
 fn main() {
     let output_dir = get_output_dir();
+    let input_dir = get_input_dir();
     let ubscore_mode = use_ubscore_mode();
 
     if ubscore_mode {
@@ -574,7 +631,8 @@ fn main() {
     } else {
         println!("=== 0xInfinity: Chapter 7 - Testing Framework ===");
     }
-    println!("Output directory: {}/\n", output_dir);
+    println!("Output directory: {}/", output_dir);
+    println!("Input directory: {}/\n", input_dir);
 
     let start_time = Instant::now();
 
@@ -588,6 +646,7 @@ fn main() {
     let orderbook_t2 = format!("{}/t2_orderbook.csv", output_dir);
     let ledger_path = format!("{}/t2_ledger.csv", output_dir);
     let events_path = format!("{}/t2_events.csv", output_dir); // New: BalanceEvent log
+    let order_events_path = format!("{}/t2_order_events.csv", output_dir); // New: OrderEvent log
     let summary_path = format!("{}/t2_summary.txt", output_dir);
     let wal_path = format!("{}/orders.wal", output_dir);
 
@@ -595,7 +654,7 @@ fn main() {
 
     // Step 2: Load balances
     println!("\n[2] Loading balances and depositing...");
-    let mut accounts = load_balances_and_deposit("fixtures/balances_init.csv");
+    let mut accounts = load_balances_and_deposit(&format!("{}/balances_init.csv", input_dir));
 
     // Step 3: Snapshot after deposit
     println!("\n[3] Dumping balance snapshot after deposit...");
@@ -603,7 +662,11 @@ fn main() {
 
     // Step 4: Load orders
     println!("\n[4] Loading orders...");
-    let orders = load_orders("fixtures/orders.csv", &symbol_mgr, active_symbol_id);
+    let orders = load_orders(
+        &format!("{}/orders.csv", input_dir),
+        &symbol_mgr,
+        active_symbol_id,
+    );
 
     let load_time = start_time.elapsed();
     println!("\n    Data loading completed in {:.2?}", load_time);
@@ -616,7 +679,11 @@ fn main() {
     // Enable event logging for UBSCore mode (complete event sourcing)
     if ubscore_mode {
         ledger.enable_event_logging(&events_path);
-        println!("    Event logging enabled: {}", events_path);
+        ledger.enable_order_logging(&order_events_path);
+        println!(
+            "    Event logging enabled: {}, {}",
+            events_path, order_events_path
+        );
     }
 
     // Step 6: Execute orders
