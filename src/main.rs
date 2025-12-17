@@ -148,7 +148,7 @@ fn execute_orders(
             if let Some(buyer_acc) = accounts.get(&trade.buyer_user_id) {
                 if let Some(b) = buyer_acc.get_balance(quote_id) {
                     ledger.write_entry(&LedgerEntry {
-                        trade_id: trade.id,
+                        trade_id: trade.trade_id,
                         user_id: trade.buyer_user_id,
                         asset_id: quote_id,
                         op: "debit",
@@ -158,7 +158,7 @@ fn execute_orders(
                 }
                 if let Some(b) = buyer_acc.get_balance(base_id) {
                     ledger.write_entry(&LedgerEntry {
-                        trade_id: trade.id,
+                        trade_id: trade.trade_id,
                         user_id: trade.buyer_user_id,
                         asset_id: base_id,
                         op: "credit",
@@ -181,7 +181,7 @@ fn execute_orders(
             if let Some(seller_acc) = accounts.get(&trade.seller_user_id) {
                 if let Some(b) = seller_acc.get_balance(base_id) {
                     ledger.write_entry(&LedgerEntry {
-                        trade_id: trade.id,
+                        trade_id: trade.trade_id,
                         user_id: trade.seller_user_id,
                         asset_id: base_id,
                         op: "debit",
@@ -191,7 +191,7 @@ fn execute_orders(
                 }
                 if let Some(b) = seller_acc.get_balance(quote_id) {
                     ledger.write_entry(&LedgerEntry {
-                        trade_id: trade.id,
+                        trade_id: trade.trade_id,
                         user_id: trade.seller_user_id,
                         asset_id: quote_id,
                         op: "credit",
@@ -324,7 +324,7 @@ fn execute_orders_with_ubscore(
             // Buyer ledger entries
             if let Some(b) = ubscore.get_balance(trade.buyer_user_id, quote_id) {
                 ledger.write_entry(&LedgerEntry {
-                    trade_id: trade.id,
+                    trade_id: trade.trade_id,
                     user_id: trade.buyer_user_id,
                     asset_id: quote_id,
                     op: "debit",
@@ -334,7 +334,7 @@ fn execute_orders_with_ubscore(
             }
             if let Some(b) = ubscore.get_balance(trade.buyer_user_id, base_id) {
                 ledger.write_entry(&LedgerEntry {
-                    trade_id: trade.id,
+                    trade_id: trade.trade_id,
                     user_id: trade.buyer_user_id,
                     asset_id: base_id,
                     op: "credit",
@@ -346,7 +346,7 @@ fn execute_orders_with_ubscore(
             // Seller ledger entries
             if let Some(b) = ubscore.get_balance(trade.seller_user_id, base_id) {
                 ledger.write_entry(&LedgerEntry {
-                    trade_id: trade.id,
+                    trade_id: trade.trade_id,
                     user_id: trade.seller_user_id,
                     asset_id: base_id,
                     op: "debit",
@@ -356,7 +356,7 @@ fn execute_orders_with_ubscore(
             }
             if let Some(b) = ubscore.get_balance(trade.seller_user_id, quote_id) {
                 ledger.write_entry(&LedgerEntry {
-                    trade_id: trade.id,
+                    trade_id: trade.trade_id,
                     user_id: trade.seller_user_id,
                     asset_id: quote_id,
                     op: "credit",
