@@ -177,7 +177,7 @@ impl std::error::Error for CostError {}
 /// A trade that occurred when orders matched
 #[derive(Debug, Clone)]
 pub struct Trade {
-    pub id: u64,
+    pub trade_id: u64,
     pub buyer_order_id: u64,
     pub seller_order_id: u64,
     pub buyer_user_id: u64,
@@ -188,7 +188,7 @@ pub struct Trade {
 
 impl Trade {
     pub fn new(
-        id: u64,
+        trade_id: u64,
         buyer_order_id: u64,
         seller_order_id: u64,
         buyer_user_id: u64,
@@ -197,7 +197,7 @@ impl Trade {
         qty: u64,
     ) -> Self {
         Self {
-            id,
+            trade_id,
             buyer_order_id,
             seller_order_id,
             buyer_user_id,
