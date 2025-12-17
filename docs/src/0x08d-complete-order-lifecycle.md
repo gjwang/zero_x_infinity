@@ -64,7 +64,7 @@ cancelled,5,100,,,2000,,
 *   **数据集**: `fixtures/orders.csv` (10万订单，仅 Place)。
 *   **脚本**: `scripts/test_e2e.sh`
 *   **目的**: 确保传统撮合性能不回退，验证核心正确性。
-*   **原则**: **绝对不修改原始数据文件**。
+*   **原则**: **保持基准稳定** (非必要不修改，除非格式升级或重大调整)。
 
 ### 2.2 新功能测试 (Feature Testing)
 *   **数据集**: `fixtures/test_with_cancel/orders.csv` (100万订单，含30% Cancel)。
