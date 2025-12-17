@@ -165,6 +165,42 @@ impl OrderBook {
         false
     }
 
+    /// Remove an order by ID only (searches entire book)
+    ///
+    /// Returns the removed order if found. Use this when you don't know
+    /// the price/side of the order (e.g., cancel by order_id from API).
+    ///
+    /// Complexity: O(n) where n = total orders (must search entire book)
+    pub fn remove_order_by_id(&mut self, order_id: u64) -> Option<InternalOrder> {
+        // Search bids first
+        for (key, orders) in self.bids.iter_mut() {
+            if let Some(pos) = orders.iter().position(|o| o.order_id == order_id) {
+                let order = orders.remove(pos).unwrap();
+                let price = u64::MAX - *key;
+                // Clean up empty price level
+                if orders.is_empty() {
+                    self.bids.remove(&(u64::MAX - price));
+                }
+                return Some(order);
+            }
+        }
+
+        // Search asks
+        for (key, orders) in self.asks.iter_mut() {
+            if let Some(pos) = orders.iter().position(|o| o.order_id == order_id) {
+                let order = orders.remove(pos).unwrap();
+                let price = *key;
+                // Clean up empty price level
+                if orders.is_empty() {
+                    self.asks.remove(&price);
+                }
+                return Some(order);
+            }
+        }
+
+        None
+    }
+
     /// Get all orders as a Vec (for final dump/snapshot)
     ///
     /// Returns orders in price priority order:
@@ -248,5 +284,39 @@ mod tests {
         book.rest_order(make_order(3, 101, 10, Side::Sell));
 
         assert_eq!(book.depth(), (2, 1));
+    }
+
+    #[test]
+    fn test_remove_order_by_id() {
+        let mut book = OrderBook::new();
+
+        book.rest_order(make_order(1, 100, 10, Side::Buy));
+        book.rest_order(make_order(2, 101, 20, Side::Sell));
+        book.rest_order(make_order(3, 99, 30, Side::Buy));
+
+        // Remove buy order by id only
+        let removed = book.remove_order_by_id(1);
+        assert!(removed.is_some());
+        let order = removed.unwrap();
+        assert_eq!(order.order_id, 1);
+        assert_eq!(order.price, 100);
+        assert_eq!(order.qty, 10);
+
+        // Order 1 should be gone, best bid should be 99
+        assert_eq!(book.best_bid(), Some(99));
+
+        // Remove sell order by id only
+        let removed = book.remove_order_by_id(2);
+        assert!(removed.is_some());
+        let order = removed.unwrap();
+        assert_eq!(order.order_id, 2);
+        assert_eq!(order.price, 101);
+
+        // No asks should remain
+        assert_eq!(book.best_ask(), None);
+
+        // Try to remove non-existent order
+        let removed = book.remove_order_by_id(999);
+        assert!(removed.is_none());
     }
 }
