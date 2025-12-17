@@ -406,14 +406,68 @@ Loaded 291544 events
 | Settle 版本连续性 | 每个用户-资产对内递增 | ✅ |
 | Delta 守恒 | 每笔成交的 delta 总和 = 0 | ✅ |
 | Source 类型一致性 | Lock→Order, Settle→Trade | ✅ |
+| Deposit 事件 | 正 delta + source_type=external | ✅ |
 
-#### 5.3 验收标准 ✅
+#### 5.3 Events Baseline 验证
+
+`scripts/verify_events_baseline.py` 按 canonical key 比较事件：
+
+```bash
+$ python3 scripts/verify_events_baseline.py
+
+╔════════════════════════════════════════════════════════════╗
+║     Events Baseline Verification                          ║
+╚════════════════════════════════════════════════════════════╝
+
+Loading events...
+  Output: 293544 events
+  Baseline: 293544 events
+
+Comparing by event type...
+  deposit: output=2000, baseline=2000 ✅
+  lock: output=100000, baseline=100000 ✅
+  settle: output=191544, baseline=191544 ✅
+
+╔════════════════════════════════════════════════════════════╗
+║     ✅ Events match baseline!                             ║
+╚════════════════════════════════════════════════════════════╝
+```
+
+#### 5.4 完整 E2E 测试
+
+运行 `scripts/test_ubscore_e2e.sh`：
+
+```bash
+$ bash scripts/test_ubscore_e2e.sh
+
+=== Step 1: Run with UBSCore mode ===
+...
+=== Step 2: Verify standard baselines ===
+  t1_balances_deposited.csv: ✅ MATCH
+  t2_balances_final.csv: ✅ MATCH
+  t2_orderbook.csv: ✅ MATCH
+  t2_ledger.csv: ⏭️ SKIP (legacy format, use t2_events.csv instead)
+
+=== Step 3: Verify balance events correctness ===
+  ✅ All 7 checks passed!
+
+=== Step 4: Verify events baseline ===
+  ✅ Events match baseline!
+
+╔════════════════════════════════════════════════════════════╗
+║     ✅ All UBSCore E2E tests passed!                       ║
+╚════════════════════════════════════════════════════════════╝
+```
+
+#### 5.5 验收标准 ✅
 
 - [x] 验证脚本完成
-- [x] Lock 事件数量正确
-- [x] Settle 事件数量正确
+- [x] Lock 事件数量正确 (100,000)
+- [x] Settle 事件数量正确 (191,544)
+- [x] Deposit 事件数量正确 (2,000)
 - [x] Version 连续性验证通过
 - [x] Delta 守恒验证通过
+- [x] Events baseline 匹配
 
 ---
 
