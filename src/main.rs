@@ -542,6 +542,8 @@ fn main() {
             UBSCore::new(symbol_mgr.clone(), wal_config).expect("Failed to create UBSCore");
 
         // Transfer initial balances to UBSCore via deposit()
+        // Also record Deposit events for complete audit trail
+        let mut deposit_count = 0u64;
         for (user_id, account) in &accounts {
             for asset_id in [base_id, quote_id] {
                 if let Some(balance) = account.get_balance(asset_id) {
@@ -549,10 +551,26 @@ fn main() {
                         ubscore
                             .deposit(*user_id, asset_id, balance.avail())
                             .unwrap();
+
+                        // Record Deposit event
+                        if let Some(b) = ubscore.get_balance(*user_id, asset_id) {
+                            deposit_count += 1;
+                            let deposit_event = BalanceEvent::deposit(
+                                *user_id,
+                                asset_id,
+                                deposit_count, // ref_id = deposit sequence
+                                balance.avail(),
+                                b.lock_version(),
+                                b.avail(),
+                                b.frozen(),
+                            );
+                            ledger.write_balance_event(&deposit_event);
+                        }
                     }
                 }
             }
         }
+        println!("    Recorded {} deposit events", deposit_count);
 
         let (acc, rej, trades, perf) = execute_orders_with_ubscore(
             &orders,

@@ -177,6 +177,28 @@ def verify_events(events_path: str, summary_path: str) -> tuple[bool, list[str]]
         issues.append(f"Settle events have unexpected source_types: {settle_sources}")
         print(f"❌ {issues[-1]}")
     
+    # ========================================
+    # Check 7: Deposit events (if any)
+    # ========================================
+    if deposit_events:
+        print("\n=== Check 7: Deposit events ===")
+        deposit_sources = set(e['source_type'] for e in deposit_events)
+        
+        # All deposits should have positive delta
+        positive_deposits = all(int(e['delta']) > 0 for e in deposit_events)
+        if positive_deposits:
+            print(f"✅ All deposit events have positive delta ({len(deposit_events)} deposits)")
+        else:
+            issues.append("Some deposit events have non-positive delta")
+            print(f"❌ {issues[-1]}")
+        
+        # Check source type
+        if deposit_sources == {'external'}:
+            print(f"✅ All deposit events have source_type='external'")
+        else:
+            issues.append(f"Deposit events have unexpected source_types: {deposit_sources}")
+            print(f"❌ {issues[-1]}")
+    
     return len(issues) == 0, issues
 
 
