@@ -1,13 +1,13 @@
-# 0x08b UBSCore Implementation Plan
+# 0x08-b UBSCore Implementation Plan
 
-> **分支**: `0x08b-ubscore-implementation`
+> **分支**: `0x08-b-ubscore-implementation`
 > **创建时间**: 2025-12-16
 
 ---
 
 ## 目标 (Goals)
 
-基于 0x08a 的架构设计，实现 UBSCore (User Balance Core) 服务及相关组件。
+基于 0x08-a 的架构设计，实现 UBSCore (User Balance Core) 服务及相关组件。
 
 ---
 
@@ -200,7 +200,7 @@ for trade in result.trades {
 
 ### Phase 6: 文档更新
 
-**文件**: `docs/src/0x08b-ubscore-implementation.md`
+**文件**: `docs/src/0x08-b-ubscore-implementation.md`
 
 **内容**:
 1. UBSCore 服务详解
