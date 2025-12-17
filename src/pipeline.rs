@@ -89,6 +89,162 @@ pub enum PreTradeResult {
 }
 
 // ============================================================
+// MULTI-THREAD MESSAGE TYPES
+// ============================================================
+
+/// Settlement request (ME → UBSCore)
+///
+/// After matching, ME sends this to UBSCore thread for balance settlement.
+#[derive(Debug, Clone)]
+pub struct SettleRequest {
+    /// The trade event to settle
+    pub trade_event: TradeEvent,
+    /// Price improvement refund (for limit buy orders filled at better price)
+    pub price_improvement: Option<PriceImprovement>,
+}
+
+/// Price improvement refund info
+#[derive(Debug, Clone)]
+pub struct PriceImprovement {
+    pub user_id: u64,
+    pub asset_id: u32,
+    pub amount: u64,
+}
+
+impl SettleRequest {
+    pub fn new(trade_event: TradeEvent) -> Self {
+        Self {
+            trade_event,
+            price_improvement: None,
+        }
+    }
+
+    pub fn with_price_improvement(
+        trade_event: TradeEvent,
+        user_id: u64,
+        asset_id: u32,
+        amount: u64,
+    ) -> Self {
+        Self {
+            trade_event,
+            price_improvement: Some(PriceImprovement {
+                user_id,
+                asset_id,
+                amount,
+            }),
+        }
+    }
+}
+
+/// Pipeline events for Ledger thread
+///
+/// All threads send events here for centralized logging.
+#[derive(Debug, Clone)]
+pub enum PipelineEvent {
+    /// Order accepted by UBSCore
+    OrderAccepted {
+        seq_id: u64,
+        order_id: u64,
+        user_id: u64,
+    },
+    /// Order rejected by UBSCore
+    OrderRejected {
+        order_id: u64,
+        user_id: u64,
+        reason: RejectReason,
+    },
+    /// Balance locked for order
+    BalanceLocked {
+        user_id: u64,
+        asset_id: u32,
+        seq_id: u64,
+        amount: u64,
+        version: u64,
+        avail_after: u64,
+        frozen_after: u64,
+    },
+    /// Balance unlocked (cancel)
+    BalanceUnlocked {
+        user_id: u64,
+        asset_id: u32,
+        order_id: u64,
+        amount: u64,
+        version: u64,
+        avail_after: u64,
+        frozen_after: u64,
+    },
+    /// Trade executed
+    TradeExecuted {
+        trade_id: u64,
+        buyer_order_id: u64,
+        seller_order_id: u64,
+        price: u64,
+        qty: u64,
+    },
+    /// Order filled
+    OrderFilled {
+        order_id: u64,
+        user_id: u64,
+        filled_qty: u64,
+        avg_price: u64,
+    },
+    /// Order partially filled
+    OrderPartialFilled {
+        order_id: u64,
+        user_id: u64,
+        filled_qty: u64,
+        remaining_qty: u64,
+    },
+    /// Order cancelled
+    OrderCancelled {
+        order_id: u64,
+        user_id: u64,
+        unfilled_qty: u64,
+    },
+    /// Settlement: spend frozen
+    SettleSpend {
+        user_id: u64,
+        asset_id: u32,
+        trade_id: u64,
+        amount: u64,
+        version: u64,
+        avail_after: u64,
+        frozen_after: u64,
+    },
+    /// Settlement: receive
+    SettleReceive {
+        user_id: u64,
+        asset_id: u32,
+        trade_id: u64,
+        amount: u64,
+        version: u64,
+        avail_after: u64,
+        frozen_after: u64,
+    },
+    /// Settlement: restore (price improvement refund)
+    SettleRestore {
+        user_id: u64,
+        asset_id: u32,
+        trade_id: u64,
+        amount: u64,
+        version: u64,
+        avail_after: u64,
+        frozen_after: u64,
+    },
+    /// Ledger entry (for t2_ledger.csv)
+    LedgerEntry {
+        trade_id: u64,
+        user_id: u64,
+        asset_id: u32,
+        op: &'static str, // "credit" or "debit"
+        delta: u64,
+        balance_after: u64,
+    },
+    /// Shutdown signal
+    Shutdown,
+}
+
+// ============================================================
 // PIPELINE QUEUES (Shared between threads)
 // ============================================================
 
@@ -141,6 +297,73 @@ impl PipelineQueues {
 }
 
 impl Default for PipelineQueues {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ============================================================
+// MULTI-THREAD QUEUE CAPACITIES
+// ============================================================
+
+/// Capacity for settle request queue (ME → UBSCore)
+pub const SETTLE_REQUEST_QUEUE_CAPACITY: usize = 16384;
+
+/// Capacity for event queue (All → Ledger)
+pub const EVENT_QUEUE_CAPACITY: usize = 65536;
+
+// ============================================================
+// MULTI-THREAD QUEUES
+// ============================================================
+
+/// Extended queues for multi-threaded pipeline
+///
+/// Includes all base queues plus additional queues for:
+/// - Settle requests (ME → UBSCore)
+/// - Pipeline events (All → Ledger)
+pub struct MultiThreadQueues {
+    /// Orders from ingestion → UBSCore
+    pub order_queue: Arc<ArrayQueue<SequencedOrder>>,
+
+    /// Valid orders from UBSCore → ME
+    pub valid_order_queue: Arc<ArrayQueue<ValidOrder>>,
+
+    /// Trade events from ME (for stats tracking)
+    pub trade_queue: Arc<ArrayQueue<TradeEvent>>,
+
+    /// Settle requests from ME → UBSCore
+    ///
+    /// After matching, ME sends settle requests to UBSCore thread.
+    pub settle_request_queue: Arc<ArrayQueue<SettleRequest>>,
+
+    /// Pipeline events from all threads → Ledger thread
+    ///
+    /// Centralized event logging.
+    pub event_queue: Arc<ArrayQueue<PipelineEvent>>,
+}
+
+impl MultiThreadQueues {
+    /// Create new multi-thread queues with default capacities
+    pub fn new() -> Self {
+        Self {
+            order_queue: Arc::new(ArrayQueue::new(ORDER_QUEUE_CAPACITY)),
+            valid_order_queue: Arc::new(ArrayQueue::new(VALID_ORDER_QUEUE_CAPACITY)),
+            trade_queue: Arc::new(ArrayQueue::new(TRADE_QUEUE_CAPACITY)),
+            settle_request_queue: Arc::new(ArrayQueue::new(SETTLE_REQUEST_QUEUE_CAPACITY)),
+            event_queue: Arc::new(ArrayQueue::new(EVENT_QUEUE_CAPACITY)),
+        }
+    }
+
+    /// Check if all processing queues are empty (for shutdown)
+    pub fn all_empty(&self) -> bool {
+        self.order_queue.is_empty()
+            && self.valid_order_queue.is_empty()
+            && self.trade_queue.is_empty()
+            && self.settle_request_queue.is_empty()
+    }
+}
+
+impl Default for MultiThreadQueues {
     fn default() -> Self {
         Self::new()
     }

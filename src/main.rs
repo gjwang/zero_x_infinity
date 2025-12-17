@@ -32,6 +32,7 @@ use zero_x_infinity::messages::{BalanceEvent, OrderEvent, TradeEvent};
 use zero_x_infinity::models::{InternalOrder, OrderStatus, OrderType, Side};
 use zero_x_infinity::orderbook::OrderBook;
 use zero_x_infinity::perf::PerfMetrics;
+use zero_x_infinity::pipeline_mt::run_pipeline_multi_thread;
 use zero_x_infinity::pipeline_runner::run_pipeline_single_thread;
 use zero_x_infinity::symbol_manager::SymbolManager;
 use zero_x_infinity::ubscore::UBSCore;
@@ -630,13 +631,20 @@ fn use_pipeline_mode() -> bool {
     std::env::args().any(|a| a == "--pipeline")
 }
 
+fn use_pipeline_mt_mode() -> bool {
+    std::env::args().any(|a| a == "--pipeline-mt")
+}
+
 fn main() {
     let output_dir = get_output_dir();
     let input_dir = get_input_dir();
     let ubscore_mode = use_ubscore_mode();
     let pipeline_mode = use_pipeline_mode();
+    let pipeline_mt_mode = use_pipeline_mt_mode();
 
-    if pipeline_mode {
+    if pipeline_mt_mode {
+        println!("=== 0xInfinity: Chapter 8g - Multi-Thread Pipeline ===");
+    } else if pipeline_mode {
         println!("=== 0xInfinity: Chapter 8f - Ring Buffer Pipeline ===");
     } else if ubscore_mode {
         println!("=== 0xInfinity: Chapter 8b - UBSCore Pipeline ===");
@@ -707,8 +715,82 @@ fn main() {
         .expect("Active symbol not found");
     let base_id = symbol_info.base_asset_id;
     let quote_id = symbol_info.quote_asset_id;
+    let (accepted, rejected, total_trades, perf, final_accounts, final_book) = if pipeline_mt_mode {
+        println!("    Using Multi-Thread Pipeline (4 threads)...");
 
-    let (accepted, rejected, total_trades, perf, final_accounts) = if pipeline_mode {
+        // Create UBSCore and initialize with deposits
+        let wal_config = WalConfig {
+            path: wal_path.clone(),
+            flush_interval_entries: 100,
+            sync_on_flush: false,
+        };
+
+        let mut ubscore =
+            UBSCore::new(symbol_mgr.clone(), wal_config).expect("Failed to create UBSCore");
+
+        // Transfer initial balances to UBSCore via deposit()
+        let mut deposit_count = 0u64;
+        for (user_id, account) in &accounts {
+            for asset_id in [base_id, quote_id] {
+                if let Some(balance) = account.get_balance(asset_id) {
+                    if balance.avail() > 0 {
+                        ubscore
+                            .deposit(*user_id, asset_id, balance.avail())
+                            .unwrap();
+
+                        // Record Deposit event
+                        if let Some(b) = ubscore.get_balance(*user_id, asset_id) {
+                            deposit_count += 1;
+                            let deposit_event = BalanceEvent::deposit(
+                                *user_id,
+                                asset_id,
+                                deposit_count,
+                                balance.avail(),
+                                b.lock_version(),
+                                b.avail(),
+                                b.frozen(),
+                            );
+                            ledger.write_balance_event(&deposit_event);
+                        }
+                    }
+                }
+            }
+        }
+        println!("    Recorded {} deposit events", deposit_count);
+
+        // Clone orders for multi-thread (takes ownership)
+        let orders_owned: Vec<_> = orders.iter().cloned().collect();
+
+        // Run multi-threaded pipeline (consumes ubscore, book, ledger)
+        let result = run_pipeline_multi_thread(
+            orders_owned,
+            ubscore,
+            book,
+            ledger,
+            &symbol_mgr,
+            active_symbol_id,
+        );
+
+        // Print stats
+        println!(
+            "    Pipeline: accepted={}, rejected={}, trades={}",
+            result.accepted, result.rejected, result.total_trades
+        );
+
+        // Note: In multi-thread mode, we don't have access to final ubscore/book/ledger
+        // They are consumed by the threads. We return empty accounts for now.
+        // In production, the threads would return these back.
+        let empty_accounts = rustc_hash::FxHashMap::default();
+
+        (
+            result.accepted,
+            result.rejected,
+            result.total_trades,
+            PerfMetrics::default(), // Multi-thread mode doesn't track perf yet
+            empty_accounts,
+            None, // OrderBook consumed by threads
+        )
+    } else if pipeline_mode {
         println!("    Using Ring Buffer Pipeline (Single Thread)...");
 
         // Create UBSCore and initialize with deposits
@@ -775,6 +857,7 @@ fn main() {
             result.total_trades,
             result.perf,
             final_accs,
+            Some(book),
         )
     } else if ubscore_mode {
         println!("    Using UBSCore pipeline (WAL + Balance Lock)...");
@@ -836,7 +919,7 @@ fn main() {
         let (wal_entries, wal_bytes) = ubscore.wal_stats();
         println!("    WAL: {} entries, {} bytes", wal_entries, wal_bytes);
 
-        (acc, rej, trades, perf, final_accs)
+        (acc, rej, trades, perf, final_accs, Some(book))
     } else {
         let (acc, rej, trades, perf) = execute_orders(
             &orders,
@@ -846,7 +929,7 @@ fn main() {
             &symbol_mgr,
             active_symbol_id,
         );
-        (acc, rej, trades, perf, accounts)
+        (acc, rej, trades, perf, accounts, Some(book))
     };
 
     let exec_time = exec_start.elapsed();
@@ -854,7 +937,11 @@ fn main() {
     // Step 7: Dump final state
     println!("\n[7] Dumping final state...");
     dump_balances(&final_accounts, &symbol_mgr, active_symbol_id, &balances_t2);
-    dump_orderbook_snapshot(&book, &orderbook_t2);
+    if let Some(ref book) = final_book {
+        dump_orderbook_snapshot(book, &orderbook_t2);
+    } else {
+        println!("    (OrderBook not available in multi-thread mode)");
+    }
 
     // Step 8: Summary
     let total_time = start_time.elapsed();
@@ -898,10 +985,10 @@ Samples: {}
         exec_time,
         orders_per_sec,
         trades_per_sec,
-        book.best_bid(),
-        book.best_ask(),
-        book.depth().0,
-        book.depth().1,
+        final_book.as_ref().map(|b| b.best_bid()).unwrap_or(None),
+        final_book.as_ref().map(|b| b.best_ask()).unwrap_or(None),
+        final_book.as_ref().map(|b| b.depth().0).unwrap_or(0),
+        final_book.as_ref().map(|b| b.depth().1).unwrap_or(0),
         total_time,
         perf.breakdown(),
         perf.min_latency().unwrap_or(0),
