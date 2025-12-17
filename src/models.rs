@@ -19,19 +19,21 @@ pub enum OrderType {
 /// Per 0x08a design doc, once an order is persisted, it MUST reach
 /// one of these terminal states (never disappear or become unknown).
 ///
-/// Reference: Binance API order status enums
+/// Reference: Binance API order status enums (SCREAMING_CASE for API compatibility)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(clippy::upper_case_acronyms)]
+#[allow(non_camel_case_types)]
 pub enum OrderStatus {
-    New,             // Just created, waiting in orderbook
-    PartiallyFilled, // Some quantity filled, rest in orderbook
-    Filled,          // Fully filled
-    Cancelled,       // Cancelled by user
-    Rejected,        // Rejected after persistence (e.g., balance check failed)
-    Expired,         // Expired by system (e.g., GTD order timeout, IOC/FOK no fill)
-                     // TODO: Future implementation
-                     // PendingNew,      // Pending in order list (OCO orders) - not implemented
-                     // PendingCancel,   // Pending cancel - not implemented (unused in Binance)
-                     // ExpiredInMatch,  // Expired due to STP (Self-Trade Prevention) - not implemented
+    NEW,              // Just created, waiting in orderbook
+    PARTIALLY_FILLED, // Some quantity filled, rest in orderbook
+    FILLED,           // Fully filled
+    CANCELED,         // Cancelled by user (Binance uses CANCELED, not CANCELLED)
+    REJECTED,         // Rejected after persistence (e.g., balance check failed)
+    EXPIRED,          // Expired by system (e.g., GTD order timeout, IOC/FOK no fill)
+                      // TODO: Future implementation
+                      // PENDING_NEW,      // Pending in order list (OCO orders) - not implemented
+                      // PENDING_CANCEL,   // Pending cancel - not implemented (unused in Binance)
+                      // EXPIRED_IN_MATCH, // Expired due to STP (Self-Trade Prevention) - not implemented
 }
 
 // ============================================================
@@ -74,7 +76,7 @@ impl InternalOrder {
             filled_qty: 0,
             side,
             order_type: OrderType::Limit,
-            status: OrderStatus::New,
+            status: OrderStatus::NEW,
         }
     }
 
@@ -89,7 +91,7 @@ impl InternalOrder {
             filled_qty: 0,
             side,
             order_type: OrderType::Market,
-            status: OrderStatus::New,
+            status: OrderStatus::NEW,
         }
     }
 

@@ -54,10 +54,10 @@ impl MatchingEngine {
 
         // Update status and rest order (matches original logic exactly)
         if order.is_filled() {
-            order.status = OrderStatus::Filled;
+            order.status = OrderStatus::FILLED;
         } else if order.filled_qty > 0 {
             // Partially filled, rest remaining
-            order.status = OrderStatus::PartiallyFilled;
+            order.status = OrderStatus::PARTIALLY_FILLED;
             if order.order_type == OrderType::Limit {
                 book.rest_order(order.clone());
             }
@@ -215,7 +215,7 @@ mod tests {
         let result = MatchingEngine::process_order(&mut book, order);
 
         assert!(result.trades.is_empty());
-        assert_eq!(result.order.status, OrderStatus::New);
+        assert_eq!(result.order.status, OrderStatus::NEW);
         assert_eq!(book.best_bid(), Some(100));
     }
 
@@ -234,7 +234,7 @@ mod tests {
         assert_eq!(result.trades.len(), 1);
         assert_eq!(result.trades[0].qty, 10);
         assert_eq!(result.trades[0].price, 100);
-        assert_eq!(result.order.status, OrderStatus::Filled);
+        assert_eq!(result.order.status, OrderStatus::FILLED);
     }
 
     #[test]
@@ -250,7 +250,7 @@ mod tests {
         assert_eq!(result.trades.len(), 1);
         assert_eq!(result.trades[0].qty, 10);
         assert_eq!(result.order.filled_qty, 10);
-        assert_eq!(result.order.status, OrderStatus::PartiallyFilled);
+        assert_eq!(result.order.status, OrderStatus::PARTIALLY_FILLED);
         // Remaining 5 should be rested
         assert_eq!(book.best_bid(), Some(100));
     }

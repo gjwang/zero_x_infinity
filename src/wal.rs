@@ -315,7 +315,7 @@ impl WalReader {
             filled_qty: 0,
             side,
             order_type,
-            status: OrderStatus::New,
+            status: OrderStatus::NEW,
         };
 
         Some(WalEntry {
