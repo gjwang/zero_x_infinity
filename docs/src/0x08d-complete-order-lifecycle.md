@@ -1,213 +1,130 @@
-# 0x08d 完整订单生命周期事件
+# 0x08d 完整订单生命周期与撤单优化教程
 
-> **核心目标**：实现完整的订单生命周期事件，创建新测试集验证。
-
----
-
-## 本章目标
-
-### 1. 完整的订单状态
-
-根据 0x08a 文档，订单持久化后的所有可能状态：
-
-```
-订单已持久化
-       │
-       ├──▶ 成交 (Filled)
-       ├──▶ 部分成交 (PartiallyFilled)
-       ├──▶ 挂单中 (New)
-       ├──▶ 用户取消 (Cancelled)
-       ├──▶ 系统过期 (Expired)
-       └──▶ 余额不足被拒绝 (Rejected)
-```
-
-### 2. OrderStatus 需要扩展
-
-当前：
-```rust
-pub enum OrderStatus {
-    New,             // ✅
-    PartiallyFilled, // ✅
-    Filled,          // ✅
-    Cancelled,       // ✅
-}
-```
-
-需要添加：
-```rust
-pub enum OrderStatus {
-    New,
-    PartiallyFilled,
-    Filled,
-    Cancelled,
-    Rejected,    // NEW: 余额不足等原因被拒绝
-    Expired,     // NEW: 系统过期（如 GTD 订单）
-}
-```
-
-### 3. 订单事件与余额事件对照
-
-| 订单状态 | OrderEvent | BalanceEvent | 当前状态 |
-|----------|------------|--------------|----------|
-| New (挂单) | Accepted | Lock | ✅ |
-| **Rejected** | Rejected | **无**（未锁定） | ⏳ 需要记录 |
-| PartiallyFilled | PartialFilled | Settle | ✅ |
-| Filled | Filled | Settle + Unlock(剩余) | ✅/⏳ |
-| **Cancelled** | Cancelled | **Unlock** | ⏳ |
-| **Expired** | Expired? | **Unlock** | ⏳ |
-
-### 4. BalanceEvent 完整类型
-
-```rust
-pub enum BalanceEventType {
-    Deposit,   // ✅ 已实现 - 充值
-    Withdraw,  // ⏳ 待实现 - 提现
-    Lock,      // ✅ 已实现 - 下单锁定
-    Unlock,    // ⏳ 待实现 - 取消/过期释放
-    Settle,    // ✅ 已实现 - 成交结算
-}
-```
+> **核心目标**：实现订单全生命周期管理（含撤单、退款），设计双轨制测试框架，并深入分析引入的性能瓶颈。
 
 ---
 
-## 实现计划
+## 1. 功能实现概览
 
-### Phase 1: 扩展 OrderStatus
+在本章中，我们完成了以下核心功能，使交易引擎具备了完整的订单处理能力：
 
+### 1.1 订单事件与状态管理
+实现了完整的 `OrderEvent` 枚举与 CSV 日志记录。
+
+**OrderStatus (src/models.rs)**:
+注意遵循 Binance 风格的 Screaming Snake Case。
 ```rust
-// src/models.rs
 pub enum OrderStatus {
-    New,
-    PartiallyFilled,
-    Filled,
-    Cancelled,
-    Rejected,    // 余额不足/验证失败
-    Expired,     // 系统过期
+    NEW,              // 挂单中
+    PARTIALLY_FILLED, // 部分成交
+    FILLED,           // 完全成交
+    CANCELED,         // 用户撤单 (注意拼写 CANCELED)
+    REJECTED,         // 风控拒绝
+    EXPIRED,          // 系统过期
 }
 ```
 
-### Phase 2: 扩展 OrderEvent (可选)
+**OrderEvent (src/messages.rs)**:
+用于 Event Sourcing 和审计日志。
+| 事件类型 | 触发场景 | 资金操作 |
+|---|---|---|
+| `Accepted` | 订单通过风控并进入撮合 | `Lock` (冻结) |
+| `Rejected` | 余额不足或参数错误 | 无 |
+| `Filled` | 完全成交 | `Settle` (结算) |
+| `PartialFilled` | 部分成交 | `Settle` (结算) |
+| `Cancelled` | 用户撤单 (注意拼写 Cancelled) | `Unlock` (解冻剩余资金) |
+| `Expired` | 系统过期 | `Unlock` (解冻) |
 
-当前 `OrderEvent` 已包含 `Rejected`，可能需要添加 `Expired`：
-
-```rust
-pub enum OrderEvent {
-    Accepted { ... },
-    Rejected { ... },     // ✅ 已有
-    PartialFilled { ... },
-    Filled { ... },
-    Cancelled { ... },
-    Expired { ... },      // NEW
-}
+**CSV 日志格式 (output/t2_order_events.csv)**:
+实际代码实现的列顺序如下：
+```csv
+event_type,order_id,user_id,seq_id,filled_qty,remaining_qty,price,reason
+accepted,1,100,101,,,,
+rejected,3,102,103,,,,insufficient_balance
+partial_filled,1,100,,5000,1000,,
+filled,1,100,,0,,85000,
+cancelled,5,100,,,2000,,
 ```
 
-### Phase 3: 实现 Unlock 事件
+### 1.2 撤单流程 (Cancel Workflow)
+实现了 `cancel` 动作的处理流程：
+1.  **输入解析**: `scripts/csv_io.rs` 支持新旧两种 CSV 格式。
+    *   新格式: `order_id,user_id,action,side,price,qty` (支持 `action=cancel`)。
+2.  **撮合移除**: `MatchingEngine` 调用 `OrderBook::remove_order_by_id` 移除订单。
+3.  **资金解锁**: `UBSCore` 生成 `Unlock` 事件，返还冻结资金。
+4.  **事件记录**: 记录 `Cancelled` 事件。
 
-触发场景：
-1. **用户取消** - CancelOrder 请求
-2. **系统过期** - GTD 订单超时
-3. **完全成交后剩余** - 因价格保护未完全使用锁定金额
+---
+
+## 2. 双轨制测试框架
+
+为了在引入新功能的同时保证原有基准不被破坏，我们设计了**双轨制测试策略**：
+
+### 2.1 原始基准 (Regression Baseline)
+*   **数据集**: `fixtures/orders.csv` (10万订单，仅 Place)。
+*   **脚本**: `scripts/test_e2e.sh`
+*   **目的**: 确保传统撮合性能不回退，验证核心正确性。
+*   **原则**: **绝对不修改原始数据文件**。
+
+### 2.2 新功能测试 (Feature Testing)
+*   **数据集**: `fixtures/test_with_cancel/orders.csv` (100万订单，含30% Cancel)。
+*   **脚本**: `scripts/test_cancel.sh`
+*   **验证**:
+    *   `verify_balance_events.py`: 验证资金守恒 (Lock = Settle + Unlock)。
+    *   `verify_order_events.py`: 验证订单生命周期闭环。
+
+---
+
+## 3. 重大性能问题分析 (Major Issue)
+
+在将撤单测试规模从 1000 扩大到 100万 时，我们发现了一个严重的性能崩塌现象。
+
+### 3.1 现象
+*   **基准测试 (10万 Place)**: 耗时 ~3秒。
+*   **撤单测试 (100万 Place+Cancel)**: 耗时 **超过 7分钟 (430秒)**。
+*   **瓶颈定位**: `Matching Engine` 耗时占比 98%。
+
+### 3.2 原因深入分析
+通过代码审查，我们发现瓶颈在于 `OrderBook::remove_order_by_id` 的实现：
 
 ```rust
-impl UBSCore {
-    pub fn cancel_order(&mut self, order_id: u64) -> Result<BalanceEvent, Error> {
-        // 1. 从 OrderBook 移除
-        let order = self.book.remove(order_id)?;
-        
-        // 2. 计算未使用的锁定金额
-        let unlock_amount = order.remaining_cost();
-        
-        // 3. Unlock
-        self.unlock(order.user_id, asset_id, unlock_amount)?;
-        
-        // 4. 生成事件
-        Ok(BalanceEvent::unlock(order.user_id, asset_id, order_id, ...))
+// src/orderbook.rs
+pub fn remove_order_by_id(&mut self, order_id: u64) -> Option<InternalOrder> {
+    // 遍历卖单簿的所有价格层级 --> 遍历每个层级的所有订单
+    for (key, orders) in self.bids.iter_mut() {
+        if let Some(pos) = orders.iter().position(|o| o.order_id == order_id) {
+            // ...
+        }
     }
+    // 遍历买单簿...
 }
 ```
 
-### Phase 4: 扩展 CSV 格式支持
+*   **复杂度**: **O(N)**，其中 N 是当前 OrderBook 中的订单总数。
+*   **数据分布恶化**: 在 `test_with_cancel` 数据集中，由于缺乏激进的“吃单”逻辑，大量订单堆积在撮合簿中（未成交）。假设盘口堆积了 50万 订单。
+*   **计算量**: 执行 30万 次撤单，每次遍历 50万 数据 = **1500亿次 CPU 比较操作**。
 
-```csv
-# orders.csv - 新增 action 列
-order_id,user_id,action,side,price,qty
-1,100,place,buy,85000.00,1.5
-2,101,place,sell,85100.00,2.0
-3,100,cancel,,,             # Cancel order 1
-```
+这解释了为什么系统在处理大规模撤单时速度极慢。
 
-### Phase 5: 创建新测试集
-
-```
-fixtures/
-  ├── (原文件保持不变)
-  ├── orders.csv              # 原测试数据
-  ├── balances_init.csv
-  └── test_with_lifecycle/    # 新测试集
-      ├── orders.csv          # 包含 place + cancel 订单
-      └── balances_init.csv
-
-baseline/
-  ├── (原文件保持不变)
-  └── test_with_lifecycle/    # 新 baseline
-      ├── t2_events.csv
-      ├── t2_order_events.csv  # NEW: 订单事件日志
-      └── ...
-```
-
-### Phase 6: 新增订单事件日志
-
-```csv
-# t2_order_events.csv
-seq_id,order_id,user_id,event_type,reason,timestamp
-1,1,100,accepted,,1234567890
-2,2,101,accepted,,1234567891
-3,1,100,partial_filled,,1234567892
-4,3,102,rejected,insufficient_balance,1234567893
-5,1,100,cancelled,,1234567894
-```
-
-### Phase 7: 验证
-
-1. **资金守恒**
-   ```
-   for each user-asset:
-     Lock_total = Settle_total + Unlock_total
-   ```
-
-2. **订单状态一致性**
-   ```
-   for each order:
-     if Accepted → must have Lock event
-     if Rejected → must NOT have Lock event
-     if Cancelled → must have Unlock event
-     if Filled → must have Settle event(s)
-   ```
+### 3.3 解决方案 (Next Step)
+为了解决此问题，必须引入**订单索引 (Order Index)**：
+*   **结构**: `HashMap<OrderId, (Price, Side)>`。
+*   **优化后复杂度**: 撤单查找从 O(N) 降为 **O(1)**。
 
 ---
 
-## 验收标准
+## 4. 验证脚本
 
-- [ ] OrderStatus 添加 Rejected, Expired
-- [ ] OrderEvent 添加 Expired（如需要）
-- [ ] Unlock 事件实现
-- [ ] CSV 格式支持 cancel action
-- [ ] 订单事件日志 (t2_order_events.csv)
-- [ ] 新测试集创建
-- [ ] 资金守恒验证通过
-- [ ] 原测试集仍然通过
+我们提供了两个 Python脚本用于验证逻辑正确性：
 
----
+1.  `verify_balance_events.py`:
+    *   新增 `Check 8`: 验证 Frozen Balance 的历史一致性。
+    *   验证 `Unlock` 事件是否正确释放了资金。
 
-## 文件变更
+2.  `verify_order_events.py`:
+    *   验证所有 `Accepted` 订单最终都有终态 (Filled/Cancelled/Rejected)。
+    *   验证 `Cancelled` 订单真的对应了相应的 `Accepted` 事件。
 
-| 文件 | 变更 |
-|------|------|
-| `src/models.rs` | 添加 Rejected, Expired 到 OrderStatus |
-| `src/messages.rs` | 添加 Expired 到 OrderEvent（可选）|
-| `src/ubscore.rs` | 添加 cancel_order() |
-| `src/orderbook.rs` | 添加 remove_order() |
-| `src/ledger.rs` | 添加 write_order_event() |
-| `src/csv_io.rs` | 支持 action 列解析 |
-| `scripts/generate_orders_with_lifecycle.py` | 生成带取消的订单 |
-| `scripts/verify_balance_events.py` | 添加资金守恒检查 |
+## 5. 总结
+
+本章不仅完成了功能的开发，更重要的是建立了**数据隔离的测试体系**，并通过大规模压测暴露了**算法复杂度缺陷**。这为下一步的持续迭代奠定了坚实基础。
