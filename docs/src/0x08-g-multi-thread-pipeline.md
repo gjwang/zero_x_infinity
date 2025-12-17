@@ -135,6 +135,107 @@ shutdown.request_shutdown();
 
 注：Multi-thread 当前版本包含 BalanceEvent 生成和持久化开销，性能与 Single-Thread 相当。未来优化方向包括批量 I/O 和减少队列竞争。
 
+## 队列优先级策略
+
+### 当前实现
+
+UBSCore 同时消费两个队列：
+- `balance_update_queue` - 来自 ME 的 settle/unlock 请求
+- `order_queue` - 新订单
+
+**当前策略**: 完全 drain `balance_update_queue` 后才处理 `order_queue`。
+
+```rust
+// PRIORITY 1: 先处理所有 balance updates
+while let Some(update) = balance_update_queue.pop() {
+    process_settlement(update);
+}
+
+// PRIORITY 2: 再处理一个新订单
+if let Some(order) = order_queue.pop() {
+    process_order(order);
+}
+```
+
+### 未来优化: 加权优先级
+
+生产环境建议实现更灵活的优先级策略，允许交替处理但保持 settle 优先：
+
+#### 方案 1: 加权轮询 (Weighted Round-Robin)
+
+```rust
+const SETTLE_WEIGHT: u32 = 3;  // settle : order = 3 : 1
+
+let mut settle_count = 0;
+loop {
+    if settle_count < SETTLE_WEIGHT {
+        if let Some(update) = balance_update_queue.pop() {
+            process_settlement(update);
+            settle_count += 1;
+            continue;
+        }
+    }
+    
+    if let Some(order) = order_queue.pop() {
+        process_order(order);
+        settle_count = 0;  // 重置
+    }
+}
+```
+
+#### 方案 2: 批量处理 (Batch Processing)
+
+```rust
+const MAX_SETTLE_BATCH: usize = 10;
+const MAX_ORDER_BATCH: usize = 3;
+
+loop {
+    // Phase 1: 最多 10 个 settlements
+    for _ in 0..MAX_SETTLE_BATCH {
+        if balance_update_queue.pop().map(process_settlement).is_none() {
+            break;
+        }
+    }
+    
+    // Phase 2: 最多 3 个 orders
+    for _ in 0..MAX_ORDER_BATCH {
+        if order_queue.pop().map(process_order).is_none() {
+            break;
+        }
+    }
+}
+```
+
+#### 方案 3: 动态自适应 (Adaptive)
+
+```rust
+loop {
+    let settle_depth = balance_update_queue.len();
+    
+    // 根据积压深度动态调整比例
+    let ratio = match settle_depth {
+        0..=10 => 2,    // 空闲: 2:1
+        11..=100 => 5,  // 正常: 5:1
+        _ => 10,        // 积压: 10:1
+    };
+    
+    // 按比例处理...
+}
+```
+
+### 配置结构 (未来)
+
+```rust
+pub struct QueuePriority {
+    /// Settle:Order ratio (e.g., 3 = process 3 settlements per 1 order)
+    pub settle_weight: u32,
+    /// Max batch size per round
+    pub max_batch: usize,
+    /// Enable adaptive mode based on queue depth
+    pub adaptive: bool,
+}
+```
+
 ## 文件结构
 
 ```
