@@ -47,7 +47,8 @@ pub use balance::Balance;
 pub use core_types::{AssetId, OrderId, SeqNum, TradeId, UserId};
 pub use engine::MatchingEngine;
 pub use messages::{
-    BalanceOp, BalanceUpdate, OrderEvent, OrderMessage, RejectReason, TradeEvent, ValidOrder,
+    BalanceEvent, BalanceEventType, BalanceOp, BalanceUpdate, OrderEvent, OrderMessage,
+    RejectReason, SourceType, TradeEvent, ValidOrder,
 };
 pub use models::{CostError, InternalOrder, OrderResult, OrderStatus, OrderType, Side, Trade};
 pub use orderbook::OrderBook;
@@ -58,9 +59,9 @@ pub use wal::{WalConfig, WalWriter};
 
 // Pipeline re-exports
 pub use pipeline::{
-    BalanceEvent, BalanceEventType, BalanceUpdateRequest, MultiThreadQueues, OrderAction,
-    PipelineQueues, PipelineStats, PipelineStatsSnapshot, PriceImprovement, SequencedOrder,
-    ShutdownSignal, SingleThreadPipeline, ValidAction,
+    BalanceUpdateRequest, MultiThreadQueues, OrderAction, PipelineQueues, PipelineStats,
+    PipelineStatsSnapshot, PriceImprovement, SequencedOrder, ShutdownSignal, SingleThreadPipeline,
+    ValidAction,
 };
 pub use pipeline_mt::{MultiThreadPipelineResult, run_pipeline_multi_thread};
 pub use pipeline_runner::{PipelineResult, run_pipeline_single_thread};
