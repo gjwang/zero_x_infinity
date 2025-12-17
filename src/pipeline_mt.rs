@@ -42,11 +42,11 @@ use crate::csv_io::InputOrder;
 use crate::engine::MatchingEngine;
 use crate::ledger::{LedgerEntry, LedgerWriter};
 use crate::messages::TradeEvent;
-use crate::models::{InternalOrder, OrderType, Side};
+use crate::models::{InternalOrder, OrderStatus, OrderType, Side};
 use crate::orderbook::OrderBook;
 use crate::pipeline::{
-    BalanceEvent, BalanceEventType, BalanceUpdateRequest, MultiThreadQueues, PipelineStats,
-    PriceImprovement, SequencedOrder, ShutdownSignal,
+    BalanceEvent, BalanceEventType, BalanceUpdateRequest, MultiThreadQueues, OrderAction,
+    PipelineStats, PriceImprovement, SequencedOrder, ShutdownSignal, ValidAction,
 };
 use crate::symbol_manager::SymbolManager;
 use crate::ubscore::UBSCore;
@@ -112,27 +112,30 @@ pub fn run_pipeline_multi_thread(
                 break;
             }
 
-            // Skip cancel orders for now
-            if input.action == "cancel" {
-                ingestion_stats.incr_ingested();
-                continue;
-            }
+            // Create OrderAction based on input action type
+            let action = if input.action == "cancel" {
+                // Cancel order - no seq needed, just pass order_id
+                OrderAction::Cancel {
+                    order_id: input.order_id,
+                    user_id: input.user_id,
+                }
+            } else {
+                // Place order - assign sequence number
+                seq_counter += 1;
+                let order = InternalOrder::new(
+                    input.order_id,
+                    input.user_id,
+                    active_symbol_id,
+                    input.price,
+                    input.qty,
+                    input.side,
+                );
+                OrderAction::Place(SequencedOrder::new(seq_counter, order, 0))
+            };
 
-            seq_counter += 1;
-            let order = InternalOrder::new(
-                input.order_id,
-                input.user_id,
-                active_symbol_id,
-                input.price,
-                input.qty,
-                input.side,
-            );
-
-            let seq_order = SequencedOrder::new(seq_counter, order, 0);
-
-            // Push with backpressure
+            // Push with backpressure (same path for both place and cancel)
             loop {
-                match ingestion_queues.order_queue.push(seq_order.clone()) {
+                match ingestion_queues.order_queue.push(action.clone()) {
                     Ok(()) => break,
                     Err(_) => {
                         ingestion_stats.incr_backpressure();
@@ -175,44 +178,72 @@ pub fn run_pipeline_multi_thread(
             let mut did_work = false;
 
             // ============================================
-            // Pre-Trade: Process incoming orders
+            // Pre-Trade: Process incoming order actions
             // ============================================
-            if let Some(seq_order) = ubscore_queues.order_queue.pop() {
+            if let Some(order_action) = ubscore_queues.order_queue.pop() {
                 did_work = true;
-                let order = seq_order.order.clone();
-                let order_id = order.order_id;
-                let user_id = order.user_id;
 
-                match ubscore.process_order(order.clone()) {
-                    Ok(valid_order) => {
-                        // Generate Lock BalanceEvent
-                        // Query balance AFTER lock to get updated state
-                        let lock_asset = if order.side == Side::Buy {
-                            quote_id
-                        } else {
-                            base_id
-                        };
+                match order_action {
+                    OrderAction::Place(seq_order) => {
+                        // Place order: lock balance, send to ME
+                        let order = seq_order.order.clone();
+                        let order_id = order.order_id;
+                        let user_id = order.user_id;
 
-                        if let Some(balance) = ubscore.get_balance(user_id, lock_asset) {
-                            let lock_amount = order.calculate_cost(qty_unit).unwrap_or(0);
+                        match ubscore.process_order(order.clone()) {
+                            Ok(valid_order) => {
+                                // Generate Lock BalanceEvent
+                                let lock_asset = if order.side == Side::Buy {
+                                    quote_id
+                                } else {
+                                    base_id
+                                };
 
-                            let event = BalanceEvent::new(
-                                user_id,
-                                lock_asset,
-                                BalanceEventType::Lock,
-                                lock_amount,
-                                balance.lock_version(),
-                                balance.avail(),
-                                balance.frozen(),
-                            )
-                            .with_order_id(order_id);
+                                if let Some(balance) = ubscore.get_balance(user_id, lock_asset) {
+                                    let lock_amount = order.calculate_cost(qty_unit).unwrap_or(0);
 
-                            push_balance_event(&ubscore_queues, event, &ubscore_stats);
+                                    let event = BalanceEvent::new(
+                                        user_id,
+                                        lock_asset,
+                                        BalanceEventType::Lock,
+                                        lock_amount,
+                                        balance.lock_version(),
+                                        balance.avail(),
+                                        balance.frozen(),
+                                    )
+                                    .with_order_id(order_id);
+
+                                    push_balance_event(&ubscore_queues, event, &ubscore_stats);
+                                }
+
+                                // Push ValidAction::Order to ME
+                                loop {
+                                    match ubscore_queues
+                                        .action_queue
+                                        .push(ValidAction::Order(valid_order.clone()))
+                                    {
+                                        Ok(()) => break,
+                                        Err(_) => {
+                                            ubscore_stats.incr_backpressure();
+                                            std::hint::spin_loop();
+                                        }
+                                    }
+                                }
+                                ubscore_stats.incr_accepted();
+                            }
+                            Err(_reason) => {
+                                ubscore_stats.incr_rejected();
+                            }
                         }
-
-                        // Push to ME
+                    }
+                    OrderAction::Cancel { order_id, user_id } => {
+                        // Cancel order: pass through to ME (no balance lock needed)
+                        // ME will remove from book and return the cancelled order info
                         loop {
-                            match ubscore_queues.valid_order_queue.push(valid_order.clone()) {
+                            match ubscore_queues
+                                .action_queue
+                                .push(ValidAction::Cancel { order_id, user_id })
+                            {
                                 Ok(()) => break,
                                 Err(_) => {
                                     ubscore_stats.incr_backpressure();
@@ -220,10 +251,6 @@ pub fn run_pipeline_multi_thread(
                                 }
                             }
                         }
-                        ubscore_stats.incr_accepted();
-                    }
-                    Err(_reason) => {
-                        ubscore_stats.incr_rejected();
                     }
                 }
             }
@@ -233,116 +260,153 @@ pub fn run_pipeline_multi_thread(
             // ============================================
             if let Some(balance_update) = ubscore_queues.balance_update_queue.pop() {
                 did_work = true;
-                let trade_event = &balance_update.trade_event;
-                let trade = &trade_event.trade;
-                let trade_id = trade.trade_id;
-                let quote_amount = trade_event.quote_amount();
 
-                // Execute balance update
-                if ubscore.settle_trade(trade_event).is_ok() {
-                    // Generate BalanceEvents for buyer
-                    // Buyer: SpendFrozen(quote), Credit(base)
-                    if let Some(balance) =
-                        ubscore.get_balance(trade.buyer_user_id, trade_event.quote_asset_id)
-                    {
-                        push_balance_event(
-                            &ubscore_queues,
-                            BalanceEvent::new(
-                                trade.buyer_user_id,
-                                trade_event.quote_asset_id,
-                                BalanceEventType::SpendFrozen,
-                                quote_amount,
-                                balance.settle_version(),
-                                balance.avail(),
-                                balance.frozen(),
-                            )
-                            .with_trade_id(trade_id),
-                            &ubscore_stats,
-                        );
-                    }
-                    if let Some(balance) =
-                        ubscore.get_balance(trade.buyer_user_id, trade_event.base_asset_id)
-                    {
-                        push_balance_event(
-                            &ubscore_queues,
-                            BalanceEvent::new(
-                                trade.buyer_user_id,
-                                trade_event.base_asset_id,
-                                BalanceEventType::Credit,
-                                trade.qty,
-                                balance.settle_version(),
-                                balance.avail(),
-                                balance.frozen(),
-                            )
-                            .with_trade_id(trade_id),
-                            &ubscore_stats,
-                        );
-                    }
+                match balance_update {
+                    BalanceUpdateRequest::Trade {
+                        trade_event,
+                        price_improvement,
+                    } => {
+                        let trade = &trade_event.trade;
+                        let trade_id = trade.trade_id;
+                        let quote_amount = trade_event.quote_amount();
 
-                    // Generate BalanceEvents for seller
-                    // Seller: SpendFrozen(base), Credit(quote)
-                    if let Some(balance) =
-                        ubscore.get_balance(trade.seller_user_id, trade_event.base_asset_id)
-                    {
-                        push_balance_event(
-                            &ubscore_queues,
-                            BalanceEvent::new(
-                                trade.seller_user_id,
-                                trade_event.base_asset_id,
-                                BalanceEventType::SpendFrozen,
-                                trade.qty,
-                                balance.settle_version(),
-                                balance.avail(),
-                                balance.frozen(),
-                            )
-                            .with_trade_id(trade_id),
-                            &ubscore_stats,
-                        );
-                    }
-                    if let Some(balance) =
-                        ubscore.get_balance(trade.seller_user_id, trade_event.quote_asset_id)
-                    {
-                        push_balance_event(
-                            &ubscore_queues,
-                            BalanceEvent::new(
-                                trade.seller_user_id,
-                                trade_event.quote_asset_id,
-                                BalanceEventType::Credit,
-                                quote_amount,
-                                balance.settle_version(),
-                                balance.avail(),
-                                balance.frozen(),
-                            )
-                            .with_trade_id(trade_id),
-                            &ubscore_stats,
-                        );
-                    }
+                        // Execute balance update
+                        if ubscore.settle_trade(&trade_event).is_ok() {
+                            // Generate BalanceEvents for buyer
+                            // Buyer: SpendFrozen(quote), Credit(base)
+                            if let Some(balance) =
+                                ubscore.get_balance(trade.buyer_user_id, trade_event.quote_asset_id)
+                            {
+                                push_balance_event(
+                                    &ubscore_queues,
+                                    BalanceEvent::new(
+                                        trade.buyer_user_id,
+                                        trade_event.quote_asset_id,
+                                        BalanceEventType::SpendFrozen,
+                                        quote_amount,
+                                        balance.settle_version(),
+                                        balance.avail(),
+                                        balance.frozen(),
+                                    )
+                                    .with_trade_id(trade_id),
+                                    &ubscore_stats,
+                                );
+                            }
+                            if let Some(balance) =
+                                ubscore.get_balance(trade.buyer_user_id, trade_event.base_asset_id)
+                            {
+                                push_balance_event(
+                                    &ubscore_queues,
+                                    BalanceEvent::new(
+                                        trade.buyer_user_id,
+                                        trade_event.base_asset_id,
+                                        BalanceEventType::Credit,
+                                        trade.qty,
+                                        balance.settle_version(),
+                                        balance.avail(),
+                                        balance.frozen(),
+                                    )
+                                    .with_trade_id(trade_id),
+                                    &ubscore_stats,
+                                );
+                            }
 
-                    // Handle price improvement refund
-                    if let Some(pi) = balance_update.price_improvement {
-                        if let Some(account) = ubscore.accounts_mut().get_mut(&pi.user_id) {
-                            if account.settle_unlock(pi.asset_id, pi.amount).is_ok() {
-                                if let Some(balance) = ubscore.get_balance(pi.user_id, pi.asset_id)
-                                {
-                                    push_balance_event(
-                                        &ubscore_queues,
-                                        BalanceEvent::new(
-                                            pi.user_id,
-                                            pi.asset_id,
-                                            BalanceEventType::RefundFrozen,
-                                            pi.amount,
-                                            balance.lock_version(),
-                                            balance.avail(),
-                                            balance.frozen(),
-                                        )
-                                        .with_trade_id(trade_id),
-                                        &ubscore_stats,
-                                    );
+                            // Generate BalanceEvents for seller
+                            // Seller: SpendFrozen(base), Credit(quote)
+                            if let Some(balance) =
+                                ubscore.get_balance(trade.seller_user_id, trade_event.base_asset_id)
+                            {
+                                push_balance_event(
+                                    &ubscore_queues,
+                                    BalanceEvent::new(
+                                        trade.seller_user_id,
+                                        trade_event.base_asset_id,
+                                        BalanceEventType::SpendFrozen,
+                                        trade.qty,
+                                        balance.settle_version(),
+                                        balance.avail(),
+                                        balance.frozen(),
+                                    )
+                                    .with_trade_id(trade_id),
+                                    &ubscore_stats,
+                                );
+                            }
+                            if let Some(balance) = ubscore
+                                .get_balance(trade.seller_user_id, trade_event.quote_asset_id)
+                            {
+                                push_balance_event(
+                                    &ubscore_queues,
+                                    BalanceEvent::new(
+                                        trade.seller_user_id,
+                                        trade_event.quote_asset_id,
+                                        BalanceEventType::Credit,
+                                        quote_amount,
+                                        balance.settle_version(),
+                                        balance.avail(),
+                                        balance.frozen(),
+                                    )
+                                    .with_trade_id(trade_id),
+                                    &ubscore_stats,
+                                );
+                            }
+
+                            // Handle price improvement refund
+                            if let Some(pi) = price_improvement {
+                                if let Some(account) = ubscore.accounts_mut().get_mut(&pi.user_id) {
+                                    if account.settle_unlock(pi.asset_id, pi.amount).is_ok() {
+                                        if let Some(balance) =
+                                            ubscore.get_balance(pi.user_id, pi.asset_id)
+                                        {
+                                            push_balance_event(
+                                                &ubscore_queues,
+                                                BalanceEvent::new(
+                                                    pi.user_id,
+                                                    pi.asset_id,
+                                                    BalanceEventType::RefundFrozen,
+                                                    pi.amount,
+                                                    balance.lock_version(),
+                                                    balance.avail(),
+                                                    balance.frozen(),
+                                                )
+                                                .with_trade_id(trade_id),
+                                                &ubscore_stats,
+                                            );
+                                        }
+                                    }
                                 }
+                            }
+                            ubscore_stats.incr_settled();
+                        }
+                    }
+                    BalanceUpdateRequest::Cancel {
+                        order_id,
+                        user_id,
+                        asset_id,
+                        unlock_amount,
+                    } => {
+                        // Unlock balance for cancelled order
+                        if let Err(e) = ubscore.unlock(user_id, asset_id, unlock_amount) {
+                            eprintln!("Cancel unlock failed for order {}: {}", order_id, e);
+                        } else {
+                            // Generate Unlock BalanceEvent
+                            if let Some(balance) = ubscore.get_balance(user_id, asset_id) {
+                                push_balance_event(
+                                    &ubscore_queues,
+                                    BalanceEvent::new(
+                                        user_id,
+                                        asset_id,
+                                        BalanceEventType::Unlock,
+                                        unlock_amount,
+                                        balance.lock_version(),
+                                        balance.avail(),
+                                        balance.frozen(),
+                                    )
+                                    .with_order_id(order_id),
+                                    &ubscore_stats,
+                                );
                             }
                         }
                     }
-                    ubscore_stats.incr_settled();
                 }
             }
 
@@ -384,84 +448,127 @@ pub fn run_pipeline_multi_thread(
         loop {
             let mut did_work = false;
 
-            if let Some(valid_order) = me_queues.valid_order_queue.pop() {
+            if let Some(action) = me_queues.action_queue.pop() {
                 did_work = true;
 
-                // Match order
-                let result = MatchingEngine::process_order(&mut book, valid_order.order.clone());
+                match action {
+                    ValidAction::Order(valid_order) => {
+                        // Match order
+                        let result =
+                            MatchingEngine::process_order(&mut book, valid_order.order.clone());
 
-                // Fan-out: Send Trade Events to BOTH Settlement AND UBSCore
-                for trade in &result.trades {
-                    let trade_event = TradeEvent::new(
-                        trade.clone(),
-                        if valid_order.order.side == Side::Buy {
-                            trade.buyer_order_id
-                        } else {
-                            trade.seller_order_id
-                        },
-                        if valid_order.order.side == Side::Buy {
-                            trade.seller_order_id
-                        } else {
-                            trade.buyer_order_id
-                        },
-                        valid_order.order.side,
-                        base_id,
-                        quote_id,
-                        qty_unit,
-                    );
+                        // Fan-out: Send Trade Events to BOTH Settlement AND UBSCore
+                        for trade in &result.trades {
+                            let trade_event = TradeEvent::new(
+                                trade.clone(),
+                                if valid_order.order.side == Side::Buy {
+                                    trade.buyer_order_id
+                                } else {
+                                    trade.seller_order_id
+                                },
+                                if valid_order.order.side == Side::Buy {
+                                    trade.seller_order_id
+                                } else {
+                                    trade.buyer_order_id
+                                },
+                                valid_order.order.side,
+                                base_id,
+                                quote_id,
+                                qty_unit,
+                            );
 
-                    // Calculate price improvement for buy orders
-                    let price_improvement = if valid_order.order.side == Side::Buy
-                        && valid_order.order.order_type == OrderType::Limit
-                        && valid_order.order.price > trade.price
-                    {
-                        let diff = valid_order.order.price - trade.price;
-                        let refund = diff * trade.qty / qty_unit;
-                        if refund > 0 {
-                            Some(PriceImprovement {
-                                user_id: valid_order.order.user_id,
-                                asset_id: quote_id,
-                                amount: refund,
-                            })
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    };
+                            // Calculate price improvement for buy orders
+                            let price_improvement = if valid_order.order.side == Side::Buy
+                                && valid_order.order.order_type == OrderType::Limit
+                                && valid_order.order.price > trade.price
+                            {
+                                let diff = valid_order.order.price - trade.price;
+                                let refund = diff * trade.qty / qty_unit;
+                                if refund > 0 {
+                                    Some(PriceImprovement {
+                                        user_id: valid_order.order.user_id,
+                                        asset_id: quote_id,
+                                        amount: refund,
+                                    })
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            };
 
-                    // [1] Send to Settlement (for persistence) - trade_queue
-                    loop {
-                        match me_queues.trade_queue.push(trade_event.clone()) {
-                            Ok(()) => break,
-                            Err(_) => {
-                                me_stats.incr_backpressure();
-                                std::hint::spin_loop();
+                            // [1] Send to Settlement (for persistence) - trade_queue
+                            loop {
+                                match me_queues.trade_queue.push(trade_event.clone()) {
+                                    Ok(()) => break,
+                                    Err(_) => {
+                                        me_stats.incr_backpressure();
+                                        std::hint::spin_loop();
+                                    }
+                                }
                             }
+
+                            // [2] Send to UBSCore (for balance update) - balance_update_queue
+                            let balance_update = BalanceUpdateRequest::Trade {
+                                trade_event,
+                                price_improvement,
+                            };
+                            loop {
+                                match me_queues.balance_update_queue.push(balance_update.clone()) {
+                                    Ok(()) => break,
+                                    Err(_) => {
+                                        me_stats.incr_backpressure();
+                                        std::hint::spin_loop();
+                                    }
+                                }
+                            }
+
+                            me_stats.add_trades(1);
                         }
                     }
+                    ValidAction::Cancel { order_id, user_id } => {
+                        // Cancel order: remove from book
+                        if let Some(mut cancelled_order) = book.remove_order_by_id(order_id) {
+                            cancelled_order.status = OrderStatus::CANCELED;
+                            let remaining_qty = cancelled_order.remaining_qty();
 
-                    // [2] Send to UBSCore (for balance update) - balance_update_queue
-                    let balance_update = BalanceUpdateRequest {
-                        trade_event,
-                        price_improvement,
-                    };
-                    loop {
-                        match me_queues.balance_update_queue.push(balance_update.clone()) {
-                            Ok(()) => break,
-                            Err(_) => {
-                                me_stats.incr_backpressure();
-                                std::hint::spin_loop();
+                            if remaining_qty > 0 {
+                                // Calculate unlock amount
+                                let mut temp_order = cancelled_order.clone();
+                                temp_order.qty = remaining_qty;
+                                let unlock_amount =
+                                    temp_order.calculate_cost(qty_unit).unwrap_or(0);
+                                let lock_asset_id = match cancelled_order.side {
+                                    Side::Buy => quote_id,
+                                    Side::Sell => base_id,
+                                };
+
+                                // Send cancel result to UBSCore for unlock
+                                let cancel_update = BalanceUpdateRequest::Cancel {
+                                    order_id,
+                                    user_id,
+                                    asset_id: lock_asset_id,
+                                    unlock_amount,
+                                };
+                                loop {
+                                    match me_queues.balance_update_queue.push(cancel_update.clone())
+                                    {
+                                        Ok(()) => break,
+                                        Err(_) => {
+                                            me_stats.incr_backpressure();
+                                            std::hint::spin_loop();
+                                        }
+                                    }
+                                }
                             }
                         }
+                        // If order not found in book, it may already be fully filled - silently ignore
                     }
-
-                    me_stats.add_trades(1);
                 }
             }
 
             // Check for shutdown
-            if me_shutdown.is_shutdown_requested() && me_queues.valid_order_queue.is_empty() {
+            if me_shutdown.is_shutdown_requested() && me_queues.action_queue.is_empty() {
                 break;
             }
 
