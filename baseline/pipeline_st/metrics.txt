@@ -1,0 +1,7 @@
+# Single-Thread Pipeline Baseline
+# Dataset: 100k (default)
+# Input: fixtures
+# Generated: 2025-12-17T11:37:48Z
+accepted=100000
+rejected=0
+trades=47886
