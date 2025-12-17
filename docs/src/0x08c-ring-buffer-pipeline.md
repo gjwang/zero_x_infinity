@@ -330,16 +330,17 @@ user_id,asset_id,event_type,version,source_type,source_id,delta,avail_after,froz
 |------|------|------|
 | **Lock** | ✅ | 下单锁定后记录 |
 | **Settle** | ✅ | 成交结算后记录（spend_frozen + receive）|
-| Unlock | ⏳ | 取消订单时记录（待实现）|
-| Deposit | ⏳ | 充值时记录（待实现）|
-| Withdraw | ⏳ | 提现时记录（待实现）|
+| **Deposit** | ✅ | 初始充值时记录 |
+| Unlock | ⏳ | 取消订单时记录（当前测试无取消）|
+| Withdraw | ⏳ | 提现时记录（当前测试无提现）|
 
 #### 4.3 事件统计
 
 ```
-Total events: 291,544
+Total events: 293,544
   Lock events: 100,000 (= accepted orders)
   Settle events: 191,544 (= trades × 4)
+  Deposit events: 2,000 (= users × 2 assets)
 ```
 
 #### 4.4 验收标准 ✅
