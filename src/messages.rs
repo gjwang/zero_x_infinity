@@ -174,6 +174,67 @@ pub enum OrderEvent {
     },
 }
 
+impl OrderEvent {
+    pub fn csv_header() -> &'static str {
+        "event_type,order_id,user_id,seq_id,filled_qty,remaining_qty,price,reason"
+    }
+
+    pub fn to_csv(&self) -> String {
+        match self {
+            Self::Accepted {
+                seq_id,
+                order_id,
+                user_id,
+            } => format!("accepted,{},{},{},,,,", order_id, user_id, seq_id),
+
+            Self::Rejected {
+                seq_id,
+                order_id,
+                user_id,
+                reason,
+            } => format!(
+                "rejected,{},{},{},,,,{}",
+                order_id,
+                user_id,
+                seq_id,
+                reason.as_str()
+            ),
+
+            Self::Filled {
+                order_id,
+                user_id,
+                filled_qty,
+                avg_price,
+            } => format!(
+                "filled,{},{},,{},,{},",
+                order_id, user_id, filled_qty, avg_price
+            ),
+
+            Self::PartialFilled {
+                order_id,
+                user_id,
+                filled_qty,
+                remaining_qty,
+            } => format!(
+                "partial_filled,{},{},,{},{},,",
+                order_id, user_id, filled_qty, remaining_qty
+            ),
+
+            Self::Cancelled {
+                order_id,
+                user_id,
+                unfilled_qty,
+            } => format!("cancelled,{},{},,,{},,", order_id, user_id, unfilled_qty),
+
+            Self::Expired {
+                order_id,
+                user_id,
+                unfilled_qty,
+            } => format!("expired,{},{},,,{},,", order_id, user_id, unfilled_qty),
+        }
+    }
+}
+
 // ============================================================
 // REJECT REASON
 // ============================================================

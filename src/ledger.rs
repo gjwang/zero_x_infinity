@@ -17,7 +17,7 @@
 //! This enables deterministic verification even when events
 //! from different queues are interleaved in a pipelined architecture.
 
-use crate::messages::BalanceEvent;
+use crate::messages::{BalanceEvent, OrderEvent};
 use std::fs::File;
 use std::io::{BufWriter, Write};
 
@@ -57,6 +57,10 @@ pub struct LedgerWriter {
     event_writer: Option<BufWriter<File>>,
     /// Event count for new format
     event_count: u64,
+    /// Optional: Order event writer
+    order_writer: Option<BufWriter<File>>,
+    /// Order event count
+    order_count: u64,
 }
 
 impl LedgerWriter {
@@ -64,9 +68,11 @@ impl LedgerWriter {
     ///
     /// This creates the legacy format file at `path`.
     /// To enable full event sourcing, call `enable_event_logging()`.
+    /// To enable order logging, call `enable_order_logging()`.
     pub fn new(path: &str) -> Self {
         let file = File::create(path).expect("Failed to create ledger file");
-        let mut writer = BufWriter::new(file);
+        // Use 1MB buffer to reduce syscalls for large datasets (e.g., 1M orders)
+        let mut writer = BufWriter::with_capacity(1024 * 1024, file);
 
         // Legacy header: trade_id,user_id,asset_id,op,delta,balance_after
         writeln!(writer, "trade_id,user_id,asset_id,op,delta,balance_after").unwrap();
@@ -76,6 +82,8 @@ impl LedgerWriter {
             legacy_count: 0,
             event_writer: None,
             event_count: 0,
+            order_writer: None,
+            order_count: 0,
         }
     }
 
@@ -90,6 +98,17 @@ impl LedgerWriter {
         writeln!(writer, "{}", BalanceEvent::csv_header()).unwrap();
 
         self.event_writer = Some(writer);
+    }
+
+    /// Enable order event logging to a separate file
+    pub fn enable_order_logging(&mut self, path: &str) {
+        let file = File::create(path).expect("Failed to create order event file");
+        let mut writer = BufWriter::new(file);
+
+        // Write header for OrderEvent format
+        writeln!(writer, "{}", OrderEvent::csv_header()).unwrap();
+
+        self.order_writer = Some(writer);
     }
 
     /// Write a single legacy ledger entry (backward compatible)
@@ -120,10 +139,21 @@ impl LedgerWriter {
         }
     }
 
+    /// Write an OrderEvent
+    pub fn write_order_event(&mut self, event: &OrderEvent) {
+        if let Some(ref mut writer) = self.order_writer {
+            writeln!(writer, "{}", event.to_csv()).unwrap();
+            self.order_count += 1;
+        }
+    }
+
     /// Flush all buffered data to disk
     pub fn flush(&mut self) {
         self.legacy_writer.flush().unwrap();
         if let Some(ref mut writer) = self.event_writer {
+            writer.flush().unwrap();
+        }
+        if let Some(ref mut writer) = self.order_writer {
             writer.flush().unwrap();
         }
     }
@@ -136,6 +166,11 @@ impl LedgerWriter {
     /// Get total number of events written (new format)
     pub fn event_count(&self) -> u64 {
         self.event_count
+    }
+
+    /// Get total number of order events written
+    pub fn order_count(&self) -> u64 {
+        self.order_count
     }
 
     /// Check if event logging is enabled

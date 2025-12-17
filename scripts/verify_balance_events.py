@@ -59,13 +59,15 @@ def verify_events(events_path: str, summary_path: str) -> tuple[bool, list[str]]
     
     # Count by event type
     lock_events = [e for e in events if e['event_type'] == 'lock']
-    settle_events = [e for e in events if e['event_type'] == 'settle']
     unlock_events = [e for e in events if e['event_type'] == 'unlock']
+    settle_events = [e for e in events if e['event_type'] == 'settle']
+    settle_restore_events = [e for e in events if e['event_type'] == 'settle_restore']
     deposit_events = [e for e in events if e['event_type'] == 'deposit']
     
     print(f"  Lock events: {len(lock_events)}")
-    print(f"  Settle events: {len(settle_events)}")
     print(f"  Unlock events: {len(unlock_events)}")
+    print(f"  Settle events: {len(settle_events)}")
+    print(f"  Settle restore events: {len(settle_restore_events)}")
     print(f"  Deposit events: {len(deposit_events)}")
     
     # ========================================
@@ -92,21 +94,22 @@ def verify_events(events_path: str, summary_path: str) -> tuple[bool, list[str]]
         print(f"❌ {issues[-1]}")
     
     # ========================================
-    # Check 3: Lock version continuity
+    # Check 3: Lock version continuity (Lock + Unlock)
     # ========================================
     print("\n=== Check 3: Lock version continuity ===")
+    lock_ops = [e for e in events if e['event_type'] in ('lock', 'unlock')]
     lock_by_user_asset = defaultdict(list)
-    for e in lock_events:
+    for e in lock_ops:
         key = (e['user_id'], e['asset_id'])
         lock_by_user_asset[key].append(int(e['version']))
     
     lock_version_issues = 0
     for (user_id, asset_id), versions in lock_by_user_asset.items():
-        # Versions should be increasing (not necessarily consecutive due to deposits)
+        # Versions should be increasing
         for i in range(1, len(versions)):
             if versions[i] <= versions[i-1]:
                 lock_version_issues += 1
-                if lock_version_issues <= 3:  # Only show first 3
+                if lock_version_issues <= 3:
                     issues.append(f"Lock version not increasing: user={user_id}, asset={asset_id}, versions={versions[i-1]}→{versions[i]}")
     
     if lock_version_issues == 0:
@@ -115,11 +118,12 @@ def verify_events(events_path: str, summary_path: str) -> tuple[bool, list[str]]
         print(f"❌ {lock_version_issues} lock version issues found")
     
     # ========================================
-    # Check 4: Settle version continuity
+    # Check 4: Settle version continuity (Settle + SettleRestore)
     # ========================================
     print("\n=== Check 4: Settle version continuity ===")
+    settle_ops = [e for e in events if e['event_type'] in ('settle', 'settle_restore')]
     settle_by_user_asset = defaultdict(list)
-    for e in settle_events:
+    for e in settle_ops:
         key = (e['user_id'], e['asset_id'])
         settle_by_user_asset[key].append(int(e['version']))
     
@@ -127,7 +131,7 @@ def verify_events(events_path: str, summary_path: str) -> tuple[bool, list[str]]
     for (user_id, asset_id), versions in settle_by_user_asset.items():
         # Versions should be increasing
         for i in range(1, len(versions)):
-            if versions[i] < versions[i-1]:  # Allow equal (same trade, multiple ops)
+            if versions[i] < versions[i-1]:
                 settle_version_issues += 1
                 if settle_version_issues <= 3:
                     issues.append(f"Settle version not increasing: user={user_id}, asset={asset_id}")
@@ -138,11 +142,11 @@ def verify_events(events_path: str, summary_path: str) -> tuple[bool, list[str]]
         print(f"❌ {settle_version_issues} settle version issues found")
     
     # ========================================
-    # Check 5: Balance conservation (settle events)
+    # Check 5: Balance conservation (settle events only)
     # ========================================
     print("\n=== Check 5: Settle delta conservation by trade ===")
     settle_by_trade = defaultdict(list)
-    for e in settle_events:
+    for e in settle_events: # Exclude settle_restore
         trade_id = e['source_id']
         settle_by_trade[trade_id].append(int(e['delta']))
     
@@ -163,18 +167,32 @@ def verify_events(events_path: str, summary_path: str) -> tuple[bool, list[str]]
     # ========================================
     print("\n=== Check 6: Source type consistency ===")
     lock_sources = set(e['source_type'] for e in lock_events)
+    unlock_sources = set(e['source_type'] for e in unlock_events)
     settle_sources = set(e['source_type'] for e in settle_events)
+    restore_sources = set(e['source_type'] for e in settle_restore_events)
     
     if lock_sources == {'order'}:
-        print(f"✅ All lock events have source_type='order'")
+        print(f"✅ All lock events ({len(lock_events)}) have source_type='order'")
     else:
         issues.append(f"Lock events have unexpected source_types: {lock_sources}")
         print(f"❌ {issues[-1]}")
     
+    if not unlock_sources or unlock_sources == {'order'}:
+        print(f"✅ All unlock events ({len(unlock_events)}) have source_type='order'")
+    else:
+        issues.append(f"Unlock events have unexpected source_types: {unlock_sources}")
+        print(f"❌ {issues[-1]}")
+        
     if settle_sources == {'trade'}:
-        print(f"✅ All settle events have source_type='trade'")
+        print(f"✅ All settle events ({len(settle_events)}) have source_type='trade'")
     else:
         issues.append(f"Settle events have unexpected source_types: {settle_sources}")
+        print(f"❌ {issues[-1]}")
+
+    if not restore_sources or restore_sources == {'trade'}:
+        print(f"✅ All settle_restore events ({len(settle_restore_events)}) have source_type='trade'")
+    else:
+        issues.append(f"Settle restore events have unexpected source_types: {restore_sources}")
         print(f"❌ {issues[-1]}")
     
     # ========================================
@@ -198,6 +216,54 @@ def verify_events(events_path: str, summary_path: str) -> tuple[bool, list[str]]
         else:
             issues.append(f"Deposit events have unexpected source_types: {deposit_sources}")
             print(f"❌ {issues[-1]}")
+
+    # ========================================
+    # Check 8: Frozen Balance Verification
+    # ========================================
+    print("\n=== Check 8: Frozen Balance Correctness ===")
+    # Frozen = Sum(Lock.delta) - Sum(Unlock.delta) - Sum(Settle.SpendFrozen.delta) - Sum(SettleRestore.delta)
+    # Correct handling of signs:
+    # Lock: delta < 0, but Increases Frozen -> -= delta
+    # Unlock: delta > 0, Decreases Frozen -> -= delta
+    # Settle(Spend): delta < 0, Decreases Frozen -> += delta (add negative)
+    # SettleRestore: delta > 0, Decreases Frozen -> -= delta
+    
+    frozen_calc = defaultdict(int)
+    frozen_actual = defaultdict(int)
+    
+    for e in events:
+        key = (e['user_id'], e['asset_id'])
+        delta = int(e['delta'])
+        etype = e['event_type']
+        
+        # Track expected frozen change
+        if etype == 'lock':
+            frozen_calc[key] -= delta # Subtract negative (add positive)
+        elif etype == 'unlock':
+            frozen_calc[key] -= delta # Subtract positive
+        elif etype == 'settle':
+            if delta < 0:
+                 frozen_calc[key] += delta # Add negative (decrease)
+        elif etype == 'settle_restore':
+            frozen_calc[key] -= delta # Subtract positive
+
+
+        # Update actual from the latest event
+        frozen_actual[key] = int(e['frozen_after'])
+
+    frozen_issues = 0
+    for key, calc_val in frozen_calc.items():
+        if calc_val != frozen_actual[key]:
+            frozen_issues += 1
+            if frozen_issues <= 3:
+                issues.append(f"Frozen mismatch {key}: Calc={calc_val}, Actual={frozen_actual[key]}")
+    
+    if frozen_issues == 0:
+        print(f"✅ Frozen balances match event history ({len(frozen_calc)} user-asset pairs)")
+    else:
+        print(f"❌ {frozen_issues} frozen balance mismatches found")
+    
+    return len(issues) == 0, issues
     
     return len(issues) == 0, issues
 
