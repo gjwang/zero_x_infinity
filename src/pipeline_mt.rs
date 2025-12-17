@@ -643,27 +643,12 @@ pub fn run_pipeline_multi_thread(
             }
 
             // Process Balance Events from UBSCore
-            if let Some(_balance_event) = settlement_queues.balance_event_queue.pop() {
+            if let Some(balance_event) = settlement_queues.balance_event_queue.pop() {
                 did_work = true;
                 balance_events_count += 1;
 
-                // TODO: Persist balance events to DB/Ledger
-                // For now, just count them for verification
-                // Future: Write to balance_events table or separate log file
-                //
-                // Example persistence:
-                // balance_log.write_entry(&BalanceLogEntry {
-                //     user_id: balance_event.user_id,
-                //     asset_id: balance_event.asset_id,
-                //     event_type: balance_event.event_type,
-                //     amount: balance_event.amount,
-                //     order_id: balance_event.order_id,
-                //     trade_id: balance_event.trade_id,
-                //     version: balance_event.version,
-                //     avail_after: balance_event.avail_after,
-                //     frozen_after: balance_event.frozen_after,
-                //     timestamp_ns: balance_event.timestamp_ns,
-                // });
+                // Persist balance event to event log (if enabled)
+                ledger.write_balance_event(&balance_event);
             }
 
             // Check for shutdown (after both queues are drained)

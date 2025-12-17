@@ -718,6 +718,10 @@ fn main() {
     let (accepted, rejected, total_trades, perf, final_accounts, final_book) = if pipeline_mt_mode {
         println!("    Using Multi-Thread Pipeline (4 threads)...");
 
+        // Enable event logging for multi-thread mode
+        ledger.enable_event_logging(&events_path);
+        println!("    Event logging enabled: {}", events_path);
+
         // Create UBSCore and initialize with deposits
         let wal_config = WalConfig {
             path: wal_path.clone(),
