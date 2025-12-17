@@ -4,9 +4,19 @@
 
 ---
 
-## 1. 当前状态
+## 目录
 
-### 1.1 已有组件
+- [Part 1: 单线程 Pipeline](#part-1-单线程-pipeline)
+- [Part 2: 多线程 Pipeline](#part-2-多线程-pipeline)
+- [验证与性能](#验证与性能)
+
+---
+
+# Part 1: 单线程 Pipeline
+
+## 1.1 背景
+
+### 已有组件
 
 | 组件 | 文件 | 状态 |
 |------|------|------|
@@ -17,9 +27,7 @@
 | Engine | `src/engine.rs` | ✅ 实现 |
 | crossbeam-queue | Cargo.toml | ✅ 依赖 |
 
-### 1.2 当前执行模式
-
-目前 `execute_orders_with_ubscore()` 是**同步串行**执行：
+### 原始执行模式 (同步串行)
 
 ```
 for order in orders:
@@ -31,94 +39,41 @@ for order in orders:
 
 **问题**：没有 Pipeline 并行，延迟累加
 
----
+## 1.2 单线程 Pipeline 架构
 
-## 2. Pipeline 架构目标
+使用 Ring Buffer 解耦各服务，但仍在单线程中轮询执行：
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                         Ring Buffer Pipeline                             │
+│                    Single-Thread Pipeline (Round-Robin)                  │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
-│   Thread 1: Order Ingestion                                              │
-│   ┌──────────────┐                                                       │
-│   │   Input      │ ─────────────────────────────────────┐                │
-│   │   Orders     │                                      │                │
-│   └──────────────┘                                      ▼                │
-│                                                 ┌──────────────┐         │
-│                                                 │ order_queue  │         │
-│                                                 │ ArrayQueue   │         │
-│                                                 └──────┬───────┘         │
-│                                                        │                 │
-│   Thread 2: UBSCore (Pre-Trade)                        ▼                 │
-│   ┌──────────────────────────────────────────────────────────┐          │
-│   │  UBSCore.process_order():                                │          │
-│   │    1. Write Order WAL                                    │          │
-│   │    2. Lock Balance                                       │──┐       │
-│   │    3. If OK → Push to valid_order_queue                  │  │       │
-│   │       If Fail → Mark Rejected                            │  │       │
-│   └──────────────────────────────────────────────────────────┘  │       │
-│                                                                  │       │
-│                                                 ┌────────────────┘       │
-│                                                 ▼                        │
-│                                         ┌──────────────┐                 │
-│                                         │valid_order_q │                 │
-│                                         │ ArrayQueue   │                 │
-│                                         └──────┬───────┘                 │
-│                                                │                         │
-│   Thread 3: Matching Engine                    ▼                         │
-│   ┌──────────────────────────────────────────────────────────┐          │
-│   │  ME.process_order():                                     │          │
-│   │    1. Match against OrderBook                            │──┐       │
-│   │    2. Generate TradeEvents                               │  │       │
-│   │    3. Push to trade_queue                                │  │       │
-│   └──────────────────────────────────────────────────────────┘  │       │
-│                                                                  │       │
-│                                                 ┌────────────────┘       │
-│                                                 ▼                        │
-│                                         ┌──────────────┐                 │
-│                                         │ trade_queue  │                 │
-│                                         │ ArrayQueue   │                 │
-│                                         └──────┬───────┘                 │
-│                                                │                         │
-│                              ┌─────────────────┴─────────────────┐       │
-│                              │                                   │       │
-│   Thread 4: Settlement       ▼                Thread 5: UBSCore  ▼       │
-│   ┌──────────────────────────────┐         (Settle Balance)              │
-│   │  Settlement:                 │         ┌──────────────────────────┐  │
-│   │    1. Persist TradeEvents     │         │  UBSCore.settle_trade(): │  │
-│   │    2. Write Ledger            │         │    1. spend_frozen       │  │
-│   │                              │         │    2. deposit            │  │
-│   └──────────────────────────────┘         └──────────────────────────┘  │
+│   Stage 1: Ingestion          →  order_queue                            │
+│   Stage 2: UBSCore Pre-Trade  →  valid_order_queue                      │
+│   Stage 3: Matching Engine    →  trade_queue                            │
+│   Stage 4: Settlement         →  (Ledger)                               │
+│                                                                          │
+│   所有 Stage 在同一个 while 循环中轮询执行                               │
 │                                                                          │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
----
-
-## 3. 实现步骤
-
-### Phase 1: 定义 Ring Buffer 模块 ✅ 已完成
-
-创建 `src/pipeline.rs`：
+### 核心数据结构
 
 ```rust
-use crossbeam_queue::ArrayQueue;
-use std::sync::Arc;
-
-/// Pipeline 的 Ring Buffer 容量配置 (已实现)
+/// Pipeline 的 Ring Buffer 容量配置
 pub const ORDER_QUEUE_CAPACITY: usize = 4096;
 pub const VALID_ORDER_QUEUE_CAPACITY: usize = 4096;
-pub const TRADE_QUEUE_CAPACITY: usize = 16384;  // 1 order may generate multiple trades
+pub const TRADE_QUEUE_CAPACITY: usize = 16384;
 
-/// Pipeline 共享的 Ring Buffers (已实现)
+/// Pipeline 共享的 Ring Buffers
 pub struct PipelineQueues {
     pub order_queue: Arc<ArrayQueue<SequencedOrder>>,
     pub valid_order_queue: Arc<ArrayQueue<ValidOrder>>,
     pub trade_queue: Arc<ArrayQueue<TradeEvent>>,
 }
 
-/// Pipeline 统计 (已实现)
+/// Pipeline 统计
 pub struct PipelineStats {
     pub orders_ingested: AtomicU64,
     pub orders_accepted: AtomicU64,
@@ -127,51 +82,9 @@ pub struct PipelineStats {
     pub trades_settled: AtomicU64,
     pub backpressure_events: AtomicU64,
 }
-
-/// 单线程 Pipeline Runner (已实现)
-pub struct SingleThreadPipeline {
-    pub queues: PipelineQueues,
-    pub stats: Arc<PipelineStats>,
-    pub shutdown: Arc<ShutdownSignal>,
-}
 ```
 
-**已实现功能**：
-- ✅ `PipelineQueues` - 三个 Ring Buffer
-- ✅ `SequencedOrder` - 带序号的订单
-- ✅ `PipelineStats` - 原子统计计数
-- ✅ `ShutdownSignal` - 优雅关闭信号
-- ✅ `SingleThreadPipeline` - 单线程 Pipeline Runner
-- ✅ `push_with_backpressure()` - 带背压的推送
-- ✅ 10 个单元测试
-
-### Phase 2: 定义 Worker Traits
-
-```rust
-/// Pre-Trade Worker (UBSCore)
-pub trait PreTradeWorker {
-    fn process(&mut self, order: InputOrder) -> Result<ValidOrder, OrderEvent>;
-}
-
-/// Matching Worker (ME)  
-pub trait MatchingWorker {
-    fn process(&mut self, order: ValidOrder) -> Vec<TradeEvent>;
-}
-
-/// Settlement Worker
-pub trait SettlementWorker {
-    fn process(&mut self, trade: &TradeEvent);
-}
-
-/// Balance Settlement Worker (UBSCore)
-pub trait BalanceSettleWorker {
-    fn settle(&mut self, trade: &TradeEvent) -> Result<Vec<BalanceEvent>, Error>;
-}
-```
-
-### Phase 3: 单线程 Pipeline (验证正确性)
-
-先实现单线程版本，确保 Ring Buffer 通信正确：
+### 执行流程
 
 ```rust
 pub fn run_pipeline_single_thread(
@@ -187,7 +100,7 @@ pub fn run_pipeline_single_thread(
         queues.order_queue.push(order).unwrap();
     }
     
-    // 2. Process loop (single thread)
+    // 2. Process loop (single thread, round-robin)
     loop {
         // UBSCore: order_queue → valid_order_queue
         if let Some(order) = queues.order_queue.pop() {
@@ -219,158 +132,18 @@ pub fn run_pipeline_single_thread(
 }
 ```
 
-### Phase 4: 多线程 Pipeline
-
-使用 `std::thread` 或 Rayon 并行化：
-
-```rust
-pub fn run_pipeline_multi_thread(
-    orders: Vec<InputOrder>,
-    queues: PipelineQueues,
-) {
-    let (shutdown_tx, shutdown_rx) = crossbeam_channel::bounded(1);
-    
-    // Thread 1: Order Ingestion
-    let order_q = queues.order_queue.clone();
-    let ingestion = std::thread::spawn(move || {
-        for order in orders {
-            while order_q.push(order.clone()).is_err() {
-                std::hint::spin_loop();  // Backpressure
-            }
-        }
-    });
-    
-    // Thread 2: UBSCore Pre-Trade
-    let ubscore_thread = std::thread::spawn(move || {
-        loop {
-            if let Some(order) = order_queue.pop() {
-                // process...
-            }
-        }
-    });
-    
-    // Thread 3: Matching Engine
-    // Thread 4: Settlement
-    // ...
-    
-    // Wait for completion
-    ingestion.join().unwrap();
-    // Graceful shutdown...
-}
-```
-
----
-
-## 4. 关键设计决策
-
-### 4.1 Backpressure 策略
-
-当 Ring Buffer 满时：
-
-| 策略 | 描述 | 适用场景 |
-|------|------|----------|
-| Spin Wait | 忙等待 (`spin_loop()`) | 低延迟 |
-| Yield | `std::thread::yield_now()` | 中等 |
-| Block | Condvar 阻塞 | 省 CPU |
-
-**选择 Spin Wait**：HFT 场景优先低延迟
-
-### 4.2 Shutdown 机制
-
-使用 Poison Pill 模式：
-
-```rust
-enum PipelineMessage<T> {
-    Data(T),
-    Shutdown,
-}
-```
-
-### 4.3 错误处理
-
-- Pre-Trade 失败 → 记录 Rejected Event
-- Matching 保证成功（余额已锁定）
-- Settlement 必须成功（重试 or panic）
-
----
-
-## 5. 性能对比目标
-
-| 指标 | 串行模式 | Pipeline 模式 | 目标 |
-|------|----------|---------------|------|
-| 延迟 | 15µs/order | <10µs/order | -30% |
-| 吞吐量 | 72k ops/s | >100k ops/s | +40% |
-| CPU 利用率 | 单核 | 多核 | ↑ |
-
----
-
-## 6. 待解决问题
-
-### 6.1 Pipeline 确定性
-
-已通过 **分离 Version 空间** 解决（见 0x08-c）
-
-### 6.2 Graceful Shutdown
-
-需要实现：
-1. Stop accepting new orders
-2. Drain all queues
-3. Flush WAL
-4. Report final stats
-
-### 6.3 Backpressure Monitoring
-
-添加 metrics：
-- Queue depth
-- Push failures
-- Drain time
-
----
-
-## 7. 验证计划
-
-### 7.1 正确性验证
+## 1.3 运行命令
 
 ```bash
-# 运行 Pipeline 模式
+# 单线程 Pipeline
 cargo run --release -- --pipeline
-
-# 比较 baseline
-python3 scripts/verify_baseline_equivalence.py
-python3 scripts/verify_balance_events.py
-```
-
-### 7.2 性能验证
-
-```bash
-# 对比测试
-cargo run --release              # 串行
-cargo run --release -- --ubscore # UBSCore 串行
-cargo run --release -- --pipeline # Pipeline 并行
 ```
 
 ---
 
-## 进度追踪
+# Part 2: 多线程 Pipeline
 
-| Phase | 任务 | 状态 |
-|-------|------|------|
-| 1 | 创建 `src/pipeline.rs` | ✅ |
-| 1 | 实现 `PipelineQueues` | ✅ |
-| 1 | 实现 `SequencedOrder` | ✅ |
-| 1 | 实现 `PipelineStats` | ✅ |
-| 1 | 实现 `SingleThreadPipeline` | ✅ |
-| 2 | 定义 Worker Traits | ✅ (直接在 runner 中实现) |
-| 3 | 实现单线程 Pipeline 完整流程 | ✅ |
-| 3 | 验证正确性（baseline 对比） | ✅ |
-| **4** | **实现多线程 Pipeline** | **✅** |
-| 4 | 性能测试 | ✅ |
-
----
-
-## 多线程 Pipeline (Phase 4)
-
-### 架构
+## 2.1 架构
 
 根据 0x08-a 原始设计，完整的多线程 Pipeline 数据流如下：
 
@@ -410,10 +183,10 @@ cargo run --release -- --pipeline # Pipeline 并行
 ③ valid_order_queue:     UBSCore   → ME                ValidOrder
 ④ trade_queue:           ME        → Settlement        TradeEvent
 ⑤ balance_update_queue:  ME        → UBSCore           BalanceUpdateRequest
-⑥ balance_event_queue:   UBSCore   → Settlement        BalanceEvent  (NEW!)
+⑥ balance_event_queue:   UBSCore   → Settlement        BalanceEvent
 ```
 
-### 关键设计点
+## 2.2 关键设计点
 
 1. **ME Fan-out**: ME 将 `TradeEvent` **并行**发送到：
    - `trade_queue` → Settlement (持久化交易记录)
@@ -427,23 +200,28 @@ cargo run --release -- --pipeline # Pipeline 并行
 
 3. **Settlement 接收两个队列**:
    - `trade_queue`: 交易事件 (来自 ME)
-   - `balance_event_queue`: **所有**余额变更事件 (来自 UBSCore) - **需要新增**
+   - `balance_event_queue`: **所有**余额变更事件 (来自 UBSCore)
 
 4. **BalanceEvent 是完整的审计日志**:
    - 每一笔余额变更都生成 BalanceEvent
    - Settlement 持久化到 DB/Ledger
    - 支持完整的余额重建和审计
 
-### 新增类型
+## 2.3 数据类型
+
+### BalanceUpdateRequest (ME → UBSCore)
 
 ```rust
-/// 余额更新请求 (ME → UBSCore)
 #[derive(Clone)]
 pub struct BalanceUpdateRequest {
     pub trade_event: TradeEvent,
     pub price_improvement: Option<PriceImprovement>,
 }
+```
 
+### BalanceEvent (UBSCore → Settlement)
+
+```rust
 /// 余额变更事件 (UBSCore → Settlement)
 /// 
 /// 重要：这是 **所有** 余额变更事件的通道，包括但不限于：
@@ -487,7 +265,11 @@ pub enum BalanceEventType {
     // === Price Improvement ===
     RefundFrozen,   // 价格改善退款: frozen -= amount, avail += amount
 }
+```
 
+### MultiThreadQueues
+
+```rust
 /// 多线程队列 (完整版)
 pub struct MultiThreadQueues {
     // Pre-Trade Flow
@@ -505,7 +287,7 @@ pub struct MultiThreadQueues {
 }
 ```
 
-### 实现状态
+## 2.4 实现状态
 
 | 组件 | 状态 |
 |------|------|
@@ -517,7 +299,7 @@ pub struct MultiThreadQueues {
 | UBSCore 生成 BalanceEvent | ✅ 已实现 (Lock, SpendFrozen, Credit, RefundFrozen) |
 | Settlement 消费 BalanceEvent | ✅ 已实现 (计数统计，持久化待补充) |
 
-#### BalanceEvent 类型实现状态
+### BalanceEvent 类型实现状态
 
 | 事件类型 | 触发场景 | 状态 |
 |----------|----------|------|
@@ -529,12 +311,9 @@ pub struct MultiThreadQueues {
 | `Deposit` | 外部充值 | ⏳ 待实现 |
 | `Withdraw` | 外部提现 | ⏳ 待实现 |
 
-### 运行命令
+## 2.5 运行命令
 
 ```bash
-# 单线程 Pipeline
-cargo run --release -- --pipeline
-
 # 多线程 Pipeline
 cargo run --release -- --pipeline-mt
 
@@ -544,38 +323,97 @@ cargo run --release -- --ubscore
 
 ---
 
-## 验证结果 (2025-12-17)
+# 验证与性能
 
-### 正确性验证
+## 正确性验证
+
+```bash
+# 运行 E2E 测试
+./scripts/test_e2e.sh
+```
 
 | 数据集 | Pipeline vs UBSCore | 结果 |
 |--------|---------------------|------|
 | 100k orders | MD5 match | ✅ |
 | 1.3M orders (含 30 万 cancel) | MD5 match | ✅ |
 
-### 最终性能对比 (100k orders)
+## 性能对比 (2025-12-17)
+
+### 1.3M 订单数据集 (含 30 万 cancel)
+
+| 模式 | 执行时间 | 吞吐量 | Trades |
+|------|----------|--------|--------|
+| UBSCore | 23.5s | 55k ops/s | 538,487 |
+| Single-Thread Pipeline | 22.1s | 59k ops/s | 538,487 |
+| Multi-Thread Pipeline | 29.1s | 45k ops/s | 489,804 |
+
+**观察**:
+- 多线程模式跳过 cancel 订单（30 万），Trades 数量不一致
+- 多线程模式反而比单线程慢 ~30%
+- **待调查**: 原因待分析
+
+### 100k 订单数据集 (纯新订单，无 cancel)
 
 | 模式 | 执行时间 | 吞吐量 | vs UBSCore |
 |------|----------|--------|------------|
-| UBSCore | 586ms | 170k ops/s | baseline |
-| Single-Thread Pipeline | 430ms | 232k ops/s | **+36%** |
-| **Multi-Thread Pipeline** | **412ms** | **242k ops/s** | **+42%** |
+| UBSCore | 755ms | 132k ops/s | baseline |
+| Single-Thread Pipeline | 519ms | 193k ops/s | **+46%** |
+| **Multi-Thread Pipeline** | **391ms** | **256k ops/s** | **+93%** |
 
-### 分析
+**观察**:
+- 100k 小数据集上多线程表现最佳
+- 1.3M 大数据集上多线程反而退化
 
-实际加速比超过 Amdahl's Law 预测的原因：
-1. **Ledger 异步化** - 文件 I/O 不再阻塞关键路径
-2. **CPU 流水线优化** - 多线程利用现代 CPU 的并行执行单元
-3. **减少内存竞争** - 每个线程有独立的工作集
+### 已知不一致
+
+| 差异项 | 单线程 Pipeline | 多线程 Pipeline |
+|--------|-----------------|-----------------|
+| Cancel 订单处理 | ✅ 处理 | ❌ 跳过 |
+| Trades 数量 (1.3M) | 538,487 | 489,804 |
+| BalanceEvent 队列 | ❌ 不使用 (本地生成) | ✅ 使用 `balance_event_queue` |
+| BalanceEvent 类型 | `messages::BalanceEvent` | `pipeline::BalanceEvent` |
+
+**待办**:
+1. 多线程实现 cancel 订单处理 (生成 `Unlock` 事件)
+2. Trades 数量一致后重新对比性能
+3. 分析 1.3M 数据集上多线程变慢的根本原因
+
+---
+
+## 关键设计决策
+
+### Backpressure 策略
+
+| 策略 | 描述 | 适用场景 |
+|------|------|----------|
+| Spin Wait | 忙等待 (`spin_loop()`) | 低延迟 |
+| Yield | `std::thread::yield_now()` | 中等 |
+| Block | Condvar 阻塞 | 省 CPU |
+
+**选择 Spin Wait**：HFT 场景优先低延迟
+
+### Shutdown 机制
+
+使用 `ShutdownSignal` 原子标记优雅关闭：
+1. Stop accepting new orders
+2. Drain all queues
+3. Flush WAL
+4. Report final stats
+
+### 错误处理
+
+- Pre-Trade 失败 → 记录 Rejected Event
+- Matching 保证成功（余额已锁定）
+- Settlement 必须成功（无限重试直到成功）
 
 ---
 
 ## 文件变更
 
-| 文件 | 变更 |
+| 文件 | 说明 |
 |------|------|
-| `src/pipeline.rs` | 添加 `SettleRequest`, `PipelineEvent`, `MultiThreadQueues` |
+| `src/pipeline.rs` | Ring Buffer 队列、BalanceEvent 类型定义 |
 | `src/pipeline_runner.rs` | 单线程 Pipeline Runner |
-| `src/pipeline_mt.rs` | **新增**：多线程 Pipeline 实现 |
-| `src/lib.rs` | 导出新模块 |
-| `src/main.rs` | 添加 `--pipeline`, `--pipeline-mt` 模式 |
+| `src/pipeline_mt.rs` | 多线程 Pipeline 实现 |
+| `src/lib.rs` | 导出模块 |
+| `src/main.rs` | `--pipeline`, `--pipeline-mt` 模式 |
