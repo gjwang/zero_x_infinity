@@ -16,6 +16,7 @@
 - [0x08-c 完整事件流 (Complete Event Flow)](./0x08-c-ring-buffer-pipeline.md)
 - [0x08-d 完整订单生命周期 (Complete Order Lifecycle)](./0x08-d-complete-order-lifecycle.md)
 - [0x08-e 撤单性能优化 (Cancel Optimization: Order Index)](./0x08-e-cancel-optimization.md)
+- [0x08-f Ring Buffer Pipeline (WIP)](./0x08-f-ring-buffer-pipeline.md)
 ---
 
 - [Performance Report (Latest)](./perf-report.md)
