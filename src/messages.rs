@@ -661,4 +661,31 @@ mod tests {
             "user_id,asset_id,event_type,version,source_type,source_id,delta,avail_after,frozen_after"
         );
     }
+
+    #[test]
+    fn test_balance_event_unlock() {
+        let event = BalanceEvent::unlock(
+            100,   // user_id
+            1,     // asset_id (BTC)
+            5,     // order_seq_id (cancelled order)
+            1000,  // amount
+            4,     // lock_version (after unlock)
+            10000, // avail_after (restored)
+            0,     // frozen_after (released)
+        );
+
+        assert_eq!(event.user_id, 100);
+        assert_eq!(event.asset_id, 1);
+        assert_eq!(event.event_type, BalanceEventType::Unlock);
+        assert_eq!(event.version, 4);
+        assert_eq!(event.source_type, SourceType::Order); // Unlock is triggered by order
+        assert_eq!(event.source_id, 5);
+        assert_eq!(event.delta, 1000); // Positive: avail increases
+        assert_eq!(event.avail_after, 10000);
+        assert_eq!(event.frozen_after, 0);
+
+        // Test CSV output
+        let csv = event.to_csv();
+        assert_eq!(csv, "100,1,unlock,4,order,5,1000,10000,0");
+    }
 }
