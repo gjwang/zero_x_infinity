@@ -76,10 +76,15 @@ impl MatchingEngine {
     fn match_buy(book: &mut OrderBook, buy_order: &mut InternalOrder) -> Vec<PendingTrade> {
         let mut pending_trades = Vec::new();
         let mut prices_to_remove = Vec::new();
-        let mut filled_order_ids = Vec::new(); // Track filled orders to remove from index
+        let mut filled_order_ids = Vec::new();
 
-        // Get sorted prices first to avoid borrow issues
-        let prices: Vec<u64> = book.asks().keys().copied().collect();
+        // Only collect prices within matching range (optimization: avoid full key copy)
+        let max_price = if buy_order.order_type == OrderType::Limit {
+            buy_order.price
+        } else {
+            u64::MAX // Market order matches all
+        };
+        let prices: Vec<u64> = book.asks().range(..=max_price).map(|(&k, _)| k).collect();
 
         for price in prices {
             // Buy order can match asks at or below its price
@@ -146,10 +151,17 @@ impl MatchingEngine {
     fn match_sell(book: &mut OrderBook, sell_order: &mut InternalOrder) -> Vec<PendingTrade> {
         let mut pending_trades = Vec::new();
         let mut keys_to_remove = Vec::new();
-        let mut filled_order_ids = Vec::new(); // Track filled orders to remove from index
+        let mut filled_order_ids = Vec::new();
 
-        // Get sorted keys first to avoid borrow issues
-        let keys: Vec<u64> = book.bids().keys().copied().collect();
+        // Only collect keys within matching range (optimization: avoid full key copy)
+        // Bids are stored with key = u64::MAX - price, so higher prices come first
+        // For a sell at price P, we match bids with price >= P, i.e., key <= u64::MAX - P
+        let max_key = if sell_order.order_type == OrderType::Limit {
+            u64::MAX - sell_order.price
+        } else {
+            u64::MAX // Market order matches all
+        };
+        let keys: Vec<u64> = book.bids().range(..=max_key).map(|(&k, _)| k).collect();
 
         for key in keys {
             let bid_price = u64::MAX - key;
