@@ -12,5 +12,5 @@ gateway:
   queue_size: 10000
 
 persistence:
-  enabled: false  # Set to true when TDengine is running
+  enabled: true  # TDengine is running
   tdengine_dsn: "taos+ws://root:taosdata@localhost:6041"

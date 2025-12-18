@@ -37,8 +37,8 @@ pub async fn run_server(
         // Write endpoints
         .route("/api/v1/create_order", post(handlers::create_order))
         .route("/api/v1/cancel_order", post(handlers::cancel_order))
-        // Query endpoints (placeholder)
-        .route("/api/v1/order/:order_id", get(handlers::get_order))
+        // Query endpoints
+        .route("/api/v1/order/{order_id}", get(handlers::get_order))
         .route("/api/v1/orders", get(handlers::get_orders))
         .route("/api/v1/trades", get(handlers::get_trades))
         .route("/api/v1/balances", get(handlers::get_balances))
