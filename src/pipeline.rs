@@ -627,10 +627,7 @@ impl PipelineStats {
     pub fn incr_backpressure(&self) {
         let count = self.backpressure_events.fetch_add(1, Ordering::Relaxed);
         if count % 10000 == 0 {
-            tracing::warn!(
-                total_backpressure = count + 1,
-                "Pipeline backpressure detected (sampled 1/10000)"
-            );
+            tracing::warn!(target: "0XINFI", total_backpressure = count + 1, "Backpressure detected (1/10000)");
         }
     }
 

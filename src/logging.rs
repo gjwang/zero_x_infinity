@@ -14,7 +14,7 @@ pub fn init_logging(config: &AppConfig) -> WorkerGuard {
     let filter_str = if config.enable_tracing {
         config.log_level.clone()
     } else {
-        format!("{},pipeline_trace=off", config.log_level)
+        format!("{},0XINFI=off", config.log_level)
     };
 
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(filter_str));
@@ -24,12 +24,16 @@ pub fn init_logging(config: &AppConfig) -> WorkerGuard {
     if config.use_json {
         let file_layer = fmt::layer()
             .json()
+            .with_target(true) // Keep target in JSON for structured queries
             .with_writer(non_blocking)
             .with_ansi(false);
         registry.with(file_layer).init();
     } else {
-        let file_layer = fmt::layer().with_writer(non_blocking).with_ansi(false);
-        let stdout_layer = fmt::layer().with_ansi(true);
+        let file_layer = fmt::layer()
+            .with_target(false) // Hide redundant target in text output
+            .with_writer(non_blocking)
+            .with_ansi(false);
+        let stdout_layer = fmt::layer().with_target(false).with_ansi(true);
         registry.with(file_layer).with(stdout_layer).init();
     }
 
