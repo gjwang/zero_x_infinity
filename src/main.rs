@@ -89,18 +89,143 @@ fn use_pipeline_mt_mode() -> bool {
     std::env::args().any(|a| a == "--pipeline-mt")
 }
 
+fn use_gateway_mode() -> bool {
+    std::env::args().any(|a| a == "--gateway")
+}
+
+fn get_port() -> u16 {
+    let args: Vec<String> = std::env::args().collect();
+    for i in 0..args.len() {
+        if args[i] == "--port" && i + 1 < args.len() {
+            return args[i + 1].parse().unwrap_or(8080);
+        }
+    }
+    8080
+}
+
 fn main() {
     let output_dir = get_output_dir();
     let input_dir = get_input_dir();
     let ubscore_mode = use_ubscore_mode();
     let pipeline_mode = use_pipeline_mode();
     let pipeline_mt_mode = use_pipeline_mt_mode();
+    let gateway_mode = use_gateway_mode();
 
     let env = get_env();
     let app_config = zero_x_infinity::config::AppConfig::load(&env);
     let _log_guard = zero_x_infinity::logging::init_logging(&app_config);
 
     tracing::info!("Starting 0xInfinity Engine in {} mode", env);
+
+    // Gateway mode: HTTP + Trading Core
+    if gateway_mode {
+        println!("=== 0xInfinity: Chapter 9a - Gateway Mode ===");
+
+        // Load configuration
+        let (symbol_mgr, active_symbol_id) = load_symbol_manager();
+        let port = get_port();
+
+        println!("Gateway will listen on port: {}", port);
+        println!(
+            "Active symbol: {}",
+            symbol_mgr
+                .get_symbol_info_by_id(active_symbol_id)
+                .unwrap()
+                .symbol
+        );
+
+        // Create shared queues
+        let queues = std::sync::Arc::new(zero_x_infinity::MultiThreadQueues::new());
+        let symbol_mgr = std::sync::Arc::new(symbol_mgr);
+
+        // Start HTTP Server in separate thread with tokio runtime
+        let queues_clone = queues.clone();
+        let symbol_mgr_clone = symbol_mgr.clone();
+        let gateway_thread = std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(async {
+                zero_x_infinity::gateway::run_server(
+                    port,
+                    queues_clone.order_queue.clone(),
+                    symbol_mgr_clone,
+                    active_symbol_id,
+                )
+                .await;
+            });
+        });
+
+        println!("🚀 Gateway thread started");
+
+        // Prepare for Trading Core
+        println!("\n[1] Initializing Trading Core...");
+
+        // Load initial balances
+        let accounts = load_balances_and_deposit(&format!("{}/balances_init.csv", input_dir));
+
+        // Create output paths
+        std::fs::create_dir_all(output_dir).unwrap();
+        let ledger_path = format!("{}/t2_ledger.csv", output_dir);
+        let events_path = format!("{}/t2_events.csv", output_dir);
+        let wal_path = format!("{}/orders.wal", output_dir);
+
+        // Initialize services
+        let mut book = OrderBook::new();
+        let mut ledger = LedgerWriter::new(&ledger_path);
+        ledger.enable_event_logging(&events_path);
+
+        let wal_config = WalConfig {
+            path: wal_path,
+            flush_interval_entries: 100,
+            sync_on_flush: false,
+        };
+
+        let mut ubscore =
+            UBSCore::new((*symbol_mgr).clone(), wal_config).expect("Failed to create UBSCore");
+
+        // Transfer initial balances to UBSCore
+        let symbol_info = symbol_mgr.get_symbol_info_by_id(active_symbol_id).unwrap();
+        let base_id = symbol_info.base_asset_id;
+        let quote_id = symbol_info.quote_asset_id;
+
+        for (user_id, account) in &accounts {
+            for asset_id in [base_id, quote_id] {
+                if let Some(balance) = account.get_balance(asset_id) {
+                    if balance.avail() > 0 {
+                        ubscore
+                            .deposit(*user_id, asset_id, balance.avail())
+                            .unwrap();
+                    }
+                }
+            }
+        }
+
+        println!("✅ Trading Core initialized");
+        println!(
+            "\n🎯 System ready! Send orders to http://localhost:{}/api/v1/create_order",
+            port
+        );
+        println!("Press Ctrl+C to shutdown\n");
+
+        // Run Trading Core (this will block and process orders from gateway)
+        let _result = run_pipeline_multi_thread(
+            vec![], // No pre-loaded orders, will come from gateway
+            zero_x_infinity::pipeline::PipelineServices {
+                ubscore,
+                book,
+                ledger,
+            },
+            zero_x_infinity::pipeline::PipelineConfig {
+                symbol_mgr: &symbol_mgr,
+                active_symbol_id,
+                sample_rate: app_config.sample_rate,
+            },
+        );
+
+        // Wait for gateway thread
+        gateway_thread.join().unwrap();
+
+        return;
+    }
 
     if pipeline_mt_mode {
         println!("=== 0xInfinity: Chapter 8g - Multi-Thread Pipeline ===");
