@@ -161,13 +161,19 @@ pub fn run_pipeline_multi_thread(
         thread::spawn(move || service.run(&s))
     };
 
-    let t2_ubscore = spawn_ubscore_stage(
-        services.ubscore,
-        queues.clone(),
-        stats.clone(),
-        shutdown.clone(),
-        _start_time,
-    );
+    let t2_ubscore = {
+        let mut service = crate::pipeline_services::UBSCoreService::new(
+            services.ubscore,
+            queues.clone(),
+            stats.clone(),
+            _start_time,
+        );
+        let s = shutdown.clone();
+        thread::spawn(move || {
+            service.run(&s);
+            service.into_inner()
+        })
+    };
 
     let t3_me = spawn_me_stage(
         services.book,
