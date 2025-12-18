@@ -30,6 +30,33 @@
 - Settlement
 - Event Logging
 
+## 测试执行方法 (Test Execution)
+
+为了重现测试结果，请确保在 **Release 模式**下运行，并指定相应的数据集路径。
+
+### 1. 数据集准备
+默认使用 130 万量级的订单数据集（包含 30% 撤单）：
+- **Path**: `fixtures/test_with_cancel_highbal/`
+- **内容**: `orders.csv`, `balances_init.csv`
+
+### 2. 运行单线程流水线 (Single-Thread)
+```bash
+cargo run --release -- --pipeline --input fixtures/test_with_cancel_highbal
+```
+
+### 3. 运行多线程流水线 (Multi-Thread)
+```bash
+cargo run --release -- --pipeline-mt --input fixtures/test_with_cancel_highbal
+```
+
+### 4. 自动化对比脚本
+我们提供了一个脚本可以一次性运行两种模式并进行结果对等性校验：
+```bash
+./scripts/test_pipeline_compare.sh highbal
+```
+
+---
+
 ## 执行结果与分析 (1.3M 数据集)
 
 针对 130 万订单数据集（包含 30% 撤单，高余额模式），我们对单线程和多线程流水线进行了对比测试。
