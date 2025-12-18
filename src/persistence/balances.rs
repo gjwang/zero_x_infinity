@@ -82,10 +82,9 @@ mod tests {
 
         client.init_schema().await.expect("Failed to init schema");
 
-        let balance = Balance::new(
-            100_00000000, // avail
-            10_00000000,  // frozen
-        );
+        let mut balance = Balance::default();
+        balance.deposit(100_00000000).expect("Failed to deposit");
+        balance.lock(10_00000000).expect("Failed to lock");
 
         snapshot_balance(client.taos(), 1001, 1, &balance)
             .await
