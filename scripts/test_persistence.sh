@@ -4,8 +4,6 @@
 # Tests TDengine integration and query endpoints
 #
 
-set -e  # Exit on error
-
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -83,14 +81,20 @@ trap cleanup EXIT
 print_header "Pre-flight Checks"
 
 print_test "Checking required commands..."
+MISSING_CMDS=0
 for cmd in docker curl jq cargo; do
     if command_exists "$cmd"; then
         print_success "$cmd is installed"
     else
         print_error "$cmd is not installed"
-        exit 1
+        MISSING_CMDS=1
     fi
 done
+
+if [ $MISSING_CMDS -eq 1 ]; then
+    print_error "Missing required commands. Please install them first."
+    exit 1
+fi
 
 # ============================================
 # TDengine Setup
