@@ -1,5 +1,7 @@
 # 0x08-g 多线程 Pipeline 设计 (Multi-Thread Pipeline Design)
 
+> **📦 代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.8-f-ring-buffer-pipeline...v0.8-h-performance-monitoring) | [关键文件: pipeline_mt.rs](https://github.com/gjwang/zero_x_infinity/blob/main/src/pipeline_mt.rs)
+
 ## 概述
 
 Multi-Thread Pipeline 将处理逻辑分布在 4 个独立线程中，通过无锁队列通信，实现高吞吐量的订单处理。

@@ -1,5 +1,7 @@
 # Chapter 0x08-b: UBSCore Implementation
 
+> **📦 代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.8-a-trading-pipeline-design...v0.8-b-ubscore-implementation)
+
 > 从设计到实现：构建安全第一的余额核心服务
 
 ---

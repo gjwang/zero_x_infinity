@@ -1,5 +1,7 @@
 # 0x08-f Ring Buffer Pipeline 实现
 
+> **📦 代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.8-e-perf-bottleneck-profiling...v0.8-f-ring-buffer-pipeline)
+
 > **目标**：使用 Ring Buffer 串接不同服务，实现真正的 Pipeline 架构
 
 ---

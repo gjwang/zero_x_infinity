@@ -1,5 +1,7 @@
 # 0x01 创世纪: 基础引擎 (Genesis: The Basic Engine)
 
+> **📦 代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/8046049...v0.1-genesis)
+
 这是 0xInfinity 的第一个版本。在这一阶段，我们构建了一个最简单的中央限价订单簿（CLOB）雏形。我们的目标是直观地展示现实世界的交易逻辑，使用标准的数据结构来管理订单。
 
 ## 1. 订单簿布局 (Visualizing the Orderbook)

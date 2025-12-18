@@ -1,5 +1,7 @@
 # 0x08-c 完整事件流与验证
 
+> **📦 代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.8-b-ubscore-implementation...v0.8-c-complete-event-flow)
+
 > **核心目标**：实现完整的事件溯源架构，验证与旧版本的等效性，升级 baseline。
 
 ---

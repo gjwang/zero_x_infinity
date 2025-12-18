@@ -1,5 +1,7 @@
 # 0x06 强制余额管理 (Enforced Balance)
 
+> **📦 代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.5-user-balance...v0.6-enforced-balance)
+
 在上一章中，我们实现了用户账户的余额管理。但在金融系统中，资金操作是**最核心、最关键**的操作，必须确保万无一失。本章我们将余额管理升级为**类型系统强制**的安全版本。
 
 ---

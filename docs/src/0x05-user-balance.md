@@ -1,5 +1,7 @@
 # 0x05 用户账户与余额管理 (User Account & Balance Management)
 
+> **📦 代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.4-btree-orderbook...v0.5-user-balance)
+
 在前几章中，我们的撮合引擎已经可以正确匹配订单并产生成交。但有一个关键问题：**钱从哪里来？** 在真实的交易所中，用户必须先有足够的资金才能下单，成交后资金才会转移。
 
 本章我们将实现用户账户系统，包括：
