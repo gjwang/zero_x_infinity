@@ -915,7 +915,7 @@ mod tests {
 
     #[test]
     fn test_pipeline_stats() {
-        let stats = PipelineStats::new();
+        let stats = PipelineStats::new(1);
 
         stats.incr_ingested();
         stats.incr_ingested();
@@ -942,7 +942,7 @@ mod tests {
     #[test]
     fn test_push_with_backpressure_success() {
         let queue = ArrayQueue::new(10);
-        let stats = PipelineStats::new();
+        let stats = PipelineStats::new(1);
 
         // Push should succeed immediately when queue not full
         let result = push_with_backpressure(&queue, 42, &stats);
@@ -952,7 +952,7 @@ mod tests {
 
     #[test]
     fn test_single_thread_pipeline_creation() {
-        let pipeline = SingleThreadPipeline::new();
+        let pipeline = SingleThreadPipeline::new(1);
 
         assert!(!pipeline.has_pending_work());
         assert!(!pipeline.is_shutdown_requested());
@@ -963,7 +963,7 @@ mod tests {
 
     #[test]
     fn test_single_thread_pipeline_ingest() {
-        let pipeline = SingleThreadPipeline::new();
+        let pipeline = SingleThreadPipeline::new(1);
         let order = make_test_order(1, 100);
 
         // Ingest order
@@ -985,7 +985,7 @@ mod tests {
 
     #[test]
     fn test_single_thread_pipeline_shutdown() {
-        let pipeline = SingleThreadPipeline::new();
+        let pipeline = SingleThreadPipeline::new(1);
 
         assert!(!pipeline.is_shutdown_requested());
         pipeline.request_shutdown();
@@ -994,7 +994,7 @@ mod tests {
 
     #[test]
     fn test_single_thread_pipeline_multiple_orders() {
-        let pipeline = SingleThreadPipeline::new();
+        let pipeline = SingleThreadPipeline::new(1);
 
         // Ingest multiple orders
         for i in 1..=5 {

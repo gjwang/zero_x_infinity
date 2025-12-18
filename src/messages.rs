@@ -732,6 +732,7 @@ mod tests {
             3,    // lock_version
             9000, // avail_after
             1000, // frozen_after
+            0,    // ingested_at_ns
         );
 
         assert_eq!(event.user_id, 100);
@@ -755,6 +756,7 @@ mod tests {
             7,    // settle_version
             0,    // avail_after
             5000, // frozen_after
+            0,    // ingested_at_ns
         );
 
         assert_eq!(event.event_type, BalanceEventType::Settle);
@@ -765,7 +767,7 @@ mod tests {
 
     #[test]
     fn test_balance_event_csv() {
-        let event = BalanceEvent::lock(100, 1, 5, 1000, 3, 9000, 1000);
+        let event = BalanceEvent::lock(100, 1, 5, 1000, 3, 9000, 1000, 0);
         let csv = event.to_csv();
 
         assert_eq!(csv, "100,1,lock,3,order,5,-1000,9000,1000");
@@ -785,6 +787,7 @@ mod tests {
             4,     // lock_version (after unlock)
             10000, // avail_after (restored)
             0,     // frozen_after (released)
+            0,     // ingested_at_ns
         );
 
         assert_eq!(event.user_id, 100);

@@ -369,7 +369,7 @@ mod tests {
             rejected: 5,
             total_trades: 50,
             perf: PerfMetrics::new(10),
-            pipeline_stats: crate::pipeline::PipelineStats::new().snapshot(),
+            pipeline_stats: crate::pipeline::PipelineStats::new(1).snapshot(),
         };
 
         assert_eq!(result.accepted, 100);
