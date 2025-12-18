@@ -42,6 +42,7 @@ This is a pilgrimage from `Hello World` to `Microsecond Latency`.
 | 0x08-g | [Multi-Thread Pipeline](./docs/src/0x08-g-multi-thread-pipeline.md) | 多线程 Pipeline |
 | 0x08-h | [Performance Monitoring](./docs/src/0x08-h-performance-monitoring.md) | 性能监控与意图编码 |
 | 0x09-a | [Gateway: Client Access Layer](./docs/src/0x09-a-gateway.md) | HTTP Gateway 客户端接入层 |
+| 0x09-b | [Settlement Persistence](./docs/src/0x09-b-settlement-persistence.md) | TDengine 持久化层 |
 
 ---
 
@@ -69,6 +70,65 @@ cargo test
 # Test Gateway API
 ./scripts/test_gateway_simple.sh
 ```
+
+---
+
+## 💾 Settlement Persistence (TDengine)
+
+### Start TDengine
+
+```bash
+docker run -d --name tdengine -p 6030:6030 -p 6041:6041 tdengine/tdengine:latest
+```
+
+### Enable Persistence
+
+Edit `config/dev.yaml`:
+
+```yaml
+persistence:
+  enabled: true
+  tdengine_dsn: "taos+ws://root:taosdata@localhost:6041"
+```
+
+### Run with Persistence
+
+```bash
+cargo run --release -- --gateway --env dev
+```
+
+### Query Data
+
+```bash
+# Connect to TDengine
+docker exec -it tdengine taos
+
+# Query orders
+USE trading;
+SELECT * FROM orders LIMIT 10;
+
+# Query trades
+SELECT * FROM trades LIMIT 10;
+
+# Query balances
+SELECT * FROM balances LIMIT 10;
+```
+
+### API Endpoints (Placeholder)
+
+- `POST /api/v1/create_order` - Create order ✅
+- `POST /api/v1/cancel_order` - Cancel order ✅
+- `GET /api/v1/order/:order_id` - Query order ✅
+- `GET /api/v1/orders?user_id=&limit=` - Query orders list ✅
+- `GET /api/v1/trades?limit=` - Query trades ✅
+- `GET /api/v1/balances?user_id=&asset_id=` - Query balances ✅
+
+### Settlement Thread Integration
+
+**Status**: Documented, not yet implemented  
+**Guide**: See `settlement_integration_guide.md` for step-by-step instructions
+
+Currently, data must be persisted manually using the persistence layer functions. Automatic persistence from the Settlement thread requires passing `TDengineClient` through the pipeline (estimated 20-30 minutes of work).
 
 ---
 

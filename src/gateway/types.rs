@@ -150,6 +150,7 @@ impl ValidatedClientOrder {
             lock_version: 0,
             seq_id: 0,
             ingested_at_ns,
+            cid: self.cid,
         })
     }
 }

@@ -2,6 +2,7 @@ use crossbeam_queue::ArrayQueue;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use crate::persistence::TDengineClient;
 use crate::pipeline::OrderAction;
 use crate::symbol_manager::SymbolManager;
 
@@ -16,6 +17,8 @@ pub struct AppState {
     pub active_symbol_id: u32,
     /// 订单 ID 生成器
     order_id_gen: Arc<AtomicU64>,
+    /// TDengine 客户端 (可选，用于查询)
+    pub db_client: Option<Arc<TDengineClient>>,
 }
 
 impl AppState {
@@ -23,12 +26,14 @@ impl AppState {
         order_queue: Arc<ArrayQueue<OrderAction>>,
         symbol_mgr: Arc<SymbolManager>,
         active_symbol_id: u32,
+        db_client: Option<Arc<TDengineClient>>,
     ) -> Self {
         Self {
             order_queue,
             symbol_mgr,
             active_symbol_id,
             order_id_gen: Arc::new(AtomicU64::new(1)),
+            db_client,
         }
     }
 

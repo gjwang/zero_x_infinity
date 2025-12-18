@@ -322,6 +322,7 @@ impl WalReader {
             ingested_at_ns,
             lock_version: 0,
             seq_id: 0,
+            cid: None,
         };
 
         Some(WalEntry {

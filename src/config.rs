@@ -11,6 +11,8 @@ pub struct AppConfig {
     pub sample_rate: usize,
     pub enable_tracing: bool,
     pub gateway: GatewayConfig,
+    #[serde(default)]
+    pub persistence: PersistenceConfig,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -18,6 +20,21 @@ pub struct GatewayConfig {
     pub host: String,
     pub port: u16,
     pub queue_size: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PersistenceConfig {
+    pub enabled: bool,
+    pub tdengine_dsn: String,
+}
+
+impl Default for PersistenceConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            tdengine_dsn: "taos+ws://root:taosdata@localhost:6041".to_string(),
+        }
+    }
 }
 
 impl AppConfig {
