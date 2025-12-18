@@ -184,10 +184,14 @@ async fn submit_order(order: OrderRequest) -> Result<OrderResponse, ApiError> {
 
 // Response (202 Accepted)
 {
-    "order_id": 1001,
-    "cid": "my-order-001",
-    "status": "ACCEPTED",   // ACCEPTED | REJECTED (SCREAMING_CASE)
-    "accepted_at": 1734533784000
+    "code": 0,              // 0 = 成功, 非0 = 错误码
+    "msg": "ok",
+    "data": {
+        "order_id": 1001,
+        "cid": "my-order-001",
+        "order_status": "ACCEPTED",  // ACCEPTED | REJECTED
+        "accepted_at": 1734533784000
+    }
 }
 ```
 
@@ -202,35 +206,81 @@ async fn submit_order(order: OrderRequest) -> Result<OrderResponse, ApiError> {
 
 // Response (200 OK)
 {
-    "order_id": 1001,
-    "status": "CANCEL_PENDING"  // SCREAMING_CASE
-}
-```
-
-### 3.3 错误响应
-
-```json
-// 4xx Client Error
-{
-    "error": {
-        "code": "INSUFFICIENT_BALANCE",
-        "message": "Available balance is insufficient",
-        "details": {
-            "required": "1000.00",
-            "available": "500.00"
-        }
+    "code": 0,
+    "msg": "ok",
+    "data": {
+        "order_id": 1001,
+        "order_status": "CANCEL_PENDING"
     }
 }
 ```
 
-| Code | HTTP Status | 说明 |
-|------|-------------|------|
-| `INVALID_PARAMETER` | 400 | 参数格式错误 |
-| `UNAUTHORIZED` | 401 | 认证失败 |
-| `INSUFFICIENT_BALANCE` | 400 | 余额不足 |
-| `ORDER_NOT_FOUND` | 404 | 订单不存在 |
-| `RATE_LIMITED` | 429 | 请求过于频繁 |
-| `INTERNAL_ERROR` | 500 | 服务器内部错误 |
+### 3.3 统一响应格式
+
+**所有 API 响应统一使用以下格式**:
+
+```json
+{
+    "code": 0,          // 0 = 成功, 非0 = 错误码
+    "msg": "ok",        // 消息描述 (简短)
+    "data": {}          // 实际数据 (成功时) 或 null (失败时)
+}
+```
+
+**设计原则**:
+- `code` 而非 `status`: 避免与 HTTP status 混淆
+- `msg` 而非 `message`: 简短明确，减少流量
+- `data`: 统一的数据容器
+
+#### 成功响应
+
+```json
+// 成功示例
+{
+    "code": 0,
+    "msg": "ok",
+    "data": {
+        "order_id": 1001,
+        "cid": "my-order-001",
+        "order_status": "ACCEPTED",
+        "accepted_at": 1734533784000
+    }
+}
+```
+
+#### 错误响应
+
+```json
+// 错误示例 (400 Bad Request)
+{
+    "code": 1001,       // 业务错误码
+    "msg": "Invalid parameter: price must be greater than zero",
+    "data": null
+}
+
+// 错误示例 (401 Unauthorized)
+{
+    "code": 2001,
+    "msg": "Missing X-User-ID header",
+    "data": null
+}
+```
+
+### 3.4 错误码设计
+
+**简化的错误码方案** (不使用 HTTP*100):
+
+| Code | 说明 | HTTP Status |
+|------|------|-------------|
+| 0 | 成功 | 200/202 |
+| 1001 | 参数格式错误 | 400 |
+| 1002 | 余额不足 | 400 |
+| 1003 | 价格/数量无效 | 400 |
+| 2001 | 缺少认证信息 | 401 |
+| 2002 | 认证失败 | 401 |
+| 4001 | 订单不存在 | 404 |
+| 4291 | 请求过于频繁 | 429 |
+| 5001 | 服务不可用 (队列满) | 503 |
 
 ### 3.4 API 规范遵循
 
