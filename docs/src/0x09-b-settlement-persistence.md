@@ -46,7 +46,7 @@
 
 ## 1. 为什么选择 TDengine
 
-详细对比见: [数据库选型分析](./database_selection_tdengine.md)
+详细对比见: [数据库选型分析](./database-selection-tdengine.md)
 
 ### 核心优势
 
