@@ -494,3 +494,148 @@ impl MatchingService {
         self.book
     }
 }
+
+// ============================================================
+// SETTLEMENT SERVICE
+// ============================================================
+
+use crate::ledger::{LedgerEntry, LedgerWriter, OP_CREDIT, OP_DEBIT};
+
+const TARGET_PERS: &str = "0XINFI::PERS";
+const LOG_TRADE: &str = "TRADE";
+
+/// Service that handles trade settlement and ledger persistence.
+///
+/// Persists balance events and trade ledger entries to the settlement log.
+pub struct SettlementService {
+    ledger: LedgerWriter,
+    queues: Arc<MultiThreadQueues>,
+    stats: Arc<PipelineStats>,
+    balance_events_count: u64,
+}
+
+impl SettlementService {
+    pub fn new(
+        ledger: LedgerWriter,
+        queues: Arc<MultiThreadQueues>,
+        stats: Arc<PipelineStats>,
+    ) -> Self {
+        Self {
+            ledger,
+            queues,
+            stats,
+            balance_events_count: 0,
+        }
+    }
+
+    /// Run the settlement service (MT blocking mode)
+    pub fn run(&mut self, shutdown: &ShutdownSignal) {
+        let mut spin_count = 0u32;
+
+        loop {
+            let mut did_work = false;
+
+            // ============================================
+            // PRIORITY 1: Balance Events from UBSCore
+            // Drain balance_event_queue first
+            // ============================================
+            while let Some(balance_event) = self.queues.balance_event_queue.pop() {
+                did_work = true;
+                let task_start = Instant::now();
+                self.balance_events_count += 1;
+
+                // Persist balance event to event log
+                self.ledger.write_balance_event(&balance_event);
+                self.stats
+                    .add_event_log_time(task_start.elapsed().as_nanos() as u64);
+            }
+
+            // ============================================
+            // PRIORITY 2: Trade Events from ME
+            // ============================================
+            if let Some(trade_event) = self.queues.trade_queue.pop() {
+                did_work = true;
+                let task_start = Instant::now();
+
+                let trade = &trade_event.trade;
+                let span = p_span!(
+                    TARGET_PERS,
+                    LOG_TRADE,
+                    trade_id = trade.trade_id,
+                    buyer = trade.buyer_user_id,
+                    seller = trade.seller_user_id
+                );
+                let _enter = span.enter();
+
+                let trade_cost = ((trade.price as u128) * (trade.qty as u128)
+                    / (trade_event.qty_unit as u128)) as u64;
+
+                // Persist to Ledger (legacy format)
+                self.ledger.write_entry(&LedgerEntry {
+                    trade_id: trade.trade_id,
+                    user_id: trade.buyer_user_id,
+                    asset_id: trade_event.quote_asset_id,
+                    op: OP_DEBIT,
+                    delta: trade_cost,
+                    balance_after: 0,
+                });
+                self.ledger.write_entry(&LedgerEntry {
+                    trade_id: trade.trade_id,
+                    user_id: trade.buyer_user_id,
+                    asset_id: trade_event.base_asset_id,
+                    op: OP_CREDIT,
+                    delta: trade.qty,
+                    balance_after: 0,
+                });
+
+                // Seller: debit base, credit quote
+                self.ledger.write_entry(&LedgerEntry {
+                    trade_id: trade.trade_id,
+                    user_id: trade.seller_user_id,
+                    asset_id: trade_event.base_asset_id,
+                    op: OP_DEBIT,
+                    delta: trade.qty,
+                    balance_after: 0,
+                });
+                self.ledger.write_entry(&LedgerEntry {
+                    trade_id: trade.trade_id,
+                    user_id: trade.seller_user_id,
+                    asset_id: trade_event.quote_asset_id,
+                    op: OP_CREDIT,
+                    delta: trade_cost,
+                    balance_after: 0,
+                });
+                p_info!(TARGET_PERS, "Settlement persisted to ledger");
+                self.stats
+                    .add_event_log_time(task_start.elapsed().as_nanos() as u64);
+            }
+
+            // Check for shutdown
+            if shutdown.is_shutdown_requested()
+                && self.queues.trade_queue.is_empty()
+                && self.queues.balance_event_queue.is_empty()
+            {
+                break;
+            }
+
+            if !did_work {
+                spin_count += 1;
+                if spin_count > IDLE_SPIN_LIMIT {
+                    std::thread::sleep(IDLE_SLEEP_US);
+                    spin_count = 0;
+                } else {
+                    std::hint::spin_loop();
+                }
+            } else {
+                spin_count = 0;
+            }
+        }
+
+        self.ledger.flush();
+    }
+
+    /// Consume the service and return the inner LedgerWriter
+    pub fn into_inner(self) -> LedgerWriter {
+        self.ledger
+    }
+}
