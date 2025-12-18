@@ -2,7 +2,7 @@
 
 > **📦 代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.8-h-performance-monitoring...v0.9-a-gateway)
 
-> **核心目标**：实现一个生产级的 HTTP/WebSocket Gateway，连接客户端与交易核心系统。
+> **本节核心目标**：实现一个**轻量级**的 HTTP Gateway，连接客户端与交易核心系统。
 
 ---
 
@@ -159,22 +159,22 @@ async fn submit_order(order: OrderRequest) -> Result<OrderResponse, ApiError> {
 
 | Method | Path | 描述 |
 |--------|------|------|
-| `POST` | `/api/v1/order` | 提交订单 |
-| `DELETE` | `/api/v1/order/{order_id}` | 取消订单 |
+| `POST` | `/api/v1/create_order` | 提交订单 |
+| `POST` | `/api/v1/cancel_order` | 取消订单 |
 | `GET` | `/api/v1/order/{order_id}` | 查询订单状态 |
-| `GET` | `/api/v1/orders` | 查询用户订单列表 |
-| `GET` | `/api/v1/balance` | 查询用户余额 |
-| `GET` | `/api/v1/trades` | 查询成交历史 |
+| `GET` | `/api/v1/order_history` | 查询用户订单列表 |
+| `GET` | `/api/v1/trade_history` | 查询成交历史 |
+| `GET` | `/api/v1/balances` | 查询用户余额 |
 
 ### 3.2 请求/响应格式
 
 #### 提交订单
 
 ```json
-// POST /api/v1/order
+// POST /api/v1/create_order
 // Request
 {
-    "client_order_id": "my-order-001",
+    "cid": "my-order-001",//client_order_id
     "symbol": "BTC_USDT",
     "side": "BUY",
     "type": "LIMIT",
@@ -185,8 +185,8 @@ async fn submit_order(order: OrderRequest) -> Result<OrderResponse, ApiError> {
 // Response (202 Accepted)
 {
     "order_id": 1001,
-    "client_order_id": "my-order-001",
-    "status": "PENDING",
+    "cid": "my-order-001",
+    "status": "ACCEPTED",
     "accepted_at": 1734533784000
 }
 ```
@@ -194,7 +194,12 @@ async fn submit_order(order: OrderRequest) -> Result<OrderResponse, ApiError> {
 #### 取消订单
 
 ```json
-// DELETE /api/v1/order/1001
+// POST /api/v1/cancel_order
+// Request
+{
+    "order_id": 1001
+}
+
 // Response (200 OK)
 {
     "order_id": 1001,
@@ -469,35 +474,298 @@ Phase 4:               Kafka/Redpanda (高可用，多消费者)
 
 ---
 
-## 7. 实现计划
+## 7. 实现规范
 
-### Phase 1: 基础 HTTP Gateway ✅ 本章目标
+### 7.1 数据结构定义
 
-**通信方式**: 同进程 Ring Buffer (MVP)
+#### 请求类型
 
-- [ ] 添加 axum 依赖
-- [ ] 创建 `src/gateway.rs` 模块
-- [ ] 实现 AppState 共享 Ring Buffer
-- [ ] POST /api/v1/order 订单提交
-- [ ] DELETE /api/v1/order/{id} 订单取消
-- [ ] 启动模式 `--gateway` (HTTP + Trading Core)
-- [ ] 简单用户认证 (Header: X-User-ID)
+```rust
+// src/gateway/types.rs
 
-### Phase 2: 查询与 WebSocket (0x09-b/c)
+/// 创建订单请求
+#[derive(Debug, Deserialize)]
+pub struct CreateOrderRequest {
+    /// 客户端订单ID (可选)
+    pub cid: Option<String>,
+    /// 交易对
+    pub symbol: String,
+    /// 买卖方向: "BUY" | "SELL"
+    pub side: String,
+    /// 订单类型: "LIMIT" | "MARKET"
+    #[serde(rename = "type")]
+    pub order_type: String,
+    /// 价格 (LIMIT 订单必填)
+    pub price: Option<String>,
+    /// 数量
+    pub quantity: String,
+}
 
-- [ ] GET 查询接口 (需要 DB)
-- [ ] WebSocket 连接管理
-- [ ] 订单状态推送
+/// 取消订单请求
+#[derive(Debug, Deserialize)]
+pub struct CancelOrderRequest {
+    pub order_id: u64,
+}
 
-### Phase 3: 安全加固 (0x09-d)
+/// 订单响应
+#[derive(Debug, Serialize)]
+pub struct OrderResponse {
+    pub order_id: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cid: Option<String>,
+    pub status: String, // "ACCEPTED" | "REJECTED"
+    pub accepted_at: u64, // Unix timestamp (ms)
+}
 
-- [ ] API Key 认证
-- [ ] Rate Limiting
-- [ ] HTTPS/WSS
+/// 错误响应
+#[derive(Debug, Serialize)]
+pub struct ErrorResponse {
+    pub error: ErrorDetail,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ErrorDetail {
+    pub code: String,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<serde_json::Value>,
+}
+```
+
+#### 应用状态
+
+```rust
+// src/gateway/state.rs
+
+/// Gateway 应用状态 (共享)
+pub struct AppState {
+    /// 订单队列 (发送到 Trading Core)
+    pub order_queue: Arc<ArrayQueue<OrderAction>>,
+    /// Symbol Manager (只读)
+    pub symbol_mgr: Arc<SymbolManager>,
+    /// 活跃交易对 ID
+    pub active_symbol_id: u32,
+    /// 订单 ID 生成器
+    pub order_id_gen: Arc<AtomicU64>,
+}
+
+impl AppState {
+    pub fn new(
+        order_queue: Arc<ArrayQueue<OrderAction>>,
+        symbol_mgr: Arc<SymbolManager>,
+        active_symbol_id: u32,
+    ) -> Self {
+        Self {
+            order_queue,
+            symbol_mgr,
+            active_symbol_id,
+            order_id_gen: Arc::new(AtomicU64::new(1)),
+        }
+    }
+    
+    pub fn next_order_id(&self) -> u64 {
+        self.order_id_gen.fetch_add(1, Ordering::SeqCst)
+    }
+}
+```
+
+### 7.2 API Handler 实现要求
+
+#### POST /api/v1/create_order
+
+**职责**:
+1. 解析 JSON 请求体
+2. 验证参数 (symbol, side, type, price, quantity)
+3. 从 Header 提取 `X-User-ID`
+4. 转换 decimal 字符串为 u64
+5. 生成 order_id
+6. 构造 `OrderAction::Place`
+7. 推送到 `order_queue`
+8. 返回 202 Accepted
+
+**错误处理**:
+- 400: 参数格式错误 (`INVALID_PARAMETER`)
+- 401: 缺少 `X-User-ID` (`UNAUTHORIZED`)
+- 503: 队列满 (`SERVICE_UNAVAILABLE`)
+
+**示例代码框架**:
+
+```rust
+async fn create_order(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<CreateOrderRequest>,
+) -> Result<(StatusCode, Json<OrderResponse>), (StatusCode, Json<ErrorResponse>)> {
+    // 1. 提取 user_id
+    let user_id = extract_user_id(&headers)?;
+    
+    // 2. 验证参数
+    validate_create_order(&req)?;
+    
+    // 3. 转换价格和数量
+    let symbol_info = state.symbol_mgr.get_symbol_info_by_id(state.active_symbol_id)
+        .ok_or_else(|| error_response("INVALID_SYMBOL", "Symbol not found"))?;
+    
+    let price = parse_price(&req, symbol_info)?;
+    let qty = parse_quantity(&req, symbol_info)?;
+    
+    // 4. 生成 order_id
+    let order_id = state.next_order_id();
+    
+    // 5. 构造 OrderAction
+    let order = InternalOrder { /* ... */ };
+    let action = OrderAction::Place(SequencedOrder::new(order_id, order, now_ns()));
+    
+    // 6. 推送到队列
+    state.order_queue.push(action)
+        .map_err(|_| error_response("SERVICE_UNAVAILABLE", "Queue full"))?;
+    
+    // 7. 返回响应
+    Ok((StatusCode::ACCEPTED, Json(OrderResponse {
+        order_id,
+        cid: req.cid,
+        status: "ACCEPTED".to_string(),
+        accepted_at: now_ms(),
+    })))
+}
+```
+
+#### POST /api/v1/cancel_order
+
+**职责**:
+1. 解析 JSON 请求体
+2. 从 Header 提取 `X-User-ID`
+3. 构造 `OrderAction::Cancel`
+4. 推送到 `order_queue`
+5. 返回 200 OK
+
+**错误处理**:
+- 400: 参数格式错误
+- 401: 缺少 `X-User-ID`
+- 503: 队列满
+
+#### GET /api/v1/order/{order_id}
+
+**Phase 2 实现** (需要数据库)
+
+返回订单状态:
+```json
+{
+  "order_id": 1001,
+  "status": "FILLED",
+  "filled_qty": "0.001",
+  "avg_price": "85000.00"
+}
+```
+
+### 7.3 启动模式
+
+#### 命令行参数
+
+```bash
+# Gateway 模式 (HTTP + Trading Core)
+cargo run --release -- --gateway --input fixtures/test_with_cancel_highbal
+
+# 指定端口
+cargo run --release -- --gateway --port 8080
+```
+
+#### main.rs 集成
+
+```rust
+fn use_gateway_mode() -> bool {
+    std::env::args().any(|a| a == "--gateway")
+}
+
+fn get_port() -> u16 {
+    let args: Vec<String> = std::env::args().collect();
+    for i in 0..args.len() {
+        if args[i] == "--port" && i + 1 < args.len() {
+            return args[i + 1].parse().unwrap_or(8080);
+        }
+    }
+    8080
+}
+
+fn main() {
+    // ...
+    
+    if use_gateway_mode() {
+        let port = get_port();
+        let queues = Arc::new(MultiThreadQueues::new());
+        
+        // 启动 HTTP Server
+        let queues_clone = queues.clone();
+        let symbol_mgr_clone = symbol_mgr.clone();
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(async {
+                gateway::run_server(port, queues_clone, symbol_mgr_clone, active_symbol_id).await
+            });
+        });
+        
+        // 启动 Trading Core
+        run_pipeline_multi_thread(/* ... */);
+    } else {
+        // 原有模式
+    }
+}
+```
+
+### 7.4 验收标准
+
+#### 功能验收
+
+- [ ] **F1**: 启动 `--gateway` 模式，HTTP 服务器在指定端口监听
+- [ ] **F2**: POST /api/v1/create_order 返回 202 Accepted，包含 order_id
+- [ ] **F3**: POST /api/v1/cancel_order 返回 200 OK
+- [ ] **F4**: 缺少 `X-User-ID` 返回 401 Unauthorized
+- [ ] **F5**: 参数格式错误返回 400 Bad Request
+- [ ] **F6**: 订单成功推送到 `order_queue`，Trading Core 可消费
+
+#### 集成测试
+
+```bash
+# 测试脚本: scripts/test_gateway.sh
+
+# 1. 启动 Gateway
+cargo run --release -- --gateway --port 8080 &
+GATEWAY_PID=$!
+sleep 2
+
+# 2. 提交订单
+curl -X POST http://localhost:8080/api/v1/create_order \
+  -H "Content-Type: application/json" \
+  -H "X-User-ID: 1001" \
+  -d '{
+    "symbol": "BTC_USDT",
+    "side": "BUY",
+    "type": "LIMIT",
+    "price": "85000.00",
+    "quantity": "0.001"
+  }'
+
+# 3. 取消订单
+curl -X POST http://localhost:8080/api/v1/cancel_order \
+  -H "Content-Type: application/json" \
+  -H "X-User-ID: 1001" \
+  -d '{"order_id": 1}'
+
+# 4. 清理
+kill $GATEWAY_PID
+```
+
+#### 性能验收
+
+- [ ] **P1**: 单个请求延迟 < 1ms (P99)
+- [ ] **P2**: 支持 10,000 req/s 吞吐量
+- [ ] **P3**: 队列满时返回 503，不阻塞其他请求
 
 ---
 
+
 ## 8. 测试策略
+
 
 ### 8.1 单元测试
 
