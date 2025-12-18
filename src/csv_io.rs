@@ -21,6 +21,9 @@ pub const SYMBOLS_CONFIG_CSV: &str = "fixtures/symbols_config.csv";
 pub const BALANCES_INIT_CSV: &str = "fixtures/balances_init.csv";
 pub const ORDERS_CSV: &str = "fixtures/orders.csv";
 
+pub const ACTION_PLACE: &str = "place";
+pub const ACTION_CANCEL: &str = "cancel";
+
 // ============================================================
 // Configuration Loading
 // ============================================================
@@ -217,12 +220,12 @@ pub fn load_orders(path: &str, manager: &SymbolManager, active_symbol_id: u32) -
             let user_id: u64 = parts[1].parse().unwrap();
 
             let col2 = parts[2].trim().to_lowercase();
-            let is_action = col2 == "place" || col2 == "cancel";
+            let is_action = col2 == ACTION_PLACE || col2 == ACTION_CANCEL;
 
             let (action, side_idx, price_idx, qty_idx) = if is_action {
                 (col2, 3, 4, 5)
             } else {
-                ("place".to_string(), 2, 3, 4)
+                (ACTION_PLACE.to_string(), 2, 3, 4)
             };
 
             // For cancel, side/price/qty might be empty/missing

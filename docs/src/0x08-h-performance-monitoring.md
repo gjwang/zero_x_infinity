@@ -77,18 +77,21 @@ cargo run --release -- --pipeline-mt --input fixtures/test_with_cancel_highbal
 *   **吞吐量**: ~74,000 orders/sec
 *   **端到端延迟 (P50)**: 122,853,375 ns (~122 ms)
 *   **端到端延迟 (P99)**: 188 ms
-*   **架构耗时占比 (并行任务量)**:
-    1. Pre-Trade: 14.69s (43.0%) [11.30 µs/order]
-    2. Matching: 15.96s (46.8%) [15.96 µs/order]
-    3. Settlement: 0.77s (2.3%)
-    4. Event Log: 2.70s (7.9%)
+*   **架构耗时与吞吐量 (模块级分析)**:
+
+| 服务 (Service) | 模块 / 关键 Span | 任务总耗时 | 耗时占比 | 单笔延迟 (Latency) | 理论吞吐上限 (Throughput) |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **UBSCore** | `ORDER` (Lock Balance) | 14.69s | 43.0% | 11.30 µs | 88.5k ops/s |
+| **UBSCore** | `SETTLE` (Balance Upd) | 0.77s | 2.3% | 0.59 µs | 1.69M ops/s |
+| **Matching Engine** | `ORDER` (Matching) | 15.96s | 46.8% | 12.28 µs | 81.4k ops/s |
+| **Persistence** | `TRADE` (Ledger/Log) | 2.70s | 7.9% | 2.08 µs | 481k ops/s |
 
 ### 分析结论
 
-1.  **并行能力的体现**: 多线程模式下，总任务量 (Total Tracked ~34s) 远大于执行时间 (17.5s)，证明四个核心正在高效协作。
+1.  **并行能力的体现**: 多线程模式下，总任务量 (Total Tracked ~34s) 远大于实际执行时间 (17.5s)，证明四个核心正在高效并行。
 2.  **瓶颈识别**: 
-    - **ME (Matching Engine)** 依然是最大的串行瓶颈，耗时占比最高。
-    - **UBSCore (Pre-Trade)** 在多线程下因处理大量异步结算回调，从 0.6µs 衰减至 11µs，成为第二大性能杀手。
+    - **ME (Matching Engine)** 依然是最大的串行瓶颈，吞吐上限最低（约 81k），直接限制了系统的整体吞吐量（~74k）。
+    - **UBSCore (Pre-Trade)** 在多线程下因处理大量异步结算回调，从单线程的 0.6µs 衰减至 11µs，成为第二大瓶颈。
 3.  **延迟的代价**: 多线程引入了显著的消息传递开销和排队效应，导致端到端延迟从微秒级回退到了毫秒级。对于极低延迟交易，单线程自旋架构依然具有不可替代的优势。
 
 ---
@@ -109,20 +112,22 @@ cargo run --release -- --pipeline-mt --input fixtures/test_with_cancel_highbal
 - **Prod**: 开启 **JSON 格式** 日志，每小时轮转，默认关闭高频生命周期追踪以换取性能。
 
 ### 3. 标准化日志目标与全链路追踪 (Standardized Targets & Tracing)
-我们定义了全局唯一的日志目标 **`0XINFI`**，并为流水线各阶段设定了精简的简称（Span Names）：
-- `UBSC`: UBSCore 预检与资金冻结。
-- `ME`: 撮合引擎撮合逻辑。
-- `SETTLE`: 完成撮合后的资金清算。
-- `PERS`: 最终成交数据的底层持久化（Ledger Persistence）。
-- `CNCL`: 撤单处理路径。
+我们在代码中定义了具名常量（如 `TARGET_ME`, `TARGET_UBSC`）来统一日志目标。所有的流水线日志都归属于分层命名空间 **`0XINFI`**：
+- `0XINFI::UBSC`: UBSCore 服务（包含 `ORDER`, `SETTLE` 动作）。
+- `0XINFI::ME`: 撮合引擎服务（包含 `ORDER`, `CANCEL` 动作）。
+- `0XINFI::PERS`: 持久化服务（包含 `TRADE` 动作）。
 
-### 4. 动态追踪开关 (Target-based Filtering)
-通过特殊的 `Target` 过滤机制，我们可以在不修改业务代码的前提下，通过配置文件动态开启或关闭特定模块的日志。例如，在生产环境中，我们将 `0XINFI` 设为 `off`，可以将吞吐量提升约 8%-10%。
+这种分层设计使得我们可以针对特定服务进行精细化的流量染色与追踪。
+
+### 4. 动态追踪开关与 Target 过滤 (Target-based Filtering)
+结合重构后的常量定义，我们通过 `EnvFilter` 实现了精细的动态控制。例如，在生产环境中，只需要设置 `log_level: "info,0XINFI=off"`，即可在保留基础系统日志的同时，完全关闭高频的流水线追踪。
+
+在 1.3M 测试中，关闭 `0XINFI` 追踪能将系统吞吐量进一步提升约 **8%-12%**。
 
 ```yaml
 # config/prod.yaml 示例
 enable_tracing: false  # 全局流水线追踪开关
-log_level: "info"      # 系统基础日志级别
+log_level: "info,0XINFI=off"      # 系统基础日志级别
 use_json: true         # 开启 JSON 以支持 ELK 集成
 ```
 
