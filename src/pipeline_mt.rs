@@ -103,7 +103,7 @@ pub type MultiThreadServices = PipelineServices<UBSCore, OrderBook, LedgerWriter
 
 /// Market context derived from symbol configuration
 #[derive(Clone, Copy)]
-struct MarketContext {
+pub struct MarketContext {
     pub qty_unit: u64,
     pub base_id: u32,
     pub quote_id: u32,
@@ -175,13 +175,19 @@ pub fn run_pipeline_multi_thread(
         })
     };
 
-    let t3_me = spawn_me_stage(
-        services.book,
-        queues.clone(),
-        stats.clone(),
-        shutdown.clone(),
-        market,
-    );
+    let t3_me = {
+        let mut service = crate::pipeline_services::MatchingService::new(
+            services.book,
+            queues.clone(),
+            stats.clone(),
+            market,
+        );
+        let s = shutdown.clone();
+        thread::spawn(move || {
+            service.run(&s);
+            service.into_inner()
+        })
+    };
 
     let t4_settlement = spawn_settlement_stage(
         services.ledger,
