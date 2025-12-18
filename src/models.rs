@@ -1,16 +1,19 @@
 // models.rs - Core order and trade types
 
 use crate::core_types::{OrderId, UserId};
+use serde::{Deserialize, Serialize};
 
 /// Order side: Buy or Sell
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum Side {
     Buy,
     Sell,
 }
 
 /// Order type
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum OrderType {
     Limit,  // Limit order: must specify price
     Market, // Market order: execute at best avail price

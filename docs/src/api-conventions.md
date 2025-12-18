@@ -63,9 +63,133 @@ pub enum OrderStatus {
 
 ---
 
-## 2. 参考：Binance API 规范
+## 2. 参数命名一致性
 
-### 2.1 Order Status
+### 2.1 核心原则
+
+**保持前后一致，减少转换的认知代价**
+
+所有 API（HTTP、内部消息）应使用统一的字段名，避免同一概念有多个名称。
+除非有特殊设计的, 例如WebSocket的推送消息格式,会专门设计一种紧凑的方式,减少推送消息的大小。
+
+### 2.2 标准字段名
+
+| 概念 | 标准名称 | ❌ 避免使用 | 说明 |
+|------|----------|------------|------|
+| 数量 | `qty` | `quantity`, `amount`, `size` | 与 `InternalOrder.qty` 一致 |
+| 价格 | `price` | `px`, `prc` | 清晰明确 |
+| 订单ID | `order_id` | `orderId`, `oid` | snake_case |
+| 用户ID | `user_id` | `userId`, `uid` | snake_case |
+| 交易ID | `trade_id` | `tradeId`, `tid` | snake_case |
+| 客户端订单ID | `cid` | `client_order_id`, `clOrdId` | 简短但明确 |
+| 交易对 | `symbol` | `pair`, `market` | 行业标准 |
+
+### 2.3 命名风格
+
+- **JSON API**: 使用 `snake_case` (与 Rust 字段名一致)
+  ```json
+  {
+    "order_id": 1001,
+    "user_id": 1001,
+    "qty": "0.001"
+  }
+  ```
+
+- **内部 Rust 结构**: 使用 `snake_case`
+  ```rust
+  pub struct InternalOrder {
+      pub order_id: u64,
+      pub user_id: u64,
+      pub qty: u64,
+  }
+  ```
+
+### 2.4 缩写规则
+
+**何时使用缩写**:
+- ✅ 行业通用缩写: `qty` (quantity), `cid` (client_order_id)
+- ✅ 高频使用字段: `qty` 比 `quantity` 更简洁
+- ❌ 避免自创缩写: 不要用 `ord` 代替 `order`
+
+---
+
+## 3. HTTP 响应格式
+
+### 3.1 统一响应结构
+
+**所有 HTTP API 响应统一使用以下格式**:
+
+```json
+{
+    "code": 0,          // 0 = 成功, 非0 = 错误码
+    "msg": "ok",        // 消息描述 (简短)
+    "data": {}          // 实际数据 (成功时) 或 null (失败时)
+}
+```
+
+### 3.2 设计原则
+
+| 字段 | 选择 | 理由 |
+|------|------|------|
+| `code` | ✅ 而非 `status` | 避免与 HTTP status 混淆 |
+| `msg` | ✅ 而非 `message` | 简短明确，减少流量 |
+| `data` | ✅ 统一容器 | 成功/失败都使用相同结构 |
+
+### 3.3 成功响应示例
+
+```json
+// HTTP 200/202
+{
+    "code": 0,
+    "msg": "ok",
+    "data": {
+        "order_id": 1001,
+        "order_status": "ACCEPTED"
+    }
+}
+```
+
+### 3.4 错误响应示例
+
+```json
+// HTTP 400
+{
+    "code": 1001,
+    "msg": "Invalid parameter: price must be greater than zero",
+    "data": null
+}
+```
+
+### 3.5 错误码设计
+
+**简化方案** (不使用 HTTP*100):
+
+| Code | 说明 | HTTP Status |
+|------|------|-------------|
+| 0 | 成功 | 200/202 |
+| 1xxx | 客户端错误 (参数/业务) | 400 |
+| 2xxx | 认证/授权错误 | 401/403 |
+| 4xxx | 资源错误 | 404/429 |
+| 5xxx | 服务器错误 | 500/503 |
+
+**常用错误码**:
+
+| Code | 说明 | HTTP Status |
+|------|------|-------------|
+| 1001 | 参数格式错误 | 400 |
+| 1002 | 余额不足 | 400 |
+| 2001 | 缺少认证信息 | 401 |
+| 2002 | 认证失败 | 401 |
+| 4001 | 订单不存在 | 404 |
+| 4291 | 请求过于频繁 | 429 |
+| 5001 | 服务不可用 | 503 |
+
+---
+
+## 4. 参考：Binance API 规范
+
+
+### 3.1 Order Status
 
 | Status | 说明 |
 |--------|------|
@@ -78,7 +202,7 @@ pub enum OrderStatus {
 | `EXPIRED` | 订单过期（GTD/IOC/FOK）|
 | `EXPIRED_IN_MATCH` | STP 导致过期 |
 
-### 2.2 Order Type
+### 3.2 Order Type
 
 | Type | 说明 |
 |------|------|
@@ -90,7 +214,7 @@ pub enum OrderStatus {
 | `TAKE_PROFIT_LIMIT` | 限价止盈单 |
 | `LIMIT_MAKER` | 只做 Maker 单 |
 
-### 2.3 Time In Force
+### 3.3 Time In Force
 
 | TIF | 说明 |
 |-----|------|
@@ -102,7 +226,7 @@ pub enum OrderStatus {
 
 ---
 
-## 3. JSON 序列化
+## 5. JSON 序列化
 
 建议使用 `serde` 的 `rename_all` 来自动处理：
 
@@ -122,8 +246,9 @@ pub enum OrderStatus {
 
 ---
 
-## 4. 变更历史
+## 6. 变更历史
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
 | 0.8d | 2025-12-17 | 初始规范：OrderStatus 改为 SCREAMING_CASE |
+| 0.9a | 2025-12-19 | 新增参数命名一致性 (Section 2) + HTTP 响应格式 (Section 3) |

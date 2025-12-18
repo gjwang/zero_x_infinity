@@ -31,6 +31,7 @@ pub mod balance;
 pub mod config;
 pub mod csv_io;
 pub mod engine;
+pub mod gateway;
 pub mod ledger;
 pub mod logging;
 pub mod messages;
