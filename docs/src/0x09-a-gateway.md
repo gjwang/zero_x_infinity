@@ -345,38 +345,103 @@ headers = {
 
 ---
 
-## 6. 架构集成
+## 6. 通信架构设计
 
-### 6.1 Gateway 与 Trading Core 的连接
+### 6.1 通信方案选择
+
+| 方案 | 延迟 | 复杂度 | 适用场景 | 选择 |
+|------|------|--------|----------|------|
+| **同进程 + Ring Buffer** | ~100ns | ⭐ | **MVP** | ✅ 采用 |
+| 跨进程 SharedMem | ~1µs | ⭐⭐⭐ | 分离部署 | 未来 |
+| TCP/Unix Socket | ~10µs | ⭐⭐ | 分布式 | 未来 |
+| gRPC | ~100µs | ⭐⭐ | 微服务 | 未来 |
+
+**MVP 决策**：Gateway 和 Trading Core 运行在**同一进程**中，通过 `Arc<ArrayQueue>` 通信。
+
+**优势**：
+- ✅ 零改动：直接复用现有的 `crossbeam::ArrayQueue`
+- ✅ 最低延迟：无需序列化，无网络开销
+- ✅ 最简单：不需要额外的通信协议
+- ✅ 易于集成测试：单进程启动
+
+### 6.2 MVP 架构：同进程 Ring Buffer
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                           Gateway Process                                │
+│                     Single Process (--gateway mode)                      │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐               │
-│  │ HTTP Server  │    │ WS Server    │    │ Pre-Check    │               │
-│  │ (axum)       │    │ (tungstenite)│    │ (UBSCore     │               │
-│  │              │    │              │    │  read-only)  │               │
-│  └──────┬───────┘    └──────┬───────┘    └──────────────┘               │
-│         │                   │                                            │
-│         ▼                   ▼                                            │
-│  ┌──────────────────────────────────────────────────────────────┐       │
-│  │                    Order Queue (Ring Buffer)                  │       │
-│  │                    crossbeam-queue::ArrayQueue                │       │
-│  └──────────────────────────────┬───────────────────────────────┘       │
-│                                 │                                        │
-└─────────────────────────────────┼────────────────────────────────────────┘
-                                  │  Shared Memory / IPC
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                        Trading Core Process                              │
-├─────────────────────────────────────────────────────────────────────────┤
-│   Ingestion → UBSCore → ME → Settlement                                  │
+│  ┌──────────────────────────────────────────────────────────────────┐   │
+│  │                    HTTP/WS Server (tokio runtime)                 │   │
+│  │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐         │   │
+│  │  │ POST /order  │    │ DELETE /order│    │ WS Handler   │         │   │
+│  │  │              │    │              │    │              │         │   │
+│  │  └──────┬───────┘    └──────┬───────┘    └──────────────┘         │   │
+│  │         │                   │                                      │   │
+│  │         └───────────────────┴──────────────────┐                   │   │
+│  │                                                │                   │   │
+│  │                                                ▼                   │   │
+│  │  ┌──────────────────────────────────────────────────────────────┐ │   │
+│  │  │             order_queue: Arc<ArrayQueue<OrderAction>>        │ │   │
+│  │  │                        (共享 Ring Buffer)                    │ │   │
+│  │  └──────────────────────────────────────────────────────────────┘ │   │
+│  └──────────────────────────────────────────────────────────────────┘   │
+│                                                │                         │
+│                                                │ 同一进程内直接访问        │
+│                                                ▼                         │
+│  ┌──────────────────────────────────────────────────────────────────┐   │
+│  │                    Trading Core Threads                           │   │
+│  │                                                                    │   │
+│  │   Thread 1: Ingestion    (消费 order_queue)                       │   │
+│  │   Thread 2: UBSCore      (WAL + Lock + Settle)                    │   │
+│  │   Thread 3: ME           (Matching + Cancel)                      │   │
+│  │   Thread 4: Settlement   (Persistence)                            │   │
+│  │                                                                    │   │
+│  └──────────────────────────────────────────────────────────────────┘   │
+│                                                                          │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 6.2 部署拓扑 (未来)
+### 6.3 代码结构
+
+```rust
+// main.rs
+fn main() {
+    // 共享的 Ring Buffer
+    let queues = Arc::new(MultiThreadQueues::new());
+    
+    if args.gateway {
+        // 模式1: Gateway + Trading Core (同进程)
+        let queues_clone = queues.clone();
+        
+        // 启动 HTTP Server (tokio runtime)
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(run_http_server(queues_clone));
+        });
+        
+        // 启动 Trading Core (现有代码)
+        run_pipeline_multi_thread(queues, ...);
+    } else {
+        // 模式2: 原有的 CSV 批量处理模式
+        run_pipeline_multi_thread(queues, ...);
+    }
+}
+```
+
+### 6.4 演进路径
+
+```
+Phase 1 (MVP - 当前):  同进程 Ring Buffer
+                            ↓
+Phase 2:               Unix Socket (同机多进程，可独立重启)
+                            ↓
+Phase 3:               TCP + 自定义协议 (跨机部署)
+                            ↓
+Phase 4:               Kafka/Redpanda (高可用，多消费者)
+```
+
+### 6.5 部署拓扑 (未来 - Phase 3+)
 
 ```
                     Load Balancer
@@ -388,7 +453,7 @@ headers = {
     └────┬────┘     └────┬────┘     └────┬────┘
          │               │               │
          └───────────────┼───────────────┘
-                         │
+                         │ TCP / Kafka
                          ▼
                 ┌─────────────────┐
                 │  Trading Core   │  ← 单点，保证顺序
@@ -408,11 +473,15 @@ headers = {
 
 ### Phase 1: 基础 HTTP Gateway ✅ 本章目标
 
-- [ ] axum HTTP 服务器框架
+**通信方式**: 同进程 Ring Buffer (MVP)
+
+- [ ] 添加 axum 依赖
+- [ ] 创建 `src/gateway.rs` 模块
+- [ ] 实现 AppState 共享 Ring Buffer
 - [ ] POST /api/v1/order 订单提交
 - [ ] DELETE /api/v1/order/{id} 订单取消
-- [ ] Ring Buffer 连接到 Trading Core
-- [ ] Pre-Check 余额校验
+- [ ] 启动模式 `--gateway` (HTTP + Trading Core)
+- [ ] 简单用户认证 (Header: X-User-ID)
 
 ### Phase 2: 查询与 WebSocket (0x09-b/c)
 
@@ -470,10 +539,11 @@ curl -X POST http://localhost:8080/api/v1/order \
 | 设计点 | 方案 |
 |--------|------|
 | HTTP Framework | axum (高性能、类型安全) |
+| **通信方式** | **同进程 Ring Buffer** (MVP 阶段) |
 | 订单提交 | 异步接收，返回 202 Accepted |
 | Pre-Check | 只读余额查询，过滤无效订单 |
-| 队列连接 | crossbeam Ring Buffer |
-| 安全 | HMAC 签名 + Rate Limiting |
+| 队列连接 | `Arc<ArrayQueue>` 共享 |
+| 安全 | 简单 Header 认证 (MVP) → HMAC 签名 (未来) |
 
 **核心理念**：
 
