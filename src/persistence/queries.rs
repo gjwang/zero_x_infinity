@@ -1,6 +1,15 @@
 use anyhow::Result;
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use taos::*;
+
+use crate::symbol_manager::SymbolManager;
+
+/// Format internal u64 to display string with specified decimals
+fn format_amount(value: u64, decimals: u32, display_decimals: u32) -> String {
+    let decimal_value = Decimal::from(value) / Decimal::from(10u64.pow(decimals));
+    format!("{:.prec$}", decimal_value, prec = display_decimals as usize)
+}
 
 /// Order record from TDengine (matches database schema)
 #[derive(Debug, Clone, Deserialize)]
@@ -17,55 +26,21 @@ struct OrderRow {
     cid: String,
 }
 
-/// Order API response data
+/// Order API response data (compliant with API conventions)
 #[derive(Debug, Serialize)]
 pub struct OrderApiData {
     pub order_id: u64,
     pub user_id: u64,
+    pub symbol: String, // Symbol name (not ID)
     pub side: String,
     pub order_type: String,
-    pub price: u64,
-    pub qty: u64,
-    pub filled_qty: u64,
+    pub price: String,      // Formatted with price_display_decimal
+    pub qty: String,        // Formatted with base_asset.display_decimals
+    pub filled_qty: String, // Formatted with base_asset.display_decimals
     pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub cid: Option<String>,
     pub created_at: String,
-}
-
-impl From<OrderRow> for OrderApiData {
-    fn from(row: OrderRow) -> Self {
-        OrderApiData {
-            order_id: row.order_id as u64,
-            user_id: row.user_id as u64,
-            side: if row.side == 0 {
-                "BUY".to_string()
-            } else {
-                "SELL".to_string()
-            },
-            order_type: if row.order_type == 0 {
-                "LIMIT".to_string()
-            } else {
-                "MARKET".to_string()
-            },
-            price: row.price as u64,
-            qty: row.qty as u64,
-            filled_qty: row.filled_qty as u64,
-            status: match row.status {
-                0 => "NEW",
-                1 => "PARTIALLY_FILLED",
-                2 => "FILLED",
-                3 => "CANCELLED",
-                _ => "UNKNOWN",
-            }
-            .to_string(),
-            cid: if row.cid.is_empty() {
-                None
-            } else {
-                Some(row.cid)
-            },
-            created_at: row.ts,
-        }
-    }
 }
 
 /// Trade record from TDengine
@@ -82,42 +57,19 @@ struct TradeRow {
     role: i8,
 }
 
-/// Trade API response data
+/// Trade API response data (compliant with API conventions)
 #[derive(Debug, Serialize)]
 pub struct TradeApiData {
     pub trade_id: u64,
     pub order_id: u64,
     pub user_id: u64,
+    pub symbol: String, // Symbol name (not ID)
     pub side: String,
-    pub price: u64,
-    pub qty: u64,
-    pub fee: u64,
+    pub price: String, // Formatted with price_display_decimal
+    pub qty: String,   // Formatted with base_asset.display_decimals
+    pub fee: String,   // Formatted with quote_asset.display_decimals
     pub role: String,
     pub created_at: String,
-}
-
-impl From<TradeRow> for TradeApiData {
-    fn from(row: TradeRow) -> Self {
-        TradeApiData {
-            trade_id: row.trade_id as u64,
-            order_id: row.order_id as u64,
-            user_id: row.user_id as u64,
-            side: if row.side == 0 {
-                "BUY".to_string()
-            } else {
-                "SELL".to_string()
-            },
-            price: row.price as u64,
-            qty: row.qty as u64,
-            fee: row.fee as u64,
-            role: if row.role == 0 {
-                "MAKER".to_string()
-            } else {
-                "TAKER".to_string()
-            },
-            created_at: row.ts,
-        }
-    }
 }
 
 /// Balance record from TDengine
@@ -130,13 +82,13 @@ struct BalanceRow {
     settle_version: i64,
 }
 
-/// Balance API response data
+/// Balance API response data (compliant with API conventions)
 #[derive(Debug, Serialize)]
 pub struct BalanceApiData {
     pub user_id: u64,
-    pub asset_id: u32,
-    pub avail: u64,
-    pub frozen: u64,
+    pub asset: String,  // Asset name (not ID)
+    pub avail: String,  // Formatted with asset.display_decimals
+    pub frozen: String, // Formatted with asset.display_decimals
     pub lock_version: u64,
     pub settle_version: u64,
     pub updated_at: String,
@@ -147,6 +99,7 @@ pub async fn query_order(
     taos: &Taos,
     order_id: u64,
     symbol_id: u32,
+    symbol_mgr: &SymbolManager,
 ) -> Result<Option<OrderApiData>> {
     // Query from Super Table with WHERE clause
     let sql = format!(
@@ -166,7 +119,50 @@ pub async fn query_order(
         .await
         .map_err(|e| anyhow::anyhow!("Failed to deserialize: {}", e))?;
 
-    Ok(rows.into_iter().next().map(|row| row.into()))
+    Ok(rows.into_iter().next().map(|row| {
+        // Get symbol info for formatting
+        let symbol_info = symbol_mgr.get_symbol_info_by_id(symbol_id).unwrap();
+        let base_decimals = symbol_mgr
+            .get_asset_decimal(symbol_info.base_asset_id)
+            .unwrap();
+        let base_display_decimals = symbol_mgr
+            .get_asset_display_decimals(symbol_info.base_asset_id)
+            .unwrap();
+
+        OrderApiData {
+            order_id: row.order_id as u64,
+            user_id: row.user_id as u64,
+            symbol: symbol_info.symbol.clone(),
+            side: if row.side == 0 { "BUY" } else { "SELL" }.to_string(),
+            order_type: if row.order_type == 0 {
+                "LIMIT"
+            } else {
+                "MARKET"
+            }
+            .to_string(),
+            price: format_amount(
+                row.price as u64,
+                symbol_info.price_decimal,
+                symbol_info.price_display_decimal,
+            ),
+            qty: format_amount(row.qty as u64, base_decimals, base_display_decimals),
+            filled_qty: format_amount(row.filled_qty as u64, base_decimals, base_display_decimals),
+            status: match row.status {
+                0 => "NEW",
+                1 => "PARTIALLY_FILLED",
+                2 => "FILLED",
+                3 => "CANCELLED",
+                _ => "UNKNOWN",
+            }
+            .to_string(),
+            cid: if row.cid.is_empty() {
+                None
+            } else {
+                Some(row.cid)
+            },
+            created_at: row.ts,
+        }
+    }))
 }
 
 /// Query orders list for a user
@@ -175,6 +171,7 @@ pub async fn query_orders(
     user_id: u64,
     symbol_id: u32,
     limit: usize,
+    symbol_mgr: &SymbolManager,
 ) -> Result<Vec<OrderApiData>> {
     // Query from Super Table with WHERE clause
     let sql = format!(
@@ -193,11 +190,60 @@ pub async fn query_orders(
         .await
         .map_err(|e| anyhow::anyhow!("Failed to deserialize: {}", e))?;
 
-    Ok(rows.into_iter().map(|row| row.into()).collect())
+    // Get symbol info for formatting
+    let symbol_info = symbol_mgr.get_symbol_info_by_id(symbol_id).unwrap();
+    let base_decimals = symbol_mgr
+        .get_asset_decimal(symbol_info.base_asset_id)
+        .unwrap();
+    let base_display_decimals = symbol_mgr
+        .get_asset_display_decimals(symbol_info.base_asset_id)
+        .unwrap();
+
+    Ok(rows
+        .into_iter()
+        .map(|row| OrderApiData {
+            order_id: row.order_id as u64,
+            user_id: row.user_id as u64,
+            symbol: symbol_info.symbol.clone(),
+            side: if row.side == 0 { "BUY" } else { "SELL" }.to_string(),
+            order_type: if row.order_type == 0 {
+                "LIMIT"
+            } else {
+                "MARKET"
+            }
+            .to_string(),
+            price: format_amount(
+                row.price as u64,
+                symbol_info.price_decimal,
+                symbol_info.price_display_decimal,
+            ),
+            qty: format_amount(row.qty as u64, base_decimals, base_display_decimals),
+            filled_qty: format_amount(row.filled_qty as u64, base_decimals, base_display_decimals),
+            status: match row.status {
+                0 => "NEW",
+                1 => "PARTIALLY_FILLED",
+                2 => "FILLED",
+                3 => "CANCELLED",
+                _ => "UNKNOWN",
+            }
+            .to_string(),
+            cid: if row.cid.is_empty() {
+                None
+            } else {
+                Some(row.cid)
+            },
+            created_at: row.ts,
+        })
+        .collect())
 }
 
 /// Query trades for a symbol
-pub async fn query_trades(taos: &Taos, symbol_id: u32, limit: usize) -> Result<Vec<TradeApiData>> {
+pub async fn query_trades(
+    taos: &Taos,
+    symbol_id: u32,
+    limit: usize,
+    symbol_mgr: &SymbolManager,
+) -> Result<Vec<TradeApiData>> {
     // Query from Super Table
     let sql = format!(
         "SELECT ts, trade_id, order_id, user_id, side, price, qty, fee, role FROM trades WHERE symbol_id = {} ORDER BY ts DESC LIMIT {}",
@@ -215,7 +261,40 @@ pub async fn query_trades(taos: &Taos, symbol_id: u32, limit: usize) -> Result<V
         .await
         .map_err(|e| anyhow::anyhow!("Failed to deserialize: {}", e))?;
 
-    Ok(rows.into_iter().map(|row| row.into()).collect())
+    // Get symbol info for formatting
+    let symbol_info = symbol_mgr.get_symbol_info_by_id(symbol_id).unwrap();
+    let base_decimals = symbol_mgr
+        .get_asset_decimal(symbol_info.base_asset_id)
+        .unwrap();
+    let base_display_decimals = symbol_mgr
+        .get_asset_display_decimals(symbol_info.base_asset_id)
+        .unwrap();
+    let quote_decimals = symbol_mgr
+        .get_asset_decimal(symbol_info.quote_asset_id)
+        .unwrap();
+    let quote_display_decimals = symbol_mgr
+        .get_asset_display_decimals(symbol_info.quote_asset_id)
+        .unwrap();
+
+    Ok(rows
+        .into_iter()
+        .map(|row| TradeApiData {
+            trade_id: row.trade_id as u64,
+            order_id: row.order_id as u64,
+            user_id: row.user_id as u64,
+            symbol: symbol_info.symbol.clone(),
+            side: if row.side == 0 { "BUY" } else { "SELL" }.to_string(),
+            price: format_amount(
+                row.price as u64,
+                symbol_info.price_decimal,
+                symbol_info.price_display_decimal,
+            ),
+            qty: format_amount(row.qty as u64, base_decimals, base_display_decimals),
+            fee: format_amount(row.fee as u64, quote_decimals, quote_display_decimals),
+            role: if row.role == 0 { "MAKER" } else { "TAKER" }.to_string(),
+            created_at: row.ts,
+        })
+        .collect())
 }
 
 /// Query latest balance for a user
@@ -223,6 +302,7 @@ pub async fn query_balance(
     taos: &Taos,
     user_id: u64,
     asset_id: u32,
+    symbol_mgr: &SymbolManager,
 ) -> Result<Option<BalanceApiData>> {
     let table_name = format!("balances_{}_{}", user_id, asset_id);
 
@@ -242,11 +322,16 @@ pub async fn query_balance(
         .await
         .map_err(|e| anyhow::anyhow!("Failed to deserialize: {}", e))?;
 
+    // Get asset info for formatting
+    let asset_name = symbol_mgr.get_asset_name(asset_id).unwrap();
+    let asset_decimals = symbol_mgr.get_asset_decimal(asset_id).unwrap();
+    let asset_display_decimals = symbol_mgr.get_asset_display_decimals(asset_id).unwrap();
+
     Ok(rows.into_iter().next().map(|row| BalanceApiData {
         user_id,
-        asset_id,
-        avail: row.avail as u64,
-        frozen: row.frozen as u64,
+        asset: asset_name,
+        avail: format_amount(row.avail as u64, asset_decimals, asset_display_decimals),
+        frozen: format_amount(row.frozen as u64, asset_decimals, asset_display_decimals),
         lock_version: row.lock_version as u64,
         settle_version: row.settle_version as u64,
         updated_at: row.ts,
