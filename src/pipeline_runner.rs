@@ -145,6 +145,7 @@ pub fn run_pipeline_single_thread(
                         b.lock_version(),
                         b.avail(),
                         b.frozen(),
+                        0, // Use 0 for single-thread (tracked in local perf)
                     );
                     ledger.write_balance_event(&lock_event);
                 }
@@ -173,6 +174,7 @@ pub fn run_pipeline_single_thread(
                         base_id,
                         quote_id,
                         qty_unit,
+                        0, // Use 0 for single-thread
                     );
 
                     // Step 3: trade_queue → Settlement + Balance Update
@@ -216,6 +218,7 @@ pub fn run_pipeline_single_thread(
                                             b.settle_version(),
                                             b.avail(),
                                             b.frozen(),
+                                            0, // Use 0 for single-thread
                                         );
                                         ledger.write_balance_event(&restore_event);
                                     }
@@ -331,6 +334,7 @@ fn handle_cancel_order(
                     b.lock_version(),
                     b.avail(),
                     b.frozen(),
+                    0, // Use 0 for single-thread
                 );
                 ledger.write_balance_event(&unlock_event);
             }
@@ -408,6 +412,7 @@ fn log_trade_settlement_events(
             b.settle_version(),
             b.avail(),
             b.frozen(),
+            0, // Use 0 for single-thread
         );
         ledger.write_balance_event(&settle_event);
         ledger.write_entry(&LedgerEntry {
@@ -428,6 +433,7 @@ fn log_trade_settlement_events(
             b.settle_version(),
             b.avail(),
             b.frozen(),
+            0, // Use 0 for single-thread
         );
         ledger.write_balance_event(&settle_event);
         ledger.write_entry(&LedgerEntry {
@@ -450,6 +456,7 @@ fn log_trade_settlement_events(
             b.settle_version(),
             b.avail(),
             b.frozen(),
+            0, // Use 0 for single-thread
         );
         ledger.write_balance_event(&settle_event);
         ledger.write_entry(&LedgerEntry {
@@ -470,6 +477,7 @@ fn log_trade_settlement_events(
             b.settle_version(),
             b.avail(),
             b.frozen(),
+            0, // Use 0 for single-thread
         );
         ledger.write_balance_event(&settle_event);
         ledger.write_entry(&LedgerEntry {

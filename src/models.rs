@@ -1,5 +1,7 @@
 // models.rs - Core order and trade types
 
+use crate::core_types::{OrderId, UserId};
+
 /// Order side: Buy or Sell
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Side {
@@ -46,8 +48,8 @@ pub enum OrderStatus {
 /// price and qty are raw u64 (already scaled by Gateway)
 #[derive(Debug, Clone)]
 pub struct InternalOrder {
-    pub order_id: u64,
-    pub user_id: u64,
+    pub order_id: OrderId,
+    pub user_id: UserId,
     pub symbol_id: u32, // Trading pair
     pub price: u64,     // Raw u64 (already scaled by Gateway)
     pub qty: u64,       // Raw u64 (already scaled by Gateway)
@@ -55,13 +57,17 @@ pub struct InternalOrder {
     pub side: Side,
     pub order_type: OrderType,
     pub status: OrderStatus,
+    pub lock_version: u64,
+    pub seq_id: u64,
+    /// Timestamp when order was ingested (nanoseconds)
+    pub ingested_at_ns: u64,
 }
 
 impl InternalOrder {
     /// Create a new limit order
     pub fn new(
-        order_id: u64,
-        user_id: u64,
+        order_id: OrderId,
+        user_id: UserId,
         symbol_id: u32,
         price: u64,
         qty: u64,
@@ -77,11 +83,46 @@ impl InternalOrder {
             side,
             order_type: OrderType::Limit,
             status: OrderStatus::NEW,
+            lock_version: 0,
+            seq_id: 0,
+            ingested_at_ns: 0,
+        }
+    }
+
+    /// Create with explicit ingestion time
+    pub fn new_with_time(
+        order_id: OrderId,
+        user_id: UserId,
+        symbol_id: u32,
+        price: u64,
+        qty: u64,
+        side: Side,
+        ingested_at_ns: u64,
+    ) -> Self {
+        Self {
+            order_id,
+            user_id,
+            symbol_id,
+            price,
+            qty,
+            side,
+            order_type: OrderType::Limit,
+            status: OrderStatus::NEW,
+            filled_qty: 0,
+            lock_version: 0,
+            seq_id: 0,
+            ingested_at_ns,
         }
     }
 
     /// Create a market order
-    pub fn market(order_id: u64, user_id: u64, symbol_id: u32, qty: u64, side: Side) -> Self {
+    pub fn market(
+        order_id: OrderId,
+        user_id: UserId,
+        symbol_id: u32,
+        qty: u64,
+        side: Side,
+    ) -> Self {
         Self {
             order_id,
             user_id,
@@ -92,6 +133,9 @@ impl InternalOrder {
             side,
             order_type: OrderType::Market,
             status: OrderStatus::NEW,
+            ingested_at_ns: 0,
+            lock_version: 0,
+            seq_id: 0,
         }
     }
 

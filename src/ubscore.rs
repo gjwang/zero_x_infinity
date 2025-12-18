@@ -195,7 +195,8 @@ impl UBSCore {
         // 3. Lock funds (safe now, order is persisted)
         self.lock_funds(&order);
 
-        Ok(ValidOrder::new(seq_id, order))
+        let ingested_at_ns = order.ingested_at_ns;
+        Ok(ValidOrder::new(seq_id, order, ingested_at_ns))
     }
 
     // ============================================================
