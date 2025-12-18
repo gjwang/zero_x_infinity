@@ -1,0 +1,72 @@
+use anyhow::Result;
+use serde::Serialize;
+
+/// Order API response data
+#[derive(Debug, Serialize)]
+pub struct OrderApiData {
+    pub order_id: u64,
+    pub user_id: u64,
+    pub side: String,
+    pub order_type: String,
+    pub price: u64,
+    pub qty: u64,
+    pub filled_qty: u64,
+    pub status: String,
+    pub cid: Option<String>,
+    pub created_at: String,
+}
+
+/// Trade API response data
+#[derive(Debug, Serialize)]
+pub struct TradeApiData {
+    pub trade_id: u64,
+    pub order_id: u64,
+    pub user_id: u64,
+    pub side: String,
+    pub price: u64,
+    pub qty: u64,
+    pub fee: u64,
+    pub role: String,
+    pub created_at: String,
+}
+
+/// Balance API response data
+#[derive(Debug, Serialize)]
+pub struct BalanceApiData {
+    pub user_id: u64,
+    pub asset_id: u32,
+    pub avail: u64,
+    pub frozen: u64,
+    pub lock_version: u64,
+    pub settle_version: u64,
+    pub updated_at: String,
+}
+
+// TODO: Implement actual TDengine query functions
+//
+// The taos crate uses async iterators for query results, which requires
+// careful type handling. Example implementation:
+//
+// ```rust
+// use taos::*;
+// use futures::StreamExt;
+//
+// pub async fn query_order(taos: &Taos, order_id: u64, symbol_id: u32) -> Result<Option<OrderApiData>> {
+//     let table_name = format!("orders_{}", symbol_id);
+//     let sql = format!("SELECT * FROM {} WHERE order_id = {} ORDER BY ts DESC LIMIT 1", table_name, order_id);
+//
+//     let mut result = taos.query(&sql).await?;
+//     let mut rows = result.rows();
+//
+//     if let Some(row) = rows.next().await {
+//         let row = row?;
+//         // Parse row fields using row.get::<T>(index)
+//         // Return OrderApiData
+//     }
+//     Ok(None)
+// }
+// ```
+//
+// For now, query endpoints return NOT_IMPLEMENTED (501) status.
+// This allows the system to function without queries while we focus on
+// write operations and Settlement persistence.
