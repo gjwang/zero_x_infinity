@@ -1,5 +1,7 @@
 # 0x07-b 性能基线 - 初步建立 (Performance Baseline - Initial Setup)
 
+> **📦 代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.7-a-testing-framework...v0.7-b-perf-baseline)
+
 > **核心目的**：建立可量化、可追踪、可比较的性能基线。
 
 本章在 0x07-a 测试框架基础上，添加详细的性能指标收集和分析能力。

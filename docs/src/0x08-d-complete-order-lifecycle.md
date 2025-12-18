@@ -1,5 +1,7 @@
 # 0x08-d 完整订单生命周期与撤单优化
 
+> **📦 代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.8-c-complete-event-flow...v0.8-d-complete-order-lifecycle)
+
 > **核心目标**：实现订单全生命周期管理（含撤单、退款），设计双轨制测试框架，并深入分析引入的性能瓶颈。
 
 ---

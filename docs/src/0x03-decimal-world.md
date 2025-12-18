@@ -1,5 +1,7 @@
 # 0x03: 十进制世界 (Decimal World)
 
+> **📦 代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.2-the-curse-of-float...v0.3-decimal-world)
+
 在上一章中，我们将所有的 `f64` 重构为 `u64`，解决了浮点数的精度问题。但这引入了一个新的问题：**客户端使用的是十进制，而我们内部使用的是整数，如何进行转换？**
 
 ---

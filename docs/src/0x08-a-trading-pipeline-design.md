@@ -1,5 +1,7 @@
 # 0x08-a 交易流水线设计 (Trading Pipeline Design)
 
+> **📦 代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.7-b-perf-baseline...v0.8-a-trading-pipeline-design)
+
 > **核心目的**：设计完整的交易流水线架构，确保订单持久化、余额一致性和系统可恢复性。
 
 本章解决撮合引擎最关键的设计问题：**服务划分、数据流和原子性保证**。

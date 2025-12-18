@@ -1,5 +1,7 @@
 # 0x04 Orderbook数据结构重构: (OrderBook data structure Refactoring)
 
+> **📦 代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.3-decimal-world...v0.4-btree-orderbook)
+
 在前三章中，我们完成了从浮点数到整数的转换，并建立了精度配置系统。但我们的 OrderBook 数据结构还是一个"玩具"实现——每次撮合都需要重新排序！本章我们将把它升级为一个真正生产可用的数据结构。
 
 ---

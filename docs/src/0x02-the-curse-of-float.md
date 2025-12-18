@@ -1,5 +1,7 @@
 # 0x02: 浮点数的诅咒 (The Curse of Float)
 
+> **📦 代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.1-genesis...v0.2-the-curse-of-float)
+
 ## 1. 新手常犯的错误 (The Rookie Mistake)
 
 有经验的老手，应该马上看到 `price` 的类型是 `f64`，这是有问题的。因为我们在 `models.rs` 里有这行代码：

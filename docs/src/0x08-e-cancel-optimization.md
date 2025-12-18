@@ -1,5 +1,7 @@
 # 0x08-e 性能瓶颈定位与优化
 
+> **📦 代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.8-d-complete-order-lifecycle...v0.8-e-perf-bottleneck-profiling)
+
 > **背景**：引入 Cancel 功能后，执行时间从 ~30s 暴涨到 7+ 分钟，需要定位并解决问题。
 >
 > **本章目的**：

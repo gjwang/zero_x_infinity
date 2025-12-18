@@ -1,5 +1,7 @@
 # 0x07-a 测试框架 - 正确性验证 (Testing Framework - Correctness)
 
+> **📦 代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.6-enforced-balance...v0.7-a-testing-framework)
+
 > **核心目的**：为撮合引擎建立可验证、可重复、可追溯的测试基础设施。
 
 本章不仅是"如何测试"，更重要的是理解"为什么这样设计"——这些设计决策直接源于真实交易所的需求。
