@@ -40,6 +40,7 @@ pub mod perf;
 pub mod pipeline;
 pub mod pipeline_mt;
 pub mod pipeline_runner;
+pub mod pipeline_services;
 pub mod ubscore;
 pub mod user_account;
 pub mod wal;
