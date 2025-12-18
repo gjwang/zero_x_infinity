@@ -22,6 +22,13 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 
 // ============================================================
+// CONSTANTS
+// ============================================================
+
+pub const OP_CREDIT: &str = "credit";
+pub const OP_DEBIT: &str = "debit";
+
+// ============================================================
 // LEGACY LEDGER ENTRY (for backward compatibility)
 // ============================================================
 

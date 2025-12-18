@@ -67,7 +67,7 @@ impl WalEntry {
     /// Serialize to CSV line (development format)
     pub fn to_csv_line(&self) -> String {
         format!(
-            "{},{},{},{},{},{},{},{:?},{:?}\n",
+            "{},{},{},{},{},{},{},{:?},{:?},{}\n",
             self.seq_id,
             self.timestamp_ns,
             self.order.order_id,
@@ -77,6 +77,7 @@ impl WalEntry {
             self.order.qty,
             self.order.side,
             self.order.order_type,
+            self.order.ingested_at_ns,
         )
     }
 }
@@ -282,7 +283,7 @@ impl WalReader {
         use crate::models::{OrderStatus, OrderType, Side};
 
         let parts: Vec<&str> = line.split(',').collect();
-        if parts.len() < 9 {
+        if parts.len() < 10 {
             return None;
         }
 
@@ -306,6 +307,8 @@ impl WalReader {
             _ => return None,
         };
 
+        let ingested_at_ns: u64 = parts[9].trim().parse().unwrap_or(0);
+
         let order = InternalOrder {
             order_id,
             user_id,
@@ -316,6 +319,9 @@ impl WalReader {
             side,
             order_type,
             status: OrderStatus::NEW,
+            ingested_at_ns,
+            lock_version: 0,
+            seq_id: 0,
         };
 
         Some(WalEntry {
@@ -429,7 +435,7 @@ mod tests {
         };
 
         let csv = entry.to_csv_line();
-        // Format: seq_id,timestamp,order_id,user_id,symbol_id,price,qty,side,type
-        assert!(csv.contains("1,1234567890,42,100,0,50000,1000,Buy,Limit"));
+        // Format: seq_id,timestamp,order_id,user_id,symbol_id,price,qty,side,type,ingested_at
+        assert!(csv.contains("1,1234567890,42,100,0,50000,1000,Buy,Limit,0"));
     }
 }
