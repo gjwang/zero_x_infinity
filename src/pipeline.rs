@@ -537,9 +537,9 @@ pub struct PipelineStats {
 }
 
 impl PipelineStats {
-    pub fn new() -> Self {
+    pub fn new(sample_rate: usize) -> Self {
         Self {
-            perf_samples: std::sync::Mutex::new(crate::perf::PerfMetrics::new(10)),
+            perf_samples: std::sync::Mutex::new(crate::perf::PerfMetrics::new(sample_rate)),
             ..Default::default()
         }
     }
@@ -625,7 +625,13 @@ impl PipelineStats {
     }
 
     pub fn incr_backpressure(&self) {
-        self.backpressure_events.fetch_add(1, Ordering::Relaxed);
+        let count = self.backpressure_events.fetch_add(1, Ordering::Relaxed);
+        if count % 10000 == 0 {
+            tracing::warn!(
+                total_backpressure = count + 1,
+                "Pipeline backpressure detected (sampled 1/10000)"
+            );
+        }
     }
 
     /// Get snapshot of current stats
@@ -759,10 +765,10 @@ pub struct SingleThreadPipeline {
 
 impl SingleThreadPipeline {
     /// Create a new single-thread pipeline
-    pub fn new() -> Self {
+    pub fn new(sample_rate: usize) -> Self {
         Self {
             queues: PipelineQueues::new(),
-            stats: Arc::new(PipelineStats::new()),
+            stats: Arc::new(PipelineStats::new(sample_rate)),
             shutdown: Arc::new(ShutdownSignal::new()),
         }
     }
@@ -772,6 +778,7 @@ impl SingleThreadPipeline {
         order_capacity: usize,
         valid_order_capacity: usize,
         trade_capacity: usize,
+        sample_rate: usize,
     ) -> Self {
         Self {
             queues: PipelineQueues::with_capacity(
@@ -779,7 +786,7 @@ impl SingleThreadPipeline {
                 valid_order_capacity,
                 trade_capacity,
             ),
-            stats: Arc::new(PipelineStats::new()),
+            stats: Arc::new(PipelineStats::new(sample_rate)),
             shutdown: Arc::new(ShutdownSignal::new()),
         }
     }
@@ -839,12 +846,6 @@ impl SingleThreadPipeline {
     /// Get reference to stats (for external update)
     pub fn stats(&self) -> &Arc<PipelineStats> {
         &self.stats
-    }
-}
-
-impl Default for SingleThreadPipeline {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

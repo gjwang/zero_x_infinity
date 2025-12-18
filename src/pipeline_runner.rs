@@ -64,6 +64,7 @@ pub fn run_pipeline_single_thread(
     ledger: &mut LedgerWriter,
     symbol_mgr: &SymbolManager,
     active_symbol_id: u32,
+    sample_rate: usize,
 ) -> PipelineResult {
     let symbol_info = symbol_mgr
         .get_symbol_info_by_id(active_symbol_id)
@@ -72,8 +73,8 @@ pub fn run_pipeline_single_thread(
     let base_id = symbol_info.base_asset_id;
     let quote_id = symbol_info.quote_asset_id;
 
-    let pipeline = SingleThreadPipeline::new();
-    let mut perf = PerfMetrics::new(10);
+    let pipeline = SingleThreadPipeline::new(sample_rate);
+    let mut perf = PerfMetrics::new(sample_rate);
 
     let mut accepted = 0u64;
     let mut rejected = 0u64;

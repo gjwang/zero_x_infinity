@@ -28,9 +28,11 @@ pub mod symbol_manager;
 
 // Trading components
 pub mod balance;
+pub mod config;
 pub mod csv_io;
 pub mod engine;
 pub mod ledger;
+pub mod logging;
 pub mod messages;
 pub mod models;
 pub mod orderbook;

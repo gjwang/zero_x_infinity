@@ -37,6 +37,21 @@
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Instant;
+use tracing::{error, info, info_span, warn};
+
+// High-frequency lifecycle logs are sent to "pipeline_trace" target
+// This allows them to be toggled globally via tracing-subscriber filter
+macro_rules! p_info {
+    ($($arg:tt)+) => {
+        tracing::info!(target: "pipeline_trace", $($arg)+);
+    }
+}
+
+macro_rules! p_span {
+    ($name:expr, $($arg:tt)*) => {
+        tracing::info_span!(target: "pipeline_trace", $name, $($arg)*)
+    }
+}
 
 use crate::csv_io::InputOrder;
 use crate::engine::MatchingEngine;
@@ -87,6 +102,7 @@ pub fn run_pipeline_multi_thread(
     mut ledger: LedgerWriter,
     symbol_mgr: &SymbolManager,
     active_symbol_id: u32,
+    sample_rate: usize,
 ) -> MultiThreadPipelineResult {
     let symbol_info = symbol_mgr
         .get_symbol_info_by_id(active_symbol_id)
@@ -97,7 +113,7 @@ pub fn run_pipeline_multi_thread(
 
     // Create shared queues and state
     let queues = Arc::new(MultiThreadQueues::new());
-    let stats = Arc::new(PipelineStats::new());
+    let stats = Arc::new(PipelineStats::new(sample_rate));
     let shutdown = Arc::new(ShutdownSignal::new());
 
     let _start_time = Instant::now();
@@ -115,6 +131,9 @@ pub fn run_pipeline_multi_thread(
             if ingestion_shutdown.is_shutdown_requested() {
                 break;
             }
+
+            let span = p_span!("ingestion", order_id = input.order_id);
+            let _enter = span.enter();
 
             let ingested_at_ns = Instant::now().duration_since(_start_time).as_nanos() as u64;
 
@@ -145,6 +164,8 @@ pub fn run_pipeline_multi_thread(
                 order.ingested_at_ns = ingested_at_ns;
                 OrderAction::Place(SequencedOrder::new(seq_counter, order, ingested_at_ns))
             };
+
+            p_info!("Order ingested into pipeline");
 
             // Push with backpressure (same path for both place and cancel)
             loop {
@@ -214,12 +235,21 @@ pub fn run_pipeline_multi_thread(
                         price_improvement,
                     } => {
                         let trade = &trade_event.trade;
+                        let span = p_span!(
+                            "ubscore_settle",
+                            trade_id = trade.trade_id,
+                            buyer = trade.buyer_user_id,
+                            seller = trade.seller_user_id
+                        );
+                        let _enter = span.enter();
+
                         let ingested_at_ns = trade_event.taker_ingested_at_ns;
 
                         // Settle the trade (using ubscore logic)
                         if let Err(e) = ubscore.settle_trade(&trade_event) {
-                            eprintln!("Trade {} settlement error: {}", trade.trade_id, e);
+                            error!(error = ?e, "Trade settlement failed");
                         } else {
+                            p_info!("Trade settled");
                             // Generate BalanceEvents for settlement
                             let quote_amount = trade_event.quote_amount();
 
@@ -339,6 +369,8 @@ pub fn run_pipeline_multi_thread(
                         unlock_amount,
                         ingested_at_ns,
                     } => {
+                        let span = p_span!("ubscore_cancel", order_id, user_id);
+                        let _enter = span.enter();
                         // Unlock balance for cancelled order
                         if let Err(e) = ubscore.unlock(user_id, asset_id, unlock_amount) {
                             eprintln!("Cancel unlock failed for order {}: {}", order_id, e);
@@ -355,7 +387,7 @@ pub fn run_pipeline_multi_thread(
                                     BalanceEvent::unlock(
                                         user_id,
                                         asset_id,
-                                        order_id,
+                                        order_id, // order_seq_id
                                         unlock_amount,
                                         balance.lock_version(),
                                         balance.avail(),
@@ -383,6 +415,13 @@ pub fn run_pipeline_multi_thread(
                     OrderAction::Place(seq_order) => {
                         // Place order: lock balance, send to ME
                         let order = seq_order.order.clone();
+                        let span = p_span!(
+                            "ubscore_pretrade",
+                            order_id = order.order_id,
+                            user_id = order.user_id
+                        );
+                        let _enter = span.enter();
+
                         let order_id = order.order_id;
                         let user_id = order.user_id;
                         let ingested_at_ns = seq_order.ingested_at_ns;
@@ -429,6 +468,7 @@ pub fn run_pipeline_multi_thread(
                                         }
                                     }
                                 }
+                                p_info!("Order pre-checked and locked");
                                 ubscore_stats.incr_accepted();
                             }
                             Err(reason) => {
@@ -539,9 +579,14 @@ pub fn run_pipeline_multi_thread(
 
                 match action {
                     ValidAction::Order(valid_order) => {
+                        let span = p_span!("matching", order_id = valid_order.order.order_id);
+                        let _enter = span.enter();
+
                         // Match order
                         let result =
                             MatchingEngine::process_order(&mut book, valid_order.order.clone());
+
+                        p_info!(trades = result.trades.len(), "Matching completed");
 
                         // Fan-out: Send Trade Events to BOTH Settlement AND UBSCore
                         for trade in &result.trades {
@@ -718,6 +763,9 @@ pub fn run_pipeline_multi_thread(
                 let task_start = Instant::now();
 
                 let trade = &trade_event.trade;
+                let span = p_span!("settlement_persist", trade_id = trade.trade_id);
+                let _enter = span.enter();
+
                 let trade_cost = ((trade.price as u128) * (trade.qty as u128)
                     / (trade_event.qty_unit as u128)) as u64;
 
@@ -757,6 +805,7 @@ pub fn run_pipeline_multi_thread(
                     delta: trade_cost,
                     balance_after: 0,
                 });
+                p_info!("Settlement persisted to ledger");
                 settlement_stats.add_event_log_time(task_start.elapsed().as_nanos() as u64);
             }
 
