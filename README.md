@@ -47,14 +47,20 @@ This is a pilgrimage from `Hello World` to `Microsecond Latency`.
 ## 🏃 Quick Start
 
 ```bash
-# Run the matching engine
-cargo run
+# Install git hooks
+./scripts/install-hooks.sh
 
-# Run the tests
+# Run single-threaded pipeline (1.3M orders)
+cargo run --release -- --pipeline --input fixtures/test_with_cancel_highbal
+
+# Run multi-threaded pipeline
+cargo run --release -- --pipeline-mt --input fixtures/test_with_cancel_highbal
+
+# Compare both pipelines (correctness test)
+./scripts/test_pipeline_compare.sh highbal
+
+# Run unit tests
 cargo test
-
-# Run the float precision demo
-cargo run --example the_curse_of_float
 ```
 
 ---
