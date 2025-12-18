@@ -53,11 +53,17 @@ pub struct ValidOrder {
     pub seq_id: SeqNum,
     /// The order (balance already locked)
     pub order: InternalOrder,
+    /// Timestamp when order was ingested (nanoseconds)
+    pub ingested_at_ns: u64,
 }
 
 impl ValidOrder {
-    pub fn new(seq_id: SeqNum, order: InternalOrder) -> Self {
-        Self { seq_id, order }
+    pub fn new(seq_id: SeqNum, order: InternalOrder, ingested_at_ns: u64) -> Self {
+        Self {
+            seq_id,
+            order,
+            ingested_at_ns,
+        }
     }
 }
 
@@ -86,6 +92,8 @@ pub struct TradeEvent {
     pub quote_asset_id: AssetId,
     /// qty_unit for quote amount calculation
     pub qty_unit: u64,
+    /// Timestamp when taker order was ingested
+    pub taker_ingested_at_ns: u64,
 }
 
 impl TradeEvent {
@@ -97,6 +105,7 @@ impl TradeEvent {
         base_asset_id: AssetId,
         quote_asset_id: AssetId,
         qty_unit: u64,
+        taker_ingested_at_ns: u64,
     ) -> Self {
         Self {
             trade,
@@ -106,6 +115,7 @@ impl TradeEvent {
             base_asset_id,
             quote_asset_id,
             qty_unit,
+            taker_ingested_at_ns,
         }
     }
 
@@ -456,6 +466,8 @@ pub struct BalanceEvent {
     pub avail_after: u64,
     /// Frozen balance after this event
     pub frozen_after: u64,
+    /// Timestamp when the originating order/action was ingested
+    pub ingested_at_ns: u64,
 }
 
 impl BalanceEvent {
@@ -470,6 +482,7 @@ impl BalanceEvent {
         delta: i64,
         avail_after: u64,
         frozen_after: u64,
+        ingested_at_ns: u64,
     ) -> Self {
         Self {
             user_id,
@@ -481,6 +494,7 @@ impl BalanceEvent {
             delta,
             avail_after,
             frozen_after,
+            ingested_at_ns,
         }
     }
 
@@ -493,6 +507,7 @@ impl BalanceEvent {
         lock_version: u64,
         avail_after: u64,
         frozen_after: u64,
+        ingested_at_ns: u64,
     ) -> Self {
         Self::new(
             user_id,
@@ -504,6 +519,7 @@ impl BalanceEvent {
             -(amount as i64), // Negative: avail decreases
             avail_after,
             frozen_after,
+            ingested_at_ns,
         )
     }
 
@@ -516,6 +532,7 @@ impl BalanceEvent {
         lock_version: u64,
         avail_after: u64,
         frozen_after: u64,
+        ingested_at_ns: u64,
     ) -> Self {
         Self::new(
             user_id,
@@ -527,6 +544,7 @@ impl BalanceEvent {
             amount as i64, // Positive: avail increases
             avail_after,
             frozen_after,
+            ingested_at_ns,
         )
     }
 
@@ -539,6 +557,7 @@ impl BalanceEvent {
         settle_version: u64,
         avail_after: u64,
         frozen_after: u64,
+        ingested_at_ns: u64,
     ) -> Self {
         Self::new(
             user_id,
@@ -550,6 +569,7 @@ impl BalanceEvent {
             -(amount as i64), // Negative: frozen decreases
             avail_after,
             frozen_after,
+            ingested_at_ns,
         )
     }
 
@@ -562,6 +582,7 @@ impl BalanceEvent {
         settle_version: u64,
         avail_after: u64,
         frozen_after: u64,
+        ingested_at_ns: u64,
     ) -> Self {
         Self::new(
             user_id,
@@ -573,6 +594,7 @@ impl BalanceEvent {
             amount as i64, // Positive: avail increases
             avail_after,
             frozen_after,
+            ingested_at_ns,
         )
     }
 
@@ -585,6 +607,7 @@ impl BalanceEvent {
         settle_version: u64,
         avail_after: u64,
         frozen_after: u64,
+        ingested_at_ns: u64,
     ) -> Self {
         Self::new(
             user_id,
@@ -596,6 +619,7 @@ impl BalanceEvent {
             amount as i64, // Positive: avail increases
             avail_after,
             frozen_after,
+            ingested_at_ns,
         )
     }
 
@@ -619,6 +643,7 @@ impl BalanceEvent {
             amount as i64,
             avail_after,
             frozen_after,
+            0, // Ingestion time not available for deposits
         )
     }
 

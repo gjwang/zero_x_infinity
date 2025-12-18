@@ -311,6 +311,7 @@ fn execute_orders_with_ubscore(
                                 b.lock_version(),
                                 b.avail(),
                                 b.frozen(),
+                                0, // Use 0 for non-pipeline mode
                             );
                             ledger.write_balance_event(&unlock_event);
                         }
@@ -395,6 +396,7 @@ fn execute_orders_with_ubscore(
                         b.lock_version(),
                         b.avail(),
                         b.frozen(),
+                        0, // Use 0
                     );
                     ledger.write_balance_event(&lock_event);
                 }
@@ -426,6 +428,7 @@ fn execute_orders_with_ubscore(
                         base_id,
                         quote_id,
                         qty_unit,
+                        0, // Use 0
                     );
 
                     if let Err(e) = ubscore.settle_trade(&trade_event) {
@@ -466,6 +469,7 @@ fn execute_orders_with_ubscore(
                             b.settle_version(),
                             b.avail(),
                             b.frozen(),
+                            0, // Use 0
                         );
                         ledger.write_balance_event(&settle_event);
                         ledger.write_entry(&LedgerEntry {
@@ -486,6 +490,7 @@ fn execute_orders_with_ubscore(
                             b.settle_version(),
                             b.avail(),
                             b.frozen(),
+                            0, // Use 0
                         );
                         ledger.write_balance_event(&settle_event);
                         ledger.write_entry(&LedgerEntry {
@@ -508,6 +513,7 @@ fn execute_orders_with_ubscore(
                             b.settle_version(),
                             b.avail(),
                             b.frozen(),
+                            0, // Use 0
                         );
                         ledger.write_balance_event(&settle_event);
                         ledger.write_entry(&LedgerEntry {
@@ -528,6 +534,7 @@ fn execute_orders_with_ubscore(
                             b.settle_version(),
                             b.avail(),
                             b.frozen(),
+                            0, // Use 0
                         );
                         ledger.write_balance_event(&settle_event);
                         ledger.write_entry(&LedgerEntry {
@@ -555,6 +562,7 @@ fn execute_orders_with_ubscore(
                                         b.settle_version(),
                                         b.avail(),
                                         b.frozen(),
+                                        0, // Use 0
                                     );
                                     ledger.write_balance_event(&restore_event);
                                 }
@@ -787,11 +795,18 @@ fn main() {
             result.total_trades
         );
 
+        // Extract performance metrics
+        let perf = if let Ok(perf) = result.stats.perf_samples.lock() {
+            perf.clone()
+        } else {
+            PerfMetrics::default()
+        };
+
         (
             result.accepted,
             result.rejected,
             result.total_trades,
-            PerfMetrics::default(), // Multi-thread mode doesn't track perf yet
+            perf,
             result.final_accounts,
             None, // OrderBook consumed by threads
         )

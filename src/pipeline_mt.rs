@@ -116,27 +116,34 @@ pub fn run_pipeline_multi_thread(
                 break;
             }
 
+            let ingested_at_ns = Instant::now().duration_since(_start_time).as_nanos() as u64;
+
             // Create OrderAction based on input action type
             let action = if input.action == "cancel" {
                 // Cancel order - no seq needed, just pass order_id
                 ingestion_stats.incr_cancel();
+                ingestion_stats.record_cancel();
                 OrderAction::Cancel {
                     order_id: input.order_id,
                     user_id: input.user_id,
+                    ingested_at_ns,
                 }
             } else {
                 // Place order - assign sequence number
                 ingestion_stats.incr_place();
+                ingestion_stats.record_place();
                 seq_counter += 1;
-                let order = InternalOrder::new(
+                let mut order = InternalOrder::new_with_time(
                     input.order_id,
                     input.user_id,
                     active_symbol_id,
                     input.price,
                     input.qty,
                     input.side,
+                    ingested_at_ns,
                 );
-                OrderAction::Place(SequencedOrder::new(seq_counter, order, 0))
+                order.ingested_at_ns = ingested_at_ns;
+                OrderAction::Place(SequencedOrder::new(seq_counter, order, ingested_at_ns))
             };
 
             // Push with backpressure (same path for both place and cancel)
@@ -198,53 +205,61 @@ pub fn run_pipeline_multi_thread(
             // ============================================
             while let Some(balance_update) = ubscore_queues.balance_update_queue.pop() {
                 did_work = true;
+                let task_start = Instant::now();
 
+                // Process balance update (from ME)
                 match balance_update {
                     BalanceUpdateRequest::Trade {
                         trade_event,
                         price_improvement,
                     } => {
                         let trade = &trade_event.trade;
-                        let trade_id = trade.trade_id;
-                        let quote_amount = trade_event.quote_amount();
+                        let ingested_at_ns = trade_event.taker_ingested_at_ns;
 
-                        // Settle the trade
+                        // Settle the trade (using ubscore logic)
                         if let Err(e) = ubscore.settle_trade(&trade_event) {
-                            eprintln!("Trade {} settlement error: {}", trade_id, e);
+                            eprintln!("Trade {} settlement error: {}", trade.trade_id, e);
                         } else {
                             // Generate BalanceEvents for settlement
+                            let quote_amount = trade_event.quote_amount();
+
+                            // Taker: record latency since taker's action is now "complete" enough for benchmarks
+                            let now_ns =
+                                Instant::now().duration_since(_start_time).as_nanos() as u64;
+                            ubscore_stats.record_latency(now_ns.saturating_sub(ingested_at_ns));
 
                             // Buyer: spend quote, receive base
                             if let Some(balance) =
-                                ubscore.get_balance(trade.buyer_user_id, trade_event.quote_asset_id)
+                                ubscore.get_balance(trade.buyer_user_id, quote_id)
                             {
                                 push_balance_event(
                                     &ubscore_queues,
                                     BalanceEvent::settle_spend(
                                         trade.buyer_user_id,
-                                        trade_event.quote_asset_id,
-                                        trade_id,
+                                        quote_id,
+                                        trade.trade_id,
                                         quote_amount,
                                         balance.settle_version(),
                                         balance.avail(),
                                         balance.frozen(),
+                                        ingested_at_ns,
                                     ),
                                     &ubscore_stats,
                                 );
                             }
-                            if let Some(balance) =
-                                ubscore.get_balance(trade.buyer_user_id, trade_event.base_asset_id)
+                            if let Some(balance) = ubscore.get_balance(trade.buyer_user_id, base_id)
                             {
                                 push_balance_event(
                                     &ubscore_queues,
                                     BalanceEvent::settle_receive(
                                         trade.buyer_user_id,
-                                        trade_event.base_asset_id,
-                                        trade_id,
+                                        base_id,
+                                        trade.trade_id,
                                         trade.qty,
                                         balance.settle_version(),
                                         balance.avail(),
                                         balance.frozen(),
+                                        ingested_at_ns,
                                     ),
                                     &ubscore_stats,
                                 );
@@ -252,35 +267,37 @@ pub fn run_pipeline_multi_thread(
 
                             // Seller: spend base, receive quote
                             if let Some(balance) =
-                                ubscore.get_balance(trade.seller_user_id, trade_event.base_asset_id)
+                                ubscore.get_balance(trade.seller_user_id, base_id)
                             {
                                 push_balance_event(
                                     &ubscore_queues,
                                     BalanceEvent::settle_spend(
                                         trade.seller_user_id,
-                                        trade_event.base_asset_id,
-                                        trade_id,
+                                        base_id,
+                                        trade.trade_id,
                                         trade.qty,
                                         balance.settle_version(),
                                         balance.avail(),
                                         balance.frozen(),
+                                        ingested_at_ns,
                                     ),
                                     &ubscore_stats,
                                 );
                             }
-                            if let Some(balance) = ubscore
-                                .get_balance(trade.seller_user_id, trade_event.quote_asset_id)
+                            if let Some(balance) =
+                                ubscore.get_balance(trade.seller_user_id, quote_id)
                             {
                                 push_balance_event(
                                     &ubscore_queues,
                                     BalanceEvent::settle_receive(
                                         trade.seller_user_id,
-                                        trade_event.quote_asset_id,
-                                        trade_id,
+                                        quote_id,
+                                        trade.trade_id,
                                         quote_amount,
                                         balance.settle_version(),
                                         balance.avail(),
                                         balance.frozen(),
+                                        ingested_at_ns,
                                     ),
                                     &ubscore_stats,
                                 );
@@ -298,11 +315,12 @@ pub fn run_pipeline_multi_thread(
                                                 BalanceEvent::settle_restore(
                                                     pi.user_id,
                                                     pi.asset_id,
-                                                    trade_id,
+                                                    trade.trade_id,
                                                     pi.amount,
-                                                    balance.lock_version(),
+                                                    balance.settle_version(),
                                                     balance.avail(),
                                                     balance.frozen(),
+                                                    ingested_at_ns,
                                                 ),
                                                 &ubscore_stats,
                                             );
@@ -310,6 +328,7 @@ pub fn run_pipeline_multi_thread(
                                     }
                                 }
                             }
+
                             ubscore_stats.incr_settled();
                         }
                     }
@@ -318,11 +337,17 @@ pub fn run_pipeline_multi_thread(
                         user_id,
                         asset_id,
                         unlock_amount,
+                        ingested_at_ns,
                     } => {
                         // Unlock balance for cancelled order
                         if let Err(e) = ubscore.unlock(user_id, asset_id, unlock_amount) {
                             eprintln!("Cancel unlock failed for order {}: {}", order_id, e);
                         } else {
+                            // Record latency for cancel
+                            let now_ns =
+                                Instant::now().duration_since(_start_time).as_nanos() as u64;
+                            ubscore_stats.record_latency(now_ns.saturating_sub(ingested_at_ns));
+
                             // Generate Unlock BalanceEvent
                             if let Some(balance) = ubscore.get_balance(user_id, asset_id) {
                                 push_balance_event(
@@ -335,6 +360,7 @@ pub fn run_pipeline_multi_thread(
                                         balance.lock_version(),
                                         balance.avail(),
                                         balance.frozen(),
+                                        ingested_at_ns,
                                     ),
                                     &ubscore_stats,
                                 );
@@ -342,6 +368,7 @@ pub fn run_pipeline_multi_thread(
                         }
                     }
                 }
+                ubscore_stats.add_settlement_time(task_start.elapsed().as_nanos() as u64);
             }
 
             // ============================================
@@ -350,6 +377,7 @@ pub fn run_pipeline_multi_thread(
             // ============================================
             if let Some(order_action) = ubscore_queues.order_queue.pop() {
                 did_work = true;
+                let task_start = Instant::now();
 
                 match order_action {
                     OrderAction::Place(seq_order) => {
@@ -357,6 +385,7 @@ pub fn run_pipeline_multi_thread(
                         let order = seq_order.order.clone();
                         let order_id = order.order_id;
                         let user_id = order.user_id;
+                        let ingested_at_ns = seq_order.ingested_at_ns;
 
                         match ubscore.process_order(order.clone()) {
                             Ok(valid_order) => {
@@ -379,16 +408,19 @@ pub fn run_pipeline_multi_thread(
                                         balance.lock_version(),
                                         balance.avail(),
                                         balance.frozen(),
+                                        ingested_at_ns,
                                     );
 
                                     push_balance_event(&ubscore_queues, event, &ubscore_stats);
                                 }
 
                                 // Push ValidAction::Order to ME
+                                let mut final_valid_order = valid_order.clone();
+                                final_valid_order.ingested_at_ns = ingested_at_ns;
                                 loop {
                                     match ubscore_queues
                                         .action_queue
-                                        .push(ValidAction::Order(valid_order.clone()))
+                                        .push(ValidAction::Order(final_valid_order.clone()))
                                     {
                                         Ok(()) => break,
                                         Err(_) => {
@@ -400,6 +432,11 @@ pub fn run_pipeline_multi_thread(
                                 ubscore_stats.incr_accepted();
                             }
                             Err(reason) => {
+                                // Record latency for reject
+                                let now_ns =
+                                    Instant::now().duration_since(_start_time).as_nanos() as u64;
+                                ubscore_stats.record_latency(now_ns.saturating_sub(ingested_at_ns));
+
                                 // Debug: log first few rejections with balance state
                                 static REJECT_LOG_COUNT: std::sync::atomic::AtomicU64 =
                                     std::sync::atomic::AtomicU64::new(0);
@@ -433,14 +470,19 @@ pub fn run_pipeline_multi_thread(
                             }
                         }
                     }
-                    OrderAction::Cancel { order_id, user_id } => {
+                    OrderAction::Cancel {
+                        order_id,
+                        user_id,
+                        ingested_at_ns,
+                    } => {
                         // Cancel order: pass through to ME (no balance lock needed)
                         // ME will remove from book and return the cancelled order info
                         loop {
-                            match ubscore_queues
-                                .action_queue
-                                .push(ValidAction::Cancel { order_id, user_id })
-                            {
+                            match ubscore_queues.action_queue.push(ValidAction::Cancel {
+                                order_id,
+                                user_id,
+                                ingested_at_ns,
+                            }) {
                                 Ok(()) => break,
                                 Err(_) => {
                                     ubscore_stats.incr_backpressure();
@@ -450,6 +492,7 @@ pub fn run_pipeline_multi_thread(
                         }
                     }
                 }
+                ubscore_stats.add_pretrade_time(task_start.elapsed().as_nanos() as u64);
             }
 
             // Check for shutdown
@@ -492,6 +535,7 @@ pub fn run_pipeline_multi_thread(
 
             if let Some(action) = me_queues.action_queue.pop() {
                 did_work = true;
+                let task_start = Instant::now();
 
                 match action {
                     ValidAction::Order(valid_order) => {
@@ -517,6 +561,7 @@ pub fn run_pipeline_multi_thread(
                                 base_id,
                                 quote_id,
                                 qty_unit,
+                                valid_order.ingested_at_ns,
                             );
 
                             // Calculate price improvement for buy orders
@@ -566,9 +611,14 @@ pub fn run_pipeline_multi_thread(
                             }
 
                             me_stats.add_trades(1);
+                            me_stats.record_trades(1);
                         }
                     }
-                    ValidAction::Cancel { order_id, user_id } => {
+                    ValidAction::Cancel {
+                        order_id,
+                        user_id,
+                        ingested_at_ns,
+                    } => {
                         // Cancel order: remove from book
                         if let Some(mut cancelled_order) = book.remove_order_by_id(order_id) {
                             cancelled_order.status = OrderStatus::CANCELED;
@@ -591,6 +641,7 @@ pub fn run_pipeline_multi_thread(
                                     user_id,
                                     asset_id: lock_asset_id,
                                     unlock_amount,
+                                    ingested_at_ns,
                                 };
                                 loop {
                                     match me_queues.balance_update_queue.push(cancel_update.clone())
@@ -607,6 +658,7 @@ pub fn run_pipeline_multi_thread(
                         // If order not found in book, it may already be fully filled - silently ignore
                     }
                 }
+                me_stats.add_matching_time(task_start.elapsed().as_nanos() as u64);
             }
 
             // Check for shutdown
@@ -650,10 +702,12 @@ pub fn run_pipeline_multi_thread(
             // ============================================
             while let Some(balance_event) = settlement_queues.balance_event_queue.pop() {
                 did_work = true;
+                let task_start = Instant::now();
                 balance_events_count += 1;
 
                 // Persist balance event to event log
                 ledger.write_balance_event(&balance_event);
+                settlement_stats.add_event_log_time(task_start.elapsed().as_nanos() as u64);
             }
 
             // ============================================
@@ -661,6 +715,7 @@ pub fn run_pipeline_multi_thread(
             // ============================================
             if let Some(trade_event) = settlement_queues.trade_queue.pop() {
                 did_work = true;
+                let task_start = Instant::now();
 
                 let trade = &trade_event.trade;
                 let trade_cost = ((trade.price as u128) * (trade.qty as u128)
@@ -702,6 +757,7 @@ pub fn run_pipeline_multi_thread(
                     delta: trade_cost,
                     balance_after: 0,
                 });
+                settlement_stats.add_event_log_time(task_start.elapsed().as_nanos() as u64);
             }
 
             // Check for shutdown (after both queues are drained)

@@ -8,7 +8,7 @@
 
 /// Performance metrics for execution analysis
 /// Collects timing breakdown and latency samples for percentile calculation
-#[derive(Default)]
+#[derive(Clone, Default, Debug)]
 pub struct PerfMetrics {
     // ============================================
     // TOP-LEVEL ARCHITECTURE TIMING (nanoseconds)
@@ -237,9 +237,25 @@ impl PerfMetrics {
             ms(self.total_tracked_ns())
         ));
 
+        // Latency Percentiles
+        if !self.latency_samples.is_empty() {
+            s.push_str("\n--- Latency Profile (sampled) ---\n");
+            let p50 = self.percentile(50.0).unwrap_or(0);
+            let p90 = self.percentile(90.0).unwrap_or(0);
+            let p99 = self.percentile(99.0).unwrap_or(0);
+            let p999 = self.percentile(99.9).unwrap_or(0);
+            let max = self.max_latency().unwrap_or(0);
+
+            s.push_str(&format!("  P50:    {:>10} ns\n", p50));
+            s.push_str(&format!("  P90:    {:>10} ns\n", p90));
+            s.push_str(&format!("  P99:    {:>10} ns\n", p99));
+            s.push_str(&format!("  P99.9:  {:>10} ns\n", p999));
+            s.push_str(&format!("  Max:    {:>10} ns\n", max));
+        }
+
         // Sub-breakdown if available
         if self.total_wal_ns > 0 || self.total_lock_ns > 0 || self.total_cancel_lookup_ns > 0 {
-            s.push_str("\n--- Sub-Breakdown ---\n");
+            s.push_str("\n--- Stage Breakdown ---\n");
             if self.total_wal_ns > 0 {
                 s.push_str(&format!(
                     "  WAL Write:       {:>8.2}ms\n",

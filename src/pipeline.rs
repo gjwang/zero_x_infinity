@@ -88,6 +88,8 @@ pub enum OrderAction {
         order_id: u64,
         /// The user ID (for validation/logging)
         user_id: u64,
+        /// Timestamp when order was ingested (nanoseconds)
+        ingested_at_ns: u64,
     },
 }
 
@@ -119,6 +121,8 @@ pub enum ValidAction {
         order_id: u64,
         /// The user ID (for validation/logging)
         user_id: u64,
+        /// Timestamp when order was ingested (nanoseconds)
+        ingested_at_ns: u64,
     },
 }
 
@@ -418,6 +422,8 @@ pub enum BalanceUpdateRequest {
         asset_id: u32,
         /// Amount to unlock
         unlock_amount: u64,
+        /// Timestamp when order was ingested
+        ingested_at_ns: u64,
     },
 }
 
@@ -448,12 +454,19 @@ impl BalanceUpdateRequest {
     }
 
     /// Create a cancel unlock request
-    pub fn cancel(order_id: u64, user_id: u64, asset_id: u32, unlock_amount: u64) -> Self {
+    pub fn cancel(
+        order_id: u64,
+        user_id: u64,
+        asset_id: u32,
+        unlock_amount: u64,
+        ingested_at_ns: u64,
+    ) -> Self {
         Self::Cancel {
             order_id,
             user_id,
             asset_id,
             unlock_amount,
+            ingested_at_ns,
         }
     }
 }
@@ -512,11 +525,75 @@ pub struct PipelineStats {
     pub trades_settled: AtomicU64,
     /// Queue full events (backpressure)
     pub backpressure_events: AtomicU64,
+
+    // Stage timings (atomic cumulative nanoseconds)
+    pub total_pretrade_ns: AtomicU64,
+    pub total_matching_ns: AtomicU64,
+    pub total_settlement_ns: AtomicU64,
+    pub total_event_log_ns: AtomicU64,
+
+    /// Thread-safe performance samples
+    pub perf_samples: std::sync::Mutex<crate::perf::PerfMetrics>,
 }
 
 impl PipelineStats {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            perf_samples: std::sync::Mutex::new(crate::perf::PerfMetrics::new(10)),
+            ..Default::default()
+        }
+    }
+
+    pub fn record_latency(&self, latency_ns: u64) {
+        if let Ok(mut perf) = self.perf_samples.lock() {
+            perf.add_order_latency(latency_ns);
+        }
+    }
+
+    pub fn record_place(&self) {
+        if let Ok(mut perf) = self.perf_samples.lock() {
+            perf.inc_place();
+        }
+    }
+
+    pub fn record_cancel(&self) {
+        if let Ok(mut perf) = self.perf_samples.lock() {
+            perf.inc_cancel();
+        }
+    }
+
+    pub fn record_trades(&self, count: u64) {
+        if let Ok(mut perf) = self.perf_samples.lock() {
+            perf.add_trades(count);
+        }
+    }
+
+    pub fn add_pretrade_time(&self, ns: u64) {
+        self.total_pretrade_ns.fetch_add(ns, Ordering::Relaxed);
+        if let Ok(mut perf) = self.perf_samples.lock() {
+            perf.add_pretrade_time(ns);
+        }
+    }
+
+    pub fn add_matching_time(&self, ns: u64) {
+        self.total_matching_ns.fetch_add(ns, Ordering::Relaxed);
+        if let Ok(mut perf) = self.perf_samples.lock() {
+            perf.add_matching_time(ns);
+        }
+    }
+
+    pub fn add_settlement_time(&self, ns: u64) {
+        self.total_settlement_ns.fetch_add(ns, Ordering::Relaxed);
+        if let Ok(mut perf) = self.perf_samples.lock() {
+            perf.add_settlement_time(ns);
+        }
+    }
+
+    pub fn add_event_log_time(&self, ns: u64) {
+        self.total_event_log_ns.fetch_add(ns, Ordering::Relaxed);
+        if let Ok(mut perf) = self.perf_samples.lock() {
+            perf.add_event_log_time(ns);
+        }
     }
 
     pub fn incr_ingested(&self) {
