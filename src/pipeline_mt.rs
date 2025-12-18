@@ -37,19 +37,19 @@
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Instant;
-use tracing::{error, info, info_span, warn};
+use tracing::error;
 
-// High-frequency lifecycle logs are sent to "pipeline_trace" target
+// High-frequency lifecycle logs are sent to "0XINFI" target
 // This allows them to be toggled globally via tracing-subscriber filter
 macro_rules! p_info {
     ($($arg:tt)+) => {
-        tracing::info!(target: "pipeline_trace", $($arg)+);
+        tracing::info!(target: "0XINFI", $($arg)+);
     }
 }
 
 macro_rules! p_span {
     ($name:expr, $($arg:tt)*) => {
-        tracing::info_span!(target: "pipeline_trace", $name, $($arg)*)
+        tracing::info_span!(target: "0XINFI", $name, $($arg)*)
     }
 }
 
@@ -132,9 +132,6 @@ pub fn run_pipeline_multi_thread(
                 break;
             }
 
-            let span = p_span!("ingestion", order_id = input.order_id);
-            let _enter = span.enter();
-
             let ingested_at_ns = Instant::now().duration_since(_start_time).as_nanos() as u64;
 
             // Create OrderAction based on input action type
@@ -164,8 +161,6 @@ pub fn run_pipeline_multi_thread(
                 order.ingested_at_ns = ingested_at_ns;
                 OrderAction::Place(SequencedOrder::new(seq_counter, order, ingested_at_ns))
             };
-
-            p_info!("Order ingested into pipeline");
 
             // Push with backpressure (same path for both place and cancel)
             loop {
@@ -236,7 +231,7 @@ pub fn run_pipeline_multi_thread(
                     } => {
                         let trade = &trade_event.trade;
                         let span = p_span!(
-                            "ubscore_settle",
+                            "SETTLE",
                             trade_id = trade.trade_id,
                             buyer = trade.buyer_user_id,
                             seller = trade.seller_user_id
@@ -369,7 +364,7 @@ pub fn run_pipeline_multi_thread(
                         unlock_amount,
                         ingested_at_ns,
                     } => {
-                        let span = p_span!("ubscore_cancel", order_id, user_id);
+                        let span = p_span!("CNCL", order_id, user_id);
                         let _enter = span.enter();
                         // Unlock balance for cancelled order
                         if let Err(e) = ubscore.unlock(user_id, asset_id, unlock_amount) {
@@ -415,11 +410,8 @@ pub fn run_pipeline_multi_thread(
                     OrderAction::Place(seq_order) => {
                         // Place order: lock balance, send to ME
                         let order = seq_order.order.clone();
-                        let span = p_span!(
-                            "ubscore_pretrade",
-                            order_id = order.order_id,
-                            user_id = order.user_id
-                        );
+                        let span =
+                            p_span!("UBSC", order_id = order.order_id, user_id = order.user_id);
                         let _enter = span.enter();
 
                         let order_id = order.order_id;
@@ -579,7 +571,7 @@ pub fn run_pipeline_multi_thread(
 
                 match action {
                     ValidAction::Order(valid_order) => {
-                        let span = p_span!("matching", order_id = valid_order.order.order_id);
+                        let span = p_span!("ME", order_id = valid_order.order.order_id);
                         let _enter = span.enter();
 
                         // Match order
@@ -763,14 +755,18 @@ pub fn run_pipeline_multi_thread(
                 let task_start = Instant::now();
 
                 let trade = &trade_event.trade;
-                let span = p_span!("settlement_persist", trade_id = trade.trade_id);
+                let span = p_span!(
+                    "PERS",
+                    trade_id = trade.trade_id,
+                    buyer = trade.buyer_user_id,
+                    seller = trade.seller_user_id
+                );
                 let _enter = span.enter();
 
                 let trade_cost = ((trade.price as u128) * (trade.qty as u128)
                     / (trade_event.qty_unit as u128)) as u64;
 
                 // Persist to Ledger (legacy format)
-                // Buyer: debit quote, credit base
                 ledger.write_entry(&LedgerEntry {
                     trade_id: trade.trade_id,
                     user_id: trade.buyer_user_id,
