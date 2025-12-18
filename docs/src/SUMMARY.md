@@ -20,6 +20,8 @@
 - [0x08-g 多线程 Pipeline (Multi-Thread Pipeline)](./0x08-g-multi-thread-pipeline.md)
 - [0x08-h 性能监控与可观测性 (Performance Monitoring & Observability)](./0x08-h-performance-monitoring.md)
 ---
+- [0x09-a Gateway: 客户端接入层 (Client Access Layer)](./0x09-a-gateway.md)
+---
 
 - [Performance Report (Latest)](./perf-report.md)
 - [Performance History](./perf-history/README.md)
