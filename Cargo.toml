@@ -7,4 +7,8 @@ description = "Order book matching engine"
 [dependencies]
 rustc-hash = "2"
 serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
 crossbeam-queue = "0.3"  # Bank-grade: ArrayQueue, used by tokio/actix/rayon
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-appender = "0.2"

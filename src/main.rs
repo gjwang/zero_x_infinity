@@ -62,6 +62,16 @@ fn get_input_dir() -> String {
     "fixtures".to_string()
 }
 
+fn get_env() -> String {
+    let args: Vec<String> = std::env::args().collect();
+    for i in 0..args.len() {
+        if (args[i] == "--env" || args[i] == "-e") && i + 1 < args.len() {
+            return args[i + 1].clone();
+        }
+    }
+    "dev".to_string()
+}
+
 // ============================================================
 // ORDER EXECUTION
 // ============================================================
@@ -73,6 +83,7 @@ fn execute_orders(
     ledger: &mut LedgerWriter,
     symbol_mgr: &SymbolManager,
     active_symbol_id: u32,
+    sample_rate: usize,
 ) -> (u64, u64, u64, PerfMetrics) {
     let symbol_info = symbol_mgr
         .get_symbol_info_by_id(active_symbol_id)
@@ -84,7 +95,7 @@ fn execute_orders(
     let mut accepted = 0u64;
     let mut rejected = 0u64;
     let mut total_trades = 0u64;
-    let mut perf = PerfMetrics::new(10); // Sample every 10th order
+    let mut perf = PerfMetrics::new(sample_rate);
 
     for (i, input) in orders.iter().enumerate() {
         let order_start = Instant::now();
@@ -243,6 +254,7 @@ fn execute_orders_with_ubscore(
     ledger: &mut LedgerWriter,
     symbol_mgr: &SymbolManager,
     active_symbol_id: u32,
+    sample_rate: usize,
 ) -> (u64, u64, u64, PerfMetrics) {
     let symbol_info = symbol_mgr
         .get_symbol_info_by_id(active_symbol_id)
@@ -254,7 +266,7 @@ fn execute_orders_with_ubscore(
     let mut accepted = 0u64;
     let mut rejected = 0u64;
     let mut total_trades = 0u64;
-    let mut perf = PerfMetrics::new(10);
+    let mut perf = PerfMetrics::new(sample_rate);
 
     // Use full pipeline
     for (i, input) in orders.iter().enumerate() {
@@ -650,6 +662,12 @@ fn main() {
     let pipeline_mode = use_pipeline_mode();
     let pipeline_mt_mode = use_pipeline_mt_mode();
 
+    let env = get_env();
+    let app_config = zero_x_infinity::config::AppConfig::load(&env);
+    let _log_guard = zero_x_infinity::logging::init_logging(&app_config);
+
+    tracing::info!("Starting 0xInfinity Engine in {} mode", env);
+
     if pipeline_mt_mode {
         println!("=== 0xInfinity: Chapter 8g - Multi-Thread Pipeline ===");
     } else if pipeline_mode {
@@ -781,6 +799,7 @@ fn main() {
             ledger,
             &symbol_mgr,
             active_symbol_id,
+            app_config.sample_rate,
         );
 
         // Print stats (use snapshot to get place/cancel counts)
@@ -861,6 +880,7 @@ fn main() {
             &mut ledger,
             &symbol_mgr,
             active_symbol_id,
+            app_config.sample_rate,
         );
 
         // Get final accounts from UBSCore
@@ -930,6 +950,7 @@ fn main() {
             &mut ledger,
             &symbol_mgr,
             active_symbol_id,
+            app_config.sample_rate,
         );
 
         // Get final accounts from UBSCore
@@ -941,6 +962,7 @@ fn main() {
 
         (acc, rej, trades, perf, final_accs, Some(book))
     } else {
+        println!("    Using standard execution (legacy)...");
         let (acc, rej, trades, perf) = execute_orders(
             &orders,
             &mut accounts,
@@ -948,6 +970,7 @@ fn main() {
             &mut ledger,
             &symbol_mgr,
             active_symbol_id,
+            app_config.sample_rate,
         );
         (acc, rej, trades, perf, accounts, Some(book))
     };
