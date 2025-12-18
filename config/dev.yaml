@@ -1,0 +1,7 @@
+log_level: "debug"
+log_dir: "./logs"
+log_file: "dev.log"
+use_json: false
+rotation: "daily"
+sample_rate: 1
+enable_tracing: true

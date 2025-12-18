@@ -18,10 +18,12 @@
 - [0x08-e 撤单性能优化 (Cancel Optimization: Order Index)](./0x08-e-cancel-optimization.md)
 - [0x08-f Ring Buffer Pipeline](./0x08-f-ring-buffer-pipeline.md)
 - [0x08-g 多线程 Pipeline (Multi-Thread Pipeline)](./0x08-g-multi-thread-pipeline.md)
+- [0x08-h 性能监控与可观测性 (Performance Monitoring & Observability)](./0x08-h-performance-monitoring.md)
 ---
 
 - [Performance Report (Latest)](./perf-report.md)
 - [Performance History](./perf-history/README.md)
+  - [2025-12-18-0x08h](./perf-history/2025-12-18-0x08h.md)
   - [2025-12-16-0x07b](./perf-history/2025-12-16-0x07b.md)
 
 ---

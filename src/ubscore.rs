@@ -25,9 +25,10 @@
 //! TradeEvent → settle_trade() → spend_frozen + deposit → BalanceUpdate events
 //! ```
 
-use crate::core_types::{AssetId, SeqNum, UserId};
-use crate::messages::{RejectReason, TradeEvent, ValidOrder};
+use crate::core_types::{AssetId, OrderId, SeqNum, UserId};
+use crate::messages::{BalanceEvent, RejectReason, TradeEvent, ValidOrder};
 use crate::models::{InternalOrder, Side};
+use crate::pipeline::{BalanceUpdateRequest, OrderAction, ValidAction};
 use crate::symbol_manager::SymbolManager;
 use crate::user_account::UserAccount;
 use crate::wal::{WalConfig, WalWriter};
@@ -54,8 +55,6 @@ pub struct UBSCore {
 
 impl UBSCore {
     /// Create a new UBSCore with given symbol manager
-    ///
-    /// Use `deposit()` to add initial balances after creation.
     pub fn new(manager: SymbolManager, wal_config: WalConfig) -> io::Result<Self> {
         let wal = WalWriter::new(wal_config)?;
 
@@ -64,6 +63,12 @@ impl UBSCore {
             wal,
             manager,
         })
+    }
+
+    /// Commit: Flush WAL to disk for durability.
+    /// Caller should only release results collected from methods after this succeeds.
+    pub fn commit(&mut self) -> io::Result<()> {
+        self.wal.flush()
     }
 
     // ============================================================
@@ -180,22 +185,53 @@ impl UBSCore {
     /// TODO: Add deduplication guard (prevent replay attacks)
     /// - Check order_id not seen before
     /// - Use time-windowed bloom filter or LRU cache
-    pub fn process_order(&mut self, order: InternalOrder) -> Result<ValidOrder, RejectReason> {
-        // TODO: dedup_guard.check_and_record(order.order_id)?;
-
-        // 1. Pre-check (no side effects, can safely reject)
+    pub fn process_order(
+        &mut self,
+        order: InternalOrder,
+    ) -> Result<(ValidOrder, BalanceEvent), RejectReason> {
+        // 1. Pre-check
         self.pre_check(&order)?;
 
-        // 2. Persist to WAL FIRST (before any state mutation!)
+        let lock_asset = self.lock_asset_for_order(&order);
+        let qty_unit = self
+            .manager
+            .get_symbol_info_by_id(order.symbol_id)
+            .map(|s| s.qty_unit())
+            .unwrap_or(1);
+        let lock_amount = order.calculate_cost(qty_unit).unwrap_or(0);
+
+        // 2. Persist to WAL FIRST
         let seq_id = self
             .wal
             .append(&order)
             .map_err(|_| RejectReason::SystemBusy)?;
 
-        // 3. Lock funds (safe now, order is persisted)
-        self.lock_funds(&order);
+        let mut final_order = order;
+        final_order.seq_id = seq_id;
 
-        Ok(ValidOrder::new(seq_id, order))
+        // 3. Lock funds
+        self.lock_funds(&final_order);
+
+        // 4. Generate Event (authoritative balance state)
+        let balance = self
+            .get_balance(final_order.user_id, lock_asset)
+            .expect("Balance must exist after lock_funds");
+
+        let event = BalanceEvent::lock(
+            final_order.user_id,
+            lock_asset,
+            final_order.order_id,
+            lock_amount,
+            balance.lock_version(),
+            balance.avail(),
+            balance.frozen(),
+            final_order.ingested_at_ns,
+        );
+
+        Ok((
+            ValidOrder::new(seq_id, final_order, event.ingested_at_ns),
+            event,
+        ))
     }
 
     // ============================================================
@@ -207,11 +243,76 @@ impl UBSCore {
     /// # Operations for each party:
     /// - Buyer: spend_frozen(quote), deposit(base)
     /// - Seller: spend_frozen(base), deposit(quote)
-    pub fn settle_trade(&mut self, event: &TradeEvent) -> Result<(), &'static str> {
-        let trade = &event.trade;
-        let quote_amount = event.quote_amount(); // Self-contained!
+    /// Apply an order action (Place or Cancel).
+    pub fn apply_order_action(
+        &mut self,
+        action: OrderAction,
+    ) -> Result<(Vec<ValidAction>, Vec<BalanceEvent>), RejectReason> {
+        match action {
+            OrderAction::Place(seq_order) => {
+                let (valid_order, event) = self.process_order(seq_order.order)?;
+                Ok((vec![ValidAction::Order(valid_order)], vec![event]))
+            }
+            OrderAction::Cancel {
+                order_id,
+                user_id,
+                ingested_at_ns,
+            } => Ok((
+                vec![ValidAction::Cancel {
+                    order_id,
+                    user_id,
+                    ingested_at_ns,
+                }],
+                vec![],
+            )),
+        }
+    }
 
-        // Buyer settlement: spend USDT, receive BTC
+    /// Apply a high-level balance update request (Trade or Cancel).
+    /// Internalizes logic like price improvement refunds.
+    pub fn apply_balance_update(
+        &mut self,
+        request: BalanceUpdateRequest,
+    ) -> Result<Vec<BalanceEvent>, &'static str> {
+        match request {
+            BalanceUpdateRequest::Trade {
+                trade_event,
+                price_improvement,
+            } => {
+                let mut events = self.settle_trade(&trade_event)?;
+                if let Some(pi) = price_improvement {
+                    if let Ok(refund_event) = self.unlock(
+                        pi.user_id,
+                        pi.asset_id,
+                        trade_event.trade.trade_id,
+                        pi.amount,
+                        trade_event.taker_ingested_at_ns,
+                    ) {
+                        events.push(refund_event);
+                    }
+                }
+                Ok(events)
+            }
+            BalanceUpdateRequest::Cancel {
+                order_id,
+                user_id,
+                asset_id,
+                unlock_amount,
+                ingested_at_ns,
+            } => {
+                let event =
+                    self.unlock(user_id, asset_id, order_id, unlock_amount, ingested_at_ns)?;
+                Ok(vec![event])
+            }
+        }
+    }
+
+    pub fn settle_trade(&mut self, event: &TradeEvent) -> Result<Vec<BalanceEvent>, &'static str> {
+        let trade = &event.trade;
+        let quote_amount = event.quote_amount();
+        let mut results = Vec::with_capacity(4);
+
+        // 1. Buyer settlement
         {
             let buyer = self
                 .accounts
@@ -221,12 +322,35 @@ impl UBSCore {
             buyer
                 .get_balance_mut(event.quote_asset_id)?
                 .spend_frozen(quote_amount)?;
+            let b_quote = buyer.get_balance(event.quote_asset_id).unwrap();
+            results.push(BalanceEvent::settle_spend(
+                trade.buyer_user_id,
+                event.quote_asset_id,
+                trade.trade_id,
+                quote_amount,
+                b_quote.settle_version(),
+                b_quote.avail(),
+                b_quote.frozen(),
+                event.taker_ingested_at_ns,
+            ));
+
             buyer
                 .get_balance_mut(event.base_asset_id)?
                 .deposit(trade.qty)?;
+            let b_base = buyer.get_balance(event.base_asset_id).unwrap();
+            results.push(BalanceEvent::settle_receive(
+                trade.buyer_user_id,
+                event.base_asset_id,
+                trade.trade_id,
+                trade.qty,
+                b_base.settle_version(),
+                b_base.avail(),
+                b_base.frozen(),
+                event.taker_ingested_at_ns,
+            ));
         }
 
-        // Seller settlement: spend BTC, receive USDT
+        // 2. Seller settlement
         {
             let seller = self
                 .accounts
@@ -236,12 +360,35 @@ impl UBSCore {
             seller
                 .get_balance_mut(event.base_asset_id)?
                 .spend_frozen(trade.qty)?;
+            let s_base = seller.get_balance(event.base_asset_id).unwrap();
+            results.push(BalanceEvent::settle_spend(
+                trade.seller_user_id,
+                event.base_asset_id,
+                trade.trade_id,
+                trade.qty,
+                s_base.settle_version(),
+                s_base.avail(),
+                s_base.frozen(),
+                event.taker_ingested_at_ns,
+            ));
+
             seller
                 .get_balance_mut(event.quote_asset_id)?
                 .deposit(quote_amount)?;
+            let s_quote = seller.get_balance(event.quote_asset_id).unwrap();
+            results.push(BalanceEvent::settle_receive(
+                trade.seller_user_id,
+                event.quote_asset_id,
+                trade.trade_id,
+                quote_amount,
+                s_quote.settle_version(),
+                s_quote.avail(),
+                s_quote.frozen(),
+                event.taker_ingested_at_ns,
+            ));
         }
 
-        Ok(())
+        Ok(results)
     }
 
     // ============================================================
@@ -256,11 +403,24 @@ impl UBSCore {
         &mut self,
         user_id: UserId,
         asset_id: AssetId,
+        order_id: OrderId,
         amount: u64,
-    ) -> Result<(), &'static str> {
+        ingested_at_ns: u64,
+    ) -> Result<BalanceEvent, &'static str> {
         let account = self.accounts.get_mut(&user_id).ok_or("User not found")?;
         account.get_balance_mut(asset_id)?.unlock(amount)?;
-        Ok(())
+
+        let balance = account.get_balance(asset_id).unwrap();
+        Ok(BalanceEvent::unlock(
+            user_id,
+            asset_id,
+            order_id,
+            amount,
+            balance.lock_version(),
+            balance.avail(),
+            balance.frozen(),
+            ingested_at_ns,
+        ))
     }
 
     // ============================================================
@@ -399,7 +559,7 @@ mod tests {
         // Setup and process order
         ubs.deposit(1, 1, 100_0000_0000).unwrap();
         let order = InternalOrder::new(1, 1, 0, 10000, 10_0000_0000, Side::Sell);
-        ubs.process_order(order).unwrap();
+        let (_valid_order, _event) = ubs.process_order(order).unwrap();
 
         // Check: 90 avail, 10 frozen
         let b = ubs.get_balance(1, 1).unwrap();
@@ -407,7 +567,7 @@ mod tests {
         assert_eq!(b.frozen(), 10_0000_0000);
 
         // Unlock (e.g., order cancelled by ME)
-        ubs.unlock(1, 1, 10_0000_0000).unwrap();
+        let _ = ubs.unlock(1, 1, 100, 10_0000_0000, 0).unwrap();
 
         // Balance should be restored
         let b = ubs.get_balance(1, 1).unwrap();
@@ -431,7 +591,7 @@ mod tests {
 
         // Process order (Lock)
         let order = InternalOrder::new(1, 1, 0, 10000, 20_0000_0000, Side::Sell);
-        let valid_order = ubs.process_order(order).unwrap();
+        let (valid_order, _event) = ubs.process_order(order).unwrap();
         assert_eq!(valid_order.order.qty, 20_0000_0000);
 
         // Check balance after lock
@@ -442,7 +602,7 @@ mod tests {
         assert_eq!(lock_version_after_lock, 2); // lock increments lock_version
 
         // Simulate cancel: unlock frozen amount
-        ubs.unlock(1, 1, 20_0000_0000).unwrap();
+        let _ = ubs.unlock(1, 1, 1, 20_0000_0000, 0).unwrap();
 
         // Check balance after unlock
         let b = ubs.get_balance(1, 1).unwrap();

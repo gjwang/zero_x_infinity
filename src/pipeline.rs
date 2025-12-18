@@ -88,6 +88,8 @@ pub enum OrderAction {
         order_id: u64,
         /// The user ID (for validation/logging)
         user_id: u64,
+        /// Timestamp when order was ingested (nanoseconds)
+        ingested_at_ns: u64,
     },
 }
 
@@ -96,13 +98,24 @@ pub enum OrderAction {
 pub enum PreTradeResult {
     /// Order accepted, balance locked, ready for matching
     Accepted(ValidOrder),
-    /// Order rejected with reason
-    Rejected {
-        seq_id: u64,
-        order_id: u64,
-        user_id: u64,
-        reason: RejectReason,
-    },
+    /// Order rejected (not enough balance, invalid, etc.)
+    Rejected(RejectReason),
+}
+
+/// Generic container for pipeline services/resources
+///
+/// Can hold owned objects (MT) or mutable references (Single-Thread).
+pub struct PipelineServices<U, B, L> {
+    pub ubscore: U,
+    pub book: B,
+    pub ledger: L,
+}
+
+/// Common configuration for both pipeline modes
+pub struct PipelineConfig<'a> {
+    pub symbol_mgr: &'a crate::symbol_manager::SymbolManager,
+    pub active_symbol_id: u32,
+    pub sample_rate: usize,
 }
 
 /// Action for ME thread (UBSCore → ME)
@@ -119,6 +132,8 @@ pub enum ValidAction {
         order_id: u64,
         /// The user ID (for validation/logging)
         user_id: u64,
+        /// Timestamp when order was ingested (nanoseconds)
+        ingested_at_ns: u64,
     },
 }
 
@@ -418,6 +433,8 @@ pub enum BalanceUpdateRequest {
         asset_id: u32,
         /// Amount to unlock
         unlock_amount: u64,
+        /// Timestamp when order was ingested
+        ingested_at_ns: u64,
     },
 }
 
@@ -448,12 +465,19 @@ impl BalanceUpdateRequest {
     }
 
     /// Create a cancel unlock request
-    pub fn cancel(order_id: u64, user_id: u64, asset_id: u32, unlock_amount: u64) -> Self {
+    pub fn cancel(
+        order_id: u64,
+        user_id: u64,
+        asset_id: u32,
+        unlock_amount: u64,
+        ingested_at_ns: u64,
+    ) -> Self {
         Self::Cancel {
             order_id,
             user_id,
             asset_id,
             unlock_amount,
+            ingested_at_ns,
         }
     }
 }
@@ -512,11 +536,75 @@ pub struct PipelineStats {
     pub trades_settled: AtomicU64,
     /// Queue full events (backpressure)
     pub backpressure_events: AtomicU64,
+
+    // Stage timings (atomic cumulative nanoseconds)
+    pub total_pretrade_ns: AtomicU64,
+    pub total_matching_ns: AtomicU64,
+    pub total_settlement_ns: AtomicU64,
+    pub total_event_log_ns: AtomicU64,
+
+    /// Thread-safe performance samples
+    pub perf_samples: std::sync::Mutex<crate::perf::PerfMetrics>,
 }
 
 impl PipelineStats {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(sample_rate: usize) -> Self {
+        Self {
+            perf_samples: std::sync::Mutex::new(crate::perf::PerfMetrics::new(sample_rate)),
+            ..Default::default()
+        }
+    }
+
+    pub fn record_latency(&self, latency_ns: u64) {
+        if let Ok(mut perf) = self.perf_samples.lock() {
+            perf.add_order_latency(latency_ns);
+        }
+    }
+
+    pub fn record_place(&self) {
+        if let Ok(mut perf) = self.perf_samples.lock() {
+            perf.inc_place();
+        }
+    }
+
+    pub fn record_cancel(&self) {
+        if let Ok(mut perf) = self.perf_samples.lock() {
+            perf.inc_cancel();
+        }
+    }
+
+    pub fn record_trades(&self, count: u64) {
+        if let Ok(mut perf) = self.perf_samples.lock() {
+            perf.add_trades(count);
+        }
+    }
+
+    pub fn add_pretrade_time(&self, ns: u64) {
+        self.total_pretrade_ns.fetch_add(ns, Ordering::Relaxed);
+        if let Ok(mut perf) = self.perf_samples.lock() {
+            perf.add_pretrade_time(ns);
+        }
+    }
+
+    pub fn add_matching_time(&self, ns: u64) {
+        self.total_matching_ns.fetch_add(ns, Ordering::Relaxed);
+        if let Ok(mut perf) = self.perf_samples.lock() {
+            perf.add_matching_time(ns);
+        }
+    }
+
+    pub fn add_settlement_time(&self, ns: u64) {
+        self.total_settlement_ns.fetch_add(ns, Ordering::Relaxed);
+        if let Ok(mut perf) = self.perf_samples.lock() {
+            perf.add_settlement_time(ns);
+        }
+    }
+
+    pub fn add_event_log_time(&self, ns: u64) {
+        self.total_event_log_ns.fetch_add(ns, Ordering::Relaxed);
+        if let Ok(mut perf) = self.perf_samples.lock() {
+            perf.add_event_log_time(ns);
+        }
     }
 
     pub fn incr_ingested(&self) {
@@ -548,7 +636,10 @@ impl PipelineStats {
     }
 
     pub fn incr_backpressure(&self) {
-        self.backpressure_events.fetch_add(1, Ordering::Relaxed);
+        let count = self.backpressure_events.fetch_add(1, Ordering::Relaxed);
+        if count % 10000 == 0 {
+            tracing::warn!(target: "0XINFI", total_backpressure = count + 1, "Backpressure detected (1/10000)");
+        }
     }
 
     /// Get snapshot of current stats
@@ -682,10 +773,10 @@ pub struct SingleThreadPipeline {
 
 impl SingleThreadPipeline {
     /// Create a new single-thread pipeline
-    pub fn new() -> Self {
+    pub fn new(sample_rate: usize) -> Self {
         Self {
             queues: PipelineQueues::new(),
-            stats: Arc::new(PipelineStats::new()),
+            stats: Arc::new(PipelineStats::new(sample_rate)),
             shutdown: Arc::new(ShutdownSignal::new()),
         }
     }
@@ -695,6 +786,7 @@ impl SingleThreadPipeline {
         order_capacity: usize,
         valid_order_capacity: usize,
         trade_capacity: usize,
+        sample_rate: usize,
     ) -> Self {
         Self {
             queues: PipelineQueues::with_capacity(
@@ -702,7 +794,7 @@ impl SingleThreadPipeline {
                 valid_order_capacity,
                 trade_capacity,
             ),
-            stats: Arc::new(PipelineStats::new()),
+            stats: Arc::new(PipelineStats::new(sample_rate)),
             shutdown: Arc::new(ShutdownSignal::new()),
         }
     }
@@ -762,12 +854,6 @@ impl SingleThreadPipeline {
     /// Get reference to stats (for external update)
     pub fn stats(&self) -> &Arc<PipelineStats> {
         &self.stats
-    }
-}
-
-impl Default for SingleThreadPipeline {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
