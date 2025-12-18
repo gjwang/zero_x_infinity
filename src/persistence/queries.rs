@@ -148,11 +148,10 @@ pub async fn query_order(
     order_id: u64,
     symbol_id: u32,
 ) -> Result<Option<OrderApiData>> {
-    let table_name = format!("orders_{}", symbol_id);
-
+    // Query from Super Table with WHERE clause
     let sql = format!(
-        "SELECT ts, order_id, user_id, side, order_type, price, qty, filled_qty, status, cid FROM {} WHERE order_id = {} ORDER BY ts DESC LIMIT 1",
-        table_name, order_id
+        "SELECT ts, order_id, user_id, side, order_type, price, qty, filled_qty, status, cid FROM orders WHERE symbol_id = {} AND order_id = {} ORDER BY ts DESC LIMIT 1",
+        symbol_id, order_id
     );
 
     let mut result = taos
@@ -177,11 +176,10 @@ pub async fn query_orders(
     symbol_id: u32,
     limit: usize,
 ) -> Result<Vec<OrderApiData>> {
-    let table_name = format!("orders_{}", symbol_id);
-
+    // Query from Super Table with WHERE clause
     let sql = format!(
-        "SELECT ts, order_id, user_id, side, order_type, price, qty, filled_qty, status, cid FROM {} WHERE user_id = {} ORDER BY ts DESC LIMIT {}",
-        table_name, user_id, limit
+        "SELECT ts, order_id, user_id, side, order_type, price, qty, filled_qty, status, cid FROM orders WHERE symbol_id = {} AND user_id = {} ORDER BY ts DESC LIMIT {}",
+        symbol_id, user_id, limit
     );
 
     let mut result = taos
@@ -200,11 +198,10 @@ pub async fn query_orders(
 
 /// Query trades for a symbol
 pub async fn query_trades(taos: &Taos, symbol_id: u32, limit: usize) -> Result<Vec<TradeApiData>> {
-    let table_name = format!("trades_{}", symbol_id);
-
+    // Query from Super Table
     let sql = format!(
-        "SELECT ts, trade_id, order_id, user_id, side, price, qty, fee, role FROM {} ORDER BY ts DESC LIMIT {}",
-        table_name, limit
+        "SELECT ts, trade_id, order_id, user_id, side, price, qty, fee, role FROM trades WHERE symbol_id = {} ORDER BY ts DESC LIMIT {}",
+        symbol_id, limit
     );
 
     let mut result = taos
