@@ -19,7 +19,6 @@
 - [0x08-f Ring Buffer Pipeline](./0x08-f-ring-buffer-pipeline.md)
 - [0x08-g 多线程 Pipeline (Multi-Thread Pipeline)](./0x08-g-multi-thread-pipeline.md)
 - [0x08-h 性能监控与可观测性 (Performance Monitoring & Observability)](./0x08-h-performance-monitoring.md)
-- [0x08-i 服务化重构 (Service Migration)](./0x08-i-service-migration.md)
 ---
 
 - [Performance Report (Latest)](./perf-report.md)

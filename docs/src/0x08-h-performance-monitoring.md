@@ -143,3 +143,133 @@ use_json: true         # 开启 JSON 以支持 ELK 集成
 3.  **零损耗采样**：通过配置化的采样率，我们在不牺牲性能的前提下获得了 99 分位延迟的真实画像。
 
 在下一阶段的优化中，我们将深入 ME 内部，针对本章识别出的单笔执行耗时进行针对性的数据结构优化。
+
+---
+
+## 意图编码：从函数到服务的演进 (Intent-Based Design)
+
+> "好的架构不是一开始就设计出来的，而是通过不断重构演进出来的。"
+
+本节记录了我们如何将紧耦合的函数重构为解耦的服务结构，这是**意图编码 (Intent-Based Design)** 的核心实践。
+
+### 问题：紧耦合的 Spawn 函数
+
+最初的 `pipeline_mt.rs` 包含 4 个 `spawn_*_stage` 函数，**将线程管理与业务逻辑紧密耦合**：
+
+```rust
+// ❌ 问题代码：业务逻辑被埋在线程创建中
+fn spawn_me_stage(...) -> JoinHandle<OrderBook> {
+    thread::spawn(move || {
+        // 175 行撮合逻辑被"锁死"在这里
+        // 无法单独测试
+        // 无法在单线程模式复用
+    })
+}
+```
+
+这种设计的问题：
+
+| 问题 | 影响 |
+|------|------|
+| **无法单元测试** | 测试业务逻辑必须启动线程 |
+| **无法复用** | 单线程模式无法使用同一份逻辑 |
+| **意图不清晰** | 调用者无法知道"启动 ME 服务"vs"执行撮合逻辑" |
+
+### 解决方案：意图编码
+
+**意图编码的核心思想：代码应该表达"做什么"，而不是"怎么做"。**
+
+我们将每个阶段的**业务意图**提取为独立的 Service 结构体：
+
+```rust
+// ✅ 改进后：意图清晰，职责单一
+pub struct MatchingService {
+    book: OrderBook,
+    queues: Arc<MultiThreadQueues>,
+    stats: Arc<PipelineStats>,
+    market: MarketContext,
+}
+
+impl MatchingService {
+    /// 意图：运行撮合服务直到收到关闭信号
+    pub fn run(&mut self, shutdown: &ShutdownSignal) { ... }
+    
+    /// 意图：取出内部组件（所有权转移）
+    pub fn into_inner(self) -> OrderBook { ... }
+}
+```
+
+调用者现在可以**清晰表达意图**：
+
+```rust
+// 意图：创建服务 → 启动线程 → 运行服务 → 返回结果
+let t3_me = {
+    let mut service = MatchingService::new(book, queues, stats, market);
+    let s = shutdown.clone();
+    thread::spawn(move || {
+        service.run(&s);        // 意图：运行撮合
+        service.into_inner()    // 意图：返回 OrderBook
+    })
+};
+```
+
+### 增量迁移策略
+
+> ⚠️ **教训**: 第一次尝试一次性迁移所有服务，导致丢失约 2000 笔交易。
+
+成功的策略是**增量迁移**：
+
+1. **一次只迁移一个服务**
+2. **每次迁移后运行完整的 `test_pipeline_compare.sh`**
+3. **测试通过才提交，失败则回滚**
+4. **保留原函数直到所有阶段完成**
+
+| Phase | Service | 验证结果 |
+|-------|---------|----------|
+| 1 | IngestionService | ✅ 667,567 trades |
+| 2 | UBSCoreService | ✅ 667,567 trades |
+| 3 | MatchingService | ✅ 667,567 trades |
+| 4 | SettlementService | ✅ 667,567 trades |
+| Cleanup | 删除旧函数 | ✅ -467 lines |
+
+### 收益总结
+
+| 指标 | Before | After |
+|------|--------|-------|
+| `pipeline_mt.rs` 行数 | 720 | ~250 |
+| 服务可测试性 | ❌ | ✅ |
+| ST/MT 复用 | ❌ | ✅ (future) |
+| 代码意图清晰度 | 模糊 | 清晰 |
+
+### 设计模式：Service 结构体
+
+我们建立了标准化的 Service 模式：
+
+```rust
+pub struct XxxService {
+    // 拥有的核心组件
+    component: Component,
+    // 共享的基础设施
+    queues: Arc<MultiThreadQueues>,
+    stats: Arc<PipelineStats>,
+}
+
+impl XxxService {
+    pub fn new(...) -> Self { ... }
+    pub fn run(&mut self, shutdown: &ShutdownSignal) { ... }
+    pub fn into_inner(self) -> Component { ... }
+}
+```
+
+这种模式的优势：
+- **所有权明确**：Service 拥有核心组件，调用结束后可取回
+- **生命周期清晰**：`run()` 阻塞直到 shutdown，然后 `into_inner()` 返回
+- **易于扩展**：未来可添加 `poll()` 方法支持单线程协作式调度
+
+---
+
+## 下一步
+
+- [ ] 为 Service 添加 `poll()` 方法，支持单线程模式
+- [ ] 迁移 `MarketContext` 到共享模块
+- [ ] 添加 Service 级别的单元测试
