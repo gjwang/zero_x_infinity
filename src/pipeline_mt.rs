@@ -149,14 +149,17 @@ pub fn run_pipeline_multi_thread(
     let _start_time = Instant::now();
 
     // The execution setup is now much clearer - spawn each processing stage
-    let t1_ingestion = spawn_ingestion_stage(
-        orders,
-        queues.clone(),
-        stats.clone(),
-        shutdown.clone(),
-        active_symbol_id,
-        _start_time,
-    );
+    let t1_ingestion = {
+        let mut service = crate::pipeline_services::IngestionService::new(
+            orders,
+            queues.clone(),
+            stats.clone(),
+            active_symbol_id,
+            _start_time,
+        );
+        let s = shutdown.clone();
+        thread::spawn(move || service.run(&s))
+    };
 
     let t2_ubscore = spawn_ubscore_stage(
         services.ubscore,
