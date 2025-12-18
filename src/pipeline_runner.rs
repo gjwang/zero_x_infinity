@@ -21,11 +21,6 @@ use crate::messages::{OrderEvent, TradeEvent};
 use crate::models::{InternalOrder, Side};
 use crate::orderbook::OrderBook;
 use crate::perf::PerfMetrics;
-use crate::pipeline::{
-    BalanceUpdateRequest, OrderAction, PipelineStatsSnapshot, PriceImprovement, SequencedOrder,
-    SingleThreadPipeline, ValidAction,
-};
-use crate::symbol_manager::SymbolManager;
 use crate::ubscore::UBSCore;
 
 // ============================================================
@@ -40,6 +35,15 @@ pub struct PipelineResult {
     pub perf: PerfMetrics,
     pub pipeline_stats: PipelineStatsSnapshot,
 }
+
+use crate::pipeline::{
+    BalanceUpdateRequest, OrderAction, PipelineConfig, PipelineServices, PipelineStatsSnapshot,
+    PriceImprovement, SequencedOrder, SingleThreadPipeline, ValidAction,
+};
+
+/// Type alias for single-threaded services (using references)
+pub type SingleThreadServices<'a> =
+    PipelineServices<&'a mut UBSCore, &'a mut OrderBook, &'a mut LedgerWriter>;
 
 // ============================================================
 // SINGLE-THREAD PIPELINE RUNNER
@@ -61,19 +65,22 @@ pub struct PipelineResult {
 /// ```
 pub fn run_pipeline_single_thread(
     orders: &[InputOrder],
-    ubscore: &mut UBSCore,
-    book: &mut OrderBook,
-    ledger: &mut LedgerWriter,
-    symbol_mgr: &SymbolManager,
-    active_symbol_id: u32,
-    sample_rate: usize,
+    services: SingleThreadServices,
+    config: PipelineConfig,
 ) -> PipelineResult {
-    let symbol_info = symbol_mgr
-        .get_symbol_info_by_id(active_symbol_id)
+    let ubscore = services.ubscore;
+    let book = services.book;
+    let ledger = services.ledger;
+
+    let symbol_info = config
+        .symbol_mgr
+        .get_symbol_info_by_id(config.active_symbol_id)
         .expect("Active symbol not found");
     let qty_unit = symbol_info.qty_unit();
     let base_id = symbol_info.base_asset_id;
     let quote_id = symbol_info.quote_asset_id;
+    let active_symbol_id = config.active_symbol_id;
+    let sample_rate = config.sample_rate;
 
     let pipeline = SingleThreadPipeline::new(sample_rate);
     let mut perf = PerfMetrics::new(sample_rate);

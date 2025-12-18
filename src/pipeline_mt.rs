@@ -58,11 +58,6 @@ use crate::ledger::{LedgerEntry, LedgerWriter, OP_CREDIT, OP_DEBIT};
 use crate::messages::TradeEvent;
 use crate::models::{InternalOrder, OrderStatus, OrderType, Side};
 use crate::orderbook::OrderBook;
-use crate::pipeline::{
-    BalanceUpdateRequest, MultiThreadQueues, OrderAction, PipelineStats, PriceImprovement,
-    SequencedOrder, ShutdownSignal, ValidAction,
-};
-use crate::symbol_manager::SymbolManager;
 use crate::ubscore::UBSCore;
 use crate::user_account::UserAccount;
 use rustc_hash::FxHashMap;
@@ -98,6 +93,22 @@ pub struct MultiThreadPipelineResult {
     pub final_accounts: FxHashMap<u64, UserAccount>,
 }
 
+use crate::pipeline::{
+    BalanceUpdateRequest, MultiThreadQueues, OrderAction, PipelineConfig, PipelineServices,
+    PipelineStats, PriceImprovement, SequencedOrder, ShutdownSignal, ValidAction,
+};
+
+/// Type alias for owned multi-threaded services
+pub type MultiThreadServices = PipelineServices<UBSCore, OrderBook, LedgerWriter>;
+
+/// Market context derived from symbol configuration
+#[derive(Clone, Copy)]
+struct MarketContext {
+    pub qty_unit: u64,
+    pub base_id: u32,
+    pub quote_id: u32,
+}
+
 // ============================================================
 // MULTI-THREAD PIPELINE RUNNER
 // ============================================================
@@ -113,19 +124,22 @@ pub struct MultiThreadPipelineResult {
 /// Fan-out: ME sends Trade Events to both Settlement and UBSCore in parallel.
 pub fn run_pipeline_multi_thread(
     orders: Vec<InputOrder>,
-    mut ubscore: UBSCore,
-    mut book: OrderBook,
-    mut ledger: LedgerWriter,
-    symbol_mgr: &SymbolManager,
-    active_symbol_id: u32,
-    sample_rate: usize,
+    services: MultiThreadServices,
+    config: PipelineConfig,
 ) -> MultiThreadPipelineResult {
-    let symbol_info = symbol_mgr
+    let active_symbol_id = config.active_symbol_id;
+    let sample_rate = config.sample_rate;
+
+    let symbol_info = config
+        .symbol_mgr
         .get_symbol_info_by_id(active_symbol_id)
         .expect("Active symbol not found");
-    let qty_unit = symbol_info.qty_unit();
-    let base_id = symbol_info.base_asset_id;
-    let quote_id = symbol_info.quote_asset_id;
+
+    let market = MarketContext {
+        qty_unit: symbol_info.qty_unit(),
+        base_id: symbol_info.base_asset_id,
+        quote_id: symbol_info.quote_asset_id,
+    };
 
     // Create shared queues and state
     let queues = Arc::new(MultiThreadQueues::new());
@@ -134,469 +148,38 @@ pub fn run_pipeline_multi_thread(
 
     let _start_time = Instant::now();
 
-    // ================================================================
-    // THREAD 1: Ingestion
-    // ================================================================
-    let ingestion_queues = queues.clone();
-    let ingestion_stats = stats.clone();
-    let ingestion_shutdown = shutdown.clone();
-    let t1_ingestion: JoinHandle<()> = thread::spawn(move || {
-        let mut seq_counter = 0u64;
+    // The execution setup is now much clearer - spawn each processing stage
+    let t1_ingestion = spawn_ingestion_stage(
+        orders,
+        queues.clone(),
+        stats.clone(),
+        shutdown.clone(),
+        active_symbol_id,
+        _start_time,
+    );
 
-        for input in orders {
-            if ingestion_shutdown.is_shutdown_requested() {
-                break;
-            }
+    let t2_ubscore = spawn_ubscore_stage(
+        services.ubscore,
+        queues.clone(),
+        stats.clone(),
+        shutdown.clone(),
+        _start_time,
+    );
 
-            let ingested_at_ns = Instant::now().duration_since(_start_time).as_nanos() as u64;
+    let t3_me = spawn_me_stage(
+        services.book,
+        queues.clone(),
+        stats.clone(),
+        shutdown.clone(),
+        market,
+    );
 
-            // Create OrderAction based on input action type
-            let action = if input.action == ACTION_CANCEL {
-                // Cancel order - no seq needed, just pass order_id
-                ingestion_stats.incr_cancel();
-                ingestion_stats.record_cancel();
-                OrderAction::Cancel {
-                    order_id: input.order_id,
-                    user_id: input.user_id,
-                    ingested_at_ns,
-                }
-            } else {
-                // Place order - assign sequence number
-                ingestion_stats.incr_place();
-                ingestion_stats.record_place();
-                let _ = ACTION_PLACE; // Suppress unused warning if it happens
-                seq_counter += 1;
-                let mut order = InternalOrder::new_with_time(
-                    input.order_id,
-                    input.user_id,
-                    active_symbol_id,
-                    input.price,
-                    input.qty,
-                    input.side,
-                    ingested_at_ns,
-                );
-                order.ingested_at_ns = ingested_at_ns;
-                OrderAction::Place(SequencedOrder::new(seq_counter, order, ingested_at_ns))
-            };
-
-            // Push with backpressure (same path for both place and cancel)
-            loop {
-                match ingestion_queues.order_queue.push(action.clone()) {
-                    Ok(()) => break,
-                    Err(_) => {
-                        ingestion_stats.incr_backpressure();
-                        std::hint::spin_loop();
-                    }
-                }
-            }
-
-            ingestion_stats.incr_ingested();
-        }
-    });
-
-    // ================================================================
-    // THREAD 2: UBSCore (Pre-Trade + Post-Trade Balance Update)
-    // ================================================================
-    let ubscore_queues = queues.clone();
-    let ubscore_stats = stats.clone();
-    let ubscore_shutdown = shutdown.clone();
-    let t2_ubscore: JoinHandle<UBSCore> = thread::spawn(move || {
-        let mut spin_count = 0u32;
-        let mut batch_actions: Vec<ValidAction> = Vec::with_capacity(UBSC_ORDER_BATCH);
-        let mut batch_events = Vec::with_capacity(UBSC_ORDER_BATCH + UBSC_SETTLE_BATCH * 4);
-
-        loop {
-            let mut did_work = false;
-
-            // PHASE 1: COLLECT (Batch accumulation of intentions)
-
-            // 1.1 Process Settlements
-            for _ in 0..UBSC_SETTLE_BATCH {
-                if let Some(req) = ubscore_queues.balance_update_queue.pop() {
-                    did_work = true;
-                    if let Ok(events) = ubscore.apply_balance_update(req) {
-                        batch_events.extend(events);
-                    }
-                } else {
-                    break;
-                }
-            }
-
-            // 1.2 Process Orders
-            for _ in 0..UBSC_ORDER_BATCH {
-                if let Some(action) = ubscore_queues.order_queue.pop() {
-                    did_work = true;
-                    match ubscore.apply_order_action(action) {
-                        Ok((actions, events)) => {
-                            batch_actions.extend(actions);
-                            batch_events.extend(events);
-                            ubscore_stats.incr_accepted();
-                        }
-                        Err(_) => ubscore_stats.incr_rejected(),
-                    }
-                } else {
-                    break;
-                }
-            }
-
-            // PHASE 2 & 3: COMMIT & RELEASE (The actual atomic/visibility phase)
-            if !batch_actions.is_empty() || !batch_events.is_empty() {
-                // Batch Timing: Focus on the IO bottleneck (WAL Flush)
-                let commit_start = Instant::now();
-                if let Err(e) = ubscore.commit() {
-                    tracing::error!("CRITICAL: WAL commit failed: {}", e);
-                }
-                ubscore_stats.add_settlement_time(commit_start.elapsed().as_nanos() as u64);
-
-                // Publish results to downstream
-                for action in batch_actions.drain(..) {
-                    while let Err(_) = ubscore_queues.action_queue.push(action.clone()) {
-                        std::hint::spin_loop();
-                        if ubscore_shutdown.is_shutdown_requested() {
-                            break;
-                        }
-                    }
-                }
-
-                for event in batch_events.drain(..) {
-                    let lat_ingested = event.ingested_at_ns;
-                    while let Err(_) = ubscore_queues.balance_event_queue.push(event.clone()) {
-                        std::hint::spin_loop();
-                        ubscore_stats.incr_backpressure();
-                        if ubscore_shutdown.is_shutdown_requested() {
-                            break;
-                        }
-                    }
-                    if lat_ingested > 0 {
-                        let now_ns = Instant::now().duration_since(_start_time).as_nanos() as u64;
-                        ubscore_stats.record_latency(now_ns.saturating_sub(lat_ingested));
-                    }
-                    ubscore_stats.incr_settled();
-                }
-            }
-
-            if ubscore_shutdown.is_shutdown_requested()
-                && ubscore_queues.order_queue.is_empty()
-                && ubscore_queues.balance_update_queue.is_empty()
-            {
-                break;
-            }
-
-            if !did_work {
-                spin_count += 1;
-                if spin_count > IDLE_SPIN_LIMIT {
-                    thread::sleep(IDLE_SLEEP_US);
-                    spin_count = 0;
-                } else {
-                    std::hint::spin_loop();
-                }
-            } else {
-                spin_count = 0;
-            }
-        }
-        let _ = ubscore.commit();
-        ubscore
-    });
-
-    // ================================================================
-    // THREAD 3: Matching Engine
-    // ================================================================
-    let me_queues = queues.clone();
-    let me_stats = stats.clone();
-    let me_shutdown = shutdown.clone();
-    let t3_me: JoinHandle<OrderBook> = thread::spawn(move || {
-        let mut spin_count = 0u32;
-
-        loop {
-            let mut did_work = false;
-
-            if let Some(action) = me_queues.action_queue.pop() {
-                did_work = true;
-                let task_start = Instant::now();
-
-                match action {
-                    ValidAction::Order(valid_order) => {
-                        let span =
-                            p_span!(TARGET_ME, LOG_ORDER, order_id = valid_order.order.order_id);
-                        let _enter = span.enter();
-
-                        // Match order
-                        let result =
-                            MatchingEngine::process_order(&mut book, valid_order.order.clone());
-
-                        p_info!(
-                            TARGET_ME,
-                            trades = result.trades.len(),
-                            "Matching completed"
-                        );
-
-                        // Fan-out: Send Trade Events to BOTH Settlement AND UBSCore
-                        for trade in &result.trades {
-                            let trade_event = TradeEvent::new(
-                                trade.clone(),
-                                if valid_order.order.side == Side::Buy {
-                                    trade.buyer_order_id
-                                } else {
-                                    trade.seller_order_id
-                                },
-                                if valid_order.order.side == Side::Buy {
-                                    trade.seller_order_id
-                                } else {
-                                    trade.buyer_order_id
-                                },
-                                valid_order.order.side,
-                                base_id,
-                                quote_id,
-                                qty_unit,
-                                valid_order.ingested_at_ns,
-                            );
-
-                            // Calculate price improvement for buy orders
-                            let price_improvement = if valid_order.order.side == Side::Buy
-                                && valid_order.order.order_type == OrderType::Limit
-                                && valid_order.order.price > trade.price
-                            {
-                                let diff = valid_order.order.price - trade.price;
-                                let refund = diff * trade.qty / qty_unit;
-                                if refund > 0 {
-                                    Some(PriceImprovement {
-                                        user_id: valid_order.order.user_id,
-                                        asset_id: quote_id,
-                                        amount: refund,
-                                    })
-                                } else {
-                                    None
-                                }
-                            } else {
-                                None
-                            };
-
-                            // [1] Send to Settlement (for persistence) - trade_queue
-                            loop {
-                                match me_queues.trade_queue.push(trade_event.clone()) {
-                                    Ok(()) => break,
-                                    Err(_) => {
-                                        me_stats.incr_backpressure();
-                                        std::hint::spin_loop();
-                                    }
-                                }
-                            }
-
-                            // [2] Send to UBSCore (for balance update) - balance_update_queue
-                            let balance_update = BalanceUpdateRequest::Trade {
-                                trade_event,
-                                price_improvement,
-                            };
-                            loop {
-                                match me_queues.balance_update_queue.push(balance_update.clone()) {
-                                    Ok(()) => break,
-                                    Err(_) => {
-                                        me_stats.incr_backpressure();
-                                        std::hint::spin_loop();
-                                    }
-                                }
-                            }
-
-                            me_stats.add_trades(1);
-                            me_stats.record_trades(1);
-                        }
-                    }
-                    ValidAction::Cancel {
-                        order_id,
-                        user_id,
-                        ingested_at_ns,
-                    } => {
-                        let span = p_span!(
-                            TARGET_ME,
-                            LOG_CANCEL,
-                            order_id = order_id,
-                            user_id = user_id
-                        );
-                        let _enter = span.enter();
-                        // Cancel order: remove from book
-                        if let Some(mut cancelled_order) = book.remove_order_by_id(order_id) {
-                            cancelled_order.status = OrderStatus::CANCELED;
-                            let remaining_qty = cancelled_order.remaining_qty();
-
-                            if remaining_qty > 0 {
-                                // Calculate unlock amount
-                                let mut temp_order = cancelled_order.clone();
-                                temp_order.qty = remaining_qty;
-                                let unlock_amount =
-                                    temp_order.calculate_cost(qty_unit).unwrap_or(0);
-                                let lock_asset_id = match cancelled_order.side {
-                                    Side::Buy => quote_id,
-                                    Side::Sell => base_id,
-                                };
-
-                                // Send cancel result to UBSCore for unlock
-                                let cancel_update = BalanceUpdateRequest::Cancel {
-                                    order_id,
-                                    user_id,
-                                    asset_id: lock_asset_id,
-                                    unlock_amount,
-                                    ingested_at_ns,
-                                };
-                                loop {
-                                    match me_queues.balance_update_queue.push(cancel_update.clone())
-                                    {
-                                        Ok(()) => break,
-                                        Err(_) => {
-                                            me_stats.incr_backpressure();
-                                            std::hint::spin_loop();
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        // If order not found in book, it may already be fully filled - silently ignore
-                    }
-                }
-                me_stats.add_matching_time(task_start.elapsed().as_nanos() as u64);
-            }
-
-            // Check for shutdown
-            if me_shutdown.is_shutdown_requested() && me_queues.action_queue.is_empty() {
-                break;
-            }
-
-            if !did_work {
-                spin_count += 1;
-                if spin_count > IDLE_SPIN_LIMIT {
-                    thread::sleep(IDLE_SLEEP_US);
-                    spin_count = 0;
-                } else {
-                    std::hint::spin_loop();
-                }
-            } else {
-                spin_count = 0;
-            }
-        }
-
-        book
-    });
-
-    // ================================================================
-    // THREAD 4: Settlement (Persist Trade Events, Balance Events, Ledger)
-    // ================================================================
-    let settlement_queues = queues.clone();
-    let settlement_shutdown = shutdown.clone();
-    let settlement_stats = stats.clone();
-    let t4_settlement: JoinHandle<LedgerWriter> = thread::spawn(move || {
-        let mut spin_count = 0u32;
-        let mut balance_events_count = 0u64;
-
-        loop {
-            let mut did_work = false;
-
-            // ============================================
-            // PRIORITY 1: Balance Events from UBSCore
-            // Drain balance_event_queue first (same priority pattern as UBSCore)
-            // ============================================
-            while let Some(balance_event) = settlement_queues.balance_event_queue.pop() {
-                did_work = true;
-                let task_start = Instant::now();
-                balance_events_count += 1;
-
-                // Persist balance event to event log
-                ledger.write_balance_event(&balance_event);
-                settlement_stats.add_event_log_time(task_start.elapsed().as_nanos() as u64);
-            }
-
-            // ============================================
-            // PRIORITY 2: Trade Events from ME
-            // ============================================
-            if let Some(trade_event) = settlement_queues.trade_queue.pop() {
-                did_work = true;
-                let task_start = Instant::now();
-
-                let trade = &trade_event.trade;
-                let span = p_span!(
-                    TARGET_PERS,
-                    LOG_TRADE,
-                    trade_id = trade.trade_id,
-                    buyer = trade.buyer_user_id,
-                    seller = trade.seller_user_id
-                );
-                let _enter = span.enter();
-
-                let trade_cost = ((trade.price as u128) * (trade.qty as u128)
-                    / (trade_event.qty_unit as u128)) as u64;
-
-                // Persist to Ledger (legacy format)
-                ledger.write_entry(&LedgerEntry {
-                    trade_id: trade.trade_id,
-                    user_id: trade.buyer_user_id,
-                    asset_id: trade_event.quote_asset_id,
-                    op: OP_DEBIT,
-                    delta: trade_cost,
-                    balance_after: 0, // Not tracked in this format
-                });
-                ledger.write_entry(&LedgerEntry {
-                    trade_id: trade.trade_id,
-                    user_id: trade.buyer_user_id,
-                    asset_id: trade_event.base_asset_id,
-                    op: OP_CREDIT,
-                    delta: trade.qty,
-                    balance_after: 0,
-                });
-
-                // Seller: debit base, credit quote
-                ledger.write_entry(&LedgerEntry {
-                    trade_id: trade.trade_id,
-                    user_id: trade.seller_user_id,
-                    asset_id: trade_event.base_asset_id,
-                    op: OP_DEBIT,
-                    delta: trade.qty,
-                    balance_after: 0,
-                });
-                ledger.write_entry(&LedgerEntry {
-                    trade_id: trade.trade_id,
-                    user_id: trade.seller_user_id,
-                    asset_id: trade_event.quote_asset_id,
-                    op: OP_CREDIT,
-                    delta: trade_cost,
-                    balance_after: 0,
-                });
-                p_info!(TARGET_PERS, "Settlement persisted to ledger");
-                settlement_stats.add_event_log_time(task_start.elapsed().as_nanos() as u64);
-            }
-
-            // Check for shutdown (after both queues are drained)
-            if settlement_shutdown.is_shutdown_requested()
-                && settlement_queues.trade_queue.is_empty()
-                && settlement_queues.balance_event_queue.is_empty()
-            {
-                break;
-            }
-
-            if !did_work {
-                spin_count += 1;
-                if spin_count > IDLE_SPIN_LIMIT {
-                    thread::sleep(IDLE_SLEEP_US);
-                    spin_count = 0;
-                } else {
-                    std::hint::spin_loop();
-                }
-            } else {
-                spin_count = 0;
-            }
-        }
-
-        // Log balance events count (for debugging)
-        if balance_events_count > 0 {
-            // Could add to stats in future
-            let _ = balance_events_count;
-        }
-
-        // Suppress unused warning for settlement_stats
-        let _ = &settlement_stats;
-
-        ledger.flush();
-        ledger
-    });
-
-    // ================================================================
+    let t4_settlement = spawn_settlement_stage(
+        services.ledger,
+        queues.clone(),
+        stats.clone(),
+        shutdown.clone(),
+    );
     // Wait for completion
     // ================================================================
 
@@ -633,6 +216,473 @@ pub fn run_pipeline_multi_thread(
         stats,
         final_accounts: final_ubscore.accounts().clone(),
     }
+}
+
+// ============================================================
+// STAGE IMPLEMENTATIONS (Decomposed for Intent-Based Design)
+// ============================================================
+
+fn spawn_ingestion_stage(
+    orders: Vec<InputOrder>,
+    queues: Arc<MultiThreadQueues>,
+    stats: Arc<PipelineStats>,
+    shutdown: Arc<ShutdownSignal>,
+    active_symbol_id: u32,
+    start_time: Instant,
+) -> JoinHandle<()> {
+    thread::spawn(move || {
+        let mut seq_counter = 0u64;
+
+        for input in orders {
+            if shutdown.is_shutdown_requested() {
+                break;
+            }
+
+            let ingested_at_ns = Instant::now().duration_since(start_time).as_nanos() as u64;
+
+            // Create OrderAction based on input action type
+            let action = if input.action == ACTION_CANCEL {
+                // Cancel order - no seq needed, just pass order_id
+                stats.incr_cancel();
+                stats.record_cancel();
+                OrderAction::Cancel {
+                    order_id: input.order_id,
+                    user_id: input.user_id,
+                    ingested_at_ns,
+                }
+            } else {
+                // Place order - assign sequence number
+                stats.incr_place();
+                stats.record_place();
+                let _ = ACTION_PLACE; // Suppress unused warning if it happens
+                seq_counter += 1;
+                let mut order = InternalOrder::new_with_time(
+                    input.order_id,
+                    input.user_id,
+                    active_symbol_id,
+                    input.price,
+                    input.qty,
+                    input.side,
+                    ingested_at_ns,
+                );
+                order.ingested_at_ns = ingested_at_ns;
+                OrderAction::Place(SequencedOrder::new(seq_counter, order, ingested_at_ns))
+            };
+
+            // Push with backpressure (same path for both place and cancel)
+            loop {
+                match queues.order_queue.push(action.clone()) {
+                    Ok(()) => break,
+                    Err(_) => {
+                        stats.incr_backpressure();
+                        std::hint::spin_loop();
+                    }
+                }
+            }
+
+            stats.incr_ingested();
+        }
+    })
+}
+
+fn spawn_ubscore_stage(
+    mut ubscore: UBSCore,
+    queues: Arc<MultiThreadQueues>,
+    stats: Arc<PipelineStats>,
+    shutdown: Arc<ShutdownSignal>,
+    start_time: Instant,
+) -> JoinHandle<UBSCore> {
+    thread::spawn(move || {
+        let mut spin_count = 0u32;
+        let mut batch_actions: Vec<ValidAction> = Vec::with_capacity(UBSC_ORDER_BATCH);
+        let mut batch_events = Vec::with_capacity(UBSC_ORDER_BATCH + UBSC_SETTLE_BATCH * 4);
+
+        loop {
+            let mut did_work = false;
+
+            // PHASE 1: COLLECT (Batch accumulation of intentions)
+
+            // 1.1 Process Settlements
+            for _ in 0..UBSC_SETTLE_BATCH {
+                if let Some(req) = queues.balance_update_queue.pop() {
+                    did_work = true;
+                    if let Ok(events) = ubscore.apply_balance_update(req) {
+                        batch_events.extend(events);
+                    }
+                } else {
+                    break;
+                }
+            }
+
+            // 1.2 Process Orders
+            for _ in 0..UBSC_ORDER_BATCH {
+                if let Some(action) = queues.order_queue.pop() {
+                    did_work = true;
+                    match ubscore.apply_order_action(action) {
+                        Ok((actions, events)) => {
+                            batch_actions.extend(actions);
+                            batch_events.extend(events);
+                            stats.incr_accepted();
+                        }
+                        Err(_) => stats.incr_rejected(),
+                    }
+                } else {
+                    break;
+                }
+            }
+
+            // PHASE 2 & 3: COMMIT & RELEASE (The actual atomic/visibility phase)
+            if !batch_actions.is_empty() || !batch_events.is_empty() {
+                // Batch Timing: Focus on the IO bottleneck (WAL Flush)
+                let commit_start = Instant::now();
+                if let Err(e) = ubscore.commit() {
+                    tracing::error!("CRITICAL: WAL commit failed: {}", e);
+                }
+                stats.add_settlement_time(commit_start.elapsed().as_nanos() as u64);
+
+                // Publish results to downstream
+                for action in batch_actions.drain(..) {
+                    while let Err(_) = queues.action_queue.push(action.clone()) {
+                        std::hint::spin_loop();
+                        if shutdown.is_shutdown_requested() {
+                            break;
+                        }
+                    }
+                }
+
+                for event in batch_events.drain(..) {
+                    let lat_ingested = event.ingested_at_ns;
+                    while let Err(_) = queues.balance_event_queue.push(event.clone()) {
+                        std::hint::spin_loop();
+                        stats.incr_backpressure();
+                        if shutdown.is_shutdown_requested() {
+                            break;
+                        }
+                    }
+                    if lat_ingested > 0 {
+                        let now_ns = Instant::now().duration_since(start_time).as_nanos() as u64;
+                        stats.record_latency(now_ns.saturating_sub(lat_ingested));
+                    }
+                    stats.incr_settled();
+                }
+            }
+
+            if shutdown.is_shutdown_requested()
+                && queues.order_queue.is_empty()
+                && queues.balance_update_queue.is_empty()
+            {
+                break;
+            }
+
+            if !did_work {
+                spin_count += 1;
+                if spin_count > IDLE_SPIN_LIMIT {
+                    thread::sleep(IDLE_SLEEP_US);
+                    spin_count = 0;
+                } else {
+                    std::hint::spin_loop();
+                }
+            } else {
+                spin_count = 0;
+            }
+        }
+        let _ = ubscore.commit();
+        ubscore
+    })
+}
+
+fn spawn_me_stage(
+    mut book: OrderBook,
+    queues: Arc<MultiThreadQueues>,
+    stats: Arc<PipelineStats>,
+    shutdown: Arc<ShutdownSignal>,
+    market: MarketContext,
+) -> JoinHandle<OrderBook> {
+    thread::spawn(move || {
+        let mut spin_count = 0u32;
+
+        loop {
+            let mut did_work = false;
+
+            if let Some(action) = queues.action_queue.pop() {
+                did_work = true;
+                let task_start = Instant::now();
+
+                match action {
+                    ValidAction::Order(valid_order) => {
+                        let span =
+                            p_span!(TARGET_ME, LOG_ORDER, order_id = valid_order.order.order_id);
+                        let _enter = span.enter();
+
+                        // Match order
+                        let result =
+                            MatchingEngine::process_order(&mut book, valid_order.order.clone());
+
+                        p_info!(
+                            TARGET_ME,
+                            trades = result.trades.len(),
+                            "Matching completed"
+                        );
+
+                        // Fan-out: Send Trade Events to BOTH Settlement AND UBSCore
+                        for trade in &result.trades {
+                            let trade_event = TradeEvent::new(
+                                trade.clone(),
+                                if valid_order.order.side == Side::Buy {
+                                    trade.buyer_order_id
+                                } else {
+                                    trade.seller_order_id
+                                },
+                                if valid_order.order.side == Side::Buy {
+                                    trade.seller_order_id
+                                } else {
+                                    trade.buyer_order_id
+                                },
+                                valid_order.order.side,
+                                market.base_id,
+                                market.quote_id,
+                                market.qty_unit,
+                                valid_order.ingested_at_ns,
+                            );
+
+                            // Calculate price improvement for buy orders
+                            let price_improvement = if valid_order.order.side == Side::Buy
+                                && valid_order.order.order_type == OrderType::Limit
+                                && valid_order.order.price > trade.price
+                            {
+                                let diff = valid_order.order.price - trade.price;
+                                let refund = diff * trade.qty / market.qty_unit;
+                                if refund > 0 {
+                                    Some(PriceImprovement {
+                                        user_id: valid_order.order.user_id,
+                                        asset_id: market.quote_id,
+                                        amount: refund,
+                                    })
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            };
+
+                            // [1] Send to Settlement (for persistence) - trade_queue
+                            loop {
+                                match queues.trade_queue.push(trade_event.clone()) {
+                                    Ok(()) => break,
+                                    Err(_) => {
+                                        stats.incr_backpressure();
+                                        std::hint::spin_loop();
+                                    }
+                                }
+                            }
+
+                            // [2] Send to UBSCore (for balance update) - balance_update_queue
+                            let balance_update = BalanceUpdateRequest::Trade {
+                                trade_event,
+                                price_improvement,
+                            };
+                            loop {
+                                match queues.balance_update_queue.push(balance_update.clone()) {
+                                    Ok(()) => break,
+                                    Err(_) => {
+                                        stats.incr_backpressure();
+                                        std::hint::spin_loop();
+                                    }
+                                }
+                            }
+
+                            stats.add_trades(1);
+                            stats.record_trades(1);
+                        }
+                    }
+                    ValidAction::Cancel {
+                        order_id,
+                        user_id,
+                        ingested_at_ns,
+                    } => {
+                        let span = p_span!(
+                            TARGET_ME,
+                            LOG_CANCEL,
+                            order_id = order_id,
+                            user_id = user_id
+                        );
+                        let _enter = span.enter();
+                        // Cancel order: remove from book
+                        if let Some(mut cancelled_order) = book.remove_order_by_id(order_id) {
+                            cancelled_order.status = OrderStatus::CANCELED;
+                            let remaining_qty = cancelled_order.remaining_qty();
+
+                            if remaining_qty > 0 {
+                                // Calculate unlock amount
+                                let mut temp_order = cancelled_order.clone();
+                                temp_order.qty = remaining_qty;
+                                let unlock_amount =
+                                    temp_order.calculate_cost(market.qty_unit).unwrap_or(0);
+                                let lock_asset_id = match cancelled_order.side {
+                                    Side::Buy => market.quote_id,
+                                    Side::Sell => market.base_id,
+                                };
+
+                                // Send cancel result to UBSCore for unlock
+                                let cancel_update = BalanceUpdateRequest::Cancel {
+                                    order_id,
+                                    user_id,
+                                    asset_id: lock_asset_id,
+                                    unlock_amount,
+                                    ingested_at_ns,
+                                };
+                                loop {
+                                    match queues.balance_update_queue.push(cancel_update.clone()) {
+                                        Ok(()) => break,
+                                        Err(_) => {
+                                            stats.incr_backpressure();
+                                            std::hint::spin_loop();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                stats.add_matching_time(task_start.elapsed().as_nanos() as u64);
+            }
+
+            // Check for shutdown
+            if shutdown.is_shutdown_requested() && queues.action_queue.is_empty() {
+                break;
+            }
+
+            if !did_work {
+                spin_count += 1;
+                if spin_count > IDLE_SPIN_LIMIT {
+                    thread::sleep(IDLE_SLEEP_US);
+                    spin_count = 0;
+                } else {
+                    std::hint::spin_loop();
+                }
+            } else {
+                spin_count = 0;
+            }
+        }
+
+        book
+    })
+}
+
+fn spawn_settlement_stage(
+    mut ledger: LedgerWriter,
+    queues: Arc<MultiThreadQueues>,
+    stats: Arc<PipelineStats>,
+    shutdown: Arc<ShutdownSignal>,
+) -> JoinHandle<LedgerWriter> {
+    thread::spawn(move || {
+        let mut spin_count = 0u32;
+        let mut balance_events_count = 0u64;
+
+        loop {
+            let mut did_work = false;
+
+            // ============================================
+            // PRIORITY 1: Balance Events from UBSCore
+            // Drain balance_event_queue first
+            // ============================================
+            while let Some(balance_event) = queues.balance_event_queue.pop() {
+                did_work = true;
+                let task_start = Instant::now();
+                balance_events_count += 1;
+
+                // Persist balance event to event log
+                ledger.write_balance_event(&balance_event);
+                stats.add_event_log_time(task_start.elapsed().as_nanos() as u64);
+            }
+
+            // ============================================
+            // PRIORITY 2: Trade Events from ME
+            // ============================================
+            if let Some(trade_event) = queues.trade_queue.pop() {
+                did_work = true;
+                let task_start = Instant::now();
+
+                let trade = &trade_event.trade;
+                let span = p_span!(
+                    TARGET_PERS,
+                    LOG_TRADE,
+                    trade_id = trade.trade_id,
+                    buyer = trade.buyer_user_id,
+                    seller = trade.seller_user_id
+                );
+                let _enter = span.enter();
+
+                let trade_cost = ((trade.price as u128) * (trade.qty as u128)
+                    / (trade_event.qty_unit as u128)) as u64;
+
+                // Persist to Ledger (legacy format)
+                ledger.write_entry(&LedgerEntry {
+                    trade_id: trade.trade_id,
+                    user_id: trade.buyer_user_id,
+                    asset_id: trade_event.quote_asset_id,
+                    op: OP_DEBIT,
+                    delta: trade_cost,
+                    balance_after: 0,
+                });
+                ledger.write_entry(&LedgerEntry {
+                    trade_id: trade.trade_id,
+                    user_id: trade.buyer_user_id,
+                    asset_id: trade_event.base_asset_id,
+                    op: OP_CREDIT,
+                    delta: trade.qty,
+                    balance_after: 0,
+                });
+
+                // Seller: debit base, credit quote
+                ledger.write_entry(&LedgerEntry {
+                    trade_id: trade.trade_id,
+                    user_id: trade.seller_user_id,
+                    asset_id: trade_event.base_asset_id,
+                    op: OP_DEBIT,
+                    delta: trade.qty,
+                    balance_after: 0,
+                });
+                ledger.write_entry(&LedgerEntry {
+                    trade_id: trade.trade_id,
+                    user_id: trade.seller_user_id,
+                    asset_id: trade_event.quote_asset_id,
+                    op: OP_CREDIT,
+                    delta: trade_cost,
+                    balance_after: 0,
+                });
+                p_info!(TARGET_PERS, "Settlement persisted to ledger");
+                stats.add_event_log_time(task_start.elapsed().as_nanos() as u64);
+            }
+
+            // Check for shutdown
+            if shutdown.is_shutdown_requested()
+                && queues.trade_queue.is_empty()
+                && queues.balance_event_queue.is_empty()
+            {
+                break;
+            }
+
+            if !did_work {
+                spin_count += 1;
+                if spin_count > IDLE_SPIN_LIMIT {
+                    thread::sleep(IDLE_SLEEP_US);
+                    spin_count = 0;
+                } else {
+                    std::hint::spin_loop();
+                }
+            } else {
+                spin_count = 0;
+            }
+        }
+
+        if balance_events_count > 0 {
+            let _ = balance_events_count;
+        }
+
+        ledger.flush();
+        ledger
+    })
 }
 
 // ============================================================
