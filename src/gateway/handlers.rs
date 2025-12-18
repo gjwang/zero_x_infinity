@@ -160,3 +160,75 @@ fn now_ms() -> u64 {
         .unwrap()
         .as_millis() as u64
 }
+
+// ============================================================================
+// Query Endpoints (Placeholder implementations)
+// ============================================================================
+
+/// Get single order by ID
+///
+/// GET /api/v1/order/:order_id
+pub async fn get_order(
+    State(_state): State<Arc<AppState>>,
+    _headers: HeaderMap,
+) -> (StatusCode, Json<ApiResponse<()>>) {
+    // TODO: Implement order query from TDengine
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        Json(ApiResponse::<()>::error(
+            error_codes::SERVICE_UNAVAILABLE,
+            "Query endpoints not yet implemented",
+        )),
+    )
+}
+
+/// Get orders list
+///
+/// GET /api/v1/orders
+pub async fn get_orders(
+    State(_state): State<Arc<AppState>>,
+    _headers: HeaderMap,
+) -> (StatusCode, Json<ApiResponse<()>>) {
+    // TODO: Implement orders query from TDengine
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        Json(ApiResponse::<()>::error(
+            error_codes::SERVICE_UNAVAILABLE,
+            "Query endpoints not yet implemented",
+        )),
+    )
+}
+
+/// Get trades history
+///
+/// GET /api/v1/trades
+pub async fn get_trades(
+    State(_state): State<Arc<AppState>>,
+    _headers: HeaderMap,
+) -> (StatusCode, Json<ApiResponse<()>>) {
+    // TODO: Implement trades query from TDengine
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        Json(ApiResponse::<()>::error(
+            error_codes::SERVICE_UNAVAILABLE,
+            "Query endpoints not yet implemented",
+        )),
+    )
+}
+
+/// Get user balances
+///
+/// GET /api/v1/balances
+pub async fn get_balances(
+    State(_state): State<Arc<AppState>>,
+    _headers: HeaderMap,
+) -> (StatusCode, Json<ApiResponse<()>>) {
+    // TODO: Implement balances query from TDengine
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        Json(ApiResponse::<()>::error(
+            error_codes::SERVICE_UNAVAILABLE,
+            "Query endpoints not yet implemented",
+        )),
+    )
+}

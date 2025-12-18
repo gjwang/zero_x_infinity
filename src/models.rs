@@ -64,6 +64,8 @@ pub struct InternalOrder {
     pub seq_id: u64,
     /// Timestamp when order was ingested (nanoseconds)
     pub ingested_at_ns: u64,
+    /// Client order ID (optional, for API tracking)
+    pub cid: Option<String>,
 }
 
 impl InternalOrder {
@@ -89,6 +91,7 @@ impl InternalOrder {
             lock_version: 0,
             seq_id: 0,
             ingested_at_ns: 0,
+            cid: None,
         }
     }
 
@@ -115,6 +118,7 @@ impl InternalOrder {
             lock_version: 0,
             seq_id: 0,
             ingested_at_ns,
+            cid: None,
         }
     }
 
@@ -139,6 +143,7 @@ impl InternalOrder {
             ingested_at_ns: 0,
             lock_version: 0,
             seq_id: 0,
+            cid: None,
         }
     }
 
@@ -244,6 +249,10 @@ pub struct Trade {
     pub seller_user_id: u64,
     pub price: u64,
     pub qty: u64,
+    /// Fee charged (0 for now, placeholder)
+    pub fee: u64,
+    /// Role: 0=Maker, 1=Taker (0 for now, placeholder)
+    pub role: u8,
 }
 
 impl Trade {
@@ -264,6 +273,8 @@ impl Trade {
             seller_user_id,
             price,
             qty,
+            fee: 0,  // Placeholder
+            role: 0, // Placeholder: 0=Maker
         }
     }
 }

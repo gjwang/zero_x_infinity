@@ -38,6 +38,7 @@ pub mod messages;
 pub mod models;
 pub mod orderbook;
 pub mod perf;
+pub mod persistence;
 pub mod pipeline;
 pub mod pipeline_mt;
 pub mod pipeline_runner;
