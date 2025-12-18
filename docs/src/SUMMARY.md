@@ -21,6 +21,7 @@
 - [0x08-h 性能监控与可观测性 (Performance Monitoring & Observability)](./0x08-h-performance-monitoring.md)
 ---
 - [0x09-a Gateway: 客户端接入层 (Client Access Layer)](./0x09-a-gateway.md)
+- [0x09-b Settlement Persistence: TDengine 集成](./0x09-b-settlement-persistence.md)
 ---
 
 - [Performance Report (Latest)](./perf-report.md)
@@ -33,3 +34,4 @@
 # Reference
 
 - [API 规范 (API Conventions)](./api-conventions.md)
+- [数据库选型: TDengine (Database Selection)](./database-selection-tdengine.md)

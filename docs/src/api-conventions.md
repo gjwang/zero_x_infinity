@@ -199,8 +199,174 @@ pub enum OrderStatus {
 | `CANCELED` | 用户取消（注意：单 L） |
 | `PENDING_CANCEL` | 取消中（未使用）|
 | `REJECTED` | 订单被拒绝 |
-| `EXPIRED` | 订单过期（GTD/IOC/FOK）|
-| `EXPIRED_IN_MATCH` | STP 导致过期 |
+| `EXPIRED` | 订单过期（未使用）|
+
+---
+
+## 5. 数字格式规范 ⭐ 重要
+
+### 5.1 核心原则
+
+**所有返回给客户端的数字必须使用字符串格式，并应用 display_decimals**
+
+### 5.2 内部 vs 外部表示
+
+| 层级 | 格式 | 精度 | 示例 |
+|------|------|------|------|
+| **内部存储** | `u64` | `decimals` (8位) | `100000000` (1.0 BTC) |
+| **API 响应** | `String` | `display_decimals` (6位) | `"1.000000"` |
+| **TDengine** | `BIGINT UNSIGNED` | `decimals` (8位) | `100000000` |
+
+### 5.3 转换规则
+
+```rust
+// ❌ 错误：直接返回内部 u64
+{
+    "avail": 9000000000,      // 90.0 BTC (内部表示)
+    "frozen": 1000000000       // 10.0 BTC (内部表示)
+}
+
+// ✅ 正确：转换为 display_decimals 的字符串
+{
+    "avail": "90.000000",     // 使用 asset.display_decimals = 6
+    "frozen": "10.000000"
+}
+```
+
+### 5.4 适用字段
+
+所有数量和价格字段必须转换：
+
+| 字段 | 内部类型 | API 类型 | 精度来源 |
+|------|----------|----------|----------|
+| `qty` | `u64` | `String` | `base_asset.display_decimals` |
+| `price` | `u64` | `String` | `symbol.price_display_decimal` |
+| `avail` | `u64` | `String` | `asset.display_decimals` |
+| `frozen` | `u64` | `String` | `asset.display_decimals` |
+| `filled_qty` | `u64` | `String` | `base_asset.display_decimals` |
+
+### 5.5 实现示例
+
+```rust
+use rust_decimal::Decimal;
+
+// 转换函数
+fn format_amount(value: u64, decimals: u32, display_decimals: u32) -> String {
+    let decimal_value = Decimal::from(value) / Decimal::from(10u64.pow(decimals));
+    format!("{:.prec$}", decimal_value, prec = display_decimals as usize)
+}
+
+// 使用示例
+let avail_str = format_amount(
+    balance.avail,           // 9000000000 (内部)
+    asset.decimals,          // 8
+    asset.display_decimals   // 6
+);
+// 结果: "90.000000"
+```
+
+---
+
+## 6. 资产和交易对表示规范 ⭐ 重要
+
+### 6.1 核心原则
+
+**API 响应中使用人类可读的名称，而非内部 ID**
+
+### 6.2 字段映射
+
+| 概念 | 内部字段 | API 字段 | 类型 | 示例 |
+|------|----------|----------|------|------|
+| 资产 | `asset_id: u32` | `asset: String` | 名称 | `"BTC"`, `"USDT"` |
+| 交易对 | `symbol_id: u32` | `symbol: String` | 名称 | `"BTC_USDT"` |
+| 基础资产 | `base_asset_id: u32` | `base_asset: String` | 名称 | `"BTC"` |
+| 计价资产 | `quote_asset_id: u32` | `quote_asset: String` | 名称 | `"USDT"` |
+
+### 6.3 错误示例 vs 正确示例
+
+```json
+// ❌ 错误：使用内部 ID
+{
+    "code": 0,
+    "msg": "ok",
+    "data": {
+        "user_id": 1001,
+        "asset_id": 1,           // ❌ 内部 ID
+        "avail": 9000000000,     // ❌ 内部 u64
+        "frozen": 1000000000
+    }
+}
+
+// ✅ 正确：使用名称和字符串
+{
+    "code": 0,
+    "msg": "ok",
+    "data": {
+        "user_id": 1001,
+        "asset": "BTC",          // ✅ 资产名称
+        "avail": "90.000000",    // ✅ display_decimals 字符串
+        "frozen": "10.000000"
+    }
+}
+```
+
+### 6.4 订单响应示例
+
+```json
+{
+    "code": 0,
+    "msg": "ok",
+    "data": {
+        "order_id": 1001,
+        "symbol": "BTC_USDT",     // ✅ 交易对名称
+        "side": "BUY",
+        "order_type": "LIMIT",
+        "price": "85000.00",      // ✅ price_display_decimal
+        "qty": "0.001000",        // ✅ base_asset.display_decimals
+        "filled_qty": "0.000000",
+        "status": "NEW"
+    }
+}
+```
+
+### 6.5 余额响应示例
+
+```json
+{
+    "code": 0,
+    "msg": "ok",
+    "data": {
+        "user_id": 1001,
+        "asset": "BTC",           // ✅ 资产名称
+        "avail": "90.000000",     // ✅ 6 位小数
+        "frozen": "10.000000",
+        "total": "100.000000"     // avail + frozen
+    }
+}
+```
+
+---
+
+## 7. 实施检查清单
+
+在实现任何 API 端点时，必须检查：
+
+- [ ] 所有枚举使用 SCREAMING_CASE
+- [ ] 字段名使用 snake_case
+- [ ] 响应使用统一的 `{code, msg, data}` 结构
+- [ ] **所有数字转换为字符串**
+- [ ] **使用 display_decimals 精度**
+- [ ] **资产使用名称而非 ID**
+- [ ] **交易对使用名称而非 ID**
+- [ ] 错误码符合分类规范
+
+---
+
+## 8. 参考资料
+
+- [0x03 Decimal World](./0x03-decimal-world.md) - 精度设计详解
+- [0x07-a Testing Framework](./0x07-a-testing-framework.md) - decimals vs display_decimals
+- [Binance API Documentation](https://binance-docs.github.io/apidocs/spot/en/)
 
 ### 3.2 Order Type
 

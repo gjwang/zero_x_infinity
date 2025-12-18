@@ -150,14 +150,44 @@ fn main() {
         // Start HTTP Server in separate thread with tokio runtime
         let queues_clone = queues.clone();
         let symbol_mgr_clone = symbol_mgr.clone();
+        let persistence_config = app_config.persistence.clone();
         let gateway_thread = std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().unwrap();
             rt.block_on(async {
+                // Initialize TDengine client inside Gateway's tokio runtime
+                let db_client = if persistence_config.enabled {
+                    println!("\n[Persistence] Connecting to TDengine...");
+                    match zero_x_infinity::persistence::TDengineClient::connect(
+                        &persistence_config.tdengine_dsn,
+                    )
+                    .await
+                    {
+                        Ok(client) => match client.init_schema().await {
+                            Ok(_) => {
+                                println!("✅ TDengine connected and schema initialized");
+                                Some(std::sync::Arc::new(client))
+                            }
+                            Err(e) => {
+                                eprintln!("❌ Failed to initialize TDengine schema: {}", e);
+                                None
+                            }
+                        },
+                        Err(e) => {
+                            eprintln!("❌ Failed to connect to TDengine: {}", e);
+                            None
+                        }
+                    }
+                } else {
+                    println!("\n[Persistence] Disabled");
+                    None
+                };
+
                 zero_x_infinity::gateway::run_server(
                     port,
                     queues_clone.order_queue.clone(),
                     symbol_mgr_clone,
                     active_symbol_id,
+                    db_client,
                 )
                 .await;
             });

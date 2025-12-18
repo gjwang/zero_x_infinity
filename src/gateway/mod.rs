@@ -2,13 +2,17 @@ pub mod handlers;
 pub mod state;
 pub mod types;
 
-use axum::{Router, routing::post};
+use axum::{
+    Router,
+    routing::{get, post},
+};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 
 use crate::symbol_manager::SymbolManager;
 use crossbeam_queue::ArrayQueue;
 
+use crate::persistence::TDengineClient;
 use crate::pipeline::OrderAction;
 use state::AppState;
 
@@ -18,14 +22,26 @@ pub async fn run_server(
     order_queue: Arc<ArrayQueue<OrderAction>>,
     symbol_mgr: Arc<SymbolManager>,
     active_symbol_id: u32,
+    db_client: Option<Arc<TDengineClient>>,
 ) {
     // 创建共享状态
-    let state = Arc::new(AppState::new(order_queue, symbol_mgr, active_symbol_id));
+    let state = Arc::new(AppState::new(
+        order_queue,
+        symbol_mgr,
+        active_symbol_id,
+        db_client,
+    ));
 
     // 创建路由
     let app = Router::new()
+        // Write endpoints
         .route("/api/v1/create_order", post(handlers::create_order))
         .route("/api/v1/cancel_order", post(handlers::cancel_order))
+        // Query endpoints
+        .route("/api/v1/order/{order_id}", get(handlers::get_order))
+        .route("/api/v1/orders", get(handlers::get_orders))
+        .route("/api/v1/trades", get(handlers::get_trades))
+        .route("/api/v1/balances", get(handlers::get_balances))
         .with_state(state);
 
     // 绑定地址
