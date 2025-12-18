@@ -93,14 +93,15 @@ fn use_gateway_mode() -> bool {
     std::env::args().any(|a| a == "--gateway")
 }
 
-fn get_port() -> u16 {
+/// Get port override from command line (--port argument)
+fn get_port_override() -> Option<u16> {
     let args: Vec<String> = std::env::args().collect();
     for i in 0..args.len() {
         if args[i] == "--port" && i + 1 < args.len() {
-            return args[i + 1].parse().unwrap_or(8080);
+            return args[i + 1].parse().ok();
         }
     }
-    8080
+    None
 }
 
 fn main() {
@@ -123,9 +124,16 @@ fn main() {
 
         // Load configuration
         let (symbol_mgr, active_symbol_id) = load_symbol_manager();
-        let port = get_port();
 
-        println!("Gateway will listen on port: {}", port);
+        // Get Gateway config from YAML, allow --port override
+        let gateway_config = &app_config.gateway;
+        let port = if let Some(override_port) = get_port_override() {
+            override_port
+        } else {
+            gateway_config.port
+        };
+
+        println!("Gateway will listen on {}:{}", gateway_config.host, port);
         println!(
             "Active symbol: {}",
             symbol_mgr
@@ -133,6 +141,7 @@ fn main() {
                 .unwrap()
                 .symbol
         );
+        println!("Order queue size: {}", gateway_config.queue_size);
 
         // Create shared queues
         let queues = std::sync::Arc::new(zero_x_infinity::MultiThreadQueues::new());

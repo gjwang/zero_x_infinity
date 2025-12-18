@@ -5,3 +5,8 @@ use_json: true
 rotation: "hourly"
 sample_rate: 100
 enable_tracing: false
+
+gateway:
+  host: "0.0.0.0"
+  port: 8080
+  queue_size: 50000
