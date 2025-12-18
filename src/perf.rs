@@ -181,6 +181,14 @@ impl PerfMetrics {
 
     /// Get architectural breakdown as formatted string
     pub fn breakdown(&self) -> String {
+        let mut s = self.legacy_report();
+        s.push_str("\n--- Markdown Analysis Table ---\n");
+        s.push_str(&self.markdown_report());
+        s
+    }
+
+    /// Legacy text-based report
+    pub fn legacy_report(&self) -> String {
         let total = self.total_tracked_ns() as f64;
         if total == 0.0 {
             return "No timing data collected".to_string();
@@ -217,7 +225,7 @@ impl PerfMetrics {
             "2. Matching:     {:>10.2}ms ({:>5.1}%)  [{:>6.2} µs/order]\n",
             ms(self.total_matching_ns),
             pct(self.total_matching_ns),
-            us_per(self.total_matching_ns, self.place_count) // Only place orders go to ME
+            us_per(self.total_matching_ns, self.place_count)
         ));
         s.push_str(&format!(
             "3. Settlement:   {:>10.2}ms ({:>5.1}%)  [{:>6.2} µs/trade]\n",
@@ -237,45 +245,84 @@ impl PerfMetrics {
             ms(self.total_tracked_ns())
         ));
 
-        // Latency Percentiles
+        // Latency Profile
         if !self.latency_samples.is_empty() {
             s.push_str("\n--- Latency Profile (sampled) ---\n");
             let p50 = self.percentile(50.0).unwrap_or(0);
-            let p90 = self.percentile(90.0).unwrap_or(0);
             let p99 = self.percentile(99.0).unwrap_or(0);
-            let p999 = self.percentile(99.9).unwrap_or(0);
             let max = self.max_latency().unwrap_or(0);
 
             s.push_str(&format!("  P50:    {:>10} ns\n", p50));
-            s.push_str(&format!("  P90:    {:>10} ns\n", p90));
             s.push_str(&format!("  P99:    {:>10} ns\n", p99));
-            s.push_str(&format!("  P99.9:  {:>10} ns\n", p999));
             s.push_str(&format!("  Max:    {:>10} ns\n", max));
         }
 
-        // Sub-breakdown if available
-        if self.total_wal_ns > 0 || self.total_lock_ns > 0 || self.total_cancel_lookup_ns > 0 {
-            s.push_str("\n--- Stage Breakdown ---\n");
-            if self.total_wal_ns > 0 {
-                s.push_str(&format!(
-                    "  WAL Write:       {:>8.2}ms\n",
-                    ms(self.total_wal_ns)
-                ));
-            }
-            if self.total_lock_ns > 0 {
-                s.push_str(&format!(
-                    "  Balance Lock:    {:>8.2}ms\n",
-                    ms(self.total_lock_ns)
-                ));
-            }
-            if self.total_cancel_lookup_ns > 0 {
-                s.push_str(&format!(
-                    "  Cancel Lookup:   {:>8.2}ms  [{:.2} µs/cancel]\n",
-                    ms(self.total_cancel_lookup_ns),
-                    us_per(self.total_cancel_lookup_ns, self.cancel_count)
-                ));
-            }
+        s
+    }
+
+    /// Generate Markdown table for documentation
+    pub fn markdown_report(&self) -> String {
+        let total_ns = self.total_tracked_ns() as f64;
+        if total_ns == 0.0 {
+            return "| Service | Module | Task Time | Ratio | Latency | Throughput |\n| :--- | :--- | :--- | :--- | :--- | :--- |\n| N/A | N/A | 0 | 0% | 0 | 0 |".to_string();
         }
+
+        let total_orders = self.place_count + self.cancel_count;
+
+        let mut s = String::new();
+        s.push_str("| 服务 (Service) | 模块 / 关键 Span | 任务总耗时 | 耗时占比 | 单笔延迟 (Latency) | 理论吞吐上限 (Throughput) |\n");
+        s.push_str("| :--- | :--- | :--- | :--- | :--- | :--- |\n");
+
+        let mut add_row = |service: &str, module: &str, ns: u64, count: u64| {
+            let sec = ns as f64 / 1_000_000_000.0;
+            let ratio = ns as f64 / total_ns * 100.0;
+            let latency_us = if count == 0 {
+                0.0
+            } else {
+                ns as f64 / 1000.0 / count as f64
+            };
+            let throughput = if latency_us == 0.0 {
+                0.0
+            } else {
+                1_000_000.0 / latency_us
+            };
+
+            let tp_str = if throughput > 1000_000.0 {
+                format!("{:.2}M ops/s", throughput / 1000_000.0)
+            } else {
+                format!("{:.1}k ops/s", throughput / 1000.0)
+            };
+
+            s.push_str(&format!(
+                "| **{}** | `{}` | {:.2}s | {:.1}% | {:.2} µs | {} |\n",
+                service, module, sec, ratio, latency_us, tp_str
+            ));
+        };
+
+        add_row(
+            "UBSCore",
+            "ORDER (Lock)",
+            self.total_pretrade_ns,
+            total_orders,
+        );
+        add_row(
+            "UBSCore",
+            "SETTLE (Upd)",
+            self.total_settlement_ns,
+            self.trade_count,
+        );
+        add_row(
+            "Matching Engine",
+            "ORDER (Match)",
+            self.total_matching_ns,
+            self.place_count,
+        );
+        add_row(
+            "Persistence",
+            "TRADE (Ledger)",
+            self.total_event_log_ns,
+            total_orders,
+        );
 
         s
     }
