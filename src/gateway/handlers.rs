@@ -1,6 +1,6 @@
 use axum::{
     Json,
-    extract::State,
+    extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
 };
 use std::sync::Arc;
@@ -169,66 +169,227 @@ fn now_ms() -> u64 {
 ///
 /// GET /api/v1/order/:order_id
 pub async fn get_order(
-    State(_state): State<Arc<AppState>>,
-    _headers: HeaderMap,
-) -> (StatusCode, Json<ApiResponse<()>>) {
-    // TODO: Implement order query from TDengine
+    State(state): State<Arc<AppState>>,
+    Path(order_id): Path<u64>,
+) -> Result<
     (
-        StatusCode::NOT_IMPLEMENTED,
-        Json(ApiResponse::<()>::error(
-            error_codes::SERVICE_UNAVAILABLE,
-            "Query endpoints not yet implemented",
-        )),
+        StatusCode,
+        Json<ApiResponse<crate::persistence::queries::OrderApiData>>,
+    ),
+    (StatusCode, Json<ApiResponse<()>>),
+> {
+    // Check if persistence is enabled
+    let db_client = state.db_client.as_ref().ok_or_else(|| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ApiResponse::<()>::error(
+                error_codes::SERVICE_UNAVAILABLE,
+                "Persistence not enabled",
+            )),
+        )
+    })?;
+
+    // Query order from TDengine
+    match crate::persistence::queries::query_order(
+        db_client.taos(),
+        order_id,
+        state.active_symbol_id,
     )
+    .await
+    {
+        Ok(Some(order)) => Ok((StatusCode::OK, Json(ApiResponse::success(order)))),
+        Ok(None) => Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<()>::error(
+                error_codes::ORDER_NOT_FOUND,
+                "Order not found",
+            )),
+        )),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error(
+                error_codes::SERVICE_UNAVAILABLE,
+                &format!("Query failed: {}", e),
+            )),
+        )),
+    }
 }
 
 /// Get orders list
 ///
-/// GET /api/v1/orders
+/// GET /api/v1/orders?user_id=1001&limit=10
 pub async fn get_orders(
-    State(_state): State<Arc<AppState>>,
-    _headers: HeaderMap,
-) -> (StatusCode, Json<ApiResponse<()>>) {
-    // TODO: Implement orders query from TDengine
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Result<
     (
-        StatusCode::NOT_IMPLEMENTED,
-        Json(ApiResponse::<()>::error(
-            error_codes::SERVICE_UNAVAILABLE,
-            "Query endpoints not yet implemented",
-        )),
+        StatusCode,
+        Json<ApiResponse<Vec<crate::persistence::queries::OrderApiData>>>,
+    ),
+    (StatusCode, Json<ApiResponse<()>>),
+> {
+    // Check if persistence is enabled
+    let db_client = state.db_client.as_ref().ok_or_else(|| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ApiResponse::<()>::error(
+                error_codes::SERVICE_UNAVAILABLE,
+                "Persistence not enabled",
+            )),
+        )
+    })?;
+
+    // Parse query parameters
+    let user_id: u64 = params
+        .get("user_id")
+        .and_then(|s| s.parse().ok())
+        .ok_or_else(|| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<()>::error(
+                    error_codes::INVALID_PARAMETER,
+                    "Missing or invalid user_id parameter",
+                )),
+            )
+        })?;
+
+    let limit: usize = params
+        .get("limit")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(10);
+
+    // Query orders from TDengine
+    match crate::persistence::queries::query_orders(
+        db_client.taos(),
+        user_id,
+        state.active_symbol_id,
+        limit,
     )
+    .await
+    {
+        Ok(orders) => Ok((StatusCode::OK, Json(ApiResponse::success(orders)))),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error(
+                error_codes::SERVICE_UNAVAILABLE,
+                &format!("Query failed: {}", e),
+            )),
+        )),
+    }
 }
 
-/// Get trades history
+/// Get trades list
 ///
-/// GET /api/v1/trades
+/// GET /api/v1/trades?limit=100
 pub async fn get_trades(
-    State(_state): State<Arc<AppState>>,
-    _headers: HeaderMap,
-) -> (StatusCode, Json<ApiResponse<()>>) {
-    // TODO: Implement trades query from TDengine
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Result<
     (
-        StatusCode::NOT_IMPLEMENTED,
-        Json(ApiResponse::<()>::error(
-            error_codes::SERVICE_UNAVAILABLE,
-            "Query endpoints not yet implemented",
+        StatusCode,
+        Json<ApiResponse<Vec<crate::persistence::queries::TradeApiData>>>,
+    ),
+    (StatusCode, Json<ApiResponse<()>>),
+> {
+    // Check if persistence is enabled
+    let db_client = state.db_client.as_ref().ok_or_else(|| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ApiResponse::<()>::error(
+                error_codes::SERVICE_UNAVAILABLE,
+                "Persistence not enabled",
+            )),
+        )
+    })?;
+
+    // Parse query parameters
+    let limit: usize = params
+        .get("limit")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(100);
+
+    // Query trades from TDengine
+    match crate::persistence::queries::query_trades(db_client.taos(), state.active_symbol_id, limit)
+        .await
+    {
+        Ok(trades) => Ok((StatusCode::OK, Json(ApiResponse::success(trades)))),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error(
+                error_codes::SERVICE_UNAVAILABLE,
+                &format!("Query failed: {}", e),
+            )),
         )),
-    )
+    }
 }
 
-/// Get user balances
+/// Get user balance
 ///
-/// GET /api/v1/balances
+/// GET /api/v1/balances?user_id=1001&asset_id=1
 pub async fn get_balances(
-    State(_state): State<Arc<AppState>>,
-    _headers: HeaderMap,
-) -> (StatusCode, Json<ApiResponse<()>>) {
-    // TODO: Implement balances query from TDengine
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Result<
     (
-        StatusCode::NOT_IMPLEMENTED,
-        Json(ApiResponse::<()>::error(
-            error_codes::SERVICE_UNAVAILABLE,
-            "Query endpoints not yet implemented",
+        StatusCode,
+        Json<ApiResponse<crate::persistence::queries::BalanceApiData>>,
+    ),
+    (StatusCode, Json<ApiResponse<()>>),
+> {
+    // Check if persistence is enabled
+    let db_client = state.db_client.as_ref().ok_or_else(|| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ApiResponse::<()>::error(
+                error_codes::SERVICE_UNAVAILABLE,
+                "Persistence not enabled",
+            )),
+        )
+    })?;
+
+    // Parse query parameters
+    let user_id: u64 = params
+        .get("user_id")
+        .and_then(|s| s.parse().ok())
+        .ok_or_else(|| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<()>::error(
+                    error_codes::INVALID_PARAMETER,
+                    "Missing or invalid user_id parameter",
+                )),
+            )
+        })?;
+
+    let asset_id: u32 = params
+        .get("asset_id")
+        .and_then(|s| s.parse().ok())
+        .ok_or_else(|| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<()>::error(
+                    error_codes::INVALID_PARAMETER,
+                    "Missing or invalid asset_id parameter",
+                )),
+            )
+        })?;
+
+    // Query balance from TDengine
+    match crate::persistence::queries::query_balance(db_client.taos(), user_id, asset_id).await {
+        Ok(Some(balance)) => Ok((StatusCode::OK, Json(ApiResponse::success(balance)))),
+        Ok(None) => Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<()>::error(
+                error_codes::ORDER_NOT_FOUND,
+                "Balance not found",
+            )),
         )),
-    )
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error(
+                error_codes::SERVICE_UNAVAILABLE,
+                &format!("Query failed: {}", e),
+            )),
+        )),
+    }
 }
