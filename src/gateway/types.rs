@@ -20,7 +20,7 @@ where
 ///
 /// This struct is used for HTTP API deserialization only.
 /// Validation and conversion happen in separate functions.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct ClientOrder {
     /// Client order ID (optional)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -169,29 +169,100 @@ fn decimal_to_u64(decimal: Decimal, decimals: u32) -> Result<u64, &'static str> 
     result.to_u64().ok_or("Number too large")
 }
 
-/// 取消订单请求
+/// Cancel order request
 #[derive(Debug, Deserialize)]
 pub struct CancelOrderRequest {
     pub order_id: u64,
 }
 
-/// 订单响应
+// ============================================================================
+// Unified API Response Format
+// ============================================================================
+
+/// Unified API response wrapper
+///
+/// All API responses follow this structure:
+/// - code: 0 = success, non-zero = error code
+/// - msg: short message description
+/// - data: actual data (success) or null (error)
+#[derive(Debug, Serialize)]
+pub struct ApiResponse<T> {
+    pub code: i32,
+    pub msg: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<T>,
+}
+
+impl<T> ApiResponse<T> {
+    /// Create success response
+    pub fn success(data: T) -> Self {
+        Self {
+            code: 0,
+            msg: "ok".to_string(),
+            data: Some(data),
+        }
+    }
+
+    /// Create error response
+    pub fn error(code: i32, msg: impl Into<String>) -> ApiResponse<()> {
+        ApiResponse {
+            code,
+            msg: msg.into(),
+            data: None,
+        }
+    }
+}
+
+/// Order response data
+#[derive(Debug, Serialize)]
+pub struct OrderResponseData {
+    pub order_id: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cid: Option<String>,
+    pub order_status: String,
+    pub accepted_at: u64,
+}
+
+/// Error codes
+pub mod error_codes {
+    // Success
+    pub const SUCCESS: i32 = 0;
+
+    // Client errors (1xxx)
+    pub const INVALID_PARAMETER: i32 = 1001;
+    pub const INSUFFICIENT_BALANCE: i32 = 1002;
+    pub const INVALID_PRICE_QTY: i32 = 1003;
+
+    // Auth errors (2xxx)
+    pub const MISSING_AUTH: i32 = 2001;
+    pub const AUTH_FAILED: i32 = 2002;
+
+    // Resource errors (4xxx)
+    pub const ORDER_NOT_FOUND: i32 = 4001;
+    pub const RATE_LIMITED: i32 = 4291;
+
+    // Server errors (5xxx)
+    pub const SERVICE_UNAVAILABLE: i32 = 5001;
+}
+
+// Legacy types for backward compatibility (to be removed)
+#[deprecated(note = "Use ApiResponse<OrderResponseData> instead")]
 #[derive(Debug, Serialize)]
 pub struct OrderResponse {
     pub order_id: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cid: Option<String>,
-    /// 状态: "ACCEPTED" | "REJECTED" (SCREAMING_CASE)
     pub status: String,
-    pub accepted_at: u64, // Unix timestamp (ms)
+    pub accepted_at: u64,
 }
 
-/// 错误响应
+#[deprecated(note = "Use ApiResponse::error() instead")]
 #[derive(Debug, Serialize)]
 pub struct ErrorResponse {
     pub error: ErrorDetail,
 }
 
+#[deprecated(note = "Use ApiResponse::error() instead")]
 #[derive(Debug, Serialize)]
 pub struct ErrorDetail {
     pub code: String,
@@ -200,6 +271,7 @@ pub struct ErrorDetail {
     pub details: Option<serde_json::Value>,
 }
 
+#[allow(deprecated)]
 impl ErrorResponse {
     pub fn new(code: impl Into<String>, message: impl Into<String>) -> Self {
         Self {
