@@ -189,12 +189,18 @@ pub fn run_pipeline_multi_thread(
         })
     };
 
-    let t4_settlement = spawn_settlement_stage(
-        services.ledger,
-        queues.clone(),
-        stats.clone(),
-        shutdown.clone(),
-    );
+    let t4_settlement = {
+        let mut service = crate::pipeline_services::SettlementService::new(
+            services.ledger,
+            queues.clone(),
+            stats.clone(),
+        );
+        let s = shutdown.clone();
+        thread::spawn(move || {
+            service.run(&s);
+            service.into_inner()
+        })
+    };
     // Wait for completion
     // ================================================================
 
