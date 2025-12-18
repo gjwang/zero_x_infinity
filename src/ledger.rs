@@ -242,6 +242,7 @@ mod tests {
                 -1000,                  // delta
                 9000,                   // avail_after
                 1000,                   // frozen_after
+                0,                      // ingested_at_ns
             );
             ledger.write_balance_event(&event);
             assert_eq!(ledger.event_count(), 1);

@@ -523,7 +523,7 @@ mod tests {
         let result = ubs.process_order(order);
         assert!(result.is_ok());
 
-        let valid_order = result.unwrap();
+        let (valid_order, _event) = result.unwrap();
         assert_eq!(valid_order.seq_id, 1);
         assert_eq!(valid_order.order.qty, 10_0000_0000);
 
@@ -645,7 +645,7 @@ mod tests {
         assert_eq!(b.frozen(), 30_0000_0000);
 
         // Cancel remaining: unlock 30 BTC
-        ubs.unlock(1, 1, 30_0000_0000).unwrap();
+        ubs.unlock(1, 1, 1, 30_0000_0000, 0).unwrap();
 
         // Final: 80 avail, 0 frozen (100 - 20 spent = 80)
         let b = ubs.get_balance(1, 1).unwrap();
