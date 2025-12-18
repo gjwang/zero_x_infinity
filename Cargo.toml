@@ -22,4 +22,5 @@ rust_decimal = "1.36"
 # TDengine persistence
 taos = { version = "0.12", features = ["ws", "ws-rustls"] }
 anyhow = "1.0"
+futures = "0.3"
 

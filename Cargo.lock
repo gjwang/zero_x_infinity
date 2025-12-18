@@ -3317,6 +3317,7 @@ dependencies = [
  "anyhow",
  "axum",
  "crossbeam-queue",
+ "futures",
  "rust_decimal",
  "rustc-hash",
  "serde",
