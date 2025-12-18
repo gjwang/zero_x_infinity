@@ -41,6 +41,7 @@ This is a pilgrimage from `Hello World` to `Microsecond Latency`.
 | 0x08-f | [Ring Buffer Pipeline](./docs/src/0x08-f-ring-buffer-pipeline.md) | Ring Buffer Pipeline 性能分析 |
 | 0x08-g | [Multi-Thread Pipeline](./docs/src/0x08-g-multi-thread-pipeline.md) | 多线程 Pipeline |
 | 0x08-h | [Performance Monitoring](./docs/src/0x08-h-performance-monitoring.md) | 性能监控与意图编码 |
+| 0x09-a | [Gateway: Client Access Layer](./docs/src/0x09-a-gateway.md) | HTTP Gateway 客户端接入层 |
 
 ---
 
@@ -49,6 +50,9 @@ This is a pilgrimage from `Hello World` to `Microsecond Latency`.
 ```bash
 # Install git hooks
 ./scripts/install-hooks.sh
+
+# Run Gateway mode (HTTP API + Trading Core)
+cargo run --release -- --gateway --port 8080
 
 # Run single-threaded pipeline (1.3M orders)
 cargo run --release -- --pipeline --input fixtures/test_with_cancel_highbal
@@ -61,6 +65,9 @@ cargo run --release -- --pipeline-mt --input fixtures/test_with_cancel_highbal
 
 # Run unit tests
 cargo test
+
+# Test Gateway API
+./scripts/test_gateway_simple.sh
 ```
 
 ---
