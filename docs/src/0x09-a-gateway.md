@@ -174,19 +174,19 @@ async fn submit_order(order: OrderRequest) -> Result<OrderResponse, ApiError> {
 // POST /api/v1/create_order
 // Request
 {
-    "cid": "my-order-001",//client_order_id
+    "cid": "my-order-001",  // client_order_id (可选)
     "symbol": "BTC_USDT",
-    "side": "BUY",
-    "type": "LIMIT",
-    "price": "85000.00",
-    "quantity": "0.001"
+    "side": "BUY",          // BUY | SELL (SCREAMING_CASE)
+    "type": "LIMIT",        // LIMIT | MARKET (SCREAMING_CASE)
+    "price": "85000.00",    // LIMIT 订单必填
+    "qty": "0.001"          // 数量 (统一使用 qty)
 }
 
 // Response (202 Accepted)
 {
     "order_id": 1001,
     "cid": "my-order-001",
-    "status": "ACCEPTED",
+    "status": "ACCEPTED",   // ACCEPTED | REJECTED (SCREAMING_CASE)
     "accepted_at": 1734533784000
 }
 ```
@@ -203,7 +203,7 @@ async fn submit_order(order: OrderRequest) -> Result<OrderResponse, ApiError> {
 // Response (200 OK)
 {
     "order_id": 1001,
-    "status": "CANCEL_PENDING"
+    "status": "CANCEL_PENDING"  // SCREAMING_CASE
 }
 ```
 
@@ -231,6 +231,27 @@ async fn submit_order(order: OrderRequest) -> Result<OrderResponse, ApiError> {
 | `ORDER_NOT_FOUND` | 404 | 订单不存在 |
 | `RATE_LIMITED` | 429 | 请求过于频繁 |
 | `INTERNAL_ERROR` | 500 | 服务器内部错误 |
+
+### 3.4 API 规范遵循
+
+> **重要**: Gateway API 必须遵循 [API Conventions](./api-conventions.md) 规范
+
+**关键规则**:
+
+1. **枚举值使用 SCREAMING_CASE**
+   - `side`: `"BUY"` | `"SELL"` (不是 `"buy"` 或 `"Buy"`)
+   - `type`: `"LIMIT"` | `"MARKET"`
+   - `status`: `"ACCEPTED"` | `"REJECTED"` | `"CANCEL_PENDING"`
+
+2. **字段命名一致性**
+   - 使用 `qty` 而不是 `quantity` (与内部 `InternalOrder` 一致)
+   - 使用 `cid` 作为 `client_order_id` 的简写
+
+3. **错误码使用 SCREAMING_SNAKE_CASE**
+   - `INVALID_PARAMETER`, `INSUFFICIENT_BALANCE`, `RATE_LIMITED`
+
+**参考**: 与 Binance/FTX/OKX 等主流交易所 API 保持一致
+
 
 ---
 
@@ -490,15 +511,15 @@ pub struct CreateOrderRequest {
     pub cid: Option<String>,
     /// 交易对
     pub symbol: String,
-    /// 买卖方向: "BUY" | "SELL"
+    /// 买卖方向: "BUY" | "SELL" (SCREAMING_CASE)
     pub side: String,
-    /// 订单类型: "LIMIT" | "MARKET"
+    /// 订单类型: "LIMIT" | "MARKET" (SCREAMING_CASE)
     #[serde(rename = "type")]
     pub order_type: String,
     /// 价格 (LIMIT 订单必填)
     pub price: Option<String>,
-    /// 数量
-    pub quantity: String,
+    /// 数量 (统一使用 qty)
+    pub qty: String,
 }
 
 /// 取消订单请求
@@ -513,7 +534,8 @@ pub struct OrderResponse {
     pub order_id: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cid: Option<String>,
-    pub status: String, // "ACCEPTED" | "REJECTED"
+    /// 状态: "ACCEPTED" | "REJECTED" (SCREAMING_CASE)
+    pub status: String,
     pub accepted_at: u64, // Unix timestamp (ms)
 }
 
@@ -575,7 +597,7 @@ impl AppState {
 
 **职责**:
 1. 解析 JSON 请求体
-2. 验证参数 (symbol, side, type, price, quantity)
+2. 验证参数 (symbol, side, type, price, qty)
 3. 从 Header 提取 `X-User-ID`
 4. 转换 decimal 字符串为 u64
 5. 生成 order_id
@@ -742,7 +764,7 @@ curl -X POST http://localhost:8080/api/v1/create_order \
     "side": "BUY",
     "type": "LIMIT",
     "price": "85000.00",
-    "quantity": "0.001"
+    "qty": "0.001"
   }'
 
 # 3. 取消订单
