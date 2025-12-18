@@ -98,13 +98,24 @@ pub enum OrderAction {
 pub enum PreTradeResult {
     /// Order accepted, balance locked, ready for matching
     Accepted(ValidOrder),
-    /// Order rejected with reason
-    Rejected {
-        seq_id: u64,
-        order_id: u64,
-        user_id: u64,
-        reason: RejectReason,
-    },
+    /// Order rejected (not enough balance, invalid, etc.)
+    Rejected(RejectReason),
+}
+
+/// Generic container for pipeline services/resources
+///
+/// Can hold owned objects (MT) or mutable references (Single-Thread).
+pub struct PipelineServices<U, B, L> {
+    pub ubscore: U,
+    pub book: B,
+    pub ledger: L,
+}
+
+/// Common configuration for both pipeline modes
+pub struct PipelineConfig<'a> {
+    pub symbol_mgr: &'a crate::symbol_manager::SymbolManager,
+    pub active_symbol_id: u32,
+    pub sample_rate: usize,
 }
 
 /// Action for ME thread (UBSCore → ME)

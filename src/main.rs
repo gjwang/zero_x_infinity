@@ -225,15 +225,19 @@ fn main() {
         // Clone orders for multi-thread (takes ownership)
         let orders_owned: Vec<_> = orders.iter().cloned().collect();
 
-        // Run multi-threaded pipeline (consumes ubscore, book, ledger)
+        // Run multi-threaded pipeline (consumes services)
         let result = run_pipeline_multi_thread(
             orders_owned,
-            ubscore,
-            book,
-            ledger,
-            &symbol_mgr,
-            active_symbol_id,
-            app_config.sample_rate,
+            zero_x_infinity::pipeline::PipelineServices {
+                ubscore,
+                book,
+                ledger,
+            },
+            zero_x_infinity::pipeline::PipelineConfig {
+                symbol_mgr: &symbol_mgr,
+                active_symbol_id,
+                sample_rate: app_config.sample_rate,
+            },
         );
 
         // Print stats (use snapshot to get place/cancel counts)
@@ -312,12 +316,16 @@ fn main() {
         // Run pipeline
         let result = run_pipeline_single_thread(
             &orders,
-            &mut ubscore,
-            &mut book,
-            &mut ledger,
-            &symbol_mgr,
-            active_symbol_id,
-            app_config.sample_rate,
+            zero_x_infinity::pipeline::PipelineServices {
+                ubscore: &mut ubscore,
+                book: &mut book,
+                ledger: &mut ledger,
+            },
+            zero_x_infinity::pipeline::PipelineConfig {
+                symbol_mgr: &symbol_mgr,
+                active_symbol_id,
+                sample_rate: app_config.sample_rate,
+            },
         );
 
         // Get final accounts from UBSCore
@@ -401,12 +409,16 @@ fn main() {
         // Run pipeline
         let result = run_pipeline_single_thread(
             &orders,
-            &mut ubscore,
-            &mut book,
-            &mut ledger,
-            &symbol_mgr,
-            active_symbol_id,
-            app_config.sample_rate,
+            zero_x_infinity::pipeline::PipelineServices {
+                ubscore: &mut ubscore,
+                book: &mut book,
+                ledger: &mut ledger,
+            },
+            zero_x_infinity::pipeline::PipelineConfig {
+                symbol_mgr: &symbol_mgr,
+                active_symbol_id,
+                sample_rate: app_config.sample_rate,
+            },
         );
 
         // Get final accounts from UBSCore
@@ -471,12 +483,16 @@ fn main() {
 
         let result = run_pipeline_single_thread(
             &orders,
-            &mut ubscore,
-            &mut book,
-            &mut ledger,
-            &symbol_mgr,
-            active_symbol_id,
-            app_config.sample_rate,
+            zero_x_infinity::pipeline::PipelineServices {
+                ubscore: &mut ubscore,
+                book: &mut book,
+                ledger: &mut ledger,
+            },
+            zero_x_infinity::pipeline::PipelineConfig {
+                symbol_mgr: &symbol_mgr,
+                active_symbol_id,
+                sample_rate: app_config.sample_rate,
+            },
         );
 
         (
