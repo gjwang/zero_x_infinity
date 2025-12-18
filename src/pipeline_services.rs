@@ -255,3 +255,242 @@ impl UBSCoreService {
         self.ubscore
     }
 }
+
+// ============================================================
+// MATCHING SERVICE
+// ============================================================
+
+use crate::engine::MatchingEngine;
+use crate::messages::TradeEvent;
+use crate::models::{OrderStatus, OrderType, Side};
+use crate::orderbook::OrderBook;
+use crate::pipeline::{BalanceUpdateRequest, PriceImprovement};
+use crate::pipeline_mt::MarketContext;
+
+// Logging macros (matching pipeline_mt.rs)
+const TARGET_ME: &str = "0XINFI::ME";
+const LOG_ORDER: &str = "ORDER";
+const LOG_CANCEL: &str = "CANCEL";
+
+macro_rules! p_info {
+    ($target:expr, $($arg:tt)+) => {
+        tracing::info!(target: $target, $($arg)+);
+    }
+}
+
+macro_rules! p_span {
+    ($target:expr, $name:expr, $($arg:tt)*) => {
+        tracing::info_span!(target: $target, $name, $($arg)*)
+    }
+}
+
+/// Service that handles matching engine processing.
+///
+/// Processes valid orders through the matching engine and generates trades.
+pub struct MatchingService {
+    book: OrderBook,
+    queues: Arc<MultiThreadQueues>,
+    stats: Arc<PipelineStats>,
+    market: MarketContext,
+}
+
+impl MatchingService {
+    pub fn new(
+        book: OrderBook,
+        queues: Arc<MultiThreadQueues>,
+        stats: Arc<PipelineStats>,
+        market: MarketContext,
+    ) -> Self {
+        Self {
+            book,
+            queues,
+            stats,
+            market,
+        }
+    }
+
+    /// Run the matching service (MT blocking mode)
+    pub fn run(&mut self, shutdown: &ShutdownSignal) {
+        let mut spin_count = 0u32;
+
+        loop {
+            let mut did_work = false;
+
+            if let Some(action) = self.queues.action_queue.pop() {
+                did_work = true;
+                let task_start = Instant::now();
+
+                match action {
+                    ValidAction::Order(valid_order) => {
+                        let span =
+                            p_span!(TARGET_ME, LOG_ORDER, order_id = valid_order.order.order_id);
+                        let _enter = span.enter();
+
+                        // Match order
+                        let result = MatchingEngine::process_order(
+                            &mut self.book,
+                            valid_order.order.clone(),
+                        );
+
+                        p_info!(
+                            TARGET_ME,
+                            trades = result.trades.len(),
+                            "Matching completed"
+                        );
+
+                        // Fan-out: Send Trade Events to BOTH Settlement AND UBSCore
+                        for trade in &result.trades {
+                            let trade_event = TradeEvent::new(
+                                trade.clone(),
+                                if valid_order.order.side == Side::Buy {
+                                    trade.buyer_order_id
+                                } else {
+                                    trade.seller_order_id
+                                },
+                                if valid_order.order.side == Side::Buy {
+                                    trade.seller_order_id
+                                } else {
+                                    trade.buyer_order_id
+                                },
+                                valid_order.order.side,
+                                self.market.base_id,
+                                self.market.quote_id,
+                                self.market.qty_unit,
+                                valid_order.ingested_at_ns,
+                            );
+
+                            // Calculate price improvement for buy orders
+                            let price_improvement = if valid_order.order.side == Side::Buy
+                                && valid_order.order.order_type == OrderType::Limit
+                                && valid_order.order.price > trade.price
+                            {
+                                let diff = valid_order.order.price - trade.price;
+                                let refund = diff * trade.qty / self.market.qty_unit;
+                                if refund > 0 {
+                                    Some(PriceImprovement {
+                                        user_id: valid_order.order.user_id,
+                                        asset_id: self.market.quote_id,
+                                        amount: refund,
+                                    })
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            };
+
+                            // [1] Send to Settlement (for persistence) - trade_queue
+                            loop {
+                                match self.queues.trade_queue.push(trade_event.clone()) {
+                                    Ok(()) => break,
+                                    Err(_) => {
+                                        self.stats.incr_backpressure();
+                                        std::hint::spin_loop();
+                                    }
+                                }
+                            }
+
+                            // [2] Send to UBSCore (for balance update) - balance_update_queue
+                            let balance_update = BalanceUpdateRequest::Trade {
+                                trade_event,
+                                price_improvement,
+                            };
+                            loop {
+                                match self
+                                    .queues
+                                    .balance_update_queue
+                                    .push(balance_update.clone())
+                                {
+                                    Ok(()) => break,
+                                    Err(_) => {
+                                        self.stats.incr_backpressure();
+                                        std::hint::spin_loop();
+                                    }
+                                }
+                            }
+
+                            self.stats.add_trades(1);
+                            self.stats.record_trades(1);
+                        }
+                    }
+                    ValidAction::Cancel {
+                        order_id,
+                        user_id,
+                        ingested_at_ns,
+                    } => {
+                        let span = p_span!(
+                            TARGET_ME,
+                            LOG_CANCEL,
+                            order_id = order_id,
+                            user_id = user_id
+                        );
+                        let _enter = span.enter();
+                        // Cancel order: remove from book
+                        if let Some(mut cancelled_order) = self.book.remove_order_by_id(order_id) {
+                            cancelled_order.status = OrderStatus::CANCELED;
+                            let remaining_qty = cancelled_order.remaining_qty();
+
+                            if remaining_qty > 0 {
+                                // Calculate unlock amount
+                                let mut temp_order = cancelled_order.clone();
+                                temp_order.qty = remaining_qty;
+                                let unlock_amount =
+                                    temp_order.calculate_cost(self.market.qty_unit).unwrap_or(0);
+                                let lock_asset_id = match cancelled_order.side {
+                                    Side::Buy => self.market.quote_id,
+                                    Side::Sell => self.market.base_id,
+                                };
+
+                                // Send cancel result to UBSCore for unlock
+                                let cancel_update = BalanceUpdateRequest::Cancel {
+                                    order_id,
+                                    user_id,
+                                    asset_id: lock_asset_id,
+                                    unlock_amount,
+                                    ingested_at_ns,
+                                };
+                                loop {
+                                    match self
+                                        .queues
+                                        .balance_update_queue
+                                        .push(cancel_update.clone())
+                                    {
+                                        Ok(()) => break,
+                                        Err(_) => {
+                                            self.stats.incr_backpressure();
+                                            std::hint::spin_loop();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                self.stats
+                    .add_matching_time(task_start.elapsed().as_nanos() as u64);
+            }
+
+            // Check for shutdown
+            if shutdown.is_shutdown_requested() && self.queues.action_queue.is_empty() {
+                break;
+            }
+
+            if !did_work {
+                spin_count += 1;
+                if spin_count > IDLE_SPIN_LIMIT {
+                    std::thread::sleep(IDLE_SLEEP_US);
+                    spin_count = 0;
+                } else {
+                    std::hint::spin_loop();
+                }
+            } else {
+                spin_count = 0;
+            }
+        }
+    }
+
+    /// Consume the service and return the inner OrderBook
+    pub fn into_inner(self) -> OrderBook {
+        self.book
+    }
+}
