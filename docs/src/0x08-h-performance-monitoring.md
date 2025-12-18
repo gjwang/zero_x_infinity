@@ -1,5 +1,7 @@
 # 0x08-h 性能监控与架构可观测性 (Performance Monitoring & Observability)
 
+> **📦 代码变更**: [查看分支](https://github.com/gjwang/zero_x_infinity/tree/0x08-h-performance-monitoring) | [关键文件: pipeline_services.rs](https://github.com/gjwang/zero_x_infinity/blob/main/src/pipeline_services.rs)
+
 在构建高性能低延迟交易系统时，"如果你无法测量它，你就无法优化它"。本章重点在于为我们的多线程 Pipeline 引入生产级的性能监控和延迟指标分析。
 
 ## 监控维度
