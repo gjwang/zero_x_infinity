@@ -143,6 +143,31 @@ fn main() {
         );
         println!("Order queue size: {}", gateway_config.queue_size);
 
+        // Initialize TDengine client if persistence is enabled
+        let db_client = if app_config.persistence.enabled {
+            println!("\n[Persistence] Connecting to TDengine...");
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let client = rt.block_on(async {
+                let client = zero_x_infinity::persistence::TDengineClient::connect(
+                    &app_config.persistence.tdengine_dsn,
+                )
+                .await
+                .expect("Failed to connect to TDengine");
+
+                client
+                    .init_schema()
+                    .await
+                    .expect("Failed to initialize schema");
+
+                client
+            });
+            println!("✅ TDengine connected and schema initialized");
+            Some(std::sync::Arc::new(client))
+        } else {
+            println!("\n[Persistence] Disabled (set persistence.enabled=true to enable)");
+            None
+        };
+
         // Create shared queues
         let queues = std::sync::Arc::new(zero_x_infinity::MultiThreadQueues::new());
         let symbol_mgr = std::sync::Arc::new(symbol_mgr);
@@ -150,6 +175,7 @@ fn main() {
         // Start HTTP Server in separate thread with tokio runtime
         let queues_clone = queues.clone();
         let symbol_mgr_clone = symbol_mgr.clone();
+        let db_client_clone = db_client.clone();
         let gateway_thread = std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().unwrap();
             rt.block_on(async {
@@ -158,6 +184,7 @@ fn main() {
                     queues_clone.order_queue.clone(),
                     symbol_mgr_clone,
                     active_symbol_id,
+                    db_client_clone,
                 )
                 .await;
             });

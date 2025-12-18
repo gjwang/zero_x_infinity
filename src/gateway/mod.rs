@@ -12,6 +12,7 @@ use tokio::net::TcpListener;
 use crate::symbol_manager::SymbolManager;
 use crossbeam_queue::ArrayQueue;
 
+use crate::persistence::TDengineClient;
 use crate::pipeline::OrderAction;
 use state::AppState;
 
@@ -21,13 +22,14 @@ pub async fn run_server(
     order_queue: Arc<ArrayQueue<OrderAction>>,
     symbol_mgr: Arc<SymbolManager>,
     active_symbol_id: u32,
+    db_client: Option<Arc<TDengineClient>>,
 ) {
-    // 创建共享状态 (暂时不连接数据库)
+    // 创建共享状态
     let state = Arc::new(AppState::new(
         order_queue,
         symbol_mgr,
         active_symbol_id,
-        None,
+        db_client,
     ));
 
     // 创建路由
