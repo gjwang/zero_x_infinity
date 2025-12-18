@@ -39,23 +39,23 @@ use std::thread::{self, JoinHandle};
 use std::time::Instant;
 use tracing::error;
 
-// High-frequency lifecycle logs are sent to "0XINFI" target
-// This allows them to be toggled globally via tracing-subscriber filter
+// High-frequency lifecycle logs are sent to hierarchical targets under "0XINFI"
+// Example: "0XINFI::ME", "0XINFI::UBSC". This allows per-service toggling.
 macro_rules! p_info {
-    ($($arg:tt)+) => {
-        tracing::info!(target: "0XINFI", $($arg)+);
+    ($target:expr, $($arg:tt)+) => {
+        tracing::info!(target: $target, $($arg)+);
     }
 }
 
 macro_rules! p_span {
-    ($name:expr, $($arg:tt)*) => {
-        tracing::info_span!(target: "0XINFI", $name, $($arg)*)
+    ($target:expr, $name:expr, $($arg:tt)*) => {
+        tracing::info_span!(target: $target, $name, $($arg)*)
     }
 }
 
-use crate::csv_io::InputOrder;
+use crate::csv_io::{ACTION_CANCEL, ACTION_PLACE, InputOrder};
 use crate::engine::MatchingEngine;
-use crate::ledger::{LedgerEntry, LedgerWriter};
+use crate::ledger::{LedgerEntry, LedgerWriter, OP_CREDIT, OP_DEBIT};
 use crate::messages::{BalanceEvent, TradeEvent};
 use crate::models::{InternalOrder, OrderStatus, OrderType, Side};
 use crate::orderbook::OrderBook;
@@ -67,6 +67,22 @@ use crate::symbol_manager::SymbolManager;
 use crate::ubscore::UBSCore;
 use crate::user_account::UserAccount;
 use rustc_hash::FxHashMap;
+
+// ============================================================
+// LOGGING & PERFORMANCE CONSTANTS
+// ============================================================
+
+const TARGET_ME: &str = "0XINFI::ME";
+const TARGET_UBSC: &str = "0XINFI::UBSC";
+const TARGET_PERS: &str = "0XINFI::PERS";
+
+const LOG_ORDER: &str = "ORDER";
+const LOG_CANCEL: &str = "CANCEL";
+const LOG_SETTLE: &str = "SETTLE";
+const LOG_TRADE: &str = "TRADE";
+
+const SPIN_THRESHOLD: u32 = 100;
+const REJECT_LOG_LIMIT: u64 = 10;
 
 // ============================================================
 // MULTI-THREAD PIPELINE RESULT
@@ -135,7 +151,7 @@ pub fn run_pipeline_multi_thread(
             let ingested_at_ns = Instant::now().duration_since(_start_time).as_nanos() as u64;
 
             // Create OrderAction based on input action type
-            let action = if input.action == "cancel" {
+            let action = if input.action == ACTION_CANCEL {
                 // Cancel order - no seq needed, just pass order_id
                 ingestion_stats.incr_cancel();
                 ingestion_stats.record_cancel();
@@ -148,6 +164,7 @@ pub fn run_pipeline_multi_thread(
                 // Place order - assign sequence number
                 ingestion_stats.incr_place();
                 ingestion_stats.record_place();
+                let _ = ACTION_PLACE; // Suppress unused warning if it happens
                 seq_counter += 1;
                 let mut order = InternalOrder::new_with_time(
                     input.order_id,
@@ -231,7 +248,8 @@ pub fn run_pipeline_multi_thread(
                     } => {
                         let trade = &trade_event.trade;
                         let span = p_span!(
-                            "SETTLE",
+                            TARGET_UBSC,
+                            LOG_SETTLE,
                             trade_id = trade.trade_id,
                             buyer = trade.buyer_user_id,
                             seller = trade.seller_user_id
@@ -244,7 +262,7 @@ pub fn run_pipeline_multi_thread(
                         if let Err(e) = ubscore.settle_trade(&trade_event) {
                             error!(error = ?e, "Trade settlement failed");
                         } else {
-                            p_info!("Trade settled");
+                            p_info!(TARGET_UBSC, "Trade settled");
                             // Generate BalanceEvents for settlement
                             let quote_amount = trade_event.quote_amount();
 
@@ -364,7 +382,7 @@ pub fn run_pipeline_multi_thread(
                         unlock_amount,
                         ingested_at_ns,
                     } => {
-                        let span = p_span!("CNCL", order_id, user_id);
+                        let span = p_span!(TARGET_UBSC, LOG_CANCEL, order_id, user_id);
                         let _enter = span.enter();
                         // Unlock balance for cancelled order
                         if let Err(e) = ubscore.unlock(user_id, asset_id, unlock_amount) {
@@ -410,8 +428,12 @@ pub fn run_pipeline_multi_thread(
                     OrderAction::Place(seq_order) => {
                         // Place order: lock balance, send to ME
                         let order = seq_order.order.clone();
-                        let span =
-                            p_span!("UBSC", order_id = order.order_id, user_id = order.user_id);
+                        let span = p_span!(
+                            TARGET_UBSC,
+                            LOG_ORDER,
+                            order_id = order.order_id,
+                            user_id = order.user_id
+                        );
                         let _enter = span.enter();
 
                         let order_id = order.order_id;
@@ -460,7 +482,7 @@ pub fn run_pipeline_multi_thread(
                                         }
                                     }
                                 }
-                                p_info!("Order pre-checked and locked");
+                                p_info!(TARGET_UBSC, "Order pre-checked and locked");
                                 ubscore_stats.incr_accepted();
                             }
                             Err(reason) => {
@@ -474,7 +496,7 @@ pub fn run_pipeline_multi_thread(
                                     std::sync::atomic::AtomicU64::new(0);
                                 let count = REJECT_LOG_COUNT
                                     .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                                if count < 10 {
+                                if count < REJECT_LOG_LIMIT {
                                     let lock_asset = if seq_order.order.side == Side::Buy {
                                         quote_id
                                     } else {
@@ -538,7 +560,7 @@ pub fn run_pipeline_multi_thread(
             // Spin/yield if no work
             if !did_work {
                 spin_count += 1;
-                if spin_count > 100 {
+                if spin_count > SPIN_THRESHOLD {
                     thread::yield_now();
                     spin_count = 0;
                 } else {
@@ -571,14 +593,19 @@ pub fn run_pipeline_multi_thread(
 
                 match action {
                     ValidAction::Order(valid_order) => {
-                        let span = p_span!("ME", order_id = valid_order.order.order_id);
+                        let span =
+                            p_span!(TARGET_ME, LOG_ORDER, order_id = valid_order.order.order_id);
                         let _enter = span.enter();
 
                         // Match order
                         let result =
                             MatchingEngine::process_order(&mut book, valid_order.order.clone());
 
-                        p_info!(trades = result.trades.len(), "Matching completed");
+                        p_info!(
+                            TARGET_ME,
+                            trades = result.trades.len(),
+                            "Matching completed"
+                        );
 
                         // Fan-out: Send Trade Events to BOTH Settlement AND UBSCore
                         for trade in &result.trades {
@@ -656,6 +683,13 @@ pub fn run_pipeline_multi_thread(
                         user_id,
                         ingested_at_ns,
                     } => {
+                        let span = p_span!(
+                            TARGET_ME,
+                            LOG_CANCEL,
+                            order_id = order_id,
+                            user_id = user_id
+                        );
+                        let _enter = span.enter();
                         // Cancel order: remove from book
                         if let Some(mut cancelled_order) = book.remove_order_by_id(order_id) {
                             cancelled_order.status = OrderStatus::CANCELED;
@@ -706,7 +740,7 @@ pub fn run_pipeline_multi_thread(
             // Spin/yield if no work
             if !did_work {
                 spin_count += 1;
-                if spin_count > 100 {
+                if spin_count > SPIN_THRESHOLD {
                     thread::yield_now();
                     spin_count = 0;
                 } else {
@@ -756,7 +790,8 @@ pub fn run_pipeline_multi_thread(
 
                 let trade = &trade_event.trade;
                 let span = p_span!(
-                    "PERS",
+                    TARGET_PERS,
+                    LOG_TRADE,
                     trade_id = trade.trade_id,
                     buyer = trade.buyer_user_id,
                     seller = trade.seller_user_id
@@ -771,7 +806,7 @@ pub fn run_pipeline_multi_thread(
                     trade_id: trade.trade_id,
                     user_id: trade.buyer_user_id,
                     asset_id: trade_event.quote_asset_id,
-                    op: "debit",
+                    op: OP_DEBIT,
                     delta: trade_cost,
                     balance_after: 0, // Not tracked in this format
                 });
@@ -779,7 +814,7 @@ pub fn run_pipeline_multi_thread(
                     trade_id: trade.trade_id,
                     user_id: trade.buyer_user_id,
                     asset_id: trade_event.base_asset_id,
-                    op: "credit",
+                    op: OP_CREDIT,
                     delta: trade.qty,
                     balance_after: 0,
                 });
@@ -789,7 +824,7 @@ pub fn run_pipeline_multi_thread(
                     trade_id: trade.trade_id,
                     user_id: trade.seller_user_id,
                     asset_id: trade_event.base_asset_id,
-                    op: "debit",
+                    op: OP_DEBIT,
                     delta: trade.qty,
                     balance_after: 0,
                 });
@@ -797,11 +832,11 @@ pub fn run_pipeline_multi_thread(
                     trade_id: trade.trade_id,
                     user_id: trade.seller_user_id,
                     asset_id: trade_event.quote_asset_id,
-                    op: "credit",
+                    op: OP_CREDIT,
                     delta: trade_cost,
                     balance_after: 0,
                 });
-                p_info!("Settlement persisted to ledger");
+                p_info!(TARGET_PERS, "Settlement persisted to ledger");
                 settlement_stats.add_event_log_time(task_start.elapsed().as_nanos() as u64);
             }
 
@@ -816,7 +851,7 @@ pub fn run_pipeline_multi_thread(
             // Spin/yield if no work
             if !did_work {
                 spin_count += 1;
-                if spin_count > 100 {
+                if spin_count > SPIN_THRESHOLD {
                     thread::yield_now();
                     spin_count = 0;
                 } else {
