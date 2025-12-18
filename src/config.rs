@@ -10,6 +10,14 @@ pub struct AppConfig {
     pub rotation: String,
     pub sample_rate: usize,
     pub enable_tracing: bool,
+    pub gateway: GatewayConfig,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct GatewayConfig {
+    pub host: String,
+    pub port: u16,
+    pub queue_size: usize,
 }
 
 impl AppConfig {
