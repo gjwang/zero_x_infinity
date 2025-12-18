@@ -194,6 +194,7 @@ pub async fn get_order(
         db_client.taos(),
         order_id,
         state.active_symbol_id,
+        &state.symbol_mgr,
     )
     .await
     {
@@ -264,6 +265,7 @@ pub async fn get_orders(
         user_id,
         state.active_symbol_id,
         limit,
+        &state.symbol_mgr,
     )
     .await
     {
@@ -309,8 +311,13 @@ pub async fn get_trades(
         .unwrap_or(100);
 
     // Query trades from TDengine
-    match crate::persistence::queries::query_trades(db_client.taos(), state.active_symbol_id, limit)
-        .await
+    match crate::persistence::queries::query_trades(
+        db_client.taos(),
+        state.active_symbol_id,
+        limit,
+        &state.symbol_mgr,
+    )
+    .await
     {
         Ok(trades) => Ok((StatusCode::OK, Json(ApiResponse::success(trades)))),
         Err(e) => Err((
@@ -375,7 +382,14 @@ pub async fn get_balances(
         })?;
 
     // Query balance from TDengine
-    match crate::persistence::queries::query_balance(db_client.taos(), user_id, asset_id).await {
+    match crate::persistence::queries::query_balance(
+        db_client.taos(),
+        user_id,
+        asset_id,
+        &state.symbol_mgr,
+    )
+    .await
+    {
         Ok(Some(balance)) => Ok((StatusCode::OK, Json(ApiResponse::success(balance)))),
         Ok(None) => Err((
             StatusCode::NOT_FOUND,
