@@ -63,9 +63,59 @@ pub enum OrderStatus {
 
 ---
 
-## 2. 参考：Binance API 规范
+## 2. 参数命名一致性
 
-### 2.1 Order Status
+### 2.1 核心原则
+
+**保持前后一致，减少转换的认知代价**
+
+所有 API（HTTP、WebSocket、内部消息）应使用统一的字段名，避免同一概念有多个名称。
+
+### 2.2 标准字段名
+
+| 概念 | 标准名称 | ❌ 避免使用 | 说明 |
+|------|----------|------------|------|
+| 数量 | `qty` | `quantity`, `amount`, `size` | 与 `InternalOrder.qty` 一致 |
+| 价格 | `price` | `px`, `prc` | 清晰明确 |
+| 订单ID | `order_id` | `orderId`, `oid` | snake_case |
+| 用户ID | `user_id` | `userId`, `uid` | snake_case |
+| 交易ID | `trade_id` | `tradeId`, `tid` | snake_case |
+| 客户端订单ID | `cid` | `client_order_id`, `clOrdId` | 简短但明确 |
+| 交易对 | `symbol` | `pair`, `market` | 行业标准 |
+
+### 2.3 命名风格
+
+- **JSON API**: 使用 `snake_case` (与 Rust 字段名一致)
+  ```json
+  {
+    "order_id": 1001,
+    "user_id": 1001,
+    "qty": "0.001"
+  }
+  ```
+
+- **内部 Rust 结构**: 使用 `snake_case`
+  ```rust
+  pub struct InternalOrder {
+      pub order_id: u64,
+      pub user_id: u64,
+      pub qty: u64,
+  }
+  ```
+
+### 2.4 缩写规则
+
+**何时使用缩写**:
+- ✅ 行业通用缩写: `qty` (quantity), `cid` (client_order_id)
+- ✅ 高频使用字段: `qty` 比 `quantity` 更简洁
+- ❌ 避免自创缩写: 不要用 `ord` 代替 `order`
+
+---
+
+## 3. 参考：Binance API 规范
+
+
+### 3.1 Order Status
 
 | Status | 说明 |
 |--------|------|
@@ -78,7 +128,7 @@ pub enum OrderStatus {
 | `EXPIRED` | 订单过期（GTD/IOC/FOK）|
 | `EXPIRED_IN_MATCH` | STP 导致过期 |
 
-### 2.2 Order Type
+### 3.2 Order Type
 
 | Type | 说明 |
 |------|------|
@@ -90,7 +140,7 @@ pub enum OrderStatus {
 | `TAKE_PROFIT_LIMIT` | 限价止盈单 |
 | `LIMIT_MAKER` | 只做 Maker 单 |
 
-### 2.3 Time In Force
+### 3.3 Time In Force
 
 | TIF | 说明 |
 |-----|------|
@@ -102,7 +152,7 @@ pub enum OrderStatus {
 
 ---
 
-## 3. JSON 序列化
+## 4. JSON 序列化
 
 建议使用 `serde` 的 `rename_all` 来自动处理：
 
@@ -122,8 +172,9 @@ pub enum OrderStatus {
 
 ---
 
-## 4. 变更历史
+## 5. 变更历史
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
 | 0.8d | 2025-12-17 | 初始规范：OrderStatus 改为 SCREAMING_CASE |
+| 0.9a | 2025-12-19 | 新增参数命名一致性规范 (Section 2) |
