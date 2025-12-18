@@ -72,19 +72,19 @@ cargo run --release -- --pipeline-mt --input fixtures/test_with_cancel_highbal
 | **UBSCore** | `SETTLE` (Upd) | 0.04s | 0.2% | 0.03 µs | 33.3M ops/s |
 | **Persistence** | `TRADE` (Ledger) | 0.52s | 2.7% | 0.40 µs | 2.50M ops/s |
 
-### 2. 多线程流水线 (Multi-Thread Pipeline)
+### 2. 多线程流水线 (Multi-Thread Pipeline) - 服务化重构后
 
-*   **吞吐量**: ~74,000 orders/sec
-*   **端到端延迟 (P50)**: 122,853,375 ns (~122 ms)
+*   **吞吐量**: ~64,450 orders/sec
+*   **端到端延迟 (P50)**: 112,862,875 ns (~113 ms)
 *   **端到端延迟 (P99)**: 188 ms
 *   **架构耗时与吞吐量 (模块级分析)**:
 
 | 服务 (Service) | 模块 / 关键 Span | 任务总耗时 | 耗时占比 | 单笔延迟 (Latency) | 理论吞吐上限 (Throughput) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **UBSCore** | `ORDER` (Lock) | 14.69s | 43.0% | 11.30 µs | 88.5k ops/s |
-| **Matching Engine** | `ORDER` (Match) | 15.96s | 46.8% | 12.28 µs | 81.4k ops/s |
-| **UBSCore** | `SETTLE` (Upd) | 0.77s | 2.3% | 0.59 µs | 1.69M ops/s |
-| **Persistence** | `TRADE` (Ledger) | 2.70s | 7.9% | 2.08 µs | 481k ops/s |
+| **UBSCore** | `ORDER` (Lock) | 0.00s | 0.0% | 0.00 µs | N/A |
+| **Matching Engine** | `ORDER` (Match) | 19.23s | 76.6% | 19.23 µs | 52.0k ops/s |
+| **UBSCore** | `SETTLE` (Upd) | 0.51s | 2.0% | 0.76 µs | 1.31M ops/s |
+| **Persistence** | `TRADE` (Ledger) | 5.35s | 21.3% | 4.12 µs | 242.9k ops/s |
 
 ### 分析结论
 
