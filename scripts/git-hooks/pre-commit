@@ -1,0 +1,23 @@
+#!/bin/bash
+# Pre-commit hook: run cargo fmt and cargo test before commit
+
+# Run cargo fmt check
+if ! cargo fmt --check > /dev/null 2>&1; then
+    echo "❌ Code not formatted. Running cargo fmt..."
+    cargo fmt
+    echo ""
+    echo "Files formatted. Please stage changes and commit again:"
+    echo "  git add -A && git commit"
+    exit 1
+fi
+
+echo "✅ Code formatting OK"
+
+# Run cargo test
+echo "🧪 Running tests..."
+if ! cargo test --quiet 2>&1 | tail -5; then
+    echo "❌ Tests failed. Please fix before committing."
+    exit 1
+fi
+
+echo "✅ All tests passed"
