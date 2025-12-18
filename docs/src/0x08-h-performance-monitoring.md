@@ -63,14 +63,14 @@ cargo run --release -- --pipeline-mt --input fixtures/test_with_cancel_highbal
 
 ### 1. 单线程流水线 (Single-Thread Pipeline)
 
-*   **吞吐量**: ~210,000 orders/sec
-*   **端到端延迟 (P50)**: 1.25 µs
-*   **端到端延迟 (P99)**: 196 µs
-*   **架构耗时占比**:
-    *   Pre-Trade: 5.6% (0.64 µs/order)
-    *   Matching: 91.5% (13.70 µs/order)
-    *   Settlement: 0.2%
-    *   Event Log: 2.7%
+*   **性能概览**: 210,000 orders/sec (P50: 1.25 µs)
+
+| 服务 (Service) | 模块 / 关键 Span | 任务总耗时 | 耗时占比 | 单笔延迟 (Latency) | 理论吞吐上限 (Throughput) |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **UBSCore** | `ORDER` (Lock) | 0.83s | 5.6% | 0.64 µs | 1.56M ops/s |
+| **Matching Engine** | `ORDER` (Match) | 17.81s | 91.5% | 13.70 µs | 73.0k ops/s |
+| **UBSCore** | `SETTLE` (Upd) | 0.04s | 0.2% | 0.03 µs | 33.3M ops/s |
+| **Persistence** | `TRADE` (Ledger) | 0.52s | 2.7% | 0.40 µs | 2.50M ops/s |
 
 ### 2. 多线程流水线 (Multi-Thread Pipeline)
 
@@ -81,10 +81,10 @@ cargo run --release -- --pipeline-mt --input fixtures/test_with_cancel_highbal
 
 | 服务 (Service) | 模块 / 关键 Span | 任务总耗时 | 耗时占比 | 单笔延迟 (Latency) | 理论吞吐上限 (Throughput) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **UBSCore** | `ORDER` (Lock Balance) | 14.69s | 43.0% | 11.30 µs | 88.5k ops/s |
-| **UBSCore** | `SETTLE` (Balance Upd) | 0.77s | 2.3% | 0.59 µs | 1.69M ops/s |
-| **Matching Engine** | `ORDER` (Matching) | 15.96s | 46.8% | 12.28 µs | 81.4k ops/s |
-| **Persistence** | `TRADE` (Ledger/Log) | 2.70s | 7.9% | 2.08 µs | 481k ops/s |
+| **UBSCore** | `ORDER` (Lock) | 14.69s | 43.0% | 11.30 µs | 88.5k ops/s |
+| **Matching Engine** | `ORDER` (Match) | 15.96s | 46.8% | 12.28 µs | 81.4k ops/s |
+| **UBSCore** | `SETTLE` (Upd) | 0.77s | 2.3% | 0.59 µs | 1.69M ops/s |
+| **Persistence** | `TRADE` (Ledger) | 2.70s | 7.9% | 2.08 µs | 481k ops/s |
 
 ### 分析结论
 
@@ -92,7 +92,7 @@ cargo run --release -- --pipeline-mt --input fixtures/test_with_cancel_highbal
 2.  **瓶颈识别**: 
     - **ME (Matching Engine)** 依然是最大的串行瓶颈，吞吐上限最低（约 81k），直接限制了系统的整体吞吐量（~74k）。
     - **UBSCore (Pre-Trade)** 在多线程下因处理大量异步结算回调，从单线程的 0.6µs 衰减至 11µs，成为第二大瓶颈。
-3.  **延迟的代价**: 多线程引入了显著的消息传递开销和排队效应，导致端到端延迟从微秒级回退到了毫秒级。对于极低延迟交易，单线程自旋架构依然具有不可替代的优势。
+3.  **延迟的代价**: 多线程引入了显著的消息传递开销和排队效应，导致端到端延迟从微秒级回退到了毫秒级。
 
 ---
 
@@ -132,3 +132,14 @@ use_json: true         # 开启 JSON 以支持 ELK 集成
 ```
 
 这种设计确保了我们在排查线上复杂异常时有记录可查，而在正常运行时又能保持极致的性能。
+
+---
+
+## 结论：可观测性驱动开发
+
+通过本章的重构，我们建立了一套**数据驱动**的优化闭环：
+1.  **自动化报表**：引擎不再只是输出杂乱的日志，而是直接在控制台生成可以直接用于 Markdown 文档的性能表格（见 `src/perf.rs` 中的 `markdown_report` 实现）。
+2.  **瓶颈导向**：通过“理论吞吐上限”这一指标，开发人员可以瞬间识别出当前系统的最弱环节（如 ME），从而避免无效的优化。
+3.  **零损耗采样**：通过配置化的采样率，我们在不牺牲性能的前提下获得了 99 分位延迟的真实画像。
+
+在下一阶段的优化中，我们将深入 ME 内部，针对本章识别出的单笔执行耗时进行针对性的数据结构优化。
