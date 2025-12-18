@@ -6,105 +6,112 @@ use axum::{
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::pipeline::{OrderAction, SequencedOrder};
+use crate::pipeline::OrderAction;
 
 use super::state::AppState;
-use super::types::{CancelOrderRequest, ClientOrder, ErrorResponse, OrderResponse};
+use super::types::{ApiResponse, CancelOrderRequest, ClientOrder, OrderResponseData, error_codes};
 
+/// Create order endpoint
+///
 /// POST /api/v1/create_order
 pub async fn create_order(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Json(req): Json<ClientOrder>,
-) -> Result<(StatusCode, Json<OrderResponse>), (StatusCode, Json<ErrorResponse>)> {
+) -> Result<(StatusCode, Json<ApiResponse<OrderResponseData>>), (StatusCode, Json<ApiResponse<()>>)>
+{
     // 1. Extract user_id
     let user_id = extract_user_id(&headers)?;
 
     // 2. Validate and parse ClientOrder
-    let validated = super::types::validate_client_order(req, &state.symbol_mgr).map_err(|e| {
-        (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse::new("INVALID_PARAMETER", e)),
-        )
-    })?;
-
-    // 3. Generate order_id and timestamp
-    let order_id = state.next_order_id();
-    let now = now_ns();
-
-    // 4. Convert to InternalOrder
-    let cid = validated.cid.clone();
-    let order = validated
-        .into_internal_order(order_id, user_id, now)
-        .map_err(|e| {
+    let validated =
+        super::types::validate_client_order(req.clone(), &state.symbol_mgr).map_err(|e| {
             (
                 StatusCode::BAD_REQUEST,
-                Json(ErrorResponse::new("INVALID_PARAMETER", e)),
+                Json(ApiResponse::<()>::error(error_codes::INVALID_PARAMETER, e)),
             )
         })?;
 
-    // 5. Construct OrderAction
-    let action = OrderAction::Place(SequencedOrder::new(order_id, order, now));
+    // 3. Generate order_id and timestamp
+    let order_id = state.next_order_id();
+    let timestamp = now_ns();
 
-    // 6. Push to queue
-    state.order_queue.push(action).map_err(|_| {
-        (
+    // 4. Convert to InternalOrder
+    let internal_order = validated
+        .into_internal_order(order_id, user_id, timestamp)
+        .map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<()>::error(error_codes::INVALID_PARAMETER, e)),
+            )
+        })?;
+
+    // 5. Push to queue
+    let action = OrderAction::Place(crate::pipeline::SequencedOrder::new(
+        order_id,
+        internal_order,
+        timestamp,
+    ));
+    if state.order_queue.push(action).is_err() {
+        return Err((
             StatusCode::SERVICE_UNAVAILABLE,
-            Json(ErrorResponse::new(
-                "SERVICE_UNAVAILABLE",
+            Json(ApiResponse::<()>::error(
+                error_codes::SERVICE_UNAVAILABLE,
                 "Order queue is full, please try again later",
             )),
-        )
-    })?;
+        ));
+    }
 
-    // 7. Return response
+    // 6. Return response
     Ok((
         StatusCode::ACCEPTED,
-        Json(OrderResponse {
+        Json(ApiResponse::success(OrderResponseData {
             order_id,
-            cid,
-            status: "ACCEPTED".to_string(),
+            cid: req.cid,
+            order_status: "ACCEPTED".to_string(),
             accepted_at: now_ms(),
-        }),
+        })),
     ))
 }
 
+/// Cancel order endpoint
+///
 /// POST /api/v1/cancel_order
 pub async fn cancel_order(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Json(req): Json<CancelOrderRequest>,
-) -> Result<(StatusCode, Json<OrderResponse>), (StatusCode, Json<ErrorResponse>)> {
-    // 1. 提取 user_id
+) -> Result<(StatusCode, Json<ApiResponse<OrderResponseData>>), (StatusCode, Json<ApiResponse<()>>)>
+{
+    // 1. Extract user_id
     let user_id = extract_user_id(&headers)?;
 
-    // 2. 构造 OrderAction::Cancel
+    // 2. Push cancel action to queue
     let action = OrderAction::Cancel {
         order_id: req.order_id,
         user_id,
         ingested_at_ns: now_ns(),
     };
 
-    // 3. 推送到队列
-    state.order_queue.push(action).map_err(|_| {
-        (
+    if state.order_queue.push(action).is_err() {
+        return Err((
             StatusCode::SERVICE_UNAVAILABLE,
-            Json(ErrorResponse::new(
-                "SERVICE_UNAVAILABLE",
+            Json(ApiResponse::<()>::error(
+                error_codes::SERVICE_UNAVAILABLE,
                 "Order queue is full, please try again later",
             )),
-        )
-    })?;
+        ));
+    }
 
-    // 4. 返回响应
+    // 3. Return response
     Ok((
         StatusCode::OK,
-        Json(OrderResponse {
+        Json(ApiResponse::success(OrderResponseData {
             order_id: req.order_id,
             cid: None,
-            status: "CANCEL_PENDING".to_string(),
+            order_status: "CANCEL_PENDING".to_string(),
             accepted_at: now_ms(),
-        }),
+        })),
     ))
 }
 
@@ -113,15 +120,15 @@ pub async fn cancel_order(
 // ============================================================================
 
 /// Extract user_id from HTTP headers
-fn extract_user_id(headers: &HeaderMap) -> Result<u64, (StatusCode, Json<ErrorResponse>)> {
+fn extract_user_id(headers: &HeaderMap) -> Result<u64, (StatusCode, Json<ApiResponse<()>>)> {
     let user_id_str = headers
         .get("X-User-ID")
         .and_then(|v| v.to_str().ok())
         .ok_or_else(|| {
             (
                 StatusCode::UNAUTHORIZED,
-                Json(ErrorResponse::new(
-                    "UNAUTHORIZED",
+                Json(ApiResponse::<()>::error(
+                    error_codes::MISSING_AUTH,
                     "Missing X-User-ID header",
                 )),
             )
@@ -130,8 +137,8 @@ fn extract_user_id(headers: &HeaderMap) -> Result<u64, (StatusCode, Json<ErrorRe
     user_id_str.parse::<u64>().map_err(|_| {
         (
             StatusCode::BAD_REQUEST,
-            Json(ErrorResponse::new(
-                "INVALID_PARAMETER",
+            Json(ApiResponse::<()>::error(
+                error_codes::INVALID_PARAMETER,
                 "Invalid X-User-ID format",
             )),
         )
