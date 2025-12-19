@@ -79,3 +79,74 @@ pub enum PushEvent {
         frozen: u64,
     },
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ws_message_order_update_serialization() {
+        let msg = WsMessage::OrderUpdate {
+            order_id: 123,
+            symbol: "BTC_USDT".to_string(),
+            status: "FILLED".to_string(),
+            filled_qty: "0.100000".to_string(),
+            avg_price: Some("85000.00".to_string()),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+
+        // Verify type field uses dot notation
+        assert!(json.contains(r#""type":"order.update""#));
+        assert!(json.contains(r#""order_id":123"#));
+        assert!(json.contains(r#""symbol":"BTC_USDT""#));
+    }
+
+    #[test]
+    fn test_ws_message_trade_serialization() {
+        let msg = WsMessage::Trade {
+            trade_id: 456,
+            order_id: 123,
+            symbol: "BTC_USDT".to_string(),
+            side: "Buy".to_string(),
+            price: "85000.00".to_string(),
+            qty: "0.100000".to_string(),
+            role: "TAKER".to_string(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+
+        // trade type should not use dot notation
+        assert!(json.contains(r#""type":"trade""#));
+        assert!(json.contains(r#""trade_id":456"#));
+    }
+
+    #[test]
+    fn test_ws_message_balance_update_serialization() {
+        let msg = WsMessage::BalanceUpdate {
+            asset: "USDT".to_string(),
+            avail: "1000.0000".to_string(),
+            frozen: "0.0000".to_string(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+
+        // Verify type field uses dot notation
+        assert!(json.contains(r#""type":"balance.update""#));
+        assert!(json.contains(r#""asset":"USDT""#));
+    }
+
+    #[test]
+    fn test_ws_message_connected_serialization() {
+        let msg = WsMessage::Connected { user_id: 1001 };
+        let json = serde_json::to_string(&msg).unwrap();
+
+        assert!(json.contains(r#""type":"connected""#));
+        assert!(json.contains(r#""user_id":1001"#));
+    }
+
+    #[test]
+    fn test_ws_message_pong_serialization() {
+        let msg = WsMessage::Pong;
+        let json = serde_json::to_string(&msg).unwrap();
+
+        assert!(json.contains(r#""type":"pong""#));
+    }
+}
