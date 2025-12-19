@@ -49,7 +49,7 @@ while [ $COUNT -lt $MAX_RETRIES ]; do
     fi
     sleep 1
     ((COUNT++))
-    echo -n "."
+    printf "."
 done
 echo ""
 

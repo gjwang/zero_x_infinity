@@ -58,6 +58,7 @@ async def listen_ws(received_events):
                     data = json.loads(msg)
                     msg_type = data.get("type")
                     log(f"📨 WS Received: {msg_type}")
+                    log(f"   {json.dumps(data, ensure_ascii=False)}")
                     received_events.append(data)
                 except asyncio.TimeoutError:
                     log("WS Listener timed out (no new messages).")
