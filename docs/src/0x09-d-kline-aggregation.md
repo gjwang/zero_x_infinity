@@ -53,6 +53,18 @@ pub enum KLineInterval {
 }
 ```
 
+> [!WARNING]
+> **quote_volume 精度问题**: `price * qty` 可能导致 u64 溢出
+>
+> ```sql
+> -- ❌ 错误方案 (可能溢出)
+> SUM(price * qty) AS quote_volume
+>
+> -- ✅ 正确方案 (使用 DOUBLE)
+> SUM(CAST(price AS DOUBLE) * CAST(qty AS DOUBLE)) AS quote_volume
+> ```
+
+
 ### 1.2 API 响应格式
 
 ```json
