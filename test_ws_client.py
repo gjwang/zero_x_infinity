@@ -39,9 +39,11 @@ class WebSocketTester:
                 self.websocket.recv(),
                 timeout=5.0
             )
-            print(f"收到: {message}")
+            print(f"📨 收到原始消息: {message}")
             
             data = json.loads(message)
+            print(f"📦 解析后数据: {json.dumps(data, indent=2, ensure_ascii=False)}")
+            
             if data.get("type") == "connected" and data.get("user_id") == 1001:
                 print("✅ Connected 消息格式正确")
                 self.received_messages.append(data)
@@ -68,9 +70,11 @@ class WebSocketTester:
                 self.websocket.recv(),
                 timeout=5.0
             )
-            print(f"收到: {pong}")
+            print(f"📨 收到原始消息: {pong}")
             
             pong_data = json.loads(pong)
+            print(f"📦 解析后数据: {json.dumps(pong_data, indent=2, ensure_ascii=False)}")
+            
             if pong_data.get("type") == "pong":
                 print("✅ Ping/Pong 正常")
                 return True
@@ -86,25 +90,43 @@ class WebSocketTester:
         try:
             print(f"\n[TEST] 等待推送事件 (超时: {timeout}s)...")
             print("提示: 如果没有交易发生,此测试会超时,这是正常的")
+            print("=" * 60)
             
             end_time = time.time() + timeout
+            event_count = 0
+            
             while time.time() < end_time:
                 try:
                     message = await asyncio.wait_for(
                         self.websocket.recv(),
                         timeout=1.0
                     )
+                    event_count += 1
+                    
+                    print(f"\n📨 推送事件 #{event_count}")
+                    print(f"原始消息: {message}")
+                    
                     data = json.loads(message)
-                    print(f"收到推送: {data}")
+                    print(f"解析后数据:")
+                    print(json.dumps(data, indent=2, ensure_ascii=False))
+                    print("-" * 60)
+                    
                     self.received_messages.append(data)
                     
                     # 验证消息格式
-                    if data.get("type") in ["order_update", "trade", "balance_update"]:
-                        print(f"✅ 收到有效推送事件: {data.get('type')}")
+                    msg_type = data.get("type")
+                    if msg_type in ["order_update", "trade", "balance_update"]:
+                        print(f"✅ 收到有效推送事件: {msg_type}")
+                    else:
+                        print(f"⚠️  未知消息类型: {msg_type}")
+                        
                 except asyncio.TimeoutError:
                     continue
             
-            print(f"⚠️  未收到推送事件 (正常,因为没有交易)")
+            if event_count > 0:
+                print(f"\n✅ 总共收到 {event_count} 条推送事件")
+            else:
+                print(f"\n⚠️  未收到推送事件 (正常,因为没有交易)")
             return True  # 不强制要求有推送
         except Exception as e:
             print(f"⚠️  推送事件测试异常: {e}")
