@@ -95,29 +95,54 @@ GET /api/v1/depth?symbol=BTC_USDT&limit=20
 
 ## 3. 架构设计
 
-### 3.1 数据源
+### 3.1 与 K-Line 的对比
+
+| 数据 | 来源 | 时效性 | 处理方式 |
+|------|------|--------|----------|
+| K-Line | 历史成交 | 分钟级别 | TDengine 流计算 |
+| **Depth** | 当前挂单 | **毫秒级** | 内存状态 |
+
+Depth 太实时，不适合存数据库——使用 **ring buffer + 独立服务** 模式。
+
+### 3.2 事件驱动架构
+
+延续项目一贯的设计：**服务独立，通过 ring buffer 通信，lock-free**。
 
 ```
-OrderBook (内存)
-    │
-    ├──► HTTP API: GET /depth (快照查询)
-    │
-    └──► WebSocket: depth.update (增量推送)
+┌────────────┐                    ┌─────────────────────┐
+│     ME     │ ──(non-blocking)─► │ depth_event_queue   │
+│            │    drop if full    │ (capacity: 1024)    │
+└────────────┘                    └──────────┬──────────┘
+                                             │
+                                             ▼
+                                  ┌─────────────────────┐
+                                  │   DepthService      │
+                                  │   (tokio async)     │
+                                  ├─────────────────────┤
+                                  │ ● HTTP 快照查询     │
+                                  │ ● WS 增量推送       │
+                                  └─────────────────────┘
 ```
 
-### 3.2 实现方案
+### 3.3 DepthEvent
 
-**方案 A**: 直接查询 OrderBook
-- 每次请求从内存 OrderBook 获取前 N 档
-- 简单，无额外存储
+ME 在三个时机发送事件：
 
-**方案 B**: 维护 Depth 快照
-- 定期生成 Depth 快照
-- 增量更新推送
+```rust
+pub enum DepthEvent {
+    OrderRested { price: u64, qty: u64, side: Side },     // 挂单
+    TradeFilled { price: u64, qty: u64, side: Side },     // 成交 (maker 侧)
+    OrderCancelled { price: u64, qty: u64, side: Side },  // 取消
+}
+```
 
-**推荐**: 方案 A (MVP)
+**发送方式**（非阻塞）：
+```rust
+let _ = depth_event_queue.push(event);  // 满就丢，ME 不等待
+```
 
----
+> [!IMPORTANT]
+> **Market Data 特性**：最新数据最重要，丢几条事件不影响最终一致性。
 
 ## 4. 模块结构
 
