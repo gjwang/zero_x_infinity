@@ -340,19 +340,24 @@ impl MatchingService {
 
                         // Fan-out: Send Trade Events to BOTH Settlement AND UBSCore
                         for trade in &result.trades {
+                            // Determine taker and maker order IDs based on taker side
+                            let (taker_id, maker_id) = if valid_order.order.side == Side::Buy {
+                                (trade.buyer_order_id, trade.seller_order_id)
+                            } else {
+                                (trade.seller_order_id, trade.buyer_order_id)
+                            };
+
                             let trade_event = TradeEvent::new(
                                 trade.clone(),
-                                if valid_order.order.side == Side::Buy {
-                                    trade.buyer_order_id
-                                } else {
-                                    trade.seller_order_id
-                                },
-                                if valid_order.order.side == Side::Buy {
-                                    trade.seller_order_id
-                                } else {
-                                    trade.buyer_order_id
-                                },
+                                taker_id,
+                                maker_id,
                                 valid_order.order.side,
+                                // Taker order state (from result.order)
+                                result.order.qty,
+                                result.order.filled_qty,
+                                // Maker order state (TODO: get from book or track separately)
+                                0, // maker_order_qty - placeholder
+                                0, // maker_filled_qty - placeholder
                                 self.market.base_id,
                                 self.market.quote_id,
                                 self.market.qty_unit,
@@ -606,6 +611,68 @@ impl SettlementService {
                     balance_after: 0,
                 });
                 p_info!(TARGET_PERS, "Settlement persisted to ledger");
+
+                // ⭐ WebSocket Push: Generate events after persistence (Settlement-first)
+                let taker_status = if trade_event.taker_filled_qty >= trade_event.taker_order_qty {
+                    OrderStatus::FILLED
+                } else {
+                    OrderStatus::PARTIALLY_FILLED
+                };
+                let taker_user_id = if trade_event.taker_side == Side::Buy {
+                    trade.buyer_user_id
+                } else {
+                    trade.seller_user_id
+                };
+
+                // Push taker order update
+                let _ =
+                    self.queues
+                        .push_event_queue
+                        .push(crate::websocket::PushEvent::OrderUpdate {
+                            user_id: taker_user_id,
+                            order_id: trade_event.taker_order_id,
+                            symbol_id: 0,
+                            status: taker_status,
+                            filled_qty: trade_event.taker_filled_qty,
+                            avg_price: Some(trade.price),
+                        });
+
+                // Push trade notifications
+                let _ = self
+                    .queues
+                    .push_event_queue
+                    .push(crate::websocket::PushEvent::Trade {
+                        user_id: trade.buyer_user_id,
+                        trade_id: trade.trade_id,
+                        order_id: trade.buyer_order_id,
+                        symbol_id: 0,
+                        side: Side::Buy,
+                        price: trade.price,
+                        qty: trade.qty,
+                        role: if trade_event.taker_side == Side::Buy {
+                            1
+                        } else {
+                            0
+                        },
+                    });
+                let _ = self
+                    .queues
+                    .push_event_queue
+                    .push(crate::websocket::PushEvent::Trade {
+                        user_id: trade.seller_user_id,
+                        trade_id: trade.trade_id,
+                        order_id: trade.seller_order_id,
+                        symbol_id: 0,
+                        side: Side::Sell,
+                        price: trade.price,
+                        qty: trade.qty,
+                        role: if trade_event.taker_side == Side::Sell {
+                            1
+                        } else {
+                            0
+                        },
+                    });
+
                 self.stats
                     .add_event_log_time(task_start.elapsed().as_nanos() as u64);
             }
