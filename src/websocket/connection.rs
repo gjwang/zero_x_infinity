@@ -4,7 +4,7 @@
 //! Supports multiple connections per user (e.g., mobile + web).
 
 use dashmap::DashMap;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::mpsc;
 
 use super::messages::WsMessage;
@@ -12,13 +12,18 @@ use super::messages::WsMessage;
 /// WebSocket sender channel type
 pub type WsSender = mpsc::UnboundedSender<WsMessage>;
 
+/// Unique connection identifier
+pub type ConnectionId = u64;
+
 /// WebSocket connection manager
 ///
 /// Thread-safe connection registry that maps user_id to their active
 /// WebSocket connections. Uses DashMap for lock-free concurrent access.
 pub struct ConnectionManager {
-    /// user_id -> list of sender channels
-    connections: DashMap<u64, Vec<WsSender>>,
+    /// user_id -> list of (connection_id, sender)
+    connections: DashMap<u64, Vec<(ConnectionId, WsSender)>>,
+    /// Next connection ID
+    next_conn_id: AtomicU64,
 }
 
 impl ConnectionManager {
@@ -26,41 +31,49 @@ impl ConnectionManager {
     pub fn new() -> Self {
         Self {
             connections: DashMap::new(),
+            next_conn_id: AtomicU64::new(1),
         }
     }
 
     /// Add a new WebSocket connection for a user
     ///
+    /// Returns the unique connection ID for this connection.
     /// Supports multiple connections per user (e.g., mobile app + web browser).
-    pub fn add_connection(&self, user_id: u64, tx: WsSender) {
+    pub fn add_connection(&self, user_id: u64, tx: WsSender) -> ConnectionId {
+        let conn_id = self.next_conn_id.fetch_add(1, Ordering::Relaxed);
+
         self.connections
             .entry(user_id)
             .or_insert_with(Vec::new)
-            .push(tx);
+            .push((conn_id, tx));
 
         tracing::info!(
             user_id,
+            conn_id,
             total_connections = self.connections.get(&user_id).map(|v| v.len()).unwrap_or(0),
             "WebSocket connection added"
         );
+
+        conn_id
     }
 
-    /// Remove a WebSocket connection
+    /// Remove a WebSocket connection by ID
     ///
     /// Called when a connection is closed. Cleans up empty user entries.
-    pub fn remove_connection(&self, user_id: u64, tx: &WsSender) {
+    pub fn remove_connection(&self, user_id: u64, conn_id: ConnectionId) {
         if let Some(mut senders) = self.connections.get_mut(&user_id) {
-            // Remove the specific sender
-            senders.retain(|s| !std::ptr::eq(s, tx));
+            // Remove the connection with matching ID
+            senders.retain(|(id, _)| *id != conn_id);
 
             // If no more connections for this user, remove the entry
             if senders.is_empty() {
                 drop(senders); // Release the lock
                 self.connections.remove(&user_id);
-                tracing::info!(user_id, "All WebSocket connections closed");
+                tracing::info!(user_id, conn_id, "All WebSocket connections closed");
             } else {
                 tracing::info!(
                     user_id,
+                    conn_id,
                     remaining_connections = senders.len(),
                     "WebSocket connection removed"
                 );
@@ -73,21 +86,19 @@ impl ConnectionManager {
     /// Automatically removes failed connections (client disconnected).
     pub fn send_to_user(&self, user_id: u64, message: WsMessage) {
         if let Some(senders) = self.connections.get(&user_id) {
-            let mut failed_count = 0;
-
-            for sender in senders.iter() {
-                if sender.send(message.clone()).is_err() {
-                    failed_count += 1;
+            let json = serde_json::to_string(&message).unwrap_or_default();
+            for (_, tx) in senders.iter() {
+                if tx.send(message.clone()).is_err() {
+                    tracing::warn!(user_id, "Failed to send - client disconnected");
+                    // Note: removal handled by ws handler when connection closes
                 }
             }
-
-            if failed_count > 0 {
-                tracing::warn!(
-                    user_id,
-                    failed_count,
-                    "Failed to send message to some connections"
-                );
-            }
+            tracing::debug!(
+                user_id,
+                recipients = senders.len(),
+                message_type = ?json.split('"').nth(3).unwrap_or("unknown"),
+                "Message sent to user"
+            );
         }
     }
 
@@ -121,11 +132,11 @@ mod tests {
         let (tx, _rx) = mpsc::unbounded_channel();
 
         // Add connection
-        manager.add_connection(1001, tx.clone());
+        let conn_id = manager.add_connection(1001, tx);
         assert_eq!(manager.stats(), (1, 1));
 
         // Remove connection
-        manager.remove_connection(1001, &tx);
+        manager.remove_connection(1001, conn_id);
         assert_eq!(manager.stats(), (0, 0));
     }
 
@@ -136,16 +147,16 @@ mod tests {
         let (tx2, _rx2) = mpsc::unbounded_channel();
 
         // Add two connections for same user
-        manager.add_connection(1001, tx1.clone());
-        manager.add_connection(1001, tx2.clone());
+        let conn_id1 = manager.add_connection(1001, tx1);
+        let conn_id2 = manager.add_connection(1001, tx2);
         assert_eq!(manager.stats(), (1, 2));
 
         // Remove one connection
-        manager.remove_connection(1001, &tx1);
+        manager.remove_connection(1001, conn_id1);
         assert_eq!(manager.stats(), (1, 1));
 
         // Remove second connection
-        manager.remove_connection(1001, &tx2);
+        manager.remove_connection(1001, conn_id2);
         assert_eq!(manager.stats(), (0, 0));
     }
 
