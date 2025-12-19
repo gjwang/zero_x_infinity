@@ -431,3 +431,69 @@ pub async fn get_balances(
         )),
     }
 }
+
+/// Get K-Line data
+///
+/// GET /api/v1/klines?interval=1m&limit=100
+pub async fn get_klines(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Result<
+    (
+        StatusCode,
+        Json<ApiResponse<Vec<crate::persistence::queries::KLineApiData>>>,
+    ),
+    (StatusCode, Json<ApiResponse<()>>),
+> {
+    // Check if persistence is enabled
+    let db_client = state.db_client.as_ref().ok_or_else(|| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ApiResponse::<()>::error(
+                error_codes::SERVICE_UNAVAILABLE,
+                "Persistence not enabled",
+            )),
+        )
+    })?;
+
+    // Parse query parameters
+    let interval = params.get("interval").map(|s| s.as_str()).unwrap_or("1m");
+
+    // Validate interval
+    let valid_intervals = ["1m", "5m", "15m", "30m", "1h", "1d"];
+    if !valid_intervals.contains(&interval) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<()>::error(
+                error_codes::INVALID_PARAMETER,
+                "Invalid interval. Valid values: 1m, 5m, 15m, 30m, 1h, 1d",
+            )),
+        ));
+    }
+
+    let limit: usize = params
+        .get("limit")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(100)
+        .min(1000); // Cap at 1000
+
+    // Query K-Lines from TDengine
+    match crate::persistence::queries::query_klines(
+        db_client.taos(),
+        state.active_symbol_id,
+        interval,
+        limit,
+        &state.symbol_mgr,
+    )
+    .await
+    {
+        Ok(klines) => Ok((StatusCode::OK, Json(ApiResponse::success(klines)))),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error(
+                error_codes::SERVICE_UNAVAILABLE,
+                &format!("Query failed: {}", e),
+            )),
+        )),
+    }
+}

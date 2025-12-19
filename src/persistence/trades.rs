@@ -55,6 +55,46 @@ pub async fn insert_trade(taos: &Taos, trade: &Trade, symbol_id: u32) -> Result<
     Ok(())
 }
 
+/// Insert a single trade record (one side: buyer OR seller)
+///
+/// This is used by WsService when processing PushEvent::Trade,
+/// where each event represents one party's view of the trade.
+pub async fn insert_trade_record(
+    taos: &Taos,
+    trade_id: u64,
+    order_id: u64,
+    user_id: u64,
+    side: Side,
+    price: u64,
+    qty: u64,
+    fee: u64,
+    role: u8,
+    symbol_id: u32,
+) -> Result<()> {
+    let table_name = format!("trades_{}", symbol_id);
+
+    // Create subtable if not exists
+    let create_subtable = format!(
+        "CREATE TABLE IF NOT EXISTS {} USING trades TAGS ({})",
+        table_name, symbol_id
+    );
+    taos.exec(&create_subtable)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to create trades subtable: {}", e))?;
+
+    // Insert trade record
+    let sql = format!(
+        "INSERT INTO {} VALUES (NOW, {}, {}, {}, {}, {}, {}, {}, {})",
+        table_name, trade_id, order_id, user_id, side as u8, price, qty, fee, role
+    );
+
+    taos.exec(&sql)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to insert trade record: {}", e))?;
+
+    Ok(())
+}
+
 /// Batch insert trades for better performance
 pub async fn batch_insert_trades(taos: &Taos, trades: &[Trade], symbol_id: u32) -> Result<()> {
     if trades.is_empty() {
