@@ -13,7 +13,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use crate::csv_io::{ACTION_CANCEL, ACTION_PLACE, InputOrder};
-use crate::models::InternalOrder;
+use crate::models::{InternalOrder, OrderStatus};
 use crate::pipeline::{
     MultiThreadQueues, OrderAction, PipelineStats, SequencedOrder, ShutdownSignal,
 };
@@ -56,6 +56,14 @@ impl IngestionService {
     /// Run the ingestion service (MT blocking mode with backpressure)
     pub fn run(&mut self, shutdown: &ShutdownSignal) {
         for input in self.orders.drain(..) {
+            // [TRACE]
+            if input.action == crate::csv_io::ACTION_PLACE {
+                tracing::info!(
+                    "[TRACE] Order {}: Ingestion Service Picked Up",
+                    input.order_id
+                );
+            }
+
             if shutdown.is_shutdown_requested() {
                 break;
             }
@@ -153,6 +161,7 @@ impl UBSCoreService {
 
     /// Run the UBSCore service (MT blocking mode)
     pub fn run(&mut self, shutdown: &ShutdownSignal) {
+        tracing::info!("[TRACE] UBSCoreService thread started");
         let mut spin_count = 0u32;
 
         loop {
@@ -175,14 +184,25 @@ impl UBSCoreService {
             // 1.2 Process Orders
             for _ in 0..UBSC_ORDER_BATCH {
                 if let Some(action) = self.queues.order_queue.pop() {
+                    tracing::info!("[TRACE] UBSC: Popped action from order_queue");
                     did_work = true;
                     match self.ubscore.apply_order_action(action) {
                         Ok((actions, events)) => {
+                            // [TRACE]
+                            if let crate::pipeline::ValidAction::Order(ref o) = actions[0] {
+                                tracing::info!(
+                                    "[TRACE] Order {}: UBSCore Processed (Locked & Validated)",
+                                    o.order.order_id
+                                );
+                            }
                             self.batch_actions.extend(actions);
                             self.batch_events.extend(events);
                             self.stats.incr_accepted();
                         }
-                        Err(_) => self.stats.incr_rejected(),
+                        Err(e) => {
+                            tracing::error!("[TRACE] UBSCore apply_order_action failed: {:?}", e);
+                            self.stats.incr_rejected();
+                        }
                     }
                 } else {
                     break;
@@ -201,11 +221,30 @@ impl UBSCoreService {
 
                 // Publish results to downstream
                 for action in self.batch_actions.drain(..) {
+                    // [1] Push to Matching Engine
                     while let Err(_) = self.queues.action_queue.push(action.clone()) {
                         std::hint::spin_loop();
                         if shutdown.is_shutdown_requested() {
                             break;
                         }
+                    }
+
+                    // [2] Push OrderUpdate(NEW) for new orders (Settlement-First principle: Order is now durable in WAL)
+                    if let crate::pipeline::ValidAction::Order(ref seq_order) = action {
+                        let _ = self.queues.push_event_queue.push(
+                            crate::websocket::PushEvent::OrderUpdate {
+                                user_id: seq_order.order.user_id,
+                                order_id: seq_order.order.order_id,
+                                symbol_id: seq_order.order.symbol_id,
+                                status: OrderStatus::NEW,
+                                filled_qty: 0,
+                                avg_price: None,
+                            },
+                        );
+                        tracing::info!(
+                            "[TRACE] Order {}: UBSCore -> Push Event Queue (NEW)",
+                            seq_order.order.order_id
+                        );
                     }
                 }
 
@@ -262,7 +301,7 @@ impl UBSCoreService {
 
 use crate::engine::MatchingEngine;
 use crate::messages::TradeEvent;
-use crate::models::{OrderStatus, OrderType, Side};
+use crate::models::{OrderType, Side};
 use crate::orderbook::OrderBook;
 use crate::pipeline::{BalanceUpdateRequest, PriceImprovement};
 use crate::pipeline_mt::MarketContext;
@@ -330,6 +369,12 @@ impl MatchingService {
                         let result = MatchingEngine::process_order(
                             &mut self.book,
                             valid_order.order.clone(),
+                        );
+
+                        tracing::info!(
+                            "[TRACE] Order {}: Matching Engine Processed (Trades: {})",
+                            valid_order.order.order_id,
+                            result.trades.len()
                         );
 
                         p_info!(
@@ -467,6 +512,18 @@ impl MatchingService {
                                         }
                                     }
                                 }
+
+                                // [PUSH] Notify client of cancellation
+                                let _ = self.queues.push_event_queue.push(
+                                    crate::websocket::PushEvent::OrderUpdate {
+                                        user_id,
+                                        order_id,
+                                        symbol_id: cancelled_order.symbol_id,
+                                        status: OrderStatus::CANCELED,
+                                        filled_qty: cancelled_order.filled_qty,
+                                        avg_price: None, // Could calculate if partially filled, but omitting for now
+                                    },
+                                );
                             }
                         }
                     }
@@ -551,6 +608,19 @@ impl SettlementService {
 
                 // Persist balance event to event log
                 self.ledger.write_balance_event(&balance_event);
+
+                // ⭐ WebSocket Push: Generate BalanceUpdate after persistence (Settlement-first)
+                let _ =
+                    self.queues
+                        .push_event_queue
+                        .push(crate::websocket::PushEvent::BalanceUpdate {
+                            user_id: balance_event.user_id,
+                            asset_id: balance_event.asset_id,
+                            avail: balance_event.avail_after,
+                            frozen: balance_event.frozen_after,
+                            delta: balance_event.delta,
+                        });
+
                 self.stats
                     .add_event_log_time(task_start.elapsed().as_nanos() as u64);
             }
@@ -625,7 +695,16 @@ impl SettlementService {
                 };
 
                 // Push taker order update
-                let _ =
+                eprintln!(
+                    "[PUSH] Generating OrderUpdate for user {} order {}",
+                    taker_user_id, trade_event.taker_order_id
+                );
+                tracing::info!(
+                    "[PUSH] Generating OrderUpdate for user {} order {}",
+                    taker_user_id,
+                    trade_event.taker_order_id
+                );
+                let push_result =
                     self.queues
                         .push_event_queue
                         .push(crate::websocket::PushEvent::OrderUpdate {
@@ -636,8 +715,30 @@ impl SettlementService {
                             filled_qty: trade_event.taker_filled_qty,
                             avg_price: Some(trade.price),
                         });
+                if push_result.is_err() {
+                    eprintln!("[PUSH] ❌ Failed to push OrderUpdate - queue full!");
+                    tracing::error!("[PUSH] ❌ Failed to push OrderUpdate - queue full!");
+                } else {
+                    eprintln!("[PUSH] ✅ OrderUpdate pushed to queue");
+                    tracing::info!("[PUSH] ✅ OrderUpdate pushed to queue");
+                }
+
+                tracing::info!(
+                    "[TRACE] Order {}: Settlement -> Push Event Queue (Status: {:?})",
+                    trade_event.taker_order_id,
+                    taker_status
+                );
 
                 // Push trade notifications
+                eprintln!(
+                    "[PUSH] Generating Trade events for buyer {} and seller {}",
+                    trade.buyer_user_id, trade.seller_user_id
+                );
+                tracing::info!(
+                    "[PUSH] Generating Trade events for buyer {} and seller {}",
+                    trade.buyer_user_id,
+                    trade.seller_user_id
+                );
                 let _ = self
                     .queues
                     .push_event_queue
