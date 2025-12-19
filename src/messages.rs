@@ -76,6 +76,7 @@ impl ValidOrder {
 /// Contains all information needed to:
 /// 1. Update balances (UBSCore)
 /// 2. Persist to storage (Settlement)
+/// 3. Generate WebSocket push events (Settlement)
 #[derive(Debug, Clone)]
 pub struct TradeEvent {
     /// The executed trade
@@ -86,6 +87,17 @@ pub struct TradeEvent {
     pub maker_order_id: OrderId,
     /// Taker side (Buy or Sell)
     pub taker_side: Side,
+
+    // ⭐ Order state fields (for WebSocket push)
+    /// Taker order total quantity
+    pub taker_order_qty: u64,
+    /// Taker order filled quantity (after this trade)
+    pub taker_filled_qty: u64,
+    /// Maker order total quantity
+    pub maker_order_qty: u64,
+    /// Maker order filled quantity (after this trade)
+    pub maker_filled_qty: u64,
+
     /// Base asset ID (e.g., BTC in BTC_USDT)
     pub base_asset_id: AssetId,
     /// Quote asset ID (e.g., USDT in BTC_USDT)
@@ -97,11 +109,16 @@ pub struct TradeEvent {
 }
 
 impl TradeEvent {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         trade: Trade,
         taker_order_id: OrderId,
         maker_order_id: OrderId,
         taker_side: Side,
+        taker_order_qty: u64,
+        taker_filled_qty: u64,
+        maker_order_qty: u64,
+        maker_filled_qty: u64,
         base_asset_id: AssetId,
         quote_asset_id: AssetId,
         qty_unit: u64,
@@ -112,6 +129,10 @@ impl TradeEvent {
             taker_order_id,
             maker_order_id,
             taker_side,
+            taker_order_qty,
+            taker_filled_qty,
+            maker_order_qty,
+            maker_filled_qty,
             base_asset_id,
             quote_asset_id,
             qty_unit,

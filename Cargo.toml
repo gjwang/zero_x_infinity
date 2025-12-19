@@ -15,9 +15,13 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 tracing-appender = "0.2"
 
 # Gateway HTTP server
-axum = "0.8"
+axum = { version = "0.8", features = ["ws"] }
 tokio = { version = "1", features = ["full"] }
 rust_decimal = "1.36"
+
+# WebSocket support
+tokio-tungstenite = "0.21"
+dashmap = "5.5"
 
 # TDengine persistence
 taos = { version = "0.12", features = ["ws", "ws-rustls"] }

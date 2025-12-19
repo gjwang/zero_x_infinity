@@ -43,6 +43,7 @@ This is a pilgrimage from `Hello World` to `Microsecond Latency`.
 | 0x08-h | [Performance Monitoring](./docs/src/0x08-h-performance-monitoring.md) | 性能监控与意图编码 |
 | 0x09-a | [Gateway: Client Access Layer](./docs/src/0x09-a-gateway.md) | HTTP Gateway 客户端接入层 |
 | 0x09-b | [Settlement Persistence](./docs/src/0x09-b-settlement-persistence.md) | TDengine 持久化层 |
+| 0x09-c | [WebSocket Push](./docs/src/0x09-c-websocket-push.md) | 实时推送 |
 
 ---
 
@@ -122,7 +123,9 @@ SELECT * FROM balances LIMIT 10;
 - `GET /api/v1/orders?user_id=&limit=` - Query orders list ✅
 - `GET /api/v1/trades?limit=` - Query trades ✅
 - `GET /api/v1/balances?user_id=&asset_id=` - Query balances ✅
+- `WS /ws?user_id=` - WebSocket real-time push ✅
 
 ---
+
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)

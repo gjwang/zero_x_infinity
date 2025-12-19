@@ -126,7 +126,12 @@ pub fn run_pipeline_multi_thread(
     orders: Vec<InputOrder>,
     services: MultiThreadServices,
     config: PipelineConfig,
+    queues: Arc<MultiThreadQueues>,
 ) -> MultiThreadPipelineResult {
+    tracing::info!(
+        "[TRACE] Starting Multi-Thread Pipeline with {} orders...",
+        orders.len()
+    );
     let active_symbol_id = config.active_symbol_id;
     let sample_rate = config.sample_rate;
 
@@ -141,8 +146,9 @@ pub fn run_pipeline_multi_thread(
         quote_id: symbol_info.quote_asset_id,
     };
 
-    // Create shared queues and state
-    let queues = Arc::new(MultiThreadQueues::new());
+    // Create shared state
+    // queues passed in
+
     let stats = Arc::new(PipelineStats::new(sample_rate));
     let shutdown = Arc::new(ShutdownSignal::new());
 
@@ -207,17 +213,25 @@ pub fn run_pipeline_multi_thread(
     // Wait for ingestion to complete
     t1_ingestion.join().expect("Ingestion thread panicked");
 
-    // Wait for all processing queues to drain before signaling shutdown
-    // This ensures all orders are fully processed through the pipeline
-    loop {
-        if queues.all_empty() {
-            break;
+    if config.continuous {
+        tracing::info!("[TRACE] Pipeline executing in CONTINUOUS mode (ctrl+c to stop)");
+        loop {
+            // Keep main thread alive
+            std::thread::sleep(Duration::from_secs(1));
         }
-        std::hint::spin_loop();
-    }
+    } else {
+        // Wait for all processing queues to drain before signaling shutdown
+        // This ensures all orders are fully processed through the pipeline
+        loop {
+            if queues.all_empty() {
+                break;
+            }
+            std::hint::spin_loop();
+        }
 
-    // Now signal shutdown (all threads should notice queues empty and exit)
-    shutdown.request_shutdown();
+        // Now signal shutdown (all threads should notice queues empty and exit)
+        shutdown.request_shutdown();
+    }
 
     // Wait for all threads
     let final_ubscore = t2_ubscore.join().expect("UBSCore thread panicked");
