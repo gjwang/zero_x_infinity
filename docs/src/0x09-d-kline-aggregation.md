@@ -301,18 +301,21 @@ curl "http://localhost:8080/api/v1/klines?interval=1m&limit=10" | jq .
     {
       "symbol": "BTC_USDT",
       "interval": "1m",
-      "open_time": "2025-12-19T19:15:00+08:00",
-      "open": "35000.00",
-      "high": "35000.00",
-      "low": "35000.00",
-      "close": "35000.00",
-      "volume": "0.200000",
-      "quote_volume": "7000.00",
-      "trade_count": 2
+      "open_time": "2025-12-19T19:33:00+08:00",
+      "open": "37000.00",
+      "high": "37000.00",
+      "low": "37000.00",
+      "close": "37000.00",
+      "volume": "0.400000",
+      "quote_volume": "14800.00",
+      "trade_count": 8
     }
   ]
 }
 ```
+
+> [!TIP]
+> `quote_volume` = volume × price = 0.4 BTC × 37000 = 14800 USDT
 
 > [!NOTE]
 > K-Line Stream 是增量处理的。如果 API 返回空数据，可能需要等待时间窗口关闭（1分钟后）。
