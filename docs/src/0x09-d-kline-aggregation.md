@@ -315,11 +315,23 @@ curl "http://localhost:8080/api/v1/klines?interval=1m&limit=10" | jq .
 ```
 
 > [!WARNING]
-> **待修复**: `open_time` 当前返回 ISO 8601 格式，应改为 Unix 毫秒时间戳（行业标准）
+> **待修复 (P0)**: K-Line API 需对齐 Binance 行业标准
+>
+> | # | 问题 | 当前 | Binance 标准 |
+> |---|------|------|--------------|
+> | 1 | `open_time` | ISO 8601 字符串 | **Unix 毫秒** (Number) |
+> | 2 | `close_time` | 缺失 | **Unix 毫秒** (Number) |
+>
 > ```rust
-> // 当前: "2025-12-19T19:33:00+08:00"
-> // 应为: 1734611580000 (Unix ms)
+> // 当前: "open_time": "2025-12-19T19:33:00+08:00"
+> // 应为: "open_time": 1734611580000, "close_time": 1734611639999
 > ```
+
+> [!NOTE]
+> **可选 (P2)**: Binance 额外字段
+> - `taker_buy_base_volume` - Taker 买入基础资产量
+> - `taker_buy_quote_volume` - Taker 买入计价资产量
+> (需要 Settlement 额外记录 Taker 方向)
 
 > [!TIP]
 > `quote_volume` = volume × price = 0.4 BTC × 37000 = 14800 USDT
