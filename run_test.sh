@@ -12,8 +12,12 @@ echo "=========================================="
 cleanup() {
     echo ""
     echo "[Clean] Stopping services..."
-    pkill -f "zero_x_infinity" || true
-    if lsof -i:$GATEWAY_PORT >/dev/null; then
+    # First try graceful shutdown with SIGTERM
+    pkill -TERM -f "zero_x_infinity" 2>/dev/null || true
+    sleep 1
+    # Then force kill if still running
+    pkill -9 -f "zero_x_infinity" 2>/dev/null || true
+    if lsof -i:$GATEWAY_PORT >/dev/null 2>&1; then
         lsof -ti:$GATEWAY_PORT | xargs kill -9 >/dev/null 2>&1 || true
     fi
 }
