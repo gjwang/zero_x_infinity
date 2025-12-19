@@ -114,7 +114,7 @@ SELECT * FROM trades LIMIT 10;
 SELECT * FROM balances LIMIT 10;
 ```
 
-### API Endpoints (Placeholder)
+### API Endpoints
 
 - `POST /api/v1/create_order` - Create order ✅
 - `POST /api/v1/cancel_order` - Cancel order ✅
@@ -122,13 +122,6 @@ SELECT * FROM balances LIMIT 10;
 - `GET /api/v1/orders?user_id=&limit=` - Query orders list ✅
 - `GET /api/v1/trades?limit=` - Query trades ✅
 - `GET /api/v1/balances?user_id=&asset_id=` - Query balances ✅
-
-### Settlement Thread Integration
-
-**Status**: Documented, not yet implemented  
-**Guide**: See `settlement_integration_guide.md` for step-by-step instructions
-
-Currently, data must be persisted manually using the persistence layer functions. Automatic persistence from the Settlement thread requires passing `TDengineClient` through the pipeline (estimated 20-30 minutes of work).
 
 ---
 
