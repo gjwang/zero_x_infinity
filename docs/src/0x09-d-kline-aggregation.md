@@ -251,22 +251,71 @@ fn test_kline_aggregation() {
 }
 ```
 
-### 6.2 集成测试
+### 6.2 E2E 测试方案
+
+#### 前置条件
+
+1. TDengine 运行中：`docker ps | grep tdengine`
+2. Gateway 运行中：`cargo run --release -- --gateway --port 8080`
+
+#### 测试脚本
 
 ```bash
-# 1. 启动 Gateway
-cargo run --release -- --gateway --port 8080
-
-# 2. 提交多笔订单
-./scripts/test_kline.sh
-
-# 3. 查询 K 线
-curl "http://localhost:8080/api/v1/klines?symbol=BTC_USDT&interval=1m&limit=10"
-
-# 4. 验证 WebSocket 推送
-websocat ws://localhost:8080/ws?user_id=1001
-# 观察 kline.update 事件
+./scripts/test_kline_e2e.sh
 ```
+
+该脚本执行以下步骤：
+
+| 步骤 | 操作 | 验证点 |
+|------|------|--------|
+| 1 | 检查 API 连通性 | `/api/v1/klines` 可访问 |
+| 2 | 记录初始 K-Line 数量 | 基准值 |
+| 3 | 创建匹配订单 (Buy + Sell) | 订单成功创建 |
+| 4 | 等待 Stream 处理 (5s) | TDengine Stream 聚合 |
+| 5 | 查询 K-Line API | 返回 OHLCV 数据 |
+| 6 | 验证响应结构 | code=0, symbol 正确 |
+
+#### 手动验证
+
+```bash
+# 1. 查看 TDengine trades 表
+docker exec tdengine taos -s "USE trading; SELECT * FROM trades ORDER BY ts DESC LIMIT 5;"
+
+# 2. 查看 K-Line streams 状态
+docker exec tdengine taos -s "USE trading; SHOW STREAMS;"
+
+# 3. 查看 K-Line 数据
+docker exec tdengine taos -s "USE trading; SELECT * FROM klines_1m LIMIT 5;"
+
+# 4. 测试 API
+curl "http://localhost:8080/api/v1/klines?interval=1m&limit=10" | jq .
+```
+
+#### 预期 API 响应
+
+```json
+{
+  "code": 0,
+  "msg": "ok",
+  "data": [
+    {
+      "symbol": "BTC_USDT",
+      "interval": "1m",
+      "open_time": "2025-12-19T19:15:00+08:00",
+      "open": "35000.00",
+      "high": "35000.00",
+      "low": "35000.00",
+      "close": "35000.00",
+      "volume": "0.200000",
+      "quote_volume": "7000.00",
+      "trade_count": 2
+    }
+  ]
+}
+```
+
+> [!NOTE]
+> K-Line Stream 是增量处理的。如果 API 返回空数据，可能需要等待时间窗口关闭（1分钟后）。
 
 ---
 
