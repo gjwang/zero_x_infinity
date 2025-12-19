@@ -39,8 +39,8 @@ async fn handle_socket(socket: WebSocket, user_id: u64, manager: Arc<ConnectionM
     let (mut sender, mut receiver) = socket.split();
     let (tx, mut rx) = mpsc::unbounded_channel::<WsMessage>();
 
-    // Register connection
-    manager.add_connection(user_id, tx.clone());
+    // Register connection and get unique ID
+    let conn_id = manager.add_connection(user_id, tx.clone());
 
     // Send welcome message
     let welcome = WsMessage::Connected { user_id };
@@ -82,6 +82,6 @@ async fn handle_socket(socket: WebSocket, user_id: u64, manager: Arc<ConnectionM
         _ = (&mut recv_task) => send_task.abort(),
     }
 
-    // Cleanup
-    manager.remove_connection(user_id, &tx);
+    // Cleanup using connection ID
+    manager.remove_connection(user_id, conn_id);
 }
