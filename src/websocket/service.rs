@@ -5,6 +5,7 @@
 //! WsMessage, and sends them to connected clients via ConnectionManager.
 
 use crossbeam_queue::ArrayQueue;
+use rust_decimal::Decimal;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::interval;
@@ -12,6 +13,12 @@ use tokio::time::interval;
 use super::connection::ConnectionManager;
 use super::messages::{PushEvent, WsMessage};
 use crate::symbol_manager::SymbolManager;
+
+/// Format internal u64 to display string with specified decimals
+fn format_amount(value: u64, decimals: u32, display_decimals: u32) -> String {
+    let decimal_value = Decimal::from(value) / Decimal::from(10u64.pow(decimals));
+    format!("{:.prec$}", decimal_value, prec = display_decimals as usize)
+}
 
 /// WebSocket service for consuming push events and broadcasting to clients
 pub struct WsService {
@@ -97,21 +104,36 @@ impl WsService {
                 filled_qty,
                 avg_price,
             } => {
-                // Resolve symbol name from SymbolManager
-                let symbol_name = self
-                    .symbol_mgr
-                    .get_symbol_info_by_id(symbol_id)
+                // Resolve symbol info for name and decimals
+                let symbol_info = self.symbol_mgr.get_symbol_info_by_id(symbol_id);
+                let symbol_name = symbol_info
                     .map(|s| s.symbol.clone())
                     .unwrap_or_else(|| format!("SYMBOL_{}", symbol_id));
+
+                // Get base asset decimals for qty formatting
+                let (base_decimals, base_display_decimals) = symbol_info
+                    .and_then(|s| {
+                        let dec = self.symbol_mgr.get_asset_decimal(s.base_asset_id)?;
+                        let disp = self
+                            .symbol_mgr
+                            .get_asset_display_decimals(s.base_asset_id)?;
+                        Some((dec, disp))
+                    })
+                    .unwrap_or((8, 6));
+
+                // Get price decimals
+                let (price_decimals, price_display_decimals) = symbol_info
+                    .map(|s| (s.price_decimal, s.price_display_decimal))
+                    .unwrap_or((2, 2));
 
                 let message = WsMessage::OrderUpdate {
                     order_id,
                     symbol: symbol_name,
                     status: format!("{:?}", status),
-                    filled_qty: filled_qty.to_string(),
-                    avg_price: avg_price.map(|p| p.to_string()),
+                    filled_qty: format_amount(filled_qty, base_decimals, base_display_decimals),
+                    avg_price: avg_price
+                        .map(|p| format_amount(p, price_decimals, price_display_decimals)),
                 };
-                tracing::info!("[WsService] Sending to user {}", user_id);
                 self.manager.send_to_user(user_id, message);
             }
             PushEvent::Trade {
@@ -124,20 +146,35 @@ impl WsService {
                 qty,
                 role,
             } => {
-                // Resolve symbol name from SymbolManager
-                let symbol_name = self
-                    .symbol_mgr
-                    .get_symbol_info_by_id(symbol_id)
+                // Resolve symbol info for name and decimals
+                let symbol_info = self.symbol_mgr.get_symbol_info_by_id(symbol_id);
+                let symbol_name = symbol_info
                     .map(|s| s.symbol.clone())
                     .unwrap_or_else(|| format!("SYMBOL_{}", symbol_id));
+
+                // Get base asset decimals for qty formatting
+                let (base_decimals, base_display_decimals) = symbol_info
+                    .and_then(|s| {
+                        let dec = self.symbol_mgr.get_asset_decimal(s.base_asset_id)?;
+                        let disp = self
+                            .symbol_mgr
+                            .get_asset_display_decimals(s.base_asset_id)?;
+                        Some((dec, disp))
+                    })
+                    .unwrap_or((8, 6));
+
+                // Get price decimals
+                let (price_decimals, price_display_decimals) = symbol_info
+                    .map(|s| (s.price_decimal, s.price_display_decimal))
+                    .unwrap_or((2, 2));
 
                 let message = WsMessage::Trade {
                     trade_id,
                     order_id,
                     symbol: symbol_name,
                     side: format!("{:?}", side),
-                    price: price.to_string(),
-                    qty: qty.to_string(),
+                    price: format_amount(price, price_decimals, price_display_decimals),
+                    qty: format_amount(qty, base_decimals, base_display_decimals),
                     role: if role == 0 { "MAKER" } else { "TAKER" }.to_string(),
                 };
                 self.manager.send_to_user(user_id, message);
@@ -148,16 +185,25 @@ impl WsService {
                 avail,
                 frozen,
             } => {
-                // Resolve asset name from SymbolManager
+                // Resolve asset name and decimals
                 let asset_name = self
                     .symbol_mgr
                     .get_asset_name(asset_id)
                     .unwrap_or_else(|| format!("ASSET_{}", asset_id));
 
+                let (asset_decimals, asset_display_decimals) = self
+                    .symbol_mgr
+                    .get_asset_decimal(asset_id)
+                    .and_then(|dec| {
+                        let disp = self.symbol_mgr.get_asset_display_decimals(asset_id)?;
+                        Some((dec, disp))
+                    })
+                    .unwrap_or((6, 4));
+
                 let message = WsMessage::BalanceUpdate {
                     asset: asset_name,
-                    avail: avail.to_string(),
-                    frozen: frozen.to_string(),
+                    avail: format_amount(avail, asset_decimals, asset_display_decimals),
+                    frozen: format_amount(frozen, asset_decimals, asset_display_decimals),
                 };
                 self.manager.send_to_user(user_id, message);
             }

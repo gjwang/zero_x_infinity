@@ -97,9 +97,9 @@ async def main():
             log("========================================")
             log("Verification Results:")
             
-            order_updates = [e for e in received_events if e.get("type") == "order_update"]
+            order_updates = [e for e in received_events if e.get("type") == "order.update"]
             trades = [e for e in received_events if e.get("type") == "trade"]
-            balance_updates = [e for e in received_events if e.get("type") == "balance_update"]
+            balance_updates = [e for e in received_events if e.get("type") == "balance.update"]
             
             success = True
             

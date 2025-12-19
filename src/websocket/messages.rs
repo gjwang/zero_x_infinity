@@ -8,11 +8,13 @@ use serde::{Deserialize, Serialize};
 
 /// WebSocket message sent to clients
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type")]
 pub enum WsMessage {
     /// Connection established
+    #[serde(rename = "connected")]
     Connected { user_id: u64 },
     /// Order status update
+    #[serde(rename = "order.update")]
     OrderUpdate {
         order_id: u64,
         symbol: String,
@@ -21,6 +23,7 @@ pub enum WsMessage {
         avg_price: Option<String>,
     },
     /// Trade notification
+    #[serde(rename = "trade")]
     Trade {
         trade_id: u64,
         order_id: u64,
@@ -31,12 +34,14 @@ pub enum WsMessage {
         role: String, // "MAKER" or "TAKER"
     },
     /// Balance update
+    #[serde(rename = "balance.update")]
     BalanceUpdate {
         asset: String,
         avail: String,
         frozen: String,
     },
     /// Pong response to ping
+    #[serde(rename = "pong")]
     Pong,
 }
 
