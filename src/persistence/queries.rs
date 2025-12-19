@@ -1,4 +1,5 @@
 use anyhow::Result;
+use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use taos::*;
@@ -341,7 +342,7 @@ pub async fn query_balance(
 /// K-Line record from TDengine
 #[derive(Debug, Deserialize)]
 struct KLineRow {
-    ts: String,
+    ts: DateTime<Utc>,
     open: i64,
     high: i64,
     low: i64,
@@ -351,12 +352,13 @@ struct KLineRow {
     trade_count: i32,
 }
 
-/// K-Line API response data (compliant with API conventions)
+/// K-Line API response data (compliant with Binance API conventions)
 #[derive(Debug, Serialize)]
 pub struct KLineApiData {
     pub symbol: String,
     pub interval: String,
-    pub open_time: String,
+    pub open_time: i64,  // Unix milliseconds
+    pub close_time: i64, // Unix milliseconds (open_time + interval - 1)
     pub open: String,
     pub high: String,
     pub low: String,
@@ -364,6 +366,19 @@ pub struct KLineApiData {
     pub volume: String,
     pub quote_volume: String,
     pub trade_count: u32,
+}
+
+/// Convert interval string to milliseconds
+fn interval_to_ms(interval: &str) -> i64 {
+    match interval {
+        "1m" => 60 * 1000,
+        "5m" => 5 * 60 * 1000,
+        "15m" => 15 * 60 * 1000,
+        "30m" => 30 * 60 * 1000,
+        "1h" => 60 * 60 * 1000,
+        "1d" => 24 * 60 * 60 * 1000,
+        _ => 60 * 1000, // default to 1m
+    }
 }
 
 /// Query K-Line data for a symbol
@@ -413,7 +428,8 @@ pub async fn query_klines(
         .map(|row| KLineApiData {
             symbol: symbol_info.symbol.clone(),
             interval: interval.to_string(),
-            open_time: row.ts,
+            open_time: row.ts.timestamp_millis(),
+            close_time: row.ts.timestamp_millis() + interval_to_ms(interval) - 1,
             open: format_amount(
                 row.open as u64,
                 symbol_info.price_decimal,
