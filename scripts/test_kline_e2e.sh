@@ -6,6 +6,8 @@ set -e
 
 BASE_URL="${1:-http://localhost:8080}"
 INTERVAL="1m"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 echo "🧪 K-Line E2E Test"
 echo "==================="
@@ -15,14 +17,50 @@ echo ""
 # Colors
 GREEN='\033[0;32m'
 RED='\033[0;31m'
+YELLOW='\033[0;33m'
 NC='\033[0m' # No Color
 
 pass() { echo -e "${GREEN}✅ $1${NC}"; }
 fail() { echo -e "${RED}❌ $1${NC}"; exit 1; }
+warn() { echo -e "${YELLOW}⚠️  $1${NC}"; }
 
-# Step 1: Check API health
-echo "Step 1: Checking API health..."
-curl -sf "$BASE_URL/api/v1/klines?interval=1m" > /dev/null && pass "API is reachable" || fail "API not reachable"
+# ============================================================
+# Step 0: Check and start prerequisite services
+# ============================================================
+echo "Step 0: Checking prerequisite services..."
+
+# Check TDengine
+if ! docker ps | grep -q tdengine; then
+    warn "TDengine not running, starting..."
+    docker run -d --name tdengine -p 6030:6030 -p 6041:6041 tdengine/tdengine:latest 2>/dev/null || \
+    docker start tdengine 2>/dev/null || fail "Cannot start TDengine"
+    echo "   Waiting for TDengine to be ready (10s)..."
+    sleep 10
+fi
+pass "TDengine is running"
+
+# Check Gateway
+if ! curl -sf "$BASE_URL/api/v1/klines?interval=1m" > /dev/null 2>&1; then
+    warn "Gateway not running, starting..."
+    cd "$PROJECT_DIR"
+    cargo run --release -- --gateway --port 8080 > /tmp/gateway.log 2>&1 &
+    GATEWAY_PID=$!
+    echo "   Waiting for Gateway to be ready (30s)..."
+    
+    # Wait for Gateway with timeout
+    for i in {1..30}; do
+        if curl -sf "$BASE_URL/api/v1/klines?interval=1m" > /dev/null 2>&1; then
+            break
+        fi
+        sleep 1
+    done
+    
+    if ! curl -sf "$BASE_URL/api/v1/klines?interval=1m" > /dev/null 2>&1; then
+        fail "Gateway failed to start. Check /tmp/gateway.log"
+    fi
+fi
+pass "Gateway is running"
+echo ""
 
 # Step 2: Get initial K-Line count
 echo ""
