@@ -435,9 +435,15 @@ pub async fn query_klines(
                 symbol_info.price_display_decimal,
             ),
             volume: format_amount(row.volume as u64, base_decimals, base_display_decimals),
+            // quote_volume = SUM(price * qty) where:
+            // - price is in internal units (×10^price_decimal)
+            // - qty is in internal units (×10^base_decimals)
+            // To get quote_amount: price * qty / 10^base_decimals
+            // Result is already in quote asset internal units (×10^quote_decimals)
+            // So divide by 10^(base_decimals + quote_decimals) to get display value
             quote_volume: format!(
                 "{:.prec$}",
-                row.quote_volume / 10f64.powi(quote_decimals as i32),
+                row.quote_volume / 10f64.powi(base_decimals as i32 + quote_decimals as i32),
                 prec = quote_display_decimals as usize
             ),
             trade_count: row.trade_count as u32,
