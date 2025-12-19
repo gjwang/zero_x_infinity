@@ -394,8 +394,7 @@ curl "http://localhost:8080/api/v1/klines?interval=1m&limit=10" | jq .
 ```
 
 **优势**:
-- 更小的 JSON 体积 (无字段名)
+- 更小的 JSON 体积 (无字段名),更高效网络传输
 - 更快的解析速度
-- 完全兼容 Binance 客户端
 
-**实施时机**: 当 API 客户端数量增加，带宽成为瓶颈时
+**实施时机**: 未来优化点
