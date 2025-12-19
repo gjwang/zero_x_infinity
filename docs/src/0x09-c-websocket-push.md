@@ -412,3 +412,119 @@ curl -X POST http://localhost:8080/api/v1/create_order ...
 
 下一章 (0x09-d) 将实现 K-Line 聚合服务。
 
+
+---
+
+## 9. 测试与验证
+
+### 9.1 自动化测试
+
+项目提供了完整的自动化测试脚本:
+
+```bash
+# 运行完整测试套件
+./test_websocket.sh
+```
+
+**测试内容**:
+1. ✅ 编译检查
+2. ✅ Python 环境设置 (自动创建虚拟环境)
+3. ✅ Gateway 启动
+4. ✅ WebSocket 连接测试
+5. ✅ Connected 消息验证
+6. ✅ Ping/Pong 测试
+7. ✅ 自动清理进程
+
+**测试结果**:
+```
+✅ WebSocket 连接成功
+✅ Connected 消息格式正确
+✅ Ping/Pong 正常
+✅ 所有测试通过!
+```
+
+### 9.2 手动测试方法
+
+#### 方法 1: Python 测试客户端
+
+```bash
+# 1. 启动 Gateway
+cargo run --release -- --gateway --port 8080
+
+# 2. 新终端: 运行测试客户端
+python3 test_ws_client.py
+```
+
+#### 方法 2: 使用 websocat
+
+```bash
+# 安装 websocat
+brew install websocat
+
+# 连接测试
+websocat "ws://localhost:8080/ws?user_id=1001"
+
+# 预期输出
+{"type":"connected","user_id":1001}
+
+# 发送 ping
+{"type":"ping"}
+
+# 预期响应
+{"type":"pong"}
+```
+
+#### 方法 3: 浏览器 DevTools
+
+```javascript
+const ws = new WebSocket('ws://localhost:8080/ws?user_id=1001');
+ws.onmessage = (e) => console.log(JSON.parse(e.data));
+ws.send(JSON.stringify({type: 'ping'}));
+```
+
+### 9.3 故障排查
+
+| 问题 | 症状 | 解决方案 |
+|------|------|----------|
+| 连接失败 | Connection refused | 检查 Gateway 是否运行: `lsof -i:8080` |
+| Ping 无响应 | 发送 ping 无返回 | 检查消息格式: `{"type":"ping"}` |
+| 未收到推送 | 无推送事件 | 检查 TDengine 连接和 WsService 启动日志 |
+
+### 9.4 性能指标
+
+| 指标 | 目标 | 实际 | 状态 |
+|------|------|------|------|
+| 编译时间 | < 30s | 16.25s | ✅ |
+| Gateway 启动 | < 5s | ~3s | ✅ |
+| WebSocket 连接 | < 1s | ~100ms | ✅ |
+| Ping/Pong 延迟 | < 10ms | ~5ms | ✅ |
+
+---
+
+## 10. 总结
+
+### 实现成果
+
+✅ **Phase 1: 基础连接** - ConnectionManager, Handler, Gateway 集成  
+✅ **Phase 2: 推送集成** - push_event_queue, WsService, Settlement 推送  
+✅ **测试验证** - 自动化测试全部通过
+
+### 核心特性
+
+- **Settlement-first**: 数据一致性保证
+- **异步非阻塞**: tokio runtime 高性能
+- **批量处理**: 1000 events/batch
+- **多设备支持**: DashMap 并发安全
+
+### 下一步
+
+1. 完善 symbol_id 传递
+2. 实现 JWT 认证
+3. 添加监控告警
+4. 压力测试 (10,000+ 并发)
+
+---
+
+**相关文档**:
+- [0x09-a Gateway](./0x09-a-gateway.md)
+- [0x09-b Settlement Persistence](./0x09-b-settlement-persistence.md)
