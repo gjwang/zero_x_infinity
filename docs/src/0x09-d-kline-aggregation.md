@@ -301,7 +301,7 @@ curl "http://localhost:8080/api/v1/klines?interval=1m&limit=10" | jq .
     {
       "symbol": "BTC_USDT",
       "interval": "1m",
-      "open_time": "2025-12-19T19:33:00+08:00",
+      "open_time": 1734611580000,
       "open": "37000.00",
       "high": "37000.00",
       "low": "37000.00",
@@ -313,6 +313,13 @@ curl "http://localhost:8080/api/v1/klines?interval=1m&limit=10" | jq .
   ]
 }
 ```
+
+> [!WARNING]
+> **待修复**: `open_time` 当前返回 ISO 8601 格式，应改为 Unix 毫秒时间戳（行业标准）
+> ```rust
+> // 当前: "2025-12-19T19:33:00+08:00"
+> // 应为: 1734611580000 (Unix ms)
+> ```
 
 > [!TIP]
 > `quote_volume` = volume × price = 0.4 BTC × 37000 = 14800 USDT
