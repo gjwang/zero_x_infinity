@@ -2,6 +2,7 @@ use crossbeam_queue::ArrayQueue;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use crate::market::depth_service::DepthService;
 use crate::persistence::TDengineClient;
 use crate::pipeline::OrderAction;
 use crate::symbol_manager::SymbolManager;
@@ -22,6 +23,8 @@ pub struct AppState {
     pub db_client: Option<Arc<TDengineClient>>,
     /// WebSocket 连接管理器
     pub ws_manager: Arc<ConnectionManager>,
+    /// DepthService (for market depth queries)
+    pub depth_service: Arc<DepthService>,
 }
 
 impl AppState {
@@ -31,6 +34,7 @@ impl AppState {
         active_symbol_id: u32,
         db_client: Option<Arc<TDengineClient>>,
         ws_manager: Arc<ConnectionManager>,
+        depth_service: Arc<DepthService>,
     ) -> Self {
         Self {
             order_queue,
@@ -39,6 +43,7 @@ impl AppState {
             order_id_gen: Arc::new(AtomicU64::new(1)),
             db_client,
             ws_manager,
+            depth_service,
         }
     }
 

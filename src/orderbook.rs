@@ -236,6 +236,47 @@ impl OrderBook {
             .chain(self.asks.values().flat_map(|v| v.iter()))
             .map(|o| (o,))
     }
+
+    /// Get market depth snapshot
+    ///
+    /// Returns top N price levels for bids and asks with aggregated quantities.
+    /// Bids are sorted descending (highest price first), asks ascending (lowest price first).
+    pub fn get_depth(&self, limit: usize) -> DepthSnapshot {
+        let bids: Vec<(u64, u64)> = self
+            .bids
+            .iter()
+            .take(limit)
+            .map(|(&key, orders)| {
+                let price = u64::MAX - key;
+                let qty: u64 = orders.iter().map(|o| o.remaining_qty()).sum();
+                (price, qty)
+            })
+            .collect();
+
+        let asks: Vec<(u64, u64)> = self
+            .asks
+            .iter()
+            .take(limit)
+            .map(|(&price, orders)| {
+                let qty: u64 = orders.iter().map(|o| o.remaining_qty()).sum();
+                (price, qty)
+            })
+            .collect();
+
+        DepthSnapshot {
+            bids,
+            asks,
+            last_update_id: self.trade_id_counter,
+        }
+    }
+}
+
+/// Market depth snapshot
+#[derive(Debug, Clone)]
+pub struct DepthSnapshot {
+    pub bids: Vec<(u64, u64)>, // (price, total_qty)
+    pub asks: Vec<(u64, u64)>,
+    pub last_update_id: u64,
 }
 
 impl Default for OrderBook {
@@ -330,5 +371,37 @@ mod tests {
         // Try to remove non-existent order
         let removed = book.remove_order_by_id(999);
         assert!(removed.is_none());
+    }
+
+    #[test]
+    fn test_get_depth() {
+        let mut book = OrderBook::new();
+
+        // Add orders at different price levels
+        book.rest_order(make_order(1, 100, 10, Side::Buy));
+        book.rest_order(make_order(2, 99, 20, Side::Buy));
+        book.rest_order(make_order(3, 98, 15, Side::Buy));
+        book.rest_order(make_order(4, 101, 12, Side::Sell));
+        book.rest_order(make_order(5, 102, 25, Side::Sell));
+        book.rest_order(make_order(6, 103, 8, Side::Sell));
+
+        let depth = book.get_depth(5);
+
+        // Verify bids (descending price: 100, 99, 98)
+        assert_eq!(depth.bids.len(), 3);
+        assert_eq!(depth.bids[0], (100, 10));
+        assert_eq!(depth.bids[1], (99, 20));
+        assert_eq!(depth.bids[2], (98, 15));
+
+        // Verify asks (ascending price: 101, 102, 103)
+        assert_eq!(depth.asks.len(), 3);
+        assert_eq!(depth.asks[0], (101, 12));
+        assert_eq!(depth.asks[1], (102, 25));
+        assert_eq!(depth.asks[2], (103, 8));
+
+        // Test limit parameter
+        let depth_limited = book.get_depth(2);
+        assert_eq!(depth_limited.bids.len(), 2);
+        assert_eq!(depth_limited.asks.len(), 2);
     }
 }

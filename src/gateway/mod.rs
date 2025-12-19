@@ -9,6 +9,7 @@ use axum::{
 use std::sync::Arc;
 use tokio::net::TcpListener;
 
+use crate::market::depth_service::DepthService;
 use crate::symbol_manager::SymbolManager;
 use crate::websocket::{ConnectionManager, ws_handler};
 use crossbeam_queue::ArrayQueue;
@@ -25,6 +26,7 @@ pub async fn run_server(
     active_symbol_id: u32,
     db_client: Option<Arc<TDengineClient>>,
     push_event_queue: Arc<ArrayQueue<crate::websocket::PushEvent>>,
+    depth_service: Arc<DepthService>,
 ) {
     // 创建 WebSocket 连接管理器
     let ws_manager = Arc::new(ConnectionManager::new());
@@ -49,6 +51,7 @@ pub async fn run_server(
         active_symbol_id,
         db_client,
         ws_manager.clone(),
+        depth_service,
     ));
 
     // 创建路由
@@ -64,6 +67,7 @@ pub async fn run_server(
         .route("/api/v1/trades", get(handlers::get_trades))
         .route("/api/v1/balances", get(handlers::get_balances))
         .route("/api/v1/klines", get(handlers::get_klines))
+        .route("/api/v1/depth", get(handlers::get_depth))
         .with_state(state);
 
     // 绑定地址

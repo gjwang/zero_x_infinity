@@ -11,6 +11,30 @@ use crate::pipeline::OrderAction;
 use super::state::AppState;
 use super::types::{ApiResponse, CancelOrderRequest, ClientOrder, OrderResponseData, error_codes};
 
+// ============================================================================
+// Format Helpers (local to handlers)
+// ============================================================================
+
+/// Format price with display decimals
+fn format_price(value: u64, display_decimals: u32) -> String {
+    let divisor = 10u64.pow(display_decimals);
+    format!(
+        "{:.prec$}",
+        value as f64 / divisor as f64,
+        prec = display_decimals as usize
+    )
+}
+
+/// Format quantity with display decimals
+fn format_qty(value: u64, decimals: u32, display_decimals: u32) -> String {
+    let divisor = 10u64.pow(decimals);
+    format!(
+        "{:.prec$}",
+        value as f64 / divisor as f64,
+        prec = display_decimals as usize
+    )
+}
+
 /// Create order endpoint
 ///
 /// POST /api/v1/create_order
@@ -496,4 +520,97 @@ pub async fn get_klines(
             )),
         )),
     }
+}
+/// Get order book depth
+///
+/// GET /api/v1/depth?symbol=BTC_USDT&limit=20
+pub async fn get_depth(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Result<
+    (StatusCode, Json<ApiResponse<super::types::DepthApiData>>),
+    (StatusCode, Json<ApiResponse<()>>),
+> {
+    // Parse limit (default 20, max 100)
+    let limit = params
+        .get("limit")
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(20)
+        .min(100);
+
+    // Get snapshot from DepthService (not OrderBook directly!)
+    let snapshot = state.depth_service.get_snapshot(limit);
+
+    // Get symbol name
+    let symbol_name = state
+        .symbol_mgr
+        .get_symbol(state.active_symbol_id)
+        .ok_or_else(|| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error(
+                    error_codes::SERVICE_UNAVAILABLE,
+                    "Symbol not found",
+                )),
+            )
+        })?;
+
+    // Get symbol info for decimals
+    let symbol_info = state
+        .symbol_mgr
+        .get_symbol_info_by_id(state.active_symbol_id)
+        .ok_or_else(|| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error(
+                    error_codes::SERVICE_UNAVAILABLE,
+                    "Symbol info not found",
+                )),
+            )
+        })?;
+
+    let base_asset = state
+        .symbol_mgr
+        .assets
+        .get(&symbol_info.base_asset_id)
+        .ok_or_else(|| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error(
+                    error_codes::SERVICE_UNAVAILABLE,
+                    "Base asset not found",
+                )),
+            )
+        })?;
+
+    let price_decimals = symbol_info.price_display_decimal;
+    let qty_decimals = base_asset.display_decimals;
+
+    // Format response
+    let data = super::types::DepthApiData {
+        symbol: symbol_name.to_string(),
+        bids: snapshot
+            .bids
+            .iter()
+            .map(|(p, q)| {
+                [
+                    format_price(*p, price_decimals),
+                    format_qty(*q, qty_decimals, qty_decimals),
+                ]
+            })
+            .collect(),
+        asks: snapshot
+            .asks
+            .iter()
+            .map(|(p, q)| {
+                [
+                    format_price(*p, price_decimals),
+                    format_qty(*q, qty_decimals, qty_decimals),
+                ]
+            })
+            .collect(),
+        last_update_id: snapshot.update_id,
+    };
+
+    Ok((StatusCode::OK, Json(ApiResponse::success(data))))
 }

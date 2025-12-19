@@ -462,6 +462,15 @@ impl MatchingService {
                             self.stats.add_trades(1);
                             self.stats.record_trades(1);
                         }
+
+                        // [DEPTH] Send depth snapshot after order processing (non-blocking)
+                        let depth = self.book.get_depth(100); // Get top 100 levels
+                        let snapshot = crate::messages::DepthSnapshot::new(
+                            depth.bids,
+                            depth.asks,
+                            depth.last_update_id,
+                        );
+                        let _ = self.queues.depth_event_queue.push(snapshot);
                     }
                     ValidAction::Cancel {
                         order_id,
@@ -526,6 +535,15 @@ impl MatchingService {
                                 );
                             }
                         }
+
+                        // [DEPTH] Send depth snapshot after cancel (non-blocking)
+                        let depth = self.book.get_depth(100);
+                        let snapshot = crate::messages::DepthSnapshot::new(
+                            depth.bids,
+                            depth.asks,
+                            depth.last_update_id,
+                        );
+                        let _ = self.queues.depth_event_queue.push(snapshot);
                     }
                 }
                 self.stats

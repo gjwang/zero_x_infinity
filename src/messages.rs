@@ -691,6 +691,46 @@ impl BalanceEvent {
 }
 
 // ============================================================
+// DEPTH EVENT (ME → DepthService)
+// ============================================================
+
+/// Depth snapshot event - complete order book depth state
+///
+/// ME sends periodic snapshots to DepthService via ring buffer.
+/// DepthService maintains this as its current state.
+///
+/// # Non-blocking
+/// ME uses `let _ = queue.push(event)` - drops if queue is full.
+/// Market data characteristic: latest snapshot is most important.
+#[derive(Debug, Clone)]
+pub struct DepthSnapshot {
+    /// Bid price levels (price, total_qty) - sorted descending
+    pub bids: Vec<(u64, u64)>,
+    /// Ask price levels (price, total_qty) - sorted ascending  
+    pub asks: Vec<(u64, u64)>,
+    /// Update sequence ID
+    pub update_id: u64,
+}
+
+impl DepthSnapshot {
+    pub fn new(bids: Vec<(u64, u64)>, asks: Vec<(u64, u64)>, update_id: u64) -> Self {
+        Self {
+            bids,
+            asks,
+            update_id,
+        }
+    }
+
+    pub fn empty() -> Self {
+        Self {
+            bids: Vec::new(),
+            asks: Vec::new(),
+            update_id: 0,
+        }
+    }
+}
+
+// ============================================================
 // TESTS
 // ============================================================
 
@@ -796,6 +836,25 @@ mod tests {
             BalanceEvent::csv_header(),
             "user_id,asset_id,event_type,version,source_type,source_id,delta,avail_after,frozen_after"
         );
+    }
+
+    #[test]
+    fn test_depth_snapshot() {
+        let snapshot = DepthSnapshot::new(
+            vec![(30000, 100), (29900, 200)],
+            vec![(30100, 150), (30200, 250)],
+            42,
+        );
+
+        assert_eq!(snapshot.bids.len(), 2);
+        assert_eq!(snapshot.asks.len(), 2);
+        assert_eq!(snapshot.update_id, 42);
+        assert_eq!(snapshot.bids[0], (30000, 100));
+        assert_eq!(snapshot.asks[0], (30100, 150));
+
+        let empty = DepthSnapshot::empty();
+        assert_eq!(empty.bids.len(), 0);
+        assert_eq!(empty.asks.len(), 0);
     }
 
     #[test]
