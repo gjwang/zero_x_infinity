@@ -85,53 +85,67 @@ pub enum KLineInterval {
 
 ---
 
-## 2. 架构设计
+## 2. 架构设计：TDengine Stream Computing
 
-### 2.1 数据流
+### 2.1 核心思路
+
+**利用 TDengine 内置流计算自动聚合 K-Line**，无需手动实现聚合器：
+
+- Settlement 写入 `trades` 表后，TDengine 自动触发流计算
+- 流计算结果自动写入 `klines` 表
+- HTTP API 直接查询 `klines` 表返回结果
+
+### 2.2 数据流
 
 ```
-┌───────────────────────────────────────────────────────────────────┐
-│                        Trading Pipeline                            │
-│                                                                     │
-│  ME (MatchingEngine)  ──▶  trade_queue  ──▶  Settlement            │
-│                                                  │                  │
-│                                                  ├──▶ TDengine     │
-│                                                  │                  │
-│                                                  └──▶ KLineService │
-└───────────────────────────────────────────────────────────────────┘
-                                                          │
-                                                          ▼
-                                               ┌─────────────────────┐
-                                               │   KLine Aggregator  │
-                                               │                     │
-                                               │  ┌───────────────┐  │
-                                               │  │ 1m Aggregator │  │
-                                               │  ├───────────────┤  │
-                                               │  │ 5m Aggregator │  │
-                                               │  ├───────────────┤  │
-                                               │  │ 15m Aggregator│  │
-                                               │  ├───────────────┤  │
-                                               │  │ 1h Aggregator │  │
-                                               │  ├───────────────┤  │
-                                               │  │ 1d Aggregator │  │
-                                               │  └───────────────┘  │
-                                               └─────────────────────┘
-                                                          │
-                                          ┌───────────────┼───────────────┐
-                                          ▼               ▼               ▼
-                                      TDengine      WebSocket Push    HTTP API
+  Settlement ──▶ trades 表 (TDengine)
+                     │
+                     │ TDengine Stream Computing (自动)
+                     │
+                     ├─── kline_1m_stream  ──► klines_1m 表
+                     ├─── kline_5m_stream  ──► klines_5m 表
+                     ├─── kline_15m_stream ──► klines_15m 表
+                     ├─── kline_30m_stream ──► klines_30m 表
+                     ├─── kline_1h_stream  ──► klines_1h 表
+                     └─── kline_1d_stream  ──► klines_1d 表
+                                                   │
+                           ┌───────────────────────┴───────────────────────┐
+                           ▼                                               ▼
+                    HTTP API                                       WebSocket Push
+               GET /api/v1/klines                               kline.update (可选)
 ```
 
-### 2.2 时间窗口
+### 2.3 TDengine Stream 示例
 
-| Interval | 窗口大小 (ms) | 说明 |
-|----------|--------------|------|
-| 1m | 60,000 | 每分钟一根 K 线 |
-| 5m | 300,000 | 5分钟 |
-| 15m | 900,000 | 15分钟 |
-| 30m | 1,800,000 | 30分钟 |
-| 1h | 3,600,000 | 1小时 |
-| 1d | 86,400,000 | 1天 (UTC 00:00 切换) |
+```sql
+-- 创建 1 分钟 K-Line 流计算
+CREATE STREAM IF NOT EXISTS kline_1m_stream
+INTO klines_1m SUBTABLE(CONCAT('kl_1m_', CAST(symbol_id AS NCHAR(10))))
+AS SELECT
+    _wstart AS ts,
+    FIRST(price) AS open,
+    MAX(price) AS high,
+    MIN(price) AS low,
+    LAST(price) AS close,
+    SUM(qty) AS volume,
+    SUM(CAST(price AS DOUBLE) * CAST(qty AS DOUBLE)) AS quote_volume,
+    COUNT(*) AS trade_count
+FROM trades
+PARTITION BY symbol_id
+INTERVAL(1m);
+-- 不使用 FILL: 空窗口不产生 K-Line
+```
+
+### 2.4 时间窗口 & Stream
+
+| Interval | TDengine INTERVAL | Stream 名称 |
+|----------|-------------------|-------------|
+| 1m | INTERVAL(1m) | kline_1m_stream |
+| 5m | INTERVAL(5m) | kline_5m_stream |
+| 15m | INTERVAL(15m) | kline_15m_stream |
+| 30m | INTERVAL(30m) | kline_30m_stream |
+| 1h | INTERVAL(1h) | kline_1h_stream |
+| 1d | INTERVAL(1d) | kline_1d_stream |
 
 ---
 
@@ -171,41 +185,46 @@ pub enum KLineInterval {
 
 ```
 src/
-├── kline/
-│   ├── mod.rs              # 模块入口
-│   ├── aggregator.rs       # K-Line 聚合器
-│   ├── interval.rs         # 时间间隔定义
-│   ├── service.rs          # KLineService
-│   └── storage.rs          # TDengine 存储
+├── persistence/
+│   ├── klines.rs           # 创建 Stream, 查询 K-Line (新增)
+│   ├── schema.rs           # 添加 klines 超级表
+│   └── queries.rs          # 添加 query_klines()
 ├── gateway/
 │   ├── handlers.rs         # 添加 get_klines
 │   └── mod.rs              # 添加路由
 └── websocket/
-    └── messages.rs         # 添加 KLineUpdate
+    └── messages.rs         # 添加 KLineUpdate (可选)
 ```
+
+> [!TIP]
+> 无需 `src/kline/` 目录，TDengine 流计算替代了手动聚合逻辑
 
 ---
 
 ## 5. 实现计划
 
-### Phase 1: 基础聚合
-- [ ] KLine 数据结构
-- [ ] KLineInterval 枚举
-- [ ] 单周期 Aggregator (1m)
-- [ ] 成交驱动更新
+### Phase 1: Schema
+- [ ] 添加 `klines` 超级表到 `schema.rs`
+- [ ] 在 `init_schema()` 中创建表
 
-### Phase 2: 多周期支持
-- [ ] 5m, 15m, 30m, 1h, 1d Aggregators
-- [ ] 时间窗口切换逻辑
-- [ ] K 线完结事件
+### Phase 2: Stream Computing
+- [ ] 创建 `persistence/klines.rs` 模块
+- [ ] 实现 `create_kline_streams()` (6 个周期)
+- [ ] Gateway 初始化时调用
 
-### Phase 3: 持久化
-- [ ] TDengine 存储 (Super Table: klines)
-- [ ] 历史 K 线查询
+### Phase 3: HTTP API
+- [ ] 实现 `query_klines()` 查询函数
+- [ ] 添加 `GET /api/v1/klines` 端点
+- [ ] 格式化响应 (display_decimals)
 
-### Phase 4: 推送
-- [ ] WebSocket kline.update 事件
-- [ ] HTTP GET /api/v1/klines
+### Phase 4: 验证
+- [ ] 验证 Schema 创建
+- [ ] 验证 Stream 自动聚合
+- [ ] E2E 测试 API
+
+### (可选) Phase 5: WebSocket Push
+- [ ] 研究 TDengine TMQ 订阅
+- [ ] 实现 kline.update 推送
 
 ---
 
