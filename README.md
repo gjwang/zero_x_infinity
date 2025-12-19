@@ -44,6 +44,8 @@ This is a pilgrimage from `Hello World` to `Microsecond Latency`.
 | 0x09-a | [Gateway: Client Access Layer](./docs/src/0x09-a-gateway.md) | HTTP Gateway 客户端接入层 |
 | 0x09-b | [Settlement Persistence](./docs/src/0x09-b-settlement-persistence.md) | TDengine 持久化层 |
 | 0x09-c | [WebSocket Push](./docs/src/0x09-c-websocket-push.md) | 实时推送 |
+| 0x09-d | [K-Line Aggregation](./docs/src/0x09-d-kline-aggregation.md) | K线聚合 |
+| 0x09-e | [Order Book Depth](./docs/src/0x09-e-orderbook-depth.md) | 盘口深度 |
 
 ---
 
@@ -123,6 +125,7 @@ SELECT * FROM balances LIMIT 10;
 - `GET /api/v1/orders?user_id=&limit=` - Query orders list ✅
 - `GET /api/v1/trades?limit=` - Query trades ✅
 - `GET /api/v1/balances?user_id=&asset_id=` - Query balances ✅
+- `GET /api/v1/klines?interval=&limit=` - Query K-Line ✅
 - `WS /ws?user_id=` - WebSocket real-time push ✅
 
 ---
