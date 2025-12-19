@@ -618,7 +618,6 @@ impl SettlementService {
                             asset_id: balance_event.asset_id,
                             avail: balance_event.avail_after,
                             frozen: balance_event.frozen_after,
-                            delta: balance_event.delta,
                         });
 
                 self.stats

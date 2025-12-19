@@ -91,9 +91,7 @@ Client                    Gateway                Trading Core
     "data": {
         "asset": "BTC",
         "avail": "1.501000",
-        "frozen": "0.000000",
-        "delta": "+0.001000",
-        "reason": "trade_settled"
+        "frozen": "0.000000"
     }
 }
 ```

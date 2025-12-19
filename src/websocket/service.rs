@@ -147,7 +147,6 @@ impl WsService {
                 asset_id,
                 avail,
                 frozen,
-                delta,
             } => {
                 // Resolve asset name from SymbolManager
                 let asset_name = self
@@ -159,7 +158,6 @@ impl WsService {
                     asset: asset_name,
                     avail: avail.to_string(),
                     frozen: frozen.to_string(),
-                    delta: delta.to_string(),
                 };
                 self.manager.send_to_user(user_id, message);
             }
