@@ -97,10 +97,16 @@ impl WsService {
                 filled_qty,
                 avg_price,
             } => {
-                // TODO: Format with symbol name and display decimals
+                // Resolve symbol name from SymbolManager
+                let symbol_name = self
+                    .symbol_mgr
+                    .get_symbol_info_by_id(symbol_id)
+                    .map(|s| s.symbol.clone())
+                    .unwrap_or_else(|| format!("SYMBOL_{}", symbol_id));
+
                 let message = WsMessage::OrderUpdate {
                     order_id,
-                    symbol: format!("SYMBOL_{}", symbol_id), // Placeholder
+                    symbol: symbol_name,
                     status: format!("{:?}", status),
                     filled_qty: filled_qty.to_string(),
                     avg_price: avg_price.map(|p| p.to_string()),
@@ -118,17 +124,22 @@ impl WsService {
                 qty,
                 role,
             } => {
-                // TODO: Format with symbol name and display decimals
+                // Resolve symbol name from SymbolManager
+                let symbol_name = self
+                    .symbol_mgr
+                    .get_symbol_info_by_id(symbol_id)
+                    .map(|s| s.symbol.clone())
+                    .unwrap_or_else(|| format!("SYMBOL_{}", symbol_id));
+
                 let message = WsMessage::Trade {
                     trade_id,
                     order_id,
-                    symbol: format!("SYMBOL_{}", symbol_id), // Placeholder
+                    symbol: symbol_name,
                     side: format!("{:?}", side),
                     price: price.to_string(),
                     qty: qty.to_string(),
                     role: if role == 0 { "MAKER" } else { "TAKER" }.to_string(),
                 };
-                eprintln!("[WsService] Sending to user {}", user_id);
                 self.manager.send_to_user(user_id, message);
             }
             PushEvent::BalanceUpdate {
@@ -138,14 +149,18 @@ impl WsService {
                 frozen,
                 delta,
             } => {
-                // TODO: Format with asset name and display decimals
+                // Resolve asset name from SymbolManager
+                let asset_name = self
+                    .symbol_mgr
+                    .get_asset_name(asset_id)
+                    .unwrap_or_else(|| format!("ASSET_{}", asset_id));
+
                 let message = WsMessage::BalanceUpdate {
-                    asset: format!("ASSET_{}", asset_id), // Placeholder
+                    asset: asset_name,
                     avail: avail.to_string(),
                     frozen: frozen.to_string(),
                     delta: delta.to_string(),
                 };
-                eprintln!("[WsService] Sending to user {}", user_id);
                 self.manager.send_to_user(user_id, message);
             }
         }

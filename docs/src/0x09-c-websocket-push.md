@@ -444,6 +444,12 @@ sh run_test.sh
 
 **测试结果**:
 ```
+[LOGIC_TEST] 📨 WS Received: order_update
+   {"type": "order_update", "order_id": 1, "symbol": "BTC_USDT", "status": "NEW", ...}
+[LOGIC_TEST] 📨 WS Received: balance_update
+   {"type": "balance_update", "asset": "USDT", "avail": "999700000", "frozen": "300000", ...}
+[LOGIC_TEST] 📨 WS Received: trade
+   {"type": "trade", "trade_id": 1, "symbol": "BTC_USDT", "side": "Buy", "role": "TAKER", ...}
 [LOGIC_TEST] ✅ Found 2 OrderUpdate events
 [LOGIC_TEST] ✅ Found 1 Trade events
 [LOGIC_TEST] ✅ Found 4 BalanceUpdate events
