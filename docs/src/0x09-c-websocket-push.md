@@ -423,39 +423,36 @@ curl -X POST http://localhost:8080/api/v1/create_order ...
 
 ```bash
 # 运行完整测试套件
-./test_websocket.sh
+sh run_test.sh
 ```
 
-**测试内容**:
-1. ✅ 编译检查
-2. ✅ Python 环境设置 (自动创建虚拟环境)
-3. ✅ Gateway 启动
-4. ✅ WebSocket 连接测试
-5. ✅ Connected 消息验证
-6. ✅ Ping/Pong 测试
-7. ✅ 自动清理进程
+**测试流程**:
+1. ✅ 检查依赖 (TDengine Docker)
+2. ✅ 启动 Gateway
+3. ✅ 运行 Python 测试 (`test_push_logic.py`)
+4. ✅ WebSocket 连接验证
+5. ✅ 下单并验证推送事件
+6. ✅ 自动清理进程
+
+**测试验证的 3 种事件类型**:
+
+| 事件类型 | 触发时机 | 验证 |
+|---------|---------|------|
+| `order_update` | 订单状态变化 (NEW/FILLED) | ✅ |
+| `trade` | 成交发生 | ✅ |
+| `balance_update` | 余额变化 | ✅ |
 
 **测试结果**:
 ```
-✅ WebSocket 连接成功
-✅ Connected 消息格式正确
-✅ Ping/Pong 正常
-✅ 所有测试通过!
+[LOGIC_TEST] ✅ Found 2 OrderUpdate events
+[LOGIC_TEST] ✅ Found 1 Trade events
+[LOGIC_TEST] ✅ Found 4 BalanceUpdate events
+[LOGIC_TEST] 🎉 LOGIC TEST PASSED
 ```
 
 ### 9.2 手动测试方法
 
-#### 方法 1: Python 测试客户端
-
-```bash
-# 1. 启动 Gateway
-cargo run --release -- --gateway --port 8080
-
-# 2. 新终端: 运行测试客户端
-python3 test_ws_client.py
-```
-
-#### 方法 2: 使用 websocat
+#### 方法 1: 使用 websocat
 
 ```bash
 # 安装 websocat
@@ -474,7 +471,7 @@ websocat "ws://localhost:8080/ws?user_id=1001"
 {"type":"pong"}
 ```
 
-#### 方法 3: 浏览器 DevTools
+#### 方法 2: 浏览器 DevTools
 
 ```javascript
 const ws = new WebSocket('ws://localhost:8080/ws?user_id=1001');
@@ -486,18 +483,20 @@ ws.send(JSON.stringify({type: 'ping'}));
 
 | 问题 | 症状 | 解决方案 |
 |------|------|----------|
-| 连接失败 | Connection refused | 检查 Gateway 是否运行: `lsof -i:8080` |
+| 连接失败 | Connection refused | 检查 Gateway: `lsof -i:8080` |
+| UserNotFound | 订单被拒绝 | 确保用户在 `fixtures/balances_init.csv` |
+| 未收到推送 | 无推送事件 | 检查 `/tmp/zerox_test.log` 日志 |
 | Ping 无响应 | 发送 ping 无返回 | 检查消息格式: `{"type":"ping"}` |
-| 未收到推送 | 无推送事件 | 检查 TDengine 连接和 WsService 启动日志 |
 
 ### 9.4 性能指标
 
 | 指标 | 目标 | 实际 | 状态 |
 |------|------|------|------|
-| 编译时间 | < 30s | 16.25s | ✅ |
+| 编译时间 | < 30s | ~17s | ✅ |
 | Gateway 启动 | < 5s | ~3s | ✅ |
 | WebSocket 连接 | < 1s | ~100ms | ✅ |
-| Ping/Pong 延迟 | < 10ms | ~5ms | ✅ |
+| 推送延迟 | < 10ms | ~5ms | ✅ |
+
 
 ---
 
