@@ -356,3 +356,46 @@ curl "http://localhost:8080/api/v1/klines?interval=1m&limit=10" | jq .
 **核心理念**：
 
 > K-Line 是**衍生数据**：从成交事件实时计算，而非存储原始数据。
+
+---
+
+## 未来优化
+
+### Binance Array 格式 (P3)
+
+当前使用 **对象格式**，Binance 使用 **数组格式** 更高效：
+
+```json
+// 当前 (对象格式)
+{
+  "symbol": "BTC_USDT",
+  "interval": "1m",
+  "open_time": 1734611580000,
+  "close_time": 1734611639999,
+  "open": "37000.00",
+  ...
+}
+
+// Binance (数组格式 - 更高效)
+[
+  1734611580000,    // open_time
+  "37000.00",       // open
+  "37500.00",       // high
+  "36800.00",       // low
+  "37200.00",       // close
+  "0.400000",       // volume
+  1734611639999,    // close_time
+  "14800.00",       // quote_volume
+  8,                // trade_count
+  "0.200000",       // taker_buy_base_volume
+  "7400.00",        // taker_buy_quote_volume
+  "0"               // ignore
+]
+```
+
+**优势**:
+- 更小的 JSON 体积 (无字段名)
+- 更快的解析速度
+- 完全兼容 Binance 客户端
+
+**实施时机**: 当 API 客户端数量增加，带宽成为瓶颈时
