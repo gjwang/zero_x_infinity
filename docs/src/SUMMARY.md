@@ -24,6 +24,7 @@
 - [0x09-b Settlement Persistence: TDengine 集成](./0x09-b-settlement-persistence.md)
 - [0x09-c WebSocket Push: 实时推送](./0x09-c-websocket-push.md)
 - [0x09-d K-Line Aggregation: K线聚合服务](./0x09-d-kline-aggregation.md)
+- [0x09-e Order Book Depth: 盘口深度](./0x09-e-orderbook-depth.md)
 ---
 
 - [Performance Report (Latest)](./perf-report.md)
