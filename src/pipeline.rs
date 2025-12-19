@@ -53,6 +53,10 @@ pub const TRADE_QUEUE_CAPACITY: usize = 16384;
 /// Should handle burst of push notifications
 pub const PUSH_EVENT_QUEUE_CAPACITY: usize = 65536;
 
+/// Capacity for depth event queue (ME → DepthService)
+/// Market data can be dropped if queue is full
+pub const DEPTH_EVENT_QUEUE_CAPACITY: usize = 1024;
+
 // ============================================================
 // PIPELINE INPUT/OUTPUT TYPES
 // ============================================================
@@ -422,6 +426,16 @@ pub struct MultiThreadQueues {
     /// - Trade (buyer + seller notifications)
     /// - BalanceUpdate (balance changes)
     pub push_event_queue: Arc<ArrayQueue<crate::websocket::PushEvent>>,
+
+    /// Depth events from ME → DepthService (for market depth)
+    ///
+    /// ME sends depth snapshots after processing orders:
+    /// - Complete bids/asks state
+    /// - Sent after each order action (place/cancel)
+    /// - Optionally sent periodically
+    ///
+    /// Non-blocking: ME drops snapshots if queue is full (market data characteristic)
+    pub depth_event_queue: Arc<ArrayQueue<crate::messages::DepthSnapshot>>,
 }
 
 /// Balance update request from ME to UBSCore
@@ -508,6 +522,7 @@ impl MultiThreadQueues {
             balance_update_queue: Arc::new(ArrayQueue::new(BALANCE_UPDATE_QUEUE_CAPACITY)),
             balance_event_queue: Arc::new(ArrayQueue::new(BALANCE_EVENT_QUEUE_CAPACITY)),
             push_event_queue: Arc::new(ArrayQueue::new(PUSH_EVENT_QUEUE_CAPACITY)),
+            depth_event_queue: Arc::new(ArrayQueue::new(DEPTH_EVENT_QUEUE_CAPACITY)),
         }
     }
 

@@ -224,6 +224,15 @@ pub struct OrderResponseData {
     pub accepted_at: u64,
 }
 
+/// Market depth API response data
+#[derive(Debug, Serialize)]
+pub struct DepthApiData {
+    pub symbol: String,
+    pub bids: Vec<[String; 2]>, // [[price, qty], ...]
+    pub asks: Vec<[String; 2]>,
+    pub last_update_id: u64,
+}
+
 /// Error codes
 pub mod error_codes {
     // Success

@@ -223,8 +223,8 @@ curl "http://localhost:8080/api/v1/depth?symbol=BTC_USDT&limit=5" | jq .
 | 数据结构 | bids/asks 数组，Binance 兼容 |
 | HTTP API | `GET /api/v1/depth` |
 | WebSocket | `depth.update` (增量) |
-| 数据源 | 直接查询内存 OrderBook |
+| 架构 | 事件驱动，Ring Buffer 通信 |
 
 **核心理念**：
 
-> Depth 是 **实时快照**：直接从 OrderBook 获取，无需持久化。
+> **服务隔离**：ME 通过 DepthEvent 推送，DepthService 维护独立状态，lock-free。
