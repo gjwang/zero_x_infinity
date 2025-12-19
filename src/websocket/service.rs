@@ -12,6 +12,7 @@ use tokio::time::interval;
 
 use super::connection::ConnectionManager;
 use super::messages::{PushEvent, WsMessage};
+use crate::persistence::TDengineClient;
 use crate::symbol_manager::SymbolManager;
 
 /// Format internal u64 to display string with specified decimals
@@ -20,7 +21,6 @@ fn format_amount(value: u64, decimals: u32, display_decimals: u32) -> String {
     format!("{:.prec$}", decimal_value, prec = display_decimals as usize)
 }
 
-/// WebSocket service for consuming push events and broadcasting to clients
 pub struct WsService {
     /// Connection manager for sending messages to clients
     manager: Arc<ConnectionManager>,
@@ -28,6 +28,10 @@ pub struct WsService {
     push_event_queue: Arc<ArrayQueue<PushEvent>>,
     /// Symbol manager for name/decimal lookup
     symbol_mgr: Arc<SymbolManager>,
+    /// TDengine client for trade persistence (optional)
+    db_client: Option<Arc<TDengineClient>>,
+    /// Active symbol ID for trading
+    active_symbol_id: u32,
 }
 
 impl WsService {
@@ -36,11 +40,15 @@ impl WsService {
         manager: Arc<ConnectionManager>,
         push_event_queue: Arc<ArrayQueue<PushEvent>>,
         symbol_mgr: Arc<SymbolManager>,
+        db_client: Option<Arc<TDengineClient>>,
+        active_symbol_id: u32,
     ) -> Self {
         Self {
             manager,
             push_event_queue,
             symbol_mgr,
+            db_client,
+            active_symbol_id,
         }
     }
 
@@ -58,7 +66,7 @@ impl WsService {
             let mut count = 0;
             while let Some(event) = self.push_event_queue.pop() {
                 eprintln!("[WsService] Popped event from queue: count={}", count + 1);
-                self.handle_event(event);
+                self.handle_event(event).await;
                 count += 1;
                 if count >= 1000 {
                     break;
@@ -68,7 +76,7 @@ impl WsService {
     }
 
     /// Handle a single push event
-    fn handle_event(&self, event: PushEvent) {
+    async fn handle_event(&self, event: PushEvent) {
         tracing::debug!(
             "[WsService] Handling event: {:?}",
             match &event {
@@ -178,6 +186,26 @@ impl WsService {
                     role: if role == 0 { "MAKER" } else { "TAKER" }.to_string(),
                 };
                 self.manager.send_to_user(user_id, message);
+
+                // Persist trade to TDengine for K-Line aggregation
+                if let Some(ref db_client) = self.db_client {
+                    if let Err(e) = crate::persistence::trades::insert_trade_record(
+                        db_client.taos(),
+                        trade_id,
+                        order_id,
+                        user_id,
+                        side,
+                        price,
+                        qty,
+                        0, // fee placeholder
+                        role,
+                        self.active_symbol_id,
+                    )
+                    .await
+                    {
+                        tracing::error!("Failed to persist trade to TDengine: {}", e);
+                    }
+                }
             }
             PushEvent::BalanceUpdate {
                 user_id,

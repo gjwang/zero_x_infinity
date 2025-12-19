@@ -374,12 +374,12 @@ pub async fn query_klines(
     limit: usize,
     symbol_mgr: &SymbolManager,
 ) -> Result<Vec<KLineApiData>> {
-    // Query from the specific subtable created by the stream
-    // Stream creates subtables with format: kl_{interval}_{symbol_id}
-    let subtable_name = format!("kl_{}_{}", interval, symbol_id);
+    // Query from the Stream-generated super table (klines_1m, klines_5m, etc.)
+    // Note: Stream creates auto-structured tables with group_id TAG
+    let table_name = format!("klines_{}", interval);
     let sql = format!(
         "SELECT ts, open, high, low, close, volume, quote_volume, trade_count FROM {} ORDER BY ts DESC LIMIT {}",
-        subtable_name, limit
+        table_name, limit
     );
 
     let mut result = taos
