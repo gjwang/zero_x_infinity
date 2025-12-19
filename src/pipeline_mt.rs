@@ -187,6 +187,7 @@ pub fn run_pipeline_multi_thread(
             queues.clone(),
             stats.clone(),
             market,
+            100, // depth_update_interval_ms: 100ms
         );
         let s = shutdown.clone();
         thread::spawn(move || {

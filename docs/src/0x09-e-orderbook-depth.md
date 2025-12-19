@@ -228,3 +228,138 @@ curl "http://localhost:8080/api/v1/depth?symbol=BTC_USDT&limit=5" | jq .
 **核心理念**：
 
 > **服务隔离**：ME 通过 DepthEvent 推送，DepthService 维护独立状态，lock-free。
+
+## 7. 测试验证
+
+### 7.1 自动化测试脚本
+
+我们提供了完整的测试脚本 `scripts/test_depth.sh`：
+
+```bash
+# 运行完整的深度 API 测试
+./scripts/test_depth.sh
+```
+
+**测试内容：**
+1. 查询空盘口
+2. 提交买单并验证
+3. 提交卖单并验证
+4. 测试不同的 limit 参数
+5. 性能测试（快速提交多个订单）
+
+### 7.2 手动测试步骤
+
+#### Step 1: 启动 Gateway
+
+```bash
+cargo run --release -- --gateway --port 8080
+```
+
+#### Step 2: 查询空盘口
+
+```bash
+curl "http://localhost:8080/api/v1/depth?symbol=BTC_USDT&limit=5" | jq .
+```
+
+**预期结果：**
+```json
+{
+  "code": 0,
+  "msg": "ok",
+  "data": {
+    "symbol": "BTC_USDT",
+    "bids": [],
+    "asks": [],
+    "last_update_id": 0
+  }
+}
+```
+
+#### Step 3: 提交测试订单
+
+**买单：**
+```bash
+curl -X POST "http://localhost:8080/api/v1/create_order" \
+  -H "Content-Type: application/json" \
+  -H "X-User-Id: 1" \
+  -d '{
+    "symbol": "BTC_USDT",
+    "side": "BUY",
+    "order_type": "LIMIT",
+    "price": "29900.00",
+    "qty": "0.1"
+  }' | jq .
+```
+
+**卖单：**
+```bash
+curl -X POST "http://localhost:8080/api/v1/create_order" \
+  -H "Content-Type: application/json" \
+  -H "X-User-Id: 2" \
+  -d '{
+    "symbol": "BTC_USDT",
+    "side": "SELL",
+    "order_type": "LIMIT",
+    "price": "30100.00",
+    "qty": "0.15"
+  }' | jq .
+```
+
+#### Step 4: 等待深度更新并查询
+
+```bash
+# 等待 200ms（深度更新间隔为 100ms）
+sleep 0.2
+
+# 查询更新后的盘口
+curl "http://localhost:8080/api/v1/depth?symbol=BTC_USDT&limit=5" | jq .
+```
+
+**预期结果：** 应该看到买单和卖单
+
+### 7.3 性能验证
+
+**测试场景：** 快速提交 100 个订单，验证深度更新频率
+
+```bash
+# 快速提交 100 个订单
+for i in {1..100}; do
+  price=$((29000 + i * 10))
+  curl -s -X POST "http://localhost:8080/api/v1/create_order" \
+    -H "Content-Type: application/json" \
+    -H "X-User-Id: 1" \
+    -d "{\"symbol\": \"BTC_USDT\", \"side\": \"BUY\", \"order_type\": \"LIMIT\", \"price\": \"${price}.00\", \"qty\": \"0.01\"}" \
+    > /dev/null &
+done
+wait && sleep 0.2
+
+# 查询深度
+curl "http://localhost:8080/api/v1/depth?symbol=BTC_USDT&limit=10" | jq .
+```
+
+**验证要点：**
+- ✅ 深度数据正确反映订单簿状态
+- ✅ 更新延迟 ≤ 100ms
+- ✅ 高频订单不会导致过多快照（每 100ms 最多 1 次）
+
+---
+
+## 8. 总结
+
+**实现完成：**
+- ✅ DepthSnapshot 消息类型
+- ✅ 定时快照机制（100ms 间隔，dirty flag 优化）
+- ✅ DepthService 消费快照
+- ✅ GET /api/v1/depth API 端点
+- ✅ 完整的测试脚本和文档
+
+**架构特点：**
+- 简洁：快照方式，非侵入式
+- 高效：dirty flag + 定时更新（100ms）
+- 可靠：lock-free ring buffer 通信
+- 标准：符合行业惯例（Binance 等）
+
+**性能优化：**
+- 高频场景：从每笔订单 1 次快照 → 每秒最多 10 次
+- 低频场景：无变化时不发送（dirty flag）
+- ME 开销：最小化（仅设置 flag）

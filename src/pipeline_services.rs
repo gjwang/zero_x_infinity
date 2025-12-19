@@ -331,6 +331,10 @@ pub struct MatchingService {
     queues: Arc<MultiThreadQueues>,
     stats: Arc<PipelineStats>,
     market: MarketContext,
+    // Depth snapshot update tracking
+    depth_dirty: bool,
+    last_depth_update: std::time::Instant,
+    depth_update_interval_ms: u64,
 }
 
 impl MatchingService {
@@ -339,12 +343,16 @@ impl MatchingService {
         queues: Arc<MultiThreadQueues>,
         stats: Arc<PipelineStats>,
         market: MarketContext,
+        depth_update_interval_ms: u64,
     ) -> Self {
         Self {
             book,
             queues,
             stats,
             market,
+            depth_dirty: false,
+            last_depth_update: std::time::Instant::now(),
+            depth_update_interval_ms,
         }
     }
 
@@ -462,15 +470,7 @@ impl MatchingService {
                             self.stats.add_trades(1);
                             self.stats.record_trades(1);
                         }
-
-                        // [DEPTH] Send depth snapshot after order processing (non-blocking)
-                        let depth = self.book.get_depth(100); // Get top 100 levels
-                        let snapshot = crate::messages::DepthSnapshot::new(
-                            depth.bids,
-                            depth.asks,
-                            depth.last_update_id,
-                        );
-                        let _ = self.queues.depth_event_queue.push(snapshot);
+                        self.depth_dirty = true; // Mark depth as changed
                     }
                     ValidAction::Cancel {
                         order_id,
@@ -535,19 +535,27 @@ impl MatchingService {
                                 );
                             }
                         }
-
-                        // [DEPTH] Send depth snapshot after cancel (non-blocking)
-                        let depth = self.book.get_depth(100);
-                        let snapshot = crate::messages::DepthSnapshot::new(
-                            depth.bids,
-                            depth.asks,
-                            depth.last_update_id,
-                        );
-                        let _ = self.queues.depth_event_queue.push(snapshot);
+                        self.depth_dirty = true; // Mark depth as changed
                     }
                 }
                 self.stats
                     .add_matching_time(task_start.elapsed().as_nanos() as u64);
+            }
+
+            // [DEPTH] Periodic snapshot update (if dirty and interval elapsed)
+            if self.depth_dirty
+                && self.last_depth_update.elapsed().as_millis()
+                    >= self.depth_update_interval_ms as u128
+            {
+                let depth = self.book.get_depth(100);
+                let snapshot = crate::messages::DepthSnapshot::new(
+                    depth.bids,
+                    depth.asks,
+                    depth.last_update_id,
+                );
+                let _ = self.queues.depth_event_queue.push(snapshot);
+                self.last_depth_update = std::time::Instant::now();
+                self.depth_dirty = false;
             }
 
             // Check for shutdown
