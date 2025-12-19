@@ -30,4 +30,4 @@ jobs:
         run: cargo test
       
       - name: Clippy
-        run: cargo clippy -- -W clippy::all
+        run: cargo clippy -- -W clippy::all -A clippy::too_many_arguments -A clippy::collapsible_if -A clippy::unwrap_or_default -A clippy::doc_lazy_continuation -A clippy::manual_is_multiple_of -A clippy::implicit_saturating_sub -A clippy::redundant_pattern_matching

@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use taos::*;
 
 /// TDengine client for persistence operations
@@ -10,7 +10,7 @@ impl TDengineClient {
     /// Connect to TDengine using DSN
     ///
     /// # Example DSN
-    /// ```
+    /// ```text
     /// taos+ws://root:taosdata@localhost:6041
     /// ```
     pub async fn connect(dsn: &str) -> Result<Self> {

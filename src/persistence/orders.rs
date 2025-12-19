@@ -1,5 +1,5 @@
 use crate::models::{InternalOrder, OrderStatus};
-use anyhow::{Context, Result};
+use anyhow::Result;
 use taos::*;
 
 /// Insert a new order into TDengine

@@ -1,5 +1,5 @@
 use crate::models::{Side, Trade};
-use anyhow::{Context, Result};
+use anyhow::Result;
 use taos::*;
 
 /// Insert a single trade into TDengine

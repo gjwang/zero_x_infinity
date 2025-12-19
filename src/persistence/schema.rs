@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use taos::*;
 
 /// Initialize TDengine schema for trading database
