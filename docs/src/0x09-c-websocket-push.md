@@ -48,12 +48,10 @@ Client                    Gateway                Trading Core
 
 | 事件类型 | 触发时机 | 接收者 |
 |----------|----------|--------|
-| `order.created` | 订单创建 | 订单所有者 |
-| `order.filled` | 完全成交 | 订单所有者 |
-| `order.partial_filled` | 部分成交 | 订单所有者 |
-| `order.canceled` | 订单取消 | 订单所有者 |
+| `order.update` | 订单状态变化 (NEW/FILLED/PARTIALLY_FILLED/CANCELED) | 订单所有者 |
 | `trade` | 成交发生 | 双方用户 |
 | `balance.update` | 余额变化 | 账户所有者 |
+
 
 ### 1.2 消息格式
 
