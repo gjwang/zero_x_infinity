@@ -210,3 +210,41 @@ impl WsService {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_format_amount_basic() {
+        // 12345678 with 8 decimals = 0.12345678, display 4 decimals (truncated)
+        assert_eq!(format_amount(12345678, 8, 4), "0.1234");
+
+        // 100000000 with 8 decimals = 1.0, display 2 decimals
+        assert_eq!(format_amount(100000000, 8, 2), "1.00");
+
+        // Zero value
+        assert_eq!(format_amount(0, 8, 2), "0.00");
+    }
+
+    #[test]
+    fn test_format_amount_large_values() {
+        // 1 BTC = 100_000_000 satoshi
+        assert_eq!(format_amount(100_000_000, 8, 6), "1.000000");
+
+        // 10 BTC
+        assert_eq!(format_amount(1_000_000_000, 8, 6), "10.000000");
+
+        // 0.001 BTC
+        assert_eq!(format_amount(100_000, 8, 6), "0.001000");
+    }
+
+    #[test]
+    fn test_format_amount_price() {
+        // Price with 2 decimals: 85000.50 stored as 8500050
+        assert_eq!(format_amount(8500050, 2, 2), "85000.50");
+
+        // Price 30.00
+        assert_eq!(format_amount(3000, 2, 2), "30.00");
+    }
+}
