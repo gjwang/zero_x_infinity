@@ -42,6 +42,7 @@ impl WsService {
     /// This runs in a tokio task and continuously polls the push_event_queue.
     pub async fn run(self) {
         let mut tick = interval(Duration::from_millis(1));
+        tracing::info!("[WsService] Started - polling push_event_queue");
 
         loop {
             tick.tick().await;
@@ -49,6 +50,7 @@ impl WsService {
             // Batch process push events
             let mut count = 0;
             while let Some(event) = self.push_event_queue.pop() {
+                eprintln!("[WsService] Popped event from queue: count={}", count + 1);
                 self.handle_event(event);
                 count += 1;
                 if count >= 1000 {
@@ -60,6 +62,32 @@ impl WsService {
 
     /// Handle a single push event
     fn handle_event(&self, event: PushEvent) {
+        tracing::debug!(
+            "[WsService] Handling event: {:?}",
+            match &event {
+                PushEvent::OrderUpdate {
+                    user_id, order_id, ..
+                } => format!("OrderUpdate(user={}, order={})", user_id, order_id),
+                PushEvent::Trade {
+                    user_id, trade_id, ..
+                } => format!("Trade(user={}, trade={})", user_id, trade_id),
+                PushEvent::BalanceUpdate {
+                    user_id, asset_id, ..
+                } => format!("BalanceUpdate(user={}, asset={})", user_id, asset_id),
+            }
+        );
+
+        match &event {
+            PushEvent::OrderUpdate {
+                order_id, user_id, ..
+            } => tracing::info!(
+                "[TRACE] Order {}: WsService Picked Up (User {})",
+                order_id,
+                user_id
+            ),
+            _ => {}
+        }
+
         match event {
             PushEvent::OrderUpdate {
                 user_id,
@@ -77,6 +105,7 @@ impl WsService {
                     filled_qty: filled_qty.to_string(),
                     avg_price: avg_price.map(|p| p.to_string()),
                 };
+                tracing::info!("[WsService] Sending to user {}", user_id);
                 self.manager.send_to_user(user_id, message);
             }
             PushEvent::Trade {
@@ -99,6 +128,7 @@ impl WsService {
                     qty: qty.to_string(),
                     role: if role == 0 { "MAKER" } else { "TAKER" }.to_string(),
                 };
+                eprintln!("[WsService] Sending to user {}", user_id);
                 self.manager.send_to_user(user_id, message);
             }
             PushEvent::BalanceUpdate {
@@ -115,6 +145,7 @@ impl WsService {
                     frozen: frozen.to_string(),
                     delta: delta.to_string(),
                 };
+                eprintln!("[WsService] Sending to user {}", user_id);
                 self.manager.send_to_user(user_id, message);
             }
         }

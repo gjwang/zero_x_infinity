@@ -120,6 +120,7 @@ pub struct PipelineConfig<'a> {
     pub symbol_mgr: &'a crate::symbol_manager::SymbolManager,
     pub active_symbol_id: u32,
     pub sample_rate: usize,
+    pub continuous: bool,
 }
 
 /// Action for ME thread (UBSCore → ME)

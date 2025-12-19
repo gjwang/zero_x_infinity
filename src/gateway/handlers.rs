@@ -22,6 +22,7 @@ pub async fn create_order(
 {
     // 1. Extract user_id
     let user_id = extract_user_id(&headers)?;
+    tracing::info!("[TRACE] Create Order: Received from User {}", user_id);
 
     // 2. Validate and parse ClientOrder
     let validated =
@@ -47,6 +48,10 @@ pub async fn create_order(
         })?;
 
     // 5. Push to queue
+    tracing::info!(
+        "[TRACE] Create Order {}: Pushing to Ingestion Queue",
+        order_id
+    );
     let action = OrderAction::Place(crate::pipeline::SequencedOrder::new(
         order_id,
         internal_order,
@@ -61,6 +66,10 @@ pub async fn create_order(
             )),
         ));
     }
+    tracing::info!(
+        "[TRACE] Create Order {}: ✅ Pushed to Ingestion Queue",
+        order_id
+    );
 
     // 6. Return response
     Ok((
@@ -85,6 +94,11 @@ pub async fn cancel_order(
 {
     // 1. Extract user_id
     let user_id = extract_user_id(&headers)?;
+    tracing::info!(
+        "[TRACE] Cancel Order {}: Received from User {}",
+        req.order_id,
+        user_id
+    );
 
     // 2. Push cancel action to queue
     let action = OrderAction::Cancel {
@@ -94,6 +108,10 @@ pub async fn cancel_order(
     };
 
     if state.order_queue.push(action).is_err() {
+        tracing::error!(
+            "[TRACE] Cancel Order {}: ❌ Queue Full in Gateway",
+            req.order_id
+        );
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ApiResponse::<()>::error(
@@ -102,6 +120,12 @@ pub async fn cancel_order(
             )),
         ));
     }
+
+    tracing::info!(
+        "[TRACE] Cancel Order {}: ✅ Gateway -> Ingestion Queue (User {})",
+        req.order_id,
+        user_id
+    );
 
     // 3. Return response
     Ok((
