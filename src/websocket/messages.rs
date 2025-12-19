@@ -35,7 +35,6 @@ pub enum WsMessage {
         asset: String,
         avail: String,
         frozen: String,
-        delta: String,
     },
     /// Pong response to ping
     Pong,
@@ -73,6 +72,5 @@ pub enum PushEvent {
         asset_id: u32,
         avail: u64,
         frozen: u64,
-        delta: i64, // Can be negative
     },
 }
