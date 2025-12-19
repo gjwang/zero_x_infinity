@@ -287,8 +287,8 @@ impl PerfMetrics {
                 1_000_000.0 / latency_us
             };
 
-            let tp_str = if throughput > 1000_000.0 {
-                format!("{:.2}M ops/s", throughput / 1000_000.0)
+            let tp_str = if throughput > 1_000_000.0 {
+                format!("{:.2}M ops/s", throughput / 1_000_000.0)
             } else {
                 format!("{:.1}k ops/s", throughput / 1000.0)
             };

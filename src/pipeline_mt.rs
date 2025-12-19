@@ -35,7 +35,7 @@
 //!   - External: Deposit/Withdraw events
 
 use std::sync::Arc;
-use std::thread::{self, JoinHandle};
+use std::thread;
 use std::time::{Duration, Instant};
 
 // High-frequency lifecycle logs are sent to hierarchical targets under "0XINFI"
