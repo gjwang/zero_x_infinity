@@ -30,8 +30,13 @@ pub async fn run_server(
     let ws_manager = Arc::new(ConnectionManager::new());
 
     // 启动 WebSocket 推送服务
-    let ws_service =
-        crate::websocket::WsService::new(ws_manager.clone(), push_event_queue, symbol_mgr.clone());
+    let ws_service = crate::websocket::WsService::new(
+        ws_manager.clone(),
+        push_event_queue,
+        symbol_mgr.clone(),
+        db_client.clone(),
+        active_symbol_id,
+    );
     tokio::spawn(async move {
         ws_service.run().await;
     });
@@ -58,6 +63,7 @@ pub async fn run_server(
         .route("/api/v1/orders", get(handlers::get_orders))
         .route("/api/v1/trades", get(handlers::get_trades))
         .route("/api/v1/balances", get(handlers::get_balances))
+        .route("/api/v1/klines", get(handlers::get_klines))
         .with_state(state);
 
     // 绑定地址

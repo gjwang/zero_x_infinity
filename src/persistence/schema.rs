@@ -32,6 +32,10 @@ pub async fn init_schema(taos: &Taos) -> Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("{}: {}", "Failed to create order_events table", e))?;
 
+    taos.exec(CREATE_KLINES_TABLE)
+        .await
+        .map_err(|e| anyhow::anyhow!("{}: {}", "Failed to create klines table", e))?;
+
     tracing::info!("TDengine schema initialized successfully");
     Ok(())
 }
@@ -102,5 +106,22 @@ CREATE STABLE IF NOT EXISTS order_events (
     remaining_qty BIGINT UNSIGNED
 ) TAGS (
     symbol_id INT UNSIGNED
+)
+"#;
+
+/// K-Line (candlestick) super table for storing aggregated OHLCV data
+const CREATE_KLINES_TABLE: &str = r#"
+CREATE STABLE IF NOT EXISTS klines (
+    ts TIMESTAMP,
+    open BIGINT UNSIGNED,
+    high BIGINT UNSIGNED,
+    low BIGINT UNSIGNED,
+    close BIGINT UNSIGNED,
+    volume BIGINT UNSIGNED,
+    quote_volume DOUBLE,
+    trade_count INT UNSIGNED
+) TAGS (
+    symbol_id INT UNSIGNED,
+    intv NCHAR(8)
 )
 "#;

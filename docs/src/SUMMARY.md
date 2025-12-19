@@ -23,6 +23,7 @@
 - [0x09-a Gateway: 客户端接入层 (Client Access Layer)](./0x09-a-gateway.md)
 - [0x09-b Settlement Persistence: TDengine 集成](./0x09-b-settlement-persistence.md)
 - [0x09-c WebSocket Push: 实时推送](./0x09-c-websocket-push.md)
+- [0x09-d K-Line Aggregation: K线聚合服务](./0x09-d-kline-aggregation.md)
 ---
 
 - [Performance Report (Latest)](./perf-report.md)
