@@ -188,6 +188,7 @@ fn main() {
                     symbol_mgr_clone,
                     active_symbol_id,
                     db_client,
+                    queues_clone.push_event_queue.clone(),
                 )
                 .await;
             });

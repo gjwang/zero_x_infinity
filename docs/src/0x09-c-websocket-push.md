@@ -92,7 +92,7 @@ Client                    Gateway                Trading Core
         "asset": "BTC",
         "avail": "1.501000",
         "frozen": "0.000000",
-        "change": "+0.001000",
+        "delta": "+0.001000",
         "reason": "trade_settled"
     }
 }
@@ -102,61 +102,95 @@ Client                    Gateway                Trading Core
 
 ## 2. 架构设计
 
-### 2.1 系统架构
+### 2.1 设计原则
+
+> [!IMPORTANT]
+> **数据一致性优先**: 用户收到推送时,数据库必须已更新
+
+#### 推送时序问题
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                              Gateway                                     │
-│                                                                          │
-│  ┌───────────────┐     ┌───────────────┐     ┌───────────────┐          │
-│  │  HTTP Server  │     │  WS Server    │     │  Push Service │          │
-│  │  (create_order)│    │  (connections)│     │  (broadcast)  │          │
-│  └───────┬───────┘     └───────┬───────┘     └───────┬───────┘          │
-│          │                     │                     │                   │
-│          └─────────────────────┼─────────────────────┘                   │
-│                                │                                         │
-│                    ┌───────────▼───────────┐                             │
-│                    │   Connection Manager  │                             │
-│                    │  user_id → Vec<Tx>    │                             │
-│                    └───────────────────────┘                             │
-└─────────────────────────────────────────────────────────────────────────┘
-                                 │
-                    ┌────────────▼────────────┐
-                    │      Trading Core       │
-                    │                         │
-                    │  Settlement ──> Events  │
-                    └─────────────────────────┘
+❌ 错误流程:
+ME 成交 → 立即推送 → 用户收到通知 → 查询 API → 数据库还未更新 ❌
+
+✅ 正确流程:
+ME 成交 → Settlement 持久化 → 推送 → 用户查询 → 数据已存在 ✅
 ```
 
-### 2.2 连接管理
+#### 消息分类
+
+| 类型 | 示例 | 推送时机 | 原因 |
+|------|------|----------|------|
+| **Market 数据** | 公开成交记录 | ME 后立即推送 | 公开数据,无需等待 DB |
+| **User 数据** | 订单状态,余额 | Settlement 后推送 | 确保用户查询时数据已存在 |
+
+**当前实现**: 全部从 Settlement 后推送 (简化方案,未来可优化)
+
+### 2.2 系统架构
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Multi-Thread Pipeline                         │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Thread 1: Ingestion  ──▶  order_queue  ──▶  Thread 2: UBSCore │
+│                                                                  │
+│  Thread 2: UBSCore    ──▶  action_queue  ──▶  Thread 3: ME     │
+│                       └──▶  balance_event_queue                 │
+│                                                                  │
+│  Thread 3: ME         ──▶  trade_queue  ──▶  Thread 4: Settlement│
+│                       └──▶  balance_update_queue                │
+│                                                                  │
+│  Thread 4: Settlement ──▶  push_event_queue  ──▶  WsService     │
+│                       │                                          │
+│                       └──▶  TDengine (persist)                   │
+│                                                                  │
+│  WsService (Gateway)  ──▶  ConnectionManager  ──▶  Clients      │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**关键设计**:
+- ✅ Settlement 作为**唯一推送源**
+- ✅ 持久化成功后才生成 `PushEvent`
+- ✅ WsService 运行在 Gateway 的 tokio runtime
+- ✅ 不修改 UBSCore 和 ME 的核心逻辑
+
+### 2.3 连接管理
 
 ```rust
-// src/websocket/manager.rs
+// src/websocket/connection.rs
 pub struct ConnectionManager {
     // user_id -> list of sender channels
-    connections: DashMap<u64, Vec<mpsc::UnboundedSender<Message>>>,
+    // 支持同一用户多个连接 (mobile + web)
+    connections: DashMap<u64, Vec<mpsc::UnboundedSender<WsMessage>>>,
 }
 
 impl ConnectionManager {
-    pub fn add_connection(&self, user_id: u64, tx: mpsc::UnboundedSender<Message>);
-    pub fn remove_connection(&self, user_id: u64, tx: &mpsc::UnboundedSender<Message>);
-    pub fn send_to_user(&self, user_id: u64, message: &str);
-    pub fn broadcast(&self, message: &str);
+    pub fn add_connection(&self, user_id: u64, tx: WsSender);
+    pub fn remove_connection(&self, user_id: u64, tx: &WsSender);
+    pub fn send_to_user(&self, user_id: u64, message: WsMessage);
+    pub fn stats(&self) -> (usize, usize);  // (users, total_connections)
 }
 ```
 
-### 2.3 事件传播
+### 2.4 事件传播流程
 
 ```
-Settlement Thread                Push Service
-      │                               │
-      │── OrderFilled(order_id) ─────>│
-      │                               │
-      │                               ├── lookup user_id
-      │                               │
-      │                               ├── format message
-      │                               │
-      │                               └── send to user's connections
+Settlement Thread                          WsService (Gateway)
+      │                                          │
+      ├─ 1. Persist TradeEvent to TDengine      │
+      │                                          │
+      ├─ 2. Generate PushEvent ─────────────────▶│
+      │    - OrderUpdate (FILLED/PARTIAL)        │
+      │    - Trade (buyer + seller)              │
+      │    - BalanceUpdate                       │
+      │                                          │
+      │                                          ├─ 3. Format WsMessage
+      │                                          │
+      │                                          ├─ 4. Lookup user connections
+      │                                          │
+      │                                          └─ 5. Send to WebSocket clients
 ```
 
 ---
@@ -197,14 +231,16 @@ Settlement Thread                Push Service
 src/
 ├── websocket/
 │   ├── mod.rs              # 模块入口
-│   ├── server.rs           # WebSocket 服务器
-│   ├── handler.rs          # 连接处理
-│   ├── manager.rs          # 连接管理器
-│   ├── messages.rs         # 消息类型定义
-│   └── push.rs             # 推送服务
+│   ├── connection.rs       # ConnectionManager
+│   ├── handler.rs          # WebSocket 连接处理
+│   ├── messages.rs         # WsMessage, PushEvent 定义
+│   └── service.rs          # WsService (消费 push_event_queue)
 ├── gateway/
-│   └── mod.rs              # 添加 WS 路由
-└── ...
+│   ├── mod.rs              # 添加 WS 路由
+│   └── state.rs            # 添加 ConnectionManager
+├── pipeline.rs             # 添加 push_event_queue
+├── pipeline_services.rs    # Settlement 生成 PushEvent
+└── messages.rs             # 扩展 TradeEvent
 ```
 
 ---
@@ -214,29 +250,101 @@ src/
 ```toml
 # Cargo.toml
 [dependencies]
-tokio-tungstenite = "0.21"   # WebSocket 实现
-dashmap = "5.5"               # 并发 HashMap
+axum = { version = "0.8", features = ["ws"] }  # WebSocket 支持
+dashmap = "5.5"                                 # 并发 HashMap
 ```
 
 ---
 
-## 6. 实现计划
+## 6. 核心数据结构
 
-### Phase 1: 基础连接
-- [ ] WebSocket 服务器启动
-- [ ] 连接管理器 (ConnectionManager)
-- [ ] 认证流程
-- [ ] 心跳处理
+### 6.1 PushEvent (内部队列消息)
 
-### Phase 2: 事件推送
-- [ ] 订单状态推送
-- [ ] 成交推送
-- [ ] 余额更新推送
+```rust
+// src/websocket/messages.rs
+#[derive(Debug, Clone)]
+pub enum PushEvent {
+    /// 订单状态更新
+    OrderUpdate {
+        user_id: u64,
+        order_id: u64,
+        symbol_id: u32,
+        status: OrderStatus,
+        filled_qty: u64,
+        avg_price: Option<u64>,
+    },
+    
+    /// 成交通知
+    Trade {
+        user_id: u64,
+        trade_id: u64,
+        order_id: u64,
+        symbol_id: u32,
+        side: Side,
+        price: u64,
+        qty: u64,
+        role: u8,  // 0=Maker, 1=Taker
+    },
+    
+    /// 余额变化
+    BalanceUpdate {
+        user_id: u64,
+        asset_id: u32,
+        avail: u64,
+        frozen: u64,
+        delta: i64,
+    },
+}
+```
 
-### Phase 3: Settlement 集成
-- [ ] 从 Settlement 线程接收事件
-- [ ] 转换为推送消息
-- [ ] 发送到对应用户
+### 6.2 TradeEvent 扩展
+
+```rust
+// src/messages.rs
+pub struct TradeEvent {
+    pub trade: Trade,
+    pub taker_order_id: OrderId,
+    pub maker_order_id: OrderId,
+    
+    // ⭐ 新增: 订单状态信息 (用于判断 FILLED/PARTIALLY_FILLED)
+    pub taker_order_qty: u64,        // 订单总数量
+    pub taker_filled_qty: u64,       // 成交后的累计成交量
+    pub maker_order_qty: u64,
+    pub maker_filled_qty: u64,
+    
+    // 现有字段...
+    pub taker_side: Side,
+    pub base_asset_id: AssetId,
+    pub quote_asset_id: AssetId,
+    pub qty_unit: u64,
+}
+```
+
+---
+
+## 7. 实现计划
+
+### Phase 1: 基础 WebSocket 连接
+- [ ] 添加依赖 (axum ws feature, dashmap)
+- [ ] 创建 `websocket` 模块
+- [ ] 实现 `ConnectionManager`
+- [ ] 实现 WebSocket handler
+- [ ] 集成到 Gateway (添加 `/ws` 路由)
+- [ ] 测试连接/断开/心跳
+
+### Phase 2: Settlement 推送集成
+- [ ] 添加 `push_event_queue` 到 `MultiThreadQueues`
+- [ ] 扩展 `TradeEvent` (添加订单状态字段)
+- [ ] Settlement 生成 `PushEvent` (持久化后)
+- [ ] 实现 `WsService` (消费 push_event_queue)
+- [ ] 启动 WsService (Gateway tokio runtime)
+- [ ] 端到端测试
+
+### Phase 3: 完善和优化
+- [ ] 错误处理和重连逻辑
+- [ ] 性能测试 (推送延迟 < 10ms)
+- [ ] 文档更新
+- [ ] 生产环境配置
 
 ---
 
@@ -277,20 +385,30 @@ curl -X POST http://localhost:8080/api/v1/create_order ...
 
 ---
 
-## Summary
+## 8. Summary
 
 本章实现 WebSocket 实时推送：
 
-| 设计点 | 方案 |
-|--------|------|
-| WebSocket 库 | tokio-tungstenite |
-| 连接管理 | DashMap (并发安全) |
-| 消息格式 | JSON |
-| 认证 | Token/API Key |
-| 心跳 | 30秒 ping/pong |
+| 设计点 | 方案 | 原因 |
+|--------|------|------|
+| **推送源** | Settlement (持久化后) | 确保数据一致性 |
+| **事件队列** | `push_event_queue` | 解耦 Settlement 和 WsService |
+| **连接管理** | DashMap | 并发安全,支持多连接 |
+| **消息格式** | JSON | 易于调试,兼容性好 |
+| **认证** | Query parameter (MVP) | 简单,与 HTTP API 一致 |
+| **心跳** | 30秒 ping/pong | 检测连接状态 |
 
 **核心理念**：
 
-> 推送是**实时通道**：Settlement 完成后立即推送到客户端，延迟 < 10ms。
+> **数据一致性优先**: 用户收到推送时,数据库必须已更新。
+> 
+> **Settlement-first**: 所有推送事件从 Settlement 生成,确保持久化成功后才推送。
+
+**关键设计决策**:
+
+1. **TradeEvent 扩展**: 添加订单状态字段 (`order_qty`, `filled_qty`)
+2. **单一推送源**: Settlement 作为唯一事件源,简化架构
+3. **完整事件**: 推送 `order.update` + `trade` + `balance.update`
 
 下一章 (0x09-d) 将实现 K-Line 聚合服务。
+

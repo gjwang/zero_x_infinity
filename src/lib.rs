@@ -46,6 +46,7 @@ pub mod pipeline_services;
 pub mod ubscore;
 pub mod user_account;
 pub mod wal;
+pub mod websocket;
 
 // Convenient re-exports at crate root
 pub use balance::Balance;
