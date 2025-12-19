@@ -188,6 +188,7 @@ fn main() {
                     symbol_mgr_clone,
                     active_symbol_id,
                     db_client,
+                    queues_clone.push_event_queue.clone(),
                 )
                 .await;
             });
@@ -257,7 +258,9 @@ fn main() {
                 symbol_mgr: &symbol_mgr,
                 active_symbol_id,
                 sample_rate: app_config.sample_rate,
+                continuous: true,
             },
+            queues,
         );
 
         // Wait for gateway thread
@@ -389,6 +392,9 @@ fn main() {
         // Clone orders for multi-thread (takes ownership)
         let orders_owned: Vec<_> = orders.iter().cloned().collect();
 
+        // Create queues
+        let queues = std::sync::Arc::new(zero_x_infinity::MultiThreadQueues::new());
+
         // Run multi-threaded pipeline (consumes services)
         let result = run_pipeline_multi_thread(
             orders_owned,
@@ -401,7 +407,9 @@ fn main() {
                 symbol_mgr: &symbol_mgr,
                 active_symbol_id,
                 sample_rate: app_config.sample_rate,
+                continuous: false,
             },
+            queues,
         );
 
         // Print stats (use snapshot to get place/cancel counts)
@@ -489,6 +497,7 @@ fn main() {
                 symbol_mgr: &symbol_mgr,
                 active_symbol_id,
                 sample_rate: app_config.sample_rate,
+                continuous: false,
             },
         );
 
@@ -582,6 +591,7 @@ fn main() {
                 symbol_mgr: &symbol_mgr,
                 active_symbol_id,
                 sample_rate: app_config.sample_rate,
+                continuous: false,
             },
         );
 
@@ -656,6 +666,7 @@ fn main() {
                 symbol_mgr: &symbol_mgr,
                 active_symbol_id,
                 sample_rate: app_config.sample_rate,
+                continuous: false,
             },
         );
 

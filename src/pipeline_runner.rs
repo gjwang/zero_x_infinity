@@ -184,6 +184,12 @@ pub fn run_pipeline_single_thread(
                                         trade.buyer_order_id
                                     },
                                     valid_order.order.side,
+                                    // Taker order state
+                                    result.order.qty,
+                                    result.order.filled_qty,
+                                    // Maker order state (placeholder)
+                                    0,
+                                    0,
                                     base_id,
                                     quote_id,
                                     qty_unit,

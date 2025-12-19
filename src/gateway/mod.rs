@@ -10,6 +10,7 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 
 use crate::symbol_manager::SymbolManager;
+use crate::websocket::{ConnectionManager, ws_handler};
 use crossbeam_queue::ArrayQueue;
 
 use crate::persistence::TDengineClient;
@@ -23,17 +24,32 @@ pub async fn run_server(
     symbol_mgr: Arc<SymbolManager>,
     active_symbol_id: u32,
     db_client: Option<Arc<TDengineClient>>,
+    push_event_queue: Arc<ArrayQueue<crate::websocket::PushEvent>>,
 ) {
+    // 创建 WebSocket 连接管理器
+    let ws_manager = Arc::new(ConnectionManager::new());
+
+    // 启动 WebSocket 推送服务
+    let ws_service =
+        crate::websocket::WsService::new(ws_manager.clone(), push_event_queue, symbol_mgr.clone());
+    tokio::spawn(async move {
+        ws_service.run().await;
+    });
+    println!("📡 WebSocket push service started");
+
     // 创建共享状态
     let state = Arc::new(AppState::new(
         order_queue,
         symbol_mgr,
         active_symbol_id,
         db_client,
+        ws_manager.clone(),
     ));
 
     // 创建路由
     let app = Router::new()
+        // WebSocket endpoint
+        .route("/ws", get(ws_handler))
         // Write endpoints
         .route("/api/v1/create_order", post(handlers::create_order))
         .route("/api/v1/cancel_order", post(handlers::cancel_order))
@@ -49,6 +65,7 @@ pub async fn run_server(
     let listener = TcpListener::bind(&addr).await.unwrap();
 
     println!("🚀 Gateway listening on http://{}", addr);
+    println!("📡 WebSocket endpoint: ws://{}/ws", addr);
 
     // 启动服务器
     axum::serve(listener, app).await.unwrap();

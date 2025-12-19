@@ -49,6 +49,10 @@ pub const VALID_ORDER_QUEUE_CAPACITY: usize = 4096;
 /// Larger because one order may generate multiple trades
 pub const TRADE_QUEUE_CAPACITY: usize = 16384;
 
+/// Capacity for push event queue (Settlement → WsService)
+/// Should handle burst of push notifications
+pub const PUSH_EVENT_QUEUE_CAPACITY: usize = 65536;
+
 // ============================================================
 // PIPELINE INPUT/OUTPUT TYPES
 // ============================================================
@@ -116,6 +120,7 @@ pub struct PipelineConfig<'a> {
     pub symbol_mgr: &'a crate::symbol_manager::SymbolManager,
     pub active_symbol_id: u32,
     pub sample_rate: usize,
+    pub continuous: bool,
 }
 
 /// Action for ME thread (UBSCore → ME)
@@ -409,6 +414,14 @@ pub struct MultiThreadQueues {
     /// - Cancel/Reject: Unlock
     /// - Price Improvement: RefundFrozen
     pub balance_event_queue: Arc<ArrayQueue<BalanceEvent>>,
+
+    /// Push events from Settlement → WsService (for WebSocket push)
+    ///
+    /// Settlement generates push events after successful persistence:
+    /// - OrderUpdate (FILLED/PARTIALLY_FILLED/CANCELED)
+    /// - Trade (buyer + seller notifications)
+    /// - BalanceUpdate (balance changes)
+    pub push_event_queue: Arc<ArrayQueue<crate::websocket::PushEvent>>,
 }
 
 /// Balance update request from ME to UBSCore
@@ -494,6 +507,7 @@ impl MultiThreadQueues {
             trade_queue: Arc::new(ArrayQueue::new(TRADE_QUEUE_CAPACITY)),
             balance_update_queue: Arc::new(ArrayQueue::new(BALANCE_UPDATE_QUEUE_CAPACITY)),
             balance_event_queue: Arc::new(ArrayQueue::new(BALANCE_EVENT_QUEUE_CAPACITY)),
+            push_event_queue: Arc::new(ArrayQueue::new(PUSH_EVENT_QUEUE_CAPACITY)),
         }
     }
 
