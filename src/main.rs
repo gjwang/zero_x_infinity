@@ -165,6 +165,17 @@ fn main() {
                         Ok(client) => match client.init_schema().await {
                             Ok(_) => {
                                 println!("✅ TDengine connected and schema initialized");
+                                // Create K-Line streams for automatic aggregation
+                                if let Err(e) =
+                                    zero_x_infinity::persistence::klines::create_kline_streams(
+                                        client.taos(),
+                                    )
+                                    .await
+                                {
+                                    eprintln!("⚠️ Failed to create K-Line streams: {}", e);
+                                } else {
+                                    println!("✅ K-Line streams created");
+                                }
                                 Some(std::sync::Arc::new(client))
                             }
                             Err(e) => {

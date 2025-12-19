@@ -1,5 +1,6 @@
 // Persistence module for TDengine integration
 pub mod balances;
+pub mod klines;
 pub mod orders;
 pub mod queries;
 pub mod schema;

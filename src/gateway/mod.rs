@@ -58,6 +58,7 @@ pub async fn run_server(
         .route("/api/v1/orders", get(handlers::get_orders))
         .route("/api/v1/trades", get(handlers::get_trades))
         .route("/api/v1/balances", get(handlers::get_balances))
+        .route("/api/v1/klines", get(handlers::get_klines))
         .with_state(state);
 
     // 绑定地址

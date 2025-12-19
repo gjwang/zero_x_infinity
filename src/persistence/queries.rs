@@ -337,3 +337,110 @@ pub async fn query_balance(
         updated_at: row.ts,
     }))
 }
+
+/// K-Line record from TDengine
+#[derive(Debug, Deserialize)]
+struct KLineRow {
+    ts: String,
+    open: i64,
+    high: i64,
+    low: i64,
+    close: i64,
+    volume: i64,
+    quote_volume: f64, // DOUBLE in TDengine
+    trade_count: i32,
+}
+
+/// K-Line API response data (compliant with API conventions)
+#[derive(Debug, Serialize)]
+pub struct KLineApiData {
+    pub symbol: String,
+    pub interval: String,
+    pub open_time: String,
+    pub open: String,
+    pub high: String,
+    pub low: String,
+    pub close: String,
+    pub volume: String,
+    pub quote_volume: String,
+    pub trade_count: u32,
+}
+
+/// Query K-Line data for a symbol
+pub async fn query_klines(
+    taos: &Taos,
+    symbol_id: u32,
+    interval: &str,
+    limit: usize,
+    symbol_mgr: &SymbolManager,
+) -> Result<Vec<KLineApiData>> {
+    // Query from the specific subtable created by the stream
+    // Stream creates subtables with format: kl_{interval}_{symbol_id}
+    let subtable_name = format!("kl_{}_{}", interval, symbol_id);
+    let sql = format!(
+        "SELECT ts, open, high, low, close, volume, quote_volume, trade_count FROM {} ORDER BY ts DESC LIMIT {}",
+        subtable_name, limit
+    );
+
+    let mut result = taos
+        .query(&sql)
+        .await
+        .map_err(|e| anyhow::anyhow!("Query failed: {}", e))?;
+
+    let rows: Vec<KLineRow> = result
+        .deserialize()
+        .try_collect()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to deserialize: {}", e))?;
+
+    // Get symbol info for formatting
+    let symbol_info = symbol_mgr.get_symbol_info_by_id(symbol_id).unwrap();
+    let base_decimals = symbol_mgr
+        .get_asset_decimal(symbol_info.base_asset_id)
+        .unwrap();
+    let base_display_decimals = symbol_mgr
+        .get_asset_display_decimals(symbol_info.base_asset_id)
+        .unwrap();
+    let quote_decimals = symbol_mgr
+        .get_asset_decimal(symbol_info.quote_asset_id)
+        .unwrap();
+    let quote_display_decimals = symbol_mgr
+        .get_asset_display_decimals(symbol_info.quote_asset_id)
+        .unwrap();
+
+    Ok(rows
+        .into_iter()
+        .map(|row| KLineApiData {
+            symbol: symbol_info.symbol.clone(),
+            interval: interval.to_string(),
+            open_time: row.ts,
+            open: format_amount(
+                row.open as u64,
+                symbol_info.price_decimal,
+                symbol_info.price_display_decimal,
+            ),
+            high: format_amount(
+                row.high as u64,
+                symbol_info.price_decimal,
+                symbol_info.price_display_decimal,
+            ),
+            low: format_amount(
+                row.low as u64,
+                symbol_info.price_decimal,
+                symbol_info.price_display_decimal,
+            ),
+            close: format_amount(
+                row.close as u64,
+                symbol_info.price_decimal,
+                symbol_info.price_display_decimal,
+            ),
+            volume: format_amount(row.volume as u64, base_decimals, base_display_decimals),
+            quote_volume: format!(
+                "{:.prec$}",
+                row.quote_volume / 10f64.powi(quote_decimals as i32),
+                prec = quote_display_decimals as usize
+            ),
+            trade_count: row.trade_count as u32,
+        })
+        .collect())
+}
