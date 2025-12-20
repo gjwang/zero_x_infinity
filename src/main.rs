@@ -152,23 +152,16 @@ fn main() {
             zero_x_infinity::market::depth_service::DepthService::new(queues.clone()),
         );
 
-        // Start HTTP Server in separate thread with tokio runtime
-        let queues_clone = queues.clone();
-        let symbol_mgr_clone = symbol_mgr.clone();
-        let persistence_config = app_config.persistence.clone();
-        let gateway_thread = std::thread::spawn(move || {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(async {
-                // Spawn DepthService task (inside tokio runtime)
-                let depth_service_clone = depth_service.clone();
-                tokio::spawn(async move {
-                    depth_service_clone.run().await;
-                });
-                println!("📊 DepthService started");
+        // Create tokio runtime and initialize TDengine in main thread
+        // This allows sharing db_client with both Gateway and Pipeline
+        let shared_rt = std::sync::Arc::new(tokio::runtime::Runtime::new().unwrap());
+        let rt_handle = shared_rt.handle().clone();
 
-                // Initialize TDengine client inside Gateway's tokio runtime
-                let db_client = if persistence_config.enabled {
-                    println!("\n[Persistence] Connecting to TDengine...");
+        let persistence_config = app_config.persistence.clone();
+        let db_client: Option<std::sync::Arc<zero_x_infinity::persistence::TDengineClient>> =
+            if persistence_config.enabled {
+                println!("\n[Persistence] Connecting to TDengine...");
+                shared_rt.block_on(async {
                     match zero_x_infinity::persistence::TDengineClient::connect(
                         &persistence_config.tdengine_dsn,
                     )
@@ -177,7 +170,7 @@ fn main() {
                         Ok(client) => match client.init_schema().await {
                             Ok(_) => {
                                 println!("✅ TDengine connected and schema initialized");
-                                // Create K-Line streams for automatic aggregation
+                                // Create K-Line streams
                                 if let Err(e) =
                                     zero_x_infinity::persistence::klines::create_kline_streams(
                                         client.taos(),
@@ -200,17 +193,36 @@ fn main() {
                             None
                         }
                     }
-                } else {
-                    println!("\n[Persistence] Disabled");
-                    None
-                };
+                })
+            } else {
+                println!("\n[Persistence] Disabled");
+                None
+            };
 
+        let db_client_for_gateway = db_client.clone();
+        let db_client_for_pipeline = db_client.clone();
+        let rt_handle_for_pipeline = Some(rt_handle.clone());
+
+        // Start HTTP Server in separate thread with tokio runtime
+        let queues_clone = queues.clone();
+        let symbol_mgr_clone = symbol_mgr.clone();
+        let gateway_thread = std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(async {
+                // Spawn DepthService task (inside tokio runtime)
+                let depth_service_clone = depth_service.clone();
+                tokio::spawn(async move {
+                    depth_service_clone.run().await;
+                });
+                println!("📊 DepthService started");
+
+                // Use shared db_client from main thread (no duplicate init needed)
                 zero_x_infinity::gateway::run_server(
                     port,
                     queues_clone.order_queue.clone(),
                     symbol_mgr_clone,
                     active_symbol_id,
-                    db_client,
+                    db_client_for_gateway,
                     queues_clone.push_event_queue.clone(),
                     depth_service,
                 )
@@ -287,6 +299,8 @@ fn main() {
                 continuous: true,
             },
             queues,
+            rt_handle_for_pipeline, // rt_handle for SettlementService TDengine
+            db_client_for_pipeline, // db_client for SettlementService TDengine
         );
 
         // Wait for gateway thread
@@ -436,6 +450,8 @@ fn main() {
                 continuous: false,
             },
             queues,
+            None, // rt_handle: Pipeline MT mode doesn't use TDengine
+            None, // db_client
         );
 
         // Print stats (use snapshot to get place/cancel counts)

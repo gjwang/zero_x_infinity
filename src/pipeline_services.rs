@@ -600,6 +600,10 @@ pub struct SettlementService {
     queues: Arc<MultiThreadQueues>,
     stats: Arc<PipelineStats>,
     balance_events_count: u64,
+    // TDengine 持久化支持
+    rt_handle: Option<tokio::runtime::Handle>,
+    db_client: Option<Arc<crate::persistence::TDengineClient>>,
+    symbol_id: u32,
 }
 
 impl SettlementService {
@@ -607,12 +611,18 @@ impl SettlementService {
         ledger: LedgerWriter,
         queues: Arc<MultiThreadQueues>,
         stats: Arc<PipelineStats>,
+        rt_handle: Option<tokio::runtime::Handle>,
+        db_client: Option<Arc<crate::persistence::TDengineClient>>,
+        symbol_id: u32,
     ) -> Self {
         Self {
             ledger,
             queues,
             stats,
             balance_events_count: 0,
+            rt_handle,
+            db_client,
+            symbol_id,
         }
     }
 
@@ -634,6 +644,21 @@ impl SettlementService {
 
                 // Persist balance event to event log
                 self.ledger.write_balance_event(&balance_event);
+
+                // [TDENGINE] Persist Balance to TDengine (if configured)
+                if let (Some(handle), Some(db)) = (&self.rt_handle, &self.db_client) {
+                    if let Err(e) =
+                        handle.block_on(crate::persistence::balances::upsert_balance_values(
+                            db.taos(),
+                            balance_event.user_id,
+                            balance_event.asset_id,
+                            balance_event.avail_after,
+                            balance_event.frozen_after,
+                        ))
+                    {
+                        tracing::error!("[PERSIST] Failed to persist balance: {}", e);
+                    }
+                }
 
                 // ⭐ WebSocket Push: Generate BalanceUpdate after persistence (Settlement-first)
                 let _ =
@@ -707,6 +732,59 @@ impl SettlementService {
                 });
                 p_info!(TARGET_PERS, "Settlement persisted to ledger");
 
+                // [TDENGINE] Persist Trade to TDengine (if configured)
+                if let (Some(handle), Some(db)) = (&self.rt_handle, &self.db_client) {
+                    let taker_user_id = if trade_event.taker_side == Side::Buy {
+                        trade.buyer_user_id
+                    } else {
+                        trade.seller_user_id
+                    };
+                    // Taker trade
+                    if let Err(e) =
+                        handle.block_on(crate::persistence::trades::insert_trade_record(
+                            db.taos(),
+                            trade.trade_id,
+                            trade_event.taker_order_id,
+                            taker_user_id,
+                            trade_event.taker_side,
+                            trade.price,
+                            trade.qty,
+                            0, // fee
+                            1, // role: taker
+                            self.symbol_id,
+                        ))
+                    {
+                        tracing::error!("[PERSIST] Failed to persist taker trade: {}", e);
+                    }
+                    // Maker trade
+                    let maker_user_id = if trade_event.taker_side == Side::Buy {
+                        trade.seller_user_id
+                    } else {
+                        trade.buyer_user_id
+                    };
+                    let maker_side = if trade_event.taker_side == Side::Buy {
+                        Side::Sell
+                    } else {
+                        Side::Buy
+                    };
+                    if let Err(e) =
+                        handle.block_on(crate::persistence::trades::insert_trade_record(
+                            db.taos(),
+                            trade.trade_id,
+                            trade_event.maker_order_id,
+                            maker_user_id,
+                            maker_side,
+                            trade.price,
+                            trade.qty,
+                            0, // fee
+                            0, // role: maker
+                            self.symbol_id,
+                        ))
+                    {
+                        tracing::error!("[PERSIST] Failed to persist maker trade: {}", e);
+                    }
+                }
+
                 // ⭐ WebSocket Push: Generate events after persistence (Settlement-first)
                 let taker_status = if trade_event.taker_filled_qty >= trade_event.taker_order_qty {
                     OrderStatus::FILLED
@@ -729,6 +807,23 @@ impl SettlementService {
                     taker_user_id,
                     trade_event.taker_order_id
                 );
+
+                // [TDENGINE] Persist Order status to TDengine (if configured)
+                if let (Some(handle), Some(db)) = (&self.rt_handle, &self.db_client) {
+                    if let Err(e) =
+                        handle.block_on(crate::persistence::orders::update_order_status(
+                            db.taos(),
+                            trade_event.taker_order_id,
+                            taker_user_id,
+                            self.symbol_id,
+                            trade_event.taker_filled_qty,
+                            taker_status,
+                            None, // cid
+                        ))
+                    {
+                        tracing::error!("[PERSIST] Failed to persist order status: {}", e);
+                    }
+                }
                 let push_result =
                     self.queues
                         .push_event_queue
