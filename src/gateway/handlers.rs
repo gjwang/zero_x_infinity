@@ -638,60 +638,25 @@ pub async fn get_depth(
             )
         })?;
 
-    // Get symbol info for decimals
-    let symbol_info = state
-        .symbol_mgr
-        .get_symbol_info_by_id(state.active_symbol_id)
-        .ok_or_else(|| {
+    // Use DepthFormatter for type-safe formatting
+    let formatter = DepthFormatter::new(&state.symbol_mgr);
+
+    let (formatted_bids, formatted_asks) = formatter
+        .format_depth_data(&snapshot.bids, &snapshot.asks, state.active_symbol_id)
+        .map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::<()>::error(
                     error_codes::SERVICE_UNAVAILABLE,
-                    "Symbol info not found",
+                    &e,
                 )),
             )
         })?;
 
-    let base_asset = state
-        .symbol_mgr
-        .assets
-        .get(&symbol_info.base_asset_id)
-        .ok_or_else(|| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error(
-                    error_codes::SERVICE_UNAVAILABLE,
-                    "Base asset not found",
-                )),
-            )
-        })?;
-
-    let price_decimals = symbol_info.price_display_decimal;
-    let qty_decimals = base_asset.display_decimals;
-
-    // Format response
     let data = super::types::DepthApiData {
         symbol: symbol_name.to_string(),
-        bids: snapshot
-            .bids
-            .iter()
-            .map(|(p, q)| {
-                [
-                    format_price_internal(*p, price_decimals),
-                    format_qty_internal(*q, base_asset.decimals, base_asset.display_decimals),
-                ]
-            })
-            .collect(),
-        asks: snapshot
-            .asks
-            .iter()
-            .map(|(p, q)| {
-                [
-                    format_price_internal(*p, price_decimals),
-                    format_qty_internal(*q, base_asset.decimals, base_asset.display_decimals),
-                ]
-            })
-            .collect(),
+        bids: formatted_bids,
+        asks: formatted_asks,
         last_update_id: snapshot.update_id,
     };
 
