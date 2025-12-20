@@ -25,6 +25,7 @@
 - [0x09-c WebSocket Push: 实时推送](./0x09-c-websocket-push.md)
 - [0x09-d K-Line Aggregation: K线聚合服务](./0x09-d-kline-aggregation.md)
 - [0x09-e Order Book Depth: 盘口深度](./0x09-e-orderbook-depth.md)
+  - [增量更新方案调研](./0x09-e-orderbook-depth-incremental-research.md)
 ---
 
 - [Performance Report (Latest)](./perf-report.md)
