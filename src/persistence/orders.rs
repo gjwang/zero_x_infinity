@@ -123,13 +123,13 @@ pub async fn batch_insert_me_results(
             .await
             .map_err(|e| anyhow::anyhow!("Orders Stmt set_tbname failed: {}", e))?;
 
-        let now_ms = std::time::SystemTime::now()
+        let now_us = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
-            .as_millis() as i64;
+            .as_micros() as i64;
 
         let timestamps: Vec<i64> = (0..symbol_results.len())
-            .map(|i| now_ms + i as i64)
+            .map(|i| now_us + i as i64)
             .collect();
         let order_ids: Vec<u64> = symbol_results.iter().map(|r| r.order.order_id).collect();
         let user_ids: Vec<u64> = symbol_results.iter().map(|r| r.order.user_id).collect();
@@ -151,7 +151,7 @@ pub async fn batch_insert_me_results(
             .collect();
 
         let params = vec![
-            ColumnView::from_millis_timestamp(timestamps),
+            ColumnView::from_micros_timestamp(timestamps),
             ColumnView::from_unsigned_big_ints(order_ids),
             ColumnView::from_unsigned_big_ints(user_ids),
             ColumnView::from_unsigned_tiny_ints(sides),
@@ -221,13 +221,13 @@ pub async fn batch_insert_me_results(
                 .await
                 .map_err(|e| anyhow::anyhow!("Trades Stmt set_tbname failed: {}", e))?;
 
-            let now_ms = std::time::SystemTime::now()
+            let now_us = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
-                .as_millis() as i64;
+                .as_micros() as i64;
 
             let timestamps: Vec<i64> = (0..trade_records.len())
-                .map(|i| now_ms + i as i64)
+                .map(|i| now_us + i as i64)
                 .collect();
             let trade_ids: Vec<u64> = trade_records.iter().map(|(t, _, _)| t.trade_id).collect();
             let order_ids: Vec<u64> = trade_records
@@ -260,7 +260,7 @@ pub async fn batch_insert_me_results(
             let roles: Vec<u8> = trade_records.iter().map(|(t, _, _)| t.role).collect();
 
             let params = vec![
-                ColumnView::from_millis_timestamp(timestamps),
+                ColumnView::from_micros_timestamp(timestamps),
                 ColumnView::from_unsigned_big_ints(trade_ids),
                 ColumnView::from_unsigned_big_ints(order_ids),
                 ColumnView::from_unsigned_big_ints(user_ids),

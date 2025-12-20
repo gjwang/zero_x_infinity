@@ -174,19 +174,19 @@ pub async fn batch_upsert_balance_events(
             .map_err(|e| anyhow::anyhow!("Stmt set_tbname failed: {}", e))?;
 
         // Build columns for batch binding
-        let now_ms = std::time::SystemTime::now()
+        let now_us = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
-            .as_millis() as i64;
+            .as_micros() as i64;
 
-        let timestamps: Vec<i64> = (0..table_events.len()).map(|i| now_ms + i as i64).collect();
+        let timestamps: Vec<i64> = (0..table_events.len()).map(|i| now_us + i as i64).collect();
         let avails: Vec<u64> = table_events.iter().map(|e| e.avail_after).collect();
         let frozens: Vec<u64> = table_events.iter().map(|e| e.frozen_after).collect();
         let lock_versions: Vec<u64> = vec![0; table_events.len()];
         let settle_versions: Vec<u64> = vec![0; table_events.len()];
 
         let params = vec![
-            ColumnView::from_millis_timestamp(timestamps),
+            ColumnView::from_micros_timestamp(timestamps),
             ColumnView::from_unsigned_big_ints(avails),
             ColumnView::from_unsigned_big_ints(frozens),
             ColumnView::from_unsigned_big_ints(lock_versions),
