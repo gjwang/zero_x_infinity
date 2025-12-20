@@ -80,9 +80,9 @@ def submit_order(order_data: dict) -> bool:
             "qty": order_data.get("qty", "0"),
         }
     
-    max_retries = 20
+    max_retries = 25
     max_delay = 5.0    # Cap delay at 5 seconds
-    retry_delay = 0.05 # 50ms initial, doubles each retry (capped at max_delay)
+    retry_delay = 0.2 # 200ms initial, doubles each retry (capped at max_delay)
     
     # Errors that are safe to retry (network/transient issues)
     RETRYABLE_ERRORS = (
