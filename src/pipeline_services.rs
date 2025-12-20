@@ -393,6 +393,9 @@ impl MatchingService {
                             "Matching completed"
                         );
 
+                        // Collect all TradeEvents for this order
+                        let mut trade_events = Vec::with_capacity(result.trades.len());
+
                         // Fan-out: Send Trade Events to BOTH Settlement AND UBSCore
                         for trade in &result.trades {
                             // Determine taker and maker order IDs based on taker side
@@ -419,6 +422,9 @@ impl MatchingService {
                                 valid_order.ingested_at_ns,
                             );
 
+                            // Collect for MEResult
+                            trade_events.push(trade_event.clone());
+
                             // Calculate price improvement for buy orders
                             let price_improvement = if valid_order.order.side == Side::Buy
                                 && valid_order.order.order_type == OrderType::Limit
@@ -439,19 +445,7 @@ impl MatchingService {
                                 None
                             };
 
-                            // [1] Send to Settlement (for persistence) - trade_queue
-                            loop {
-                                match self.queues.trade_queue.push(trade_event.clone()) {
-                                    Ok(()) => break,
-                                    Err(_) => {
-                                        self.stats.incr_backpressure("me_trade_queue");
-                                        // std::hint::spin_loop();
-                                        std::thread::sleep(IDLE_SLEEP_US);
-                                    }
-                                }
-                            }
-
-                            // [2] Send to UBSCore (for balance update) - balance_update_queue
+                            // Send to UBSCore (for balance update) - balance_update_queue
                             let balance_update = BalanceUpdateRequest::Trade {
                                 trade_event,
                                 price_improvement,
@@ -465,7 +459,6 @@ impl MatchingService {
                                     Ok(()) => break,
                                     Err(_) => {
                                         self.stats.incr_backpressure("balance_update_queue");
-                                        // std::hint::spin_loop();
                                         std::thread::sleep(IDLE_SLEEP_US);
                                     }
                                 }
@@ -474,6 +467,24 @@ impl MatchingService {
                             self.stats.add_trades(1);
                             self.stats.record_trades(1);
                         }
+
+                        // [ATOMIC] Push MEResult to Settlement (order + all trades bundled)
+                        let me_result = crate::messages::MEResult {
+                            order: result.order.clone(),
+                            trades: trade_events,
+                            final_status: result.order.status,
+                            symbol_id: valid_order.order.symbol_id,
+                        };
+                        loop {
+                            match self.queues.me_result_queue.push(me_result.clone()) {
+                                Ok(()) => break,
+                                Err(_) => {
+                                    self.stats.incr_backpressure("me_result_queue");
+                                    std::thread::sleep(IDLE_SLEEP_US);
+                                }
+                            }
+                        }
+
                         self.depth_dirty = true; // Mark depth as changed
                     }
                     ValidAction::Cancel {
@@ -727,42 +738,83 @@ impl SettlementService {
             .expect("Failed to spawn balance processor")
     }
 
-    /// Spawn trade event processor thread
-    /// Input: trade_queue
-    /// Output: TDengine trades/orders + WebSocket push
+    /// Spawn ME result processor thread
+    /// Input: me_result_queue (order + trades bundle)
+    /// Output: TDengine orders/trades + WebSocket push
     fn spawn_trade_processor(
         queues: Arc<MultiThreadQueues>,
         stats: Arc<PipelineStats>,
         rt_handle: Option<tokio::runtime::Handle>,
         db_client: Option<Arc<crate::persistence::TDengineClient>>,
-        symbol_id: u32,
+        _symbol_id: u32,
         shutdown: Arc<ShutdownSignal>,
     ) -> std::thread::JoinHandle<()> {
         std::thread::Builder::new()
-            .name("settlement-trade".to_string())
+            .name("settlement-order".to_string())
             .spawn(move || {
                 let mut spin_count = 0u32;
                 loop {
-                    if let Some(trade_event) = queues.trade_queue.pop() {
-                        let trade = &trade_event.trade;
+                    if let Some(me_result) = queues.me_result_queue.pop() {
+                        let symbol_id = me_result.symbol_id;
 
-                        // TDengine: persist trade + order (3 writes in parallel)
+                        // TDengine: persist order + all trades atomically
                         if let (Some(handle), Some(db)) = (&rt_handle, &db_client) {
-                            Self::persist_trade_to_tdengine(
-                                handle,
-                                db,
-                                &trade_event,
-                                trade,
-                                symbol_id,
-                            );
+                            let start = Instant::now();
+
+                            // [1] Insert order first
+                            let order_result =
+                                handle.block_on(crate::persistence::orders::insert_order(
+                                    db.taos(),
+                                    &me_result.order,
+                                    symbol_id,
+                                ));
+                            if let Err(e) = order_result {
+                                tracing::error!("[PERSIST] insert_order failed: {}", e);
+                            }
+
+                            // [2] Persist all trades (if any)
+                            for trade_event in &me_result.trades {
+                                Self::persist_trade_to_tdengine(
+                                    handle,
+                                    db,
+                                    trade_event,
+                                    &trade_event.trade,
+                                    symbol_id,
+                                );
+                            }
+
+                            if start.elapsed().as_millis() > 10 {
+                                tracing::warn!(
+                                    "[PROFILE] me_result_persist={}ms trades={}",
+                                    start.elapsed().as_millis(),
+                                    me_result.trades.len()
+                                );
+                            }
                         }
 
                         // WebSocket: push order update + trade events
-                        Self::push_trade_events(&queues, &trade_event, trade);
+                        for trade_event in &me_result.trades {
+                            Self::push_trade_events(&queues, trade_event, &trade_event.trade);
+                        }
+
+                        // If no trades, still push order update for NEW orders
+                        if me_result.trades.is_empty() {
+                            let _ = queues.push_event_queue.push(
+                                crate::websocket::PushEvent::OrderUpdate {
+                                    user_id: me_result.order.user_id,
+                                    order_id: me_result.order.order_id,
+                                    symbol_id,
+                                    status: me_result.final_status,
+                                    filled_qty: me_result.order.filled_qty,
+                                    avg_price: None,
+                                },
+                            );
+                        }
 
                         stats.add_event_log_time(0);
                         spin_count = 0;
-                    } else if shutdown.is_shutdown_requested() && queues.trade_queue.is_empty() {
+                    } else if shutdown.is_shutdown_requested() && queues.me_result_queue.is_empty()
+                    {
                         break;
                     } else {
                         spin_count += 1;
@@ -774,9 +826,9 @@ impl SettlementService {
                         }
                     }
                 }
-                tracing::info!("[SETTLEMENT] Trade processor exiting");
+                tracing::info!("[SETTLEMENT] Order processor exiting");
             })
-            .expect("Failed to spawn trade processor")
+            .expect("Failed to spawn order processor")
     }
 
     /// Persist trade + order to TDengine (3 writes in parallel)

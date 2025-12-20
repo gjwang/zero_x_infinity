@@ -397,10 +397,10 @@ pub struct MultiThreadQueues {
     /// Same path for all commands, each service does what it needs.
     pub action_queue: Arc<ArrayQueue<ValidAction>>,
 
-    /// Trade events from ME → Settlement (for persistence)
+    /// ME results from ME → Settlement (for persistence)
     ///
-    /// Settlement persists Trade Events, Order Events, Ledger
-    pub trade_queue: Arc<ArrayQueue<TradeEvent>>,
+    /// Atomic bundle: order + trades for consistent persistence
+    pub me_result_queue: Arc<ArrayQueue<crate::messages::MEResult>>,
 
     /// Balance update requests from ME → UBSCore
     ///
@@ -518,7 +518,7 @@ impl MultiThreadQueues {
         Self {
             order_queue: Arc::new(ArrayQueue::new(ORDER_QUEUE_CAPACITY)),
             action_queue: Arc::new(ArrayQueue::new(VALID_ORDER_QUEUE_CAPACITY)),
-            trade_queue: Arc::new(ArrayQueue::new(TRADE_QUEUE_CAPACITY)),
+            me_result_queue: Arc::new(ArrayQueue::new(TRADE_QUEUE_CAPACITY)),
             balance_update_queue: Arc::new(ArrayQueue::new(BALANCE_UPDATE_QUEUE_CAPACITY)),
             balance_event_queue: Arc::new(ArrayQueue::new(BALANCE_EVENT_QUEUE_CAPACITY)),
             push_event_queue: Arc::new(ArrayQueue::new(PUSH_EVENT_QUEUE_CAPACITY)),
@@ -530,7 +530,7 @@ impl MultiThreadQueues {
     pub fn all_empty(&self) -> bool {
         self.order_queue.is_empty()
             && self.action_queue.is_empty()
-            && self.trade_queue.is_empty()
+            && self.me_result_queue.is_empty()
             && self.balance_update_queue.is_empty()
             && self.balance_event_queue.is_empty()
     }
