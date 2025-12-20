@@ -160,7 +160,7 @@ pub async fn batch_insert_me_results(
             ColumnView::from_unsigned_big_ints(qtys),
             ColumnView::from_unsigned_big_ints(filled_qtys),
             ColumnView::from_unsigned_tiny_ints(statuses),
-            ColumnView::from_varchar(cids),
+            ColumnView::from_nchar(cids),
         ];
 
         orders_stmt
@@ -374,7 +374,7 @@ mod tests {
     #[ignore] // Requires TDengine running
     async fn test_insert_order() {
         let client =
-            crate::persistence::TDengineClient::connect("taos+ws://root:taosdata@localhost:6041")
+            crate::persistence::TDengineClient::connect("taos://root:taosdata@localhost:6030")
                 .await
                 .expect("Failed to connect");
 
@@ -402,7 +402,7 @@ mod tests {
         use crate::models::{OrderStatus, Trade};
 
         let client =
-            crate::persistence::TDengineClient::connect("taos+ws://root:taosdata@localhost:6041")
+            crate::persistence::TDengineClient::connect("taos://root:taosdata@localhost:6030")
                 .await
                 .expect("Failed to connect");
 

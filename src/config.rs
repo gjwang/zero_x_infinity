@@ -32,7 +32,7 @@ impl Default for PersistenceConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            tdengine_dsn: "taos+ws://root:taosdata@localhost:6041".to_string(),
+            tdengine_dsn: "taos://root:taosdata@localhost:6030".to_string(),
         }
     }
 }
