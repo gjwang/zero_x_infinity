@@ -616,9 +616,6 @@ pub struct SettlementService {
     ledger: LedgerWriter,
     queues: Arc<MultiThreadQueues>,
     stats: Arc<PipelineStats>,
-    balance_events_count: u64,
-    // TDengine 持久化支持
-    rt_handle: Option<tokio::runtime::Handle>,
     db_client: Option<Arc<crate::persistence::TDengineClient>>,
     symbol_id: u32,
 }
@@ -628,7 +625,6 @@ impl SettlementService {
         ledger: LedgerWriter,
         queues: Arc<MultiThreadQueues>,
         stats: Arc<PipelineStats>,
-        rt_handle: Option<tokio::runtime::Handle>,
         db_client: Option<Arc<crate::persistence::TDengineClient>>,
         symbol_id: u32,
     ) -> Self {
@@ -636,114 +632,9 @@ impl SettlementService {
             ledger,
             queues,
             stats,
-            balance_events_count: 0,
-            rt_handle,
             db_client,
             symbol_id,
         }
-    }
-
-    /// Run the settlement service (two independent threads for parallel processing)
-    ///
-    /// Data flow:
-    /// - balance_event_queue -> BalanceProcessor -> TDengine + WebSocket
-    /// - me_result_queue -> TradeProcessor -> TDengine + WebSocket
-    pub fn run(&mut self, shutdown: Arc<ShutdownSignal>) {
-        // Spawn balance processing thread
-        let balance_handle = Self::spawn_balance_processor(
-            self.queues.clone(),
-            self.rt_handle.clone(),
-            self.db_client.clone(),
-            shutdown.clone(),
-        );
-
-        // Spawn trade processing thread
-        let trade_handle = Self::spawn_trade_processor(
-            self.queues.clone(),
-            self.stats.clone(),
-            self.rt_handle.clone(),
-            self.db_client.clone(),
-            self.symbol_id,
-            shutdown.clone(),
-        );
-
-        // Wait for both processors to complete
-        balance_handle.join().expect("Balance processor panicked");
-        trade_handle.join().expect("Trade processor panicked");
-    }
-
-    /// Spawn balance event processor thread (BATCH mode)
-    /// Input: balance_event_queue
-    /// Output: TDengine balances (batch) + WebSocket push
-    fn spawn_balance_processor(
-        queues: Arc<MultiThreadQueues>,
-        rt_handle: Option<tokio::runtime::Handle>,
-        db_client: Option<Arc<crate::persistence::TDengineClient>>,
-        shutdown: Arc<ShutdownSignal>,
-    ) -> std::thread::JoinHandle<()> {
-        const BATCH_SIZE: usize = 128;
-
-        std::thread::Builder::new()
-            .name("settlement-balance".to_string())
-            .spawn(move || {
-                let mut batch: Vec<crate::messages::BalanceEvent> = Vec::with_capacity(BATCH_SIZE);
-
-                loop {
-                    batch.clear();
-
-                    // Pop 1 to N events (whatever is available, up to BATCH_SIZE)
-                    while batch.len() < BATCH_SIZE {
-                        if let Some(event) = queues.balance_event_queue.pop() {
-                            batch.push(event);
-                        } else {
-                            break;
-                        }
-                    }
-
-                    if !batch.is_empty() {
-                        // TDengine: batch persist immediately
-                        if let (Some(handle), Some(db)) = (&rt_handle, &db_client) {
-                            let start = Instant::now();
-                            let result = handle.block_on(
-                                crate::persistence::balances::batch_upsert_balance_events(
-                                    db.taos(),
-                                    &batch,
-                                ),
-                            );
-                            if let Err(e) = result {
-                                tracing::error!("[PERSIST] batch balance failed: {}", e);
-                            }
-                            if start.elapsed().as_millis() > 10 {
-                                tracing::warn!(
-                                    "[PROFILE] batch_balance_persist={}ms count={}",
-                                    start.elapsed().as_millis(),
-                                    batch.len()
-                                );
-                            }
-                        }
-
-                        // WebSocket: push balance updates
-                        for event in &batch {
-                            let _ = queues.push_event_queue.push(
-                                crate::websocket::PushEvent::BalanceUpdate {
-                                    user_id: event.user_id,
-                                    asset_id: event.asset_id,
-                                    avail: event.avail_after,
-                                    frozen: event.frozen_after,
-                                },
-                            );
-                        }
-                    } else {
-                        // Queue empty - check shutdown or sleep
-                        if shutdown.is_shutdown_requested() {
-                            break;
-                        }
-                        std::thread::sleep(IDLE_SLEEP_US);
-                    }
-                }
-                tracing::info!("[SETTLEMENT] Balance processor exiting");
-            })
-            .expect("Failed to spawn balance processor")
     }
 
     /// Run the settlement service in async mode (zero block_on overhead)
@@ -977,96 +868,6 @@ impl SettlementService {
             }
             tracing::info!("[SETTLEMENT] Async trade processor exiting");
         })
-    }
-
-    /// Spawn ME result processor thread (BATCH mode)
-    /// Input: me_result_queue (order + trades bundle)
-    /// Output: TDengine orders/trades (batch) + WebSocket push
-    fn spawn_trade_processor(
-        queues: Arc<MultiThreadQueues>,
-        stats: Arc<PipelineStats>,
-        rt_handle: Option<tokio::runtime::Handle>,
-        db_client: Option<Arc<crate::persistence::TDengineClient>>,
-        _symbol_id: u32,
-        shutdown: Arc<ShutdownSignal>,
-    ) -> std::thread::JoinHandle<()> {
-        const BATCH_SIZE: usize = 128;
-
-        std::thread::Builder::new()
-            .name("settlement-order".to_string())
-            .spawn(move || {
-                let mut batch: Vec<crate::messages::MEResult> = Vec::with_capacity(BATCH_SIZE);
-
-                loop {
-                    batch.clear();
-
-                    // Pop 1 to N results (whatever is available, up to BATCH_SIZE)
-                    while batch.len() < BATCH_SIZE {
-                        if let Some(result) = queues.me_result_queue.pop() {
-                            batch.push(result);
-                        } else {
-                            break;
-                        }
-                    }
-
-                    if !batch.is_empty() {
-                        // TDengine: batch persist orders + trades
-                        if let (Some(handle), Some(db)) = (&rt_handle, &db_client) {
-                            let start = Instant::now();
-                            let result = handle.block_on(
-                                crate::persistence::orders::batch_insert_me_results(
-                                    db.taos(),
-                                    &batch,
-                                ),
-                            );
-                            if let Err(e) = result {
-                                tracing::error!("[PERSIST] batch me_result failed: {}", e);
-                            }
-                            if start.elapsed().as_millis() > 10 {
-                                tracing::warn!(
-                                    "[PROFILE] batch_me_persist={}ms count={} trades={}",
-                                    start.elapsed().as_millis(),
-                                    batch.len(),
-                                    batch.iter().map(|r| r.trades.len()).sum::<usize>()
-                                );
-                            }
-                        }
-
-                        // WebSocket: push order update + trade events
-                        for me_result in &batch {
-                            let symbol_id = me_result.symbol_id;
-
-                            for trade_event in &me_result.trades {
-                                Self::push_trade_events(&queues, trade_event, &trade_event.trade);
-                            }
-
-                            // If no trades, still push order update for NEW orders
-                            if me_result.trades.is_empty() {
-                                let _ = queues.push_event_queue.push(
-                                    crate::websocket::PushEvent::OrderUpdate {
-                                        user_id: me_result.order.user_id,
-                                        order_id: me_result.order.order_id,
-                                        symbol_id,
-                                        status: me_result.final_status,
-                                        filled_qty: me_result.order.filled_qty,
-                                        avg_price: None,
-                                    },
-                                );
-                            }
-                        }
-
-                        stats.add_event_log_time(0);
-                    } else {
-                        // Queue empty - check shutdown or sleep
-                        if shutdown.is_shutdown_requested() {
-                            break;
-                        }
-                        std::thread::sleep(IDLE_SLEEP_US);
-                    }
-                }
-                tracing::info!("[SETTLEMENT] Order processor exiting");
-            })
-            .expect("Failed to spawn order processor")
     }
 
     /// Push trade events to WebSocket
