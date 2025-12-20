@@ -7,8 +7,8 @@
 //!
 //! The runner processes orders in a round-robin fashion:
 //! 1. Pop from order_queue → UBSCore.process_order() → push to valid_order_queue
-//! 2. Pop from valid_order_queue → ME.process_order() → push trades to trade_queue
-//! 3. Pop from trade_queue → UBSCore.settle_trade() + Ledger.write()
+//! 2. Pop from valid_order_queue → ME.process_order() → push trades to me_result_queue
+//! 3. Pop from me_result_queue → UBSCore.settle_trade() + Ledger.write()
 //!
 //! This single-threaded version validates correctness before multi-threading.
 
@@ -59,8 +59,8 @@ pub type SingleThreadServices<'a> =
 /// 1. Ingest: orders → order_queue
 /// 2. Process Loop:
 ///    - order_queue → UBSCore → valid_order_queue (or reject)
-///    - valid_order_queue → ME → trade_queue
-///    - trade_queue → Settlement + Balance Update
+///    - valid_order_queue → ME → me_result_queue
+///    - me_result_queue → Settlement + Balance Update
 /// 3. Return stats
 /// ```
 pub fn run_pipeline_single_thread(

@@ -646,7 +646,7 @@ impl SettlementService {
     ///
     /// Data flow:
     /// - balance_event_queue -> BalanceProcessor -> TDengine + WebSocket
-    /// - trade_queue -> TradeProcessor -> TDengine + WebSocket
+    /// - me_result_queue -> TradeProcessor -> TDengine + WebSocket
     pub fn run(&mut self, shutdown: Arc<ShutdownSignal>) {
         // Spawn balance processing thread
         let balance_handle = Self::spawn_balance_processor(
