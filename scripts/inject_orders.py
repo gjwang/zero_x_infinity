@@ -80,8 +80,19 @@ def submit_order(order_data: dict) -> bool:
             "qty": order_data.get("qty", "0"),
         }
     
-    max_retries = 10  # More retries for queue full (backpressure)
-    retry_delay = 0.05  # 50ms initial delay, doubles each retry (max ~25s total)
+    max_retries = 10
+    retry_delay = 0.05  # 50ms initial, doubles each retry
+    
+    # Errors that are safe to retry (network/transient issues)
+    RETRYABLE_ERRORS = (
+        urllib.error.URLError,  # Connection issues
+        socket.timeout,         # Timeout
+        ConnectionRefusedError, # Gateway not ready
+        ConnectionResetError,   # Connection dropped
+        BrokenPipeError,        # Pipe issues
+        TimeoutError,           # General timeout
+        OSError,                # Other OS-level network errors
+    )
     
     for attempt in range(max_retries + 1):
         try:
@@ -93,42 +104,34 @@ def submit_order(order_data: dict) -> bool:
             with urllib.request.urlopen(req, timeout=30) as response:
                 result = json.loads(response.read().decode())
                 return result.get('code') == 0, None
+                
         except urllib.error.HTTPError as e:
-            # Capture response body for detailed error info
-            try:
-                body = e.read().decode()
-                error_detail = f"HTTP {e.code}: {body[:200]}"  # Limit body length
-            except:
-                error_detail = f"HTTP {e.code}"
-            
-            # Retry on 503 (Service Unavailable) - this is backpressure
+            # HTTP errors: only retry 503 (backpressure)
             if e.code == 503 and attempt < max_retries:
+                print(f"  ⏳ Retry {attempt+1}/{max_retries}: HTTP 503 (backpressure)")
                 time.sleep(retry_delay)
-                retry_delay *= 2  # Exponential backoff
+                retry_delay *= 2
                 continue
-            return False, error_detail
-        except urllib.error.URLError as e:
-            # URLError can wrap socket.timeout or other errors
-            if isinstance(e.reason, socket.timeout):
-                return False, "Request timeout (socket)"
-            return False, f"Connection: {e.reason}"
-        except socket.timeout:
-            return False, "Request timeout"
-        except ConnectionRefusedError:
-            return False, "Connection refused"
-        except ConnectionResetError:
-            return False, "Connection reset by peer"
-        except BrokenPipeError:
-            return False, "Broken pipe"
-        except OSError as e:
-            return False, f"OS error: {e}"
-        except TimeoutError:
-            return False, "Timeout"
-        except KeyboardInterrupt:
-            # This can happen during socket.connect() if Gateway is slow/blocked
-            return False, "Interrupted during connect (Gateway not responding?)"
+            # Non-retryable HTTP error
+            try:
+                body = e.read().decode()[:200]
+            except:
+                body = ""
+            return False, f"HTTP {e.code}: {body}"
+            
+        except RETRYABLE_ERRORS as e:
+            # Network error - retry with logging
+            if attempt < max_retries:
+                print(f"  ⏳ Retry {attempt+1}/{max_retries}: {type(e).__name__}")
+                time.sleep(retry_delay)
+                retry_delay *= 2
+                continue
+            return False, f"{type(e).__name__}: {e}"
+            
         except Exception as e:
-            return False, f"Unexpected: {type(e).__name__}: {e}"
+            # Unknown error - exit immediately, don't hide it
+            print(f"\n❌ FATAL: {type(e).__name__}: {e}")
+            raise  # Re-raise to trigger traceback and exit
     
     return False, "Max retries exceeded"
 
