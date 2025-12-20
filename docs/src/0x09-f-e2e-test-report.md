@@ -38,10 +38,10 @@
 
 | 指标 | 结果 |
 |------|------|
-| 注入数量 | 1,100 (100 + 1,000) |
-| 成功接受 | 1,100 (100%) ✅ |
+| 注入数量 | 1,000 |
+| 成功接受 | 1,000 (100%) ✅ |
 | 失败数 | 0 |
-| 吞吐量 | 2,052 orders/sec |
+| 吞吐量 | 2,272 orders/sec |
 | 注入模式 | 顺序单线程 (保证订单确定性) |
 
 ### 4.2 TDengine 持久化
@@ -107,10 +107,14 @@ self.manager.send_to_user(user_id, message);
 ## 6. 测试执行记录
 
 ```bash
+# 使用 E2E 测试脚本 (推荐)
+./scripts/test_gateway_e2e_full.sh quick
+
+# 或手动执行：
 # Step 1: 启动 TDengine
 docker start tdengine
 
-# Step 2: 启动 Gateway
+# Step 2: 启动 Gateway (使用脚本会自动启动)
 ./target/release/zero_x_infinity --gateway --port 8080 &
 
 # Step 3: 注入 1000 订单
@@ -139,7 +143,7 @@ docker exec tdengine taos -s "USE trading; \
 
 ---
 
-## 6. IDE 崩溃问题
+## 7. IDE 崩溃问题
 
 ### 现象
 在执行复合命令时，Antigravity IDE 崩溃：
