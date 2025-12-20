@@ -103,6 +103,45 @@ self.manager.send_to_user(user_id, message);
 
 ---
 
+### 5.3 P2: Gateway 高负载返回 HTTP 503
+
+**严重性**: P2
+
+**测试日期**: 2025-12-20
+
+**现象**:
+- 当注入速率 ≥1600 orders/sec 时
+- 约 15,000 订单后 Gateway 开始返回 HTTP 503 (Service Unavailable)
+- 触发客户端 10 次连续失败后停止
+
+**测试数据**:
+```
+Progress: 15000/20000 (75%) - 1617 orders/sec
+
+❌ ERROR: 10 consecutive failures. Last error: HTTP 503
+
+Submitted: 15238
+Accepted:  15228
+Failed:    10
+```
+
+**各规模测试结果**:
+| 订单数 | 完成率 | 速率 | 状态 |
+|--------|--------|------|------|
+| 10,000 | 100% | 1633/s | ✅ |
+| 20,000 | 76% | ~1600/s | ❌ HTTP 503 |
+| 50,000 | 6.6% | - | ❌ HTTP 503 |
+
+**影响**:
+- 无法完成 100K 订单注入测试
+- Gateway 在高吞吐量下不稳定
+
+**建议**:
+- 检查 Gateway 背压配置
+- 增加处理队列容量
+
+---
+
 ## 6. 测试执行记录
 
 ```bash
