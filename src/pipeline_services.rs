@@ -652,16 +652,24 @@ impl SettlementService {
 
                 // [TDENGINE] Persist Balance to TDengine (if configured)
                 if let (Some(handle), Some(db)) = (&self.rt_handle, &self.db_client) {
-                    if let Err(e) =
+                    let balance_start = Instant::now();
+                    let result =
                         handle.block_on(crate::persistence::balances::upsert_balance_values(
                             db.taos(),
                             balance_event.user_id,
                             balance_event.asset_id,
                             balance_event.avail_after,
                             balance_event.frozen_after,
-                        ))
-                    {
-                        tracing::error!("[PERSIST] Failed to persist balance: {}", e);
+                        ));
+                    let balance_elapsed = balance_start.elapsed();
+                    if let Err(e) = result {
+                        tracing::error!("[PERSIST] balance failed: {}", e);
+                    }
+                    if balance_elapsed.as_millis() > 10 {
+                        tracing::warn!(
+                            "[PROFILE] balance_persist={}ms",
+                            balance_elapsed.as_millis()
+                        );
                     }
                 }
 
@@ -737,31 +745,13 @@ impl SettlementService {
                 });
                 p_info!(TARGET_PERS, "Settlement persisted to ledger");
 
-                // [TDENGINE] Persist Trade to TDengine (if configured)
+                // [TDENGINE] Persist Trade + Order to TDengine (PARALLELIZED)
                 if let (Some(handle), Some(db)) = (&self.rt_handle, &self.db_client) {
                     let taker_user_id = if trade_event.taker_side == Side::Buy {
                         trade.buyer_user_id
                     } else {
                         trade.seller_user_id
                     };
-                    // Taker trade
-                    if let Err(e) =
-                        handle.block_on(crate::persistence::trades::insert_trade_record(
-                            db.taos(),
-                            trade.trade_id,
-                            trade_event.taker_order_id,
-                            taker_user_id,
-                            trade_event.taker_side,
-                            trade.price,
-                            trade.qty,
-                            0, // fee
-                            1, // role: taker
-                            self.symbol_id,
-                        ))
-                    {
-                        tracing::error!("[PERSIST] Failed to persist taker trade: {}", e);
-                    }
-                    // Maker trade
                     let maker_user_id = if trade_event.taker_side == Side::Buy {
                         trade.seller_user_id
                     } else {
@@ -772,21 +762,96 @@ impl SettlementService {
                     } else {
                         Side::Buy
                     };
-                    if let Err(e) =
-                        handle.block_on(crate::persistence::trades::insert_trade_record(
-                            db.taos(),
-                            trade.trade_id,
-                            trade_event.maker_order_id,
-                            maker_user_id,
-                            maker_side,
-                            trade.price,
-                            trade.qty,
-                            0, // fee
-                            0, // role: maker
-                            self.symbol_id,
-                        ))
-                    {
-                        tracing::error!("[PERSIST] Failed to persist maker trade: {}", e);
+                    let taker_status =
+                        if trade_event.taker_filled_qty >= trade_event.taker_order_qty {
+                            OrderStatus::FILLED
+                        } else {
+                            OrderStatus::PARTIALLY_FILLED
+                        };
+
+                    // Clone refs for async block
+                    let db = db.clone();
+                    let symbol_id = self.symbol_id;
+
+                    // Run all 3 writes in parallel
+                    let persist_start = Instant::now();
+                    let (taker_result, maker_result, order_result) = handle.block_on(async {
+                        tokio::join!(
+                            // Taker trade
+                            async {
+                                let start = Instant::now();
+                                let r = crate::persistence::trades::insert_trade_record(
+                                    db.taos(),
+                                    trade.trade_id,
+                                    trade_event.taker_order_id,
+                                    taker_user_id,
+                                    trade_event.taker_side,
+                                    trade.price,
+                                    trade.qty,
+                                    0,
+                                    1, // taker
+                                    symbol_id,
+                                )
+                                .await;
+                                (r, start.elapsed())
+                            },
+                            // Maker trade
+                            async {
+                                let start = Instant::now();
+                                let r = crate::persistence::trades::insert_trade_record(
+                                    db.taos(),
+                                    trade.trade_id,
+                                    trade_event.maker_order_id,
+                                    maker_user_id,
+                                    maker_side,
+                                    trade.price,
+                                    trade.qty,
+                                    0,
+                                    0, // maker
+                                    symbol_id,
+                                )
+                                .await;
+                                (r, start.elapsed())
+                            },
+                            // Order status
+                            async {
+                                let start = Instant::now();
+                                let r = crate::persistence::orders::update_order_status(
+                                    db.taos(),
+                                    trade_event.taker_order_id,
+                                    taker_user_id,
+                                    symbol_id,
+                                    trade_event.taker_filled_qty,
+                                    taker_status,
+                                    None,
+                                )
+                                .await;
+                                (r, start.elapsed())
+                            }
+                        )
+                    });
+                    let persist_total = persist_start.elapsed();
+
+                    // Log errors
+                    if let Err(e) = taker_result.0 {
+                        tracing::error!("[PERSIST] taker_trade failed: {}", e);
+                    }
+                    if let Err(e) = maker_result.0 {
+                        tracing::error!("[PERSIST] maker_trade failed: {}", e);
+                    }
+                    if let Err(e) = order_result.0 {
+                        tracing::error!("[PERSIST] order_status failed: {}", e);
+                    }
+
+                    // Profile: log slowest operation
+                    if persist_total.as_millis() > 10 {
+                        tracing::warn!(
+                            "[PROFILE] persist_total={}ms taker={}ms maker={}ms order={}ms",
+                            persist_total.as_millis(),
+                            taker_result.1.as_millis(),
+                            maker_result.1.as_millis(),
+                            order_result.1.as_millis()
+                        );
                     }
                 }
 
@@ -801,34 +866,6 @@ impl SettlementService {
                 } else {
                     trade.seller_user_id
                 };
-
-                // Push taker order update
-                eprintln!(
-                    "[PUSH] Generating OrderUpdate for user {} order {}",
-                    taker_user_id, trade_event.taker_order_id
-                );
-                tracing::info!(
-                    "[PUSH] Generating OrderUpdate for user {} order {}",
-                    taker_user_id,
-                    trade_event.taker_order_id
-                );
-
-                // [TDENGINE] Persist Order status to TDengine (if configured)
-                if let (Some(handle), Some(db)) = (&self.rt_handle, &self.db_client) {
-                    if let Err(e) =
-                        handle.block_on(crate::persistence::orders::update_order_status(
-                            db.taos(),
-                            trade_event.taker_order_id,
-                            taker_user_id,
-                            self.symbol_id,
-                            trade_event.taker_filled_qty,
-                            taker_status,
-                            None, // cid
-                        ))
-                    {
-                        tracing::error!("[PERSIST] Failed to persist order status: {}", e);
-                    }
-                }
                 let push_result =
                     self.queues
                         .push_event_queue
