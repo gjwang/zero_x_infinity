@@ -125,3 +125,72 @@ CREATE STABLE IF NOT EXISTS klines (
     intv NCHAR(8)
 )
 "#;
+
+/// Pre-create subtables for a symbol (orders_X, trades_X, klines_X_1m, etc.)
+///
+/// Call this during symbol configuration to avoid runtime table creation overhead.
+/// First-time table creation can take 400ms+, so we do it during startup.
+pub async fn ensure_symbol_tables(taos: &Taos, symbol_id: u32) -> Result<()> {
+    // Orders subtable
+    taos.exec(&format!(
+        "CREATE TABLE IF NOT EXISTS orders_{} USING orders TAGS ({})",
+        symbol_id, symbol_id
+    ))
+    .await
+    .map_err(|e| anyhow::anyhow!("Failed to create orders_{}: {}", symbol_id, e))?;
+
+    // Trades subtable
+    taos.exec(&format!(
+        "CREATE TABLE IF NOT EXISTS trades_{} USING trades TAGS ({})",
+        symbol_id, symbol_id
+    ))
+    .await
+    .map_err(|e| anyhow::anyhow!("Failed to create trades_{}: {}", symbol_id, e))?;
+
+    // K-line subtables for common intervals
+    for interval in &["1m", "5m", "15m", "1h", "4h", "1d"] {
+        taos.exec(&format!(
+            "CREATE TABLE IF NOT EXISTS klines_{}_{} USING klines TAGS ({}, '{}')",
+            symbol_id, interval, symbol_id, interval
+        ))
+        .await
+        .map_err(|e| {
+            anyhow::anyhow!("Failed to create klines_{}_{}: {}", symbol_id, interval, e)
+        })?;
+    }
+
+    tracing::debug!("Pre-created subtables for symbol_id={}", symbol_id);
+    Ok(())
+}
+
+/// Pre-create balance subtable for a user+asset pair
+///
+/// Call this during user onboarding to avoid runtime table creation overhead.
+pub async fn ensure_balance_table(taos: &Taos, user_id: u64, asset_id: u32) -> Result<()> {
+    taos.exec(&format!(
+        "CREATE TABLE IF NOT EXISTS balances_{}_{} USING balances TAGS ({}, {})",
+        user_id, asset_id, user_id, asset_id
+    ))
+    .await
+    .map_err(|e| anyhow::anyhow!("Failed to create balances_{}_{}: {}", user_id, asset_id, e))?;
+
+    Ok(())
+}
+
+/// Pre-create all symbol subtables from SymbolManager
+///
+/// Call this after schema init and symbol loading to ensure all tables exist.
+pub async fn ensure_all_symbol_tables(
+    taos: &Taos,
+    symbol_mgr: &crate::symbol_manager::SymbolManager,
+) -> Result<()> {
+    let symbol_ids: Vec<u32> = symbol_mgr.symbol_info.keys().copied().collect();
+    tracing::info!("Pre-creating subtables for {} symbols...", symbol_ids.len());
+
+    for symbol_id in symbol_ids {
+        ensure_symbol_tables(taos, symbol_id).await?;
+    }
+
+    tracing::info!("All symbol subtables pre-created successfully");
+    Ok(())
+}
