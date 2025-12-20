@@ -104,28 +104,45 @@ pub async fn upsert_balance_values(
 ///
 /// Groups events by user+asset, creates subtables if needed,
 /// then inserts all values in one SQL statement.
+/// Uses static cache to avoid repeated CREATE TABLE calls.
 pub async fn batch_upsert_balance_events(
     taos: &Taos,
     events: &[crate::messages::BalanceEvent],
 ) -> Result<()> {
+    use once_cell::sync::Lazy;
+    use std::sync::Mutex;
+
+    // Cache of already-created tables (survives across calls)
+    static CREATED_TABLES: Lazy<Mutex<std::collections::HashSet<(u64, u32)>>> =
+        Lazy::new(|| Mutex::new(std::collections::HashSet::new()));
+
     if events.is_empty() {
         return Ok(());
     }
 
-    // Group events by (user_id, asset_id) for subtable creation
-    let mut tables: std::collections::HashSet<(u64, u32)> = std::collections::HashSet::new();
-    for event in events {
-        tables.insert((event.user_id, event.asset_id));
+    // Find tables that need creation (not in cache)
+    let mut new_tables: Vec<(u64, u32)> = Vec::new();
+    {
+        let created = CREATED_TABLES.lock().unwrap();
+        for event in events {
+            let key = (event.user_id, event.asset_id);
+            if !created.contains(&key) && !new_tables.contains(&key) {
+                new_tables.push(key);
+            }
+        }
     }
 
-    // Create subtables if not exist (batch)
-    for (user_id, asset_id) in &tables {
+    // Create only NEW subtables
+    for (user_id, asset_id) in &new_tables {
         let table_name = format!("balances_{}_{}", user_id, asset_id);
         let create_subtable = format!(
             "CREATE TABLE IF NOT EXISTS {} USING balances TAGS ({}, {})",
             table_name, user_id, asset_id
         );
-        taos.exec(&create_subtable).await.ok(); // Ignore errors for existing tables
+        if taos.exec(&create_subtable).await.is_ok() {
+            // Add to cache on success
+            CREATED_TABLES.lock().unwrap().insert((*user_id, *asset_id));
+        }
     }
 
     // Build batch INSERT statement
