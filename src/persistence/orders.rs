@@ -40,251 +40,120 @@ pub async fn insert_order(taos: &Taos, order: &InternalOrder, symbol_id: u32) ->
     Ok(())
 }
 
-/// Batch insert MEResults (orders + trades) using Stmt parameter binding
+/// Fast batch insert MEResults (orders + trades) using batch SQL
 ///
-/// Uses prepared statement with parameter binding for better performance.
-/// Skips SQL parsing by sending binary data directly.
-/// Uses static cache to avoid repeated CREATE TABLE calls.
+/// Optimized for high-frequency writes:
+/// - One network round-trip per type (orders + trades)
+/// - No Mutex locks
+/// - Pre-allocated string buffers
+/// - No Stmt set_tbname overhead
+///
+/// Note: Tables must exist (created during symbol configuration, not here)
 pub async fn batch_insert_me_results(
     taos: &Taos,
     results: &[crate::messages::MEResult],
 ) -> Result<()> {
     use crate::models::Side;
-    use once_cell::sync::Lazy;
-    use std::sync::Mutex;
-    use taos_query::prelude::ColumnView;
-
-    // Cache of already-created tables (survives across calls)
-    static CREATED_SYMBOLS: Lazy<Mutex<std::collections::HashSet<u32>>> =
-        Lazy::new(|| Mutex::new(std::collections::HashSet::new()));
+    use std::fmt::Write;
 
     if results.is_empty() {
         return Ok(());
     }
 
-    // Find symbol_ids that need table creation
-    let mut new_symbols: Vec<u32> = Vec::new();
-    {
-        let created = CREATED_SYMBOLS.lock().unwrap();
-        for r in results {
-            if !created.contains(&r.symbol_id) && !new_symbols.contains(&r.symbol_id) {
-                new_symbols.push(r.symbol_id);
-            }
-        }
-    }
+    let now_us = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_micros() as i64;
 
-    // Create only NEW subtables for orders and trades
-    for symbol_id in &new_symbols {
-        let orders_table = format!("orders_{}", symbol_id);
-        let trades_table = format!("trades_{}", symbol_id);
-
-        let orders_ok = taos
-            .exec(&format!(
-                "CREATE TABLE IF NOT EXISTS {} USING orders TAGS ({})",
-                orders_table, symbol_id
-            ))
-            .await
-            .is_ok();
-
-        let trades_ok = taos
-            .exec(&format!(
-                "CREATE TABLE IF NOT EXISTS {} USING trades TAGS ({})",
-                trades_table, symbol_id
-            ))
-            .await
-            .is_ok();
-
-        if orders_ok && trades_ok {
-            CREATED_SYMBOLS.lock().unwrap().insert(*symbol_id);
-        }
-    }
-
-    // Group results by symbol_id for orders
-    let mut orders_by_symbol: std::collections::HashMap<u32, Vec<&crate::messages::MEResult>> =
-        std::collections::HashMap::new();
-    for r in results {
-        orders_by_symbol.entry(r.symbol_id).or_default().push(r);
-    }
-
-    // Batch INSERT orders using Stmt
+    // === BATCH INSERT ORDERS ===
     // orders schema: ts, order_id, user_id, side, order_type, price, qty, filled_qty, status, cid
-    let mut orders_stmt: taos::Stmt = <taos::Stmt as taos::AsyncBindable<Taos>>::init(taos)
-        .await
-        .map_err(|e| anyhow::anyhow!("Orders Stmt init failed: {}", e))?;
-    orders_stmt
-        .prepare("INSERT INTO ? VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-        .await
-        .map_err(|e| anyhow::anyhow!("Orders Stmt prepare failed: {}", e))?;
+    let mut orders_sql = String::with_capacity(results.len() * 200 + 20);
+    orders_sql.push_str("INSERT INTO ");
 
-    for (symbol_id, symbol_results) in &orders_by_symbol {
-        let table_name = format!("orders_{}", symbol_id);
-        orders_stmt
-            .set_tbname(&table_name)
-            .await
-            .map_err(|e| anyhow::anyhow!("Orders Stmt set_tbname failed: {}", e))?;
-
-        let now_us = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_micros() as i64;
-
-        let timestamps: Vec<i64> = (0..symbol_results.len())
-            .map(|i| now_us + i as i64)
-            .collect();
-        let order_ids: Vec<u64> = symbol_results.iter().map(|r| r.order.order_id).collect();
-        let user_ids: Vec<u64> = symbol_results.iter().map(|r| r.order.user_id).collect();
-        let sides: Vec<u8> = symbol_results.iter().map(|r| r.order.side as u8).collect();
-        let order_types: Vec<u8> = symbol_results
-            .iter()
-            .map(|r| r.order.order_type as u8)
-            .collect();
-        let prices: Vec<u64> = symbol_results.iter().map(|r| r.order.price).collect();
-        let qtys: Vec<u64> = symbol_results.iter().map(|r| r.order.qty).collect();
-        let filled_qtys: Vec<u64> = symbol_results.iter().map(|r| r.order.filled_qty).collect();
-        let statuses: Vec<u8> = symbol_results
-            .iter()
-            .map(|r| r.order.status as u8)
-            .collect();
-        let cids: Vec<&str> = symbol_results
-            .iter()
-            .map(|r| r.order.cid.as_deref().unwrap_or(""))
-            .collect();
-
-        let params = vec![
-            ColumnView::from_micros_timestamp(timestamps),
-            ColumnView::from_unsigned_big_ints(order_ids),
-            ColumnView::from_unsigned_big_ints(user_ids),
-            ColumnView::from_unsigned_tiny_ints(sides),
-            ColumnView::from_unsigned_tiny_ints(order_types),
-            ColumnView::from_unsigned_big_ints(prices),
-            ColumnView::from_unsigned_big_ints(qtys),
-            ColumnView::from_unsigned_big_ints(filled_qtys),
-            ColumnView::from_unsigned_tiny_ints(statuses),
-            ColumnView::from_nchar(cids),
-        ];
-
-        orders_stmt
-            .bind(&params)
-            .await
-            .map_err(|e| anyhow::anyhow!("Orders Stmt bind failed: {}", e))?;
-        orders_stmt
-            .add_batch()
-            .await
-            .map_err(|e| anyhow::anyhow!("Orders Stmt add_batch failed: {}", e))?;
+    for (i, r) in results.iter().enumerate() {
+        let o = &r.order;
+        let cid = o.cid.as_deref().unwrap_or("");
+        write!(
+            orders_sql,
+            "orders_{} VALUES({}, {}, {}, {}, {}, {}, {}, {}, {}, '{}') ",
+            r.symbol_id,
+            now_us + i as i64,
+            o.order_id,
+            o.user_id,
+            o.side as u8,
+            o.order_type as u8,
+            o.price,
+            o.qty,
+            o.filled_qty,
+            o.status as u8,
+            cid
+        )
+        .unwrap();
     }
 
-    orders_stmt
-        .execute()
+    taos.exec(&orders_sql)
         .await
-        .map_err(|e| anyhow::anyhow!("Orders Stmt execute failed: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Batch orders insert failed: {}", e))?;
 
-    // Batch INSERT trades (if any)
+    // === BATCH INSERT TRADES ===
     let has_trades = results.iter().any(|r| !r.trades.is_empty());
     if has_trades {
-        // Group trades by symbol_id
-        let mut trades_by_symbol: std::collections::HashMap<
-            u32,
-            Vec<(&crate::models::Trade, Side, Side)>,
-        > = std::collections::HashMap::new();
+        // trades schema: ts, trade_id, order_id, user_id, side, price, qty, fee, role
+        // Each trade generates 2 records (buyer + seller)
+        let trade_count: usize = results.iter().map(|r| r.trades.len() * 2).sum();
+        let mut trades_sql = String::with_capacity(trade_count * 150 + 20);
+        trades_sql.push_str("INSERT INTO ");
 
+        let mut ts_offset = 0i64;
         for r in results {
             for te in &r.trades {
-                let trade = &te.trade;
+                let t = &te.trade;
+
                 // Buyer record
-                trades_by_symbol.entry(r.symbol_id).or_default().push((
-                    trade,
-                    Side::Buy,
-                    te.taker_side,
-                ));
+                write!(
+                    trades_sql,
+                    "trades_{} VALUES({}, {}, {}, {}, {}, {}, {}, {}, {}) ",
+                    r.symbol_id,
+                    now_us + ts_offset,
+                    t.trade_id,
+                    t.buyer_order_id,
+                    t.buyer_user_id,
+                    Side::Buy as u8,
+                    t.price,
+                    t.qty,
+                    t.fee,
+                    if te.taker_side == Side::Buy { 0u8 } else { 1u8 } // 0=taker, 1=maker
+                )
+                .unwrap();
+                ts_offset += 1;
+
                 // Seller record
-                trades_by_symbol.entry(r.symbol_id).or_default().push((
-                    trade,
-                    Side::Sell,
-                    te.taker_side,
-                ));
+                write!(
+                    trades_sql,
+                    "trades_{} VALUES({}, {}, {}, {}, {}, {}, {}, {}, {}) ",
+                    r.symbol_id,
+                    now_us + ts_offset,
+                    t.trade_id,
+                    t.seller_order_id,
+                    t.seller_user_id,
+                    Side::Sell as u8,
+                    t.price,
+                    t.qty,
+                    t.fee,
+                    if te.taker_side == Side::Sell {
+                        0u8
+                    } else {
+                        1u8
+                    } // 0=taker, 1=maker
+                )
+                .unwrap();
+                ts_offset += 1;
             }
         }
 
-        // trades schema: ts, trade_id, order_id, user_id, side, price, qty, fee, role
-        let mut trades_stmt: taos::Stmt = <taos::Stmt as taos::AsyncBindable<Taos>>::init(taos)
+        taos.exec(&trades_sql)
             .await
-            .map_err(|e| anyhow::anyhow!("Trades Stmt init failed: {}", e))?;
-        trades_stmt
-            .prepare("INSERT INTO ? VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)")
-            .await
-            .map_err(|e| anyhow::anyhow!("Trades Stmt prepare failed: {}", e))?;
-
-        for (symbol_id, trade_records) in &trades_by_symbol {
-            let table_name = format!("trades_{}", symbol_id);
-            trades_stmt
-                .set_tbname(&table_name)
-                .await
-                .map_err(|e| anyhow::anyhow!("Trades Stmt set_tbname failed: {}", e))?;
-
-            let now_us = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_micros() as i64;
-
-            let timestamps: Vec<i64> = (0..trade_records.len())
-                .map(|i| now_us + i as i64)
-                .collect();
-            let trade_ids: Vec<u64> = trade_records.iter().map(|(t, _, _)| t.trade_id).collect();
-            let order_ids: Vec<u64> = trade_records
-                .iter()
-                .map(|(t, side, _)| {
-                    if *side == Side::Buy {
-                        t.buyer_order_id
-                    } else {
-                        t.seller_order_id
-                    }
-                })
-                .collect();
-            let user_ids: Vec<u64> = trade_records
-                .iter()
-                .map(|(t, side, _)| {
-                    if *side == Side::Buy {
-                        t.buyer_user_id
-                    } else {
-                        t.seller_user_id
-                    }
-                })
-                .collect();
-            let sides: Vec<u8> = trade_records
-                .iter()
-                .map(|(_, side, _)| *side as u8)
-                .collect();
-            let prices: Vec<u64> = trade_records.iter().map(|(t, _, _)| t.price).collect();
-            let qtys: Vec<u64> = trade_records.iter().map(|(t, _, _)| t.qty).collect();
-            let fees: Vec<u64> = trade_records.iter().map(|(t, _, _)| t.fee).collect();
-            let roles: Vec<u8> = trade_records.iter().map(|(t, _, _)| t.role).collect();
-
-            let params = vec![
-                ColumnView::from_micros_timestamp(timestamps),
-                ColumnView::from_unsigned_big_ints(trade_ids),
-                ColumnView::from_unsigned_big_ints(order_ids),
-                ColumnView::from_unsigned_big_ints(user_ids),
-                ColumnView::from_unsigned_tiny_ints(sides),
-                ColumnView::from_unsigned_big_ints(prices),
-                ColumnView::from_unsigned_big_ints(qtys),
-                ColumnView::from_unsigned_big_ints(fees),
-                ColumnView::from_unsigned_tiny_ints(roles),
-            ];
-
-            trades_stmt
-                .bind(&params)
-                .await
-                .map_err(|e| anyhow::anyhow!("Trades Stmt bind failed: {}", e))?;
-            trades_stmt
-                .add_batch()
-                .await
-                .map_err(|e| anyhow::anyhow!("Trades Stmt add_batch failed: {}", e))?;
-        }
-
-        trades_stmt
-            .execute()
-            .await
-            .map_err(|e| anyhow::anyhow!("Trades Stmt execute failed: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Batch trades insert failed: {}", e))?;
     }
 
     Ok(())
