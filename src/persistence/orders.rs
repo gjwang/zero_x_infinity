@@ -389,4 +389,57 @@ mod tests {
             results.iter().map(|r| r.trades.len() * 2).sum::<usize>() // buyer + seller
         );
     }
+
+    /// Test that auto-create fallback works when orders/trades tables don't exist
+    #[tokio::test]
+    #[ignore] // Requires TDengine running
+    async fn test_auto_create_orders_trades_tables() {
+        let client =
+            crate::persistence::TDengineClient::connect("taos://root:taosdata@localhost:6030")
+                .await
+                .expect("Failed to connect");
+
+        client.init_schema().await.expect("Failed to init schema");
+
+        // Use unique symbol ID to avoid conflicts with other tests
+        let test_symbol_id = 9999u32;
+
+        // Drop tables first to simulate missing tables
+        let _ = client
+            .taos()
+            .exec(&format!("DROP TABLE IF EXISTS orders_{}", test_symbol_id))
+            .await;
+        let _ = client
+            .taos()
+            .exec(&format!("DROP TABLE IF EXISTS trades_{}", test_symbol_id))
+            .await;
+
+        // Create test order using constructor
+        let mut order = InternalOrder::new(
+            999999001, // order_id
+            99001,     // user_id
+            test_symbol_id,
+            50000_00000000, // price
+            1_00000000,     // qty
+            Side::Buy,
+        );
+        order.order_type = OrderType::Limit;
+        order.status = OrderStatus::NEW;
+        order.cid = Some("test_autocreate".to_string());
+
+        // Create MEResult with no trades (simpler test)
+        let results = vec![crate::messages::MEResult {
+            order,
+            trades: vec![],
+            symbol_id: test_symbol_id,
+            final_status: crate::models::OrderStatus::NEW,
+        }];
+
+        // This should auto-create the orders table and succeed
+        batch_insert_me_results(client.taos(), &results)
+            .await
+            .expect("Failed to batch insert with auto-create");
+
+        println!("✅ Auto-create orders/trades table test passed");
+    }
 }

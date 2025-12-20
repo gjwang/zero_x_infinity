@@ -260,4 +260,49 @@ mod tests {
             events.len()
         );
     }
+
+    /// Test that auto-create fallback works when tables don't exist
+    #[tokio::test]
+    #[ignore] // Requires TDengine running
+    async fn test_auto_create_balance_tables() {
+        let client =
+            crate::persistence::TDengineClient::connect("taos://root:taosdata@localhost:6030")
+                .await
+                .expect("Failed to connect");
+
+        client.init_schema().await.expect("Failed to init schema");
+
+        // Use unique user/asset IDs to avoid conflicts with other tests
+        let test_user_id = 9999001u64;
+        let test_asset_id = 99u32;
+
+        // Drop the table first to simulate missing table
+        let drop_sql = format!(
+            "DROP TABLE IF EXISTS balances_{}_{}",
+            test_user_id, test_asset_id
+        );
+        let _ = client.taos().exec(&drop_sql).await;
+
+        // Create test event for the dropped table
+        use crate::messages::{BalanceEventType, SourceType};
+        let events = vec![crate::messages::BalanceEvent::new(
+            test_user_id,
+            test_asset_id,
+            BalanceEventType::Lock,
+            1,
+            SourceType::Order,
+            1000,
+            -10_00000000,
+            90_00000000,
+            10_00000000,
+            0,
+        )];
+
+        // This should auto-create the table and succeed
+        batch_upsert_balance_events(client.taos(), &events)
+            .await
+            .expect("Failed to batch upsert with auto-create");
+
+        println!("✅ Auto-create balance table test passed");
+    }
 }
