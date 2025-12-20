@@ -27,6 +27,7 @@
 - [0x09-e Order Book Depth: 盘口深度](./0x09-e-orderbook-depth.md)
   - [增量更新方案调研](./0x09-e-orderbook-depth-incremental-research.md)
 - [0x09-f 集成测试: 全功能验收](./0x09-f-integration-test.md)
+  - [E2E 测试报告](./0x09-f-e2e-test-report.md)
 ---
 
 - [Performance Report (Latest)](./perf-report.md)
