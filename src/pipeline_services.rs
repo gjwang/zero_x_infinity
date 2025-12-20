@@ -745,9 +745,9 @@ impl SettlementService {
             .expect("Failed to spawn balance processor")
     }
 
-    /// Spawn ME result processor thread
+    /// Spawn ME result processor thread (BATCH mode)
     /// Input: me_result_queue (order + trades bundle)
-    /// Output: TDengine orders/trades + WebSocket push
+    /// Output: TDengine orders/trades (batch) + WebSocket push
     fn spawn_trade_processor(
         queues: Arc<MultiThreadQueues>,
         stats: Arc<PipelineStats>,
@@ -756,81 +756,78 @@ impl SettlementService {
         _symbol_id: u32,
         shutdown: Arc<ShutdownSignal>,
     ) -> std::thread::JoinHandle<()> {
+        const BATCH_SIZE: usize = 128;
+
         std::thread::Builder::new()
             .name("settlement-order".to_string())
             .spawn(move || {
-                let mut spin_count = 0u32;
-                loop {
-                    if let Some(me_result) = queues.me_result_queue.pop() {
-                        let symbol_id = me_result.symbol_id;
+                let mut batch: Vec<crate::messages::MEResult> = Vec::with_capacity(BATCH_SIZE);
 
-                        // TDengine: persist order + all trades atomically
+                loop {
+                    batch.clear();
+
+                    // Pop 1 to N results (whatever is available, up to BATCH_SIZE)
+                    while batch.len() < BATCH_SIZE {
+                        if let Some(result) = queues.me_result_queue.pop() {
+                            batch.push(result);
+                        } else {
+                            break;
+                        }
+                    }
+
+                    if !batch.is_empty() {
+                        // TDengine: batch persist orders + trades
                         if let (Some(handle), Some(db)) = (&rt_handle, &db_client) {
                             let start = Instant::now();
-
-                            // [1] Insert order first
-                            let order_result =
-                                handle.block_on(crate::persistence::orders::insert_order(
+                            let result = handle.block_on(
+                                crate::persistence::orders::batch_insert_me_results(
                                     db.taos(),
-                                    &me_result.order,
-                                    symbol_id,
-                                ));
-                            if let Err(e) = order_result {
-                                tracing::error!("[PERSIST] insert_order failed: {}", e);
+                                    &batch,
+                                ),
+                            );
+                            if let Err(e) = result {
+                                tracing::error!("[PERSIST] batch me_result failed: {}", e);
                             }
-
-                            // [2] Persist all trades (if any)
-                            for trade_event in &me_result.trades {
-                                Self::persist_trade_to_tdengine(
-                                    handle,
-                                    db,
-                                    trade_event,
-                                    &trade_event.trade,
-                                    symbol_id,
-                                );
-                            }
-
                             if start.elapsed().as_millis() > 10 {
                                 tracing::warn!(
-                                    "[PROFILE] me_result_persist={}ms trades={}",
+                                    "[PROFILE] batch_me_persist={}ms count={} trades={}",
                                     start.elapsed().as_millis(),
-                                    me_result.trades.len()
+                                    batch.len(),
+                                    batch.iter().map(|r| r.trades.len()).sum::<usize>()
                                 );
                             }
                         }
 
                         // WebSocket: push order update + trade events
-                        for trade_event in &me_result.trades {
-                            Self::push_trade_events(&queues, trade_event, &trade_event.trade);
-                        }
+                        for me_result in &batch {
+                            let symbol_id = me_result.symbol_id;
 
-                        // If no trades, still push order update for NEW orders
-                        if me_result.trades.is_empty() {
-                            let _ = queues.push_event_queue.push(
-                                crate::websocket::PushEvent::OrderUpdate {
-                                    user_id: me_result.order.user_id,
-                                    order_id: me_result.order.order_id,
-                                    symbol_id,
-                                    status: me_result.final_status,
-                                    filled_qty: me_result.order.filled_qty,
-                                    avg_price: None,
-                                },
-                            );
+                            for trade_event in &me_result.trades {
+                                Self::push_trade_events(&queues, trade_event, &trade_event.trade);
+                            }
+
+                            // If no trades, still push order update for NEW orders
+                            if me_result.trades.is_empty() {
+                                let _ = queues.push_event_queue.push(
+                                    crate::websocket::PushEvent::OrderUpdate {
+                                        user_id: me_result.order.user_id,
+                                        order_id: me_result.order.order_id,
+                                        symbol_id,
+                                        status: me_result.final_status,
+                                        filled_qty: me_result.order.filled_qty,
+                                        avg_price: None,
+                                    },
+                                );
+                            }
                         }
 
                         stats.add_event_log_time(0);
-                        spin_count = 0;
-                    } else if shutdown.is_shutdown_requested() && queues.me_result_queue.is_empty()
-                    {
-                        break;
                     } else {
-                        spin_count += 1;
-                        if spin_count > IDLE_SPIN_LIMIT {
-                            std::thread::sleep(IDLE_SLEEP_US);
-                            spin_count = 0;
-                        } else {
-                            std::hint::spin_loop();
+                        // Queue empty - check shutdown or sleep
+                        if shutdown.is_shutdown_requested() {
+                            break;
                         }
+                        std::thread::sleep(IDLE_SLEEP_US);
                     }
                 }
                 tracing::info!("[SETTLEMENT] Order processor exiting");
