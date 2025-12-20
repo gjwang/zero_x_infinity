@@ -105,7 +105,8 @@ impl IngestionService {
                     Ok(()) => break,
                     Err(_) => {
                         self.stats.incr_backpressure();
-                        std::hint::spin_loop();
+                        // std::hint::spin_loop();
+                        std::thread::sleep(IDLE_SLEEP_US);
                     }
                 }
             }
@@ -251,8 +252,9 @@ impl UBSCoreService {
                 for event in self.batch_events.drain(..) {
                     let lat_ingested = event.ingested_at_ns;
                     while let Err(_) = self.queues.balance_event_queue.push(event.clone()) {
-                        std::hint::spin_loop();
                         self.stats.incr_backpressure();
+                        std::thread::sleep(IDLE_SLEEP_US);
+                        // std::hint::spin_loop();
                         if shutdown.is_shutdown_requested() {
                             break;
                         }
@@ -443,7 +445,8 @@ impl MatchingService {
                                     Ok(()) => break,
                                     Err(_) => {
                                         self.stats.incr_backpressure();
-                                        std::hint::spin_loop();
+                                        // std::hint::spin_loop();
+                                        std::thread::sleep(IDLE_SLEEP_US);
                                     }
                                 }
                             }
@@ -462,7 +465,8 @@ impl MatchingService {
                                     Ok(()) => break,
                                     Err(_) => {
                                         self.stats.incr_backpressure();
-                                        std::hint::spin_loop();
+                                        // std::hint::spin_loop();
+                                        std::thread::sleep(IDLE_SLEEP_US);
                                     }
                                 }
                             }
@@ -517,7 +521,8 @@ impl MatchingService {
                                         Ok(()) => break,
                                         Err(_) => {
                                             self.stats.incr_backpressure();
-                                            std::hint::spin_loop();
+                                            // std::hint::spin_loop();
+                                            std::thread::sleep(IDLE_SLEEP_US);
                                         }
                                     }
                                 }
