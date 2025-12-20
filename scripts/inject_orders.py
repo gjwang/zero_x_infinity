@@ -22,6 +22,7 @@ import argparse
 import csv
 import json
 import socket
+import subprocess
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -282,6 +283,26 @@ def inject_orders(input_file: str, rate_limit: int = 0, limit: int = 0, quiet: b
     return stats['failed'] == 0
 
 
+def clear_tdengine():
+    """Clear all data from TDengine trading tables."""
+    print("[CLEAN] Clearing TDengine data...")
+    try:
+        result = subprocess.run(
+            ["docker", "exec", "tdengine", "taos", "-s",
+             "DELETE FROM trading.orders; DELETE FROM trading.trades; DELETE FROM trading.balances;"],
+            capture_output=True, text=True, timeout=30
+        )
+        if result.returncode == 0:
+            print("[CLEAN] ✅ Data cleared successfully")
+            return True
+        else:
+            print(f"[CLEAN] ⚠️ Warning: {result.stderr}")
+            return False
+    except Exception as e:
+        print(f"[CLEAN] ❌ Failed to clear data: {e}")
+        return False
+
+
 def main():
     parser = argparse.ArgumentParser(description='Inject orders through Gateway API')
     parser.add_argument('--input', '-i', required=True, help='Input orders CSV file')
@@ -289,12 +310,22 @@ def main():
     parser.add_argument('--rate', '-r', type=int, default=0, help='Rate limit (orders/sec, 0=unlimited)')
     parser.add_argument('--limit', '-l', type=int, default=0, help='Max orders to inject (0=all)')
     parser.add_argument('--quiet', '-q', action='store_true', help='Suppress progress output')
+    parser.add_argument('--clean', '-c', action='store_true', default=True, 
+                       help='Clear TDengine data before injection (default: True)')
+    parser.add_argument('--no-clean', dest='clean', action='store_false',
+                       help='Do NOT clear TDengine data before injection')
     args = parser.parse_args()
     
     print("╔════════════════════════════════════════════════════════════╗")
     print("║    Gateway Order Injection                                ║")
     print("╚════════════════════════════════════════════════════════════╝")
     print()
+    
+    # Clear TDengine data if requested
+    if args.clean:
+        if not clear_tdengine():
+            print("⚠️ Warning: Failed to clear TDengine data, continuing anyway...")
+        time.sleep(1)  # Wait for TDengine to sync
     
     # Check Gateway is reachable (use OPTIONS on root or try create_order endpoint)
     try:
