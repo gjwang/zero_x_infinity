@@ -52,6 +52,15 @@ pub async fn update_order_status(
 ) -> Result<()> {
     let table_name = format!("orders_{}", symbol_id);
 
+    // Create subtable if not exists
+    let create_subtable = format!(
+        "CREATE TABLE IF NOT EXISTS {} USING orders TAGS ({})",
+        table_name, symbol_id
+    );
+    taos.exec(&create_subtable)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to create orders subtable: {}", e))?;
+
     let cid_str = cid.unwrap_or("");
     let sql = format!(
         "INSERT INTO {} (ts, order_id, user_id, filled_qty, status, cid) VALUES (NOW, {}, {}, {}, {}, '{}')",
@@ -60,7 +69,7 @@ pub async fn update_order_status(
 
     taos.exec(&sql)
         .await
-        .map_err(|e| anyhow::anyhow!("{}: {}", "Failed to update order status", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to update order status: {}", e))?;
 
     Ok(())
 }
