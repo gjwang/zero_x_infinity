@@ -148,6 +148,38 @@ impl TradeEvent {
 }
 
 // ============================================================
+// ME RESULT (ME → Settlement) - Atomic Order+Trades Bundle
+// ============================================================
+
+use crate::models::OrderStatus;
+
+/// ME Result - atomic bundle of input order and its generated trades
+///
+/// This structure ensures:
+/// 1. Order and trades are persisted atomically
+/// 2. Ordering is preserved through a single queue
+/// 3. All information needed for persistence is contained
+///
+/// # Data Flow
+/// ```text
+/// UBSCore → ValidOrder → ME → MEResult → Settlement
+///                             ├─ order: the input order
+///                             ├─ trades: generated trades (0..N)
+///                             └─ final_status: order status after matching
+/// ```
+#[derive(Debug, Clone)]
+pub struct MEResult {
+    /// The input order (for insert_order)
+    pub order: InternalOrder,
+    /// Generated trades (for insert_trade + update_order_status)
+    pub trades: Vec<TradeEvent>,
+    /// Final order status after matching
+    pub final_status: OrderStatus,
+    /// Symbol ID for persistence
+    pub symbol_id: u32,
+}
+
+// ============================================================
 // ORDER EVENT (状态变更事件)
 // ============================================================
 
