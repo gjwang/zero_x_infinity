@@ -181,6 +181,18 @@ fn main() {
                                 } else {
                                     println!("✅ K-Line streams created");
                                 }
+                                // Pre-create subtables for all symbols (avoid 404ms runtime overhead)
+                                if let Err(e) =
+                                    zero_x_infinity::persistence::schema::ensure_all_symbol_tables(
+                                        client.taos(),
+                                        &symbol_mgr,
+                                    )
+                                    .await
+                                {
+                                    eprintln!("⚠️ Failed to pre-create symbol tables: {}", e);
+                                } else {
+                                    println!("✅ Symbol subtables pre-created");
+                                }
                                 Some(std::sync::Arc::new(client))
                             }
                             Err(e) => {
