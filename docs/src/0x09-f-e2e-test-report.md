@@ -139,6 +139,44 @@ docker exec tdengine taos -s "USE trading; \
 
 ---
 
+## 6. IDE 崩溃问题
+
+### 现象
+在执行复合命令时，Antigravity IDE 崩溃：
+```
+Antigravity server crashed unexpectedly. Please restart to fully restore AI features.
+```
+
+### 触发条件
+| 命令类型 | 结果 |
+|----------|------|
+| 单独 `echo` | ✅ 正常 |
+| 单独 `docker exec taos` | ✅ 正常 |
+| 单独 `pkill` | ✅ 正常 |
+| **复合命令** `pkill + docker exec` | ❌ 崩溃 |
+
+### 错误日志
+```
+got retryable useReactiveState RPC error on attempt [3 / Infinity]
+ConnectError: [unknown] reactive component f3e07a43-...not found
+```
+
+### 关键发现
+1. 命令实际**成功完成** (`Exit code 0`)
+2. 崩溃发生在命令**完成后**
+3. 只有复合命令触发
+
+### 临时解决方案
+分开执行命令：
+```bash
+# 先执行
+pkill -f "zero_x_infinity"
+# IDE 恢复后再执行
+docker exec tdengine taos -s "DROP DATABASE IF EXISTS trading"
+```
+
+---
+
 ## 8. 待办事项
 
 - [ ] **P1**: 修复 Orders 持久化
