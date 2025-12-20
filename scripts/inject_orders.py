@@ -283,7 +283,7 @@ def inject_orders(input_file: str, rate_limit: int = 0, limit: int = 0, quiet: b
     return stats['failed'] == 0
 
 
-def clean_start():
+def clean_start(args):
     """
     Clean start: Reset everything and start fresh Gateway.
     1. Kill any running Gateway
@@ -341,8 +341,11 @@ def clean_start():
             print("    ❌ Binary not found. Run: cargo build --release")
             return False
         
+        input_dir = os.path.dirname(args.input) if args.input else "fixtures"
+        if not input_dir: input_dir = "."
+        
         subprocess.Popen(
-            ["./target/release/zero_x_infinity", "--gateway", "--port", "8080"],
+            ["./target/release/zero_x_infinity", "--gateway", "--port", "8080", "--input", input_dir],
             stdout=open("/tmp/gw.log", "w"),
             stderr=subprocess.STDOUT,
             start_new_session=True
@@ -387,7 +390,7 @@ def main():
     
     # --clean_start: Do everything from scratch
     if args.clean_start:
-        if not clean_start():
+        if not clean_start(args):
             print("❌ Clean start failed, aborting")
             return 1
         # Continue to injection below...
