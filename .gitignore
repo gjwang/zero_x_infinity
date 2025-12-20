@@ -29,3 +29,4 @@ test_gateway/
 # Test outputs
 test_results.log
 config/*.bak
+__pycache__/
