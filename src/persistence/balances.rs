@@ -100,6 +100,52 @@ pub async fn upsert_balance_values(
     Ok(())
 }
 
+/// Batch upsert balance events (efficient multi-row insert)
+///
+/// Groups events by user+asset, creates subtables if needed,
+/// then inserts all values in one SQL statement.
+pub async fn batch_upsert_balance_events(
+    taos: &Taos,
+    events: &[crate::messages::BalanceEvent],
+) -> Result<()> {
+    if events.is_empty() {
+        return Ok(());
+    }
+
+    // Group events by (user_id, asset_id) for subtable creation
+    let mut tables: std::collections::HashSet<(u64, u32)> = std::collections::HashSet::new();
+    for event in events {
+        tables.insert((event.user_id, event.asset_id));
+    }
+
+    // Create subtables if not exist (batch)
+    for (user_id, asset_id) in &tables {
+        let table_name = format!("balances_{}_{}", user_id, asset_id);
+        let create_subtable = format!(
+            "CREATE TABLE IF NOT EXISTS {} USING balances TAGS ({}, {})",
+            table_name, user_id, asset_id
+        );
+        taos.exec(&create_subtable).await.ok(); // Ignore errors for existing tables
+    }
+
+    // Build batch INSERT statement
+    // TDengine supports: INSERT INTO t1 VALUES (...) t2 VALUES (...) ...
+    let mut sql = String::from("INSERT INTO ");
+    for event in events {
+        let table_name = format!("balances_{}_{}", event.user_id, event.asset_id);
+        sql.push_str(&format!(
+            "{} VALUES (NOW, {}, {}, 0, 0) ",
+            table_name, event.avail_after, event.frozen_after
+        ));
+    }
+
+    taos.exec(&sql)
+        .await
+        .map_err(|e| anyhow::anyhow!("Batch balance insert failed: {}", e))?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -671,66 +671,73 @@ impl SettlementService {
         trade_handle.join().expect("Trade processor panicked");
     }
 
-    /// Spawn balance event processor thread
+    /// Spawn balance event processor thread (BATCH mode)
     /// Input: balance_event_queue
-    /// Output: TDengine balances + WebSocket push
+    /// Output: TDengine balances (batch) + WebSocket push
     fn spawn_balance_processor(
         queues: Arc<MultiThreadQueues>,
         rt_handle: Option<tokio::runtime::Handle>,
         db_client: Option<Arc<crate::persistence::TDengineClient>>,
         shutdown: Arc<ShutdownSignal>,
     ) -> std::thread::JoinHandle<()> {
+        const BATCH_SIZE: usize = 128;
+
         std::thread::Builder::new()
             .name("settlement-balance".to_string())
             .spawn(move || {
-                let mut spin_count = 0u32;
+                let mut batch: Vec<crate::messages::BalanceEvent> = Vec::with_capacity(BATCH_SIZE);
+
                 loop {
-                    if let Some(balance_event) = queues.balance_event_queue.pop() {
-                        // TDengine: persist balance
+                    batch.clear();
+
+                    // Pop 1 to N events (whatever is available, up to BATCH_SIZE)
+                    while batch.len() < BATCH_SIZE {
+                        if let Some(event) = queues.balance_event_queue.pop() {
+                            batch.push(event);
+                        } else {
+                            break;
+                        }
+                    }
+
+                    if !batch.is_empty() {
+                        // TDengine: batch persist immediately
                         if let (Some(handle), Some(db)) = (&rt_handle, &db_client) {
                             let start = Instant::now();
                             let result = handle.block_on(
-                                crate::persistence::balances::upsert_balance_values(
+                                crate::persistence::balances::batch_upsert_balance_events(
                                     db.taos(),
-                                    balance_event.user_id,
-                                    balance_event.asset_id,
-                                    balance_event.avail_after,
-                                    balance_event.frozen_after,
+                                    &batch,
                                 ),
                             );
                             if let Err(e) = result {
-                                tracing::error!("[PERSIST] balance failed: {}", e);
+                                tracing::error!("[PERSIST] batch balance failed: {}", e);
                             }
                             if start.elapsed().as_millis() > 10 {
                                 tracing::warn!(
-                                    "[PROFILE] balance_persist={}ms",
-                                    start.elapsed().as_millis()
+                                    "[PROFILE] batch_balance_persist={}ms count={}",
+                                    start.elapsed().as_millis(),
+                                    batch.len()
                                 );
                             }
                         }
 
-                        // WebSocket: push balance update
-                        let _ = queues.push_event_queue.push(
-                            crate::websocket::PushEvent::BalanceUpdate {
-                                user_id: balance_event.user_id,
-                                asset_id: balance_event.asset_id,
-                                avail: balance_event.avail_after,
-                                frozen: balance_event.frozen_after,
-                            },
-                        );
-                        spin_count = 0;
-                    } else if shutdown.is_shutdown_requested()
-                        && queues.balance_event_queue.is_empty()
-                    {
-                        break;
-                    } else {
-                        spin_count += 1;
-                        if spin_count > IDLE_SPIN_LIMIT {
-                            std::thread::sleep(IDLE_SLEEP_US);
-                            spin_count = 0;
-                        } else {
-                            std::hint::spin_loop();
+                        // WebSocket: push balance updates
+                        for event in &batch {
+                            let _ = queues.push_event_queue.push(
+                                crate::websocket::PushEvent::BalanceUpdate {
+                                    user_id: event.user_id,
+                                    asset_id: event.asset_id,
+                                    avail: event.avail_after,
+                                    frozen: event.frozen_after,
+                                },
+                            );
                         }
+                    } else {
+                        // Queue empty - check shutdown or sleep
+                        if shutdown.is_shutdown_requested() {
+                            break;
+                        }
+                        std::thread::sleep(IDLE_SLEEP_US);
                     }
                 }
                 tracing::info!("[SETTLEMENT] Balance processor exiting");
