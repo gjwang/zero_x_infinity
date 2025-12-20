@@ -127,12 +127,27 @@ STEP=3
 echo ""
 echo "[Step $STEP] Checking Gateway..."
 
-if ! curl -sf "http://localhost:8080/api/v1/ping" >/dev/null 2>&1; then
+# Health check function - use port check since /api/v1/ping doesn't exist
+check_gateway() {
+    nc -z localhost 8080 2>/dev/null
+}
+
+if ! check_gateway; then
     echo "    Starting Gateway..."
     nohup ./target/release/zero_x_infinity --gateway --port 8080 > /tmp/gateway_e2e.log 2>&1 &
-    sleep 5
     
-    if ! curl -sf "http://localhost:8080/api/v1/ping" >/dev/null 2>&1; then
+    # Wait for Gateway to be ready (up to 30 seconds)
+    echo "    Waiting for Gateway to start..."
+    for i in $(seq 1 30); do
+        if check_gateway; then
+            break
+        fi
+        sleep 1
+    done
+    
+    if ! check_gateway; then
+        echo "    Gateway log:"
+        tail -10 /tmp/gateway_e2e.log
         fail_at_step "Gateway failed to start"
     fi
 fi
