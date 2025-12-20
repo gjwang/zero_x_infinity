@@ -210,7 +210,7 @@ pub fn run_pipeline_multi_thread(
         );
         let s = shutdown.clone();
         thread::spawn(move || {
-            service.run(&s);
+            service.run(s);
             service.into_inner()
         })
     };
