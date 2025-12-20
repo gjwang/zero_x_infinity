@@ -119,17 +119,16 @@ pub async fn batch_upsert_balance_events(
         return Ok(());
     }
 
-    // Pre-allocate buffer: ~100 bytes per record
-    let mut sql = String::with_capacity(events.len() * 100 + 20);
-    sql.push_str("INSERT INTO ");
-
+    // Build batch INSERT SQL
     let now_us = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_micros() as i64;
 
+    let mut sql = String::with_capacity(events.len() * 100 + 20);
+    sql.push_str("INSERT INTO ");
+
     for (i, event) in events.iter().enumerate() {
-        // Each record: balances_<user>_<asset> VALUES(<ts>, <avail>, <frozen>, 0, 0)
         write!(
             sql,
             "balances_{}_{} VALUES({}, {}, {}, 0, 0) ",
@@ -142,10 +141,37 @@ pub async fn batch_upsert_balance_events(
         .unwrap();
     }
 
-    // Single network call - TDengine distributes to vnodes
+    // First attempt
+    match taos.exec(&sql).await {
+        Ok(_) => return Ok(()),
+        Err(e) => {
+            let err_str = e.to_string();
+            // Check if error is "table does not exist" (TDengine error code 0x2662)
+            if !err_str.contains("Table does not exist") && !err_str.contains("0x2662") {
+                return Err(anyhow::anyhow!("Batch balance insert failed: {}", e));
+            }
+            tracing::debug!("Table not found, auto-creating missing balance tables...");
+        }
+    }
+
+    // Auto-create missing tables and retry
+    let mut created = std::collections::HashSet::new();
+    for event in events {
+        let key = (event.user_id, event.asset_id);
+        if !created.contains(&key) {
+            let create_sql = format!(
+                "CREATE TABLE IF NOT EXISTS balances_{}_{} USING balances TAGS ({}, {})",
+                event.user_id, event.asset_id, event.user_id, event.asset_id
+            );
+            let _ = taos.exec(&create_sql).await; // Ignore error (may already exist)
+            created.insert(key);
+        }
+    }
+
+    // Retry INSERT
     taos.exec(&sql)
         .await
-        .map_err(|e| anyhow::anyhow!("Batch balance insert failed: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Batch balance insert failed after auto-create: {}", e))?;
 
     Ok(())
 }
