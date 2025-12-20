@@ -9,6 +9,9 @@
 #   3. Inject orders from CSV through Gateway HTTP API
 #   4. Verify all data in TDengine
 #
+# NOTE: This script uses explicit sleep between pkill and docker exec
+#       to avoid Antigravity IDE crash (reactive component RPC error).
+#
 # USAGE:
 #   ./scripts/test_gateway_e2e_full.sh 100k     # Test with 100K dataset
 #   ./scripts/test_gateway_e2e_full.sh highbal  # Test with 1.3M dataset
@@ -84,13 +87,25 @@ ORDER_COUNT=$(wc -l < "$INPUT_FILE" | tr -d ' ')
 echo -e "    ${GREEN}✓${NC} Input file: $INPUT_FILE ($ORDER_COUNT lines)"
 
 # ============================================================================
-# Step 2: Clear TDengine database
+# Step 2: Stop any running Gateway (isolated from docker exec to avoid IDE crash)
 # ============================================================================
 STEP=2
 echo ""
-echo "[Step $STEP] Clearing TDengine database..."
+echo "[Step $STEP] Stopping any running Gateway..."
 
-docker exec tdengine taos -s "DROP DATABASE IF EXISTS exchange" 2>&1 | grep -v "^taos>" || true
+pkill -f "zero_x_infinity" 2>/dev/null || true
+# NOTE: Explicit sleep to avoid Antigravity IDE crash (reactive component RPC error)
+#       when pkill and docker exec are combined in rapid succession.
+sleep 3
+echo -e "    ${GREEN}✓${NC} Old Gateway stopped"
+
+# ============================================================================
+# Step 2b: Clear TDengine database (separate step for IDE stability)
+# ============================================================================
+echo ""
+echo "[Step 2b] Clearing TDengine database..."
+
+docker exec tdengine taos -s "DROP DATABASE IF EXISTS trading" 2>&1 | grep -v "^taos>" || true
 sleep 2
 echo -e "    ${GREEN}✓${NC} Database cleared"
 
