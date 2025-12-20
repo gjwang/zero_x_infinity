@@ -173,6 +173,8 @@ pub struct MEResult {
     pub order: InternalOrder,
     /// Generated trades (for insert_trade + update_order_status)
     pub trades: Vec<TradeEvent>,
+    /// Maker orders that were updated during matching
+    pub maker_updates: Vec<InternalOrder>,
     /// Final order status after matching
     pub final_status: OrderStatus,
     /// Symbol ID for persistence
