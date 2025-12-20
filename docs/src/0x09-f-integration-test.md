@@ -204,3 +204,66 @@ baseline/
 ./scripts/generate_baseline.sh 1.3m
 ```
 
+---
+
+## 大数据集测试注意事项
+
+> [!IMPORTANT]
+> 运行 1.3M 数据集测试时需要特别注意以下几点：
+
+### 1. 输出重定向（必须）
+
+大数据集测试会产生大量日志，**必须**将输出重定向到文件以避免 IDE 卡顿：
+
+```bash
+# 使用 nohup 后台执行，输出重定向到文件
+nohup ./scripts/test_pipeline_compare.sh highbal > /tmp/pipeline.log 2>&1 &
+
+# 监控测试进度
+tail -f /tmp/pipeline.log
+
+# 查看最终结果
+grep -A20 "Comparing Results" /tmp/pipeline.log
+```
+
+### 2. 执行时间预期
+
+| 阶段 | 单线程模式 | 多线程模式 |
+|------|------------|------------|
+| 1.3M 订单处理 | ~16 秒 | ~100+ 秒 |
+| 完整测试时间 | ~25 秒 | ~500+ 秒 |
+
+> [!NOTE]
+> 多线程模式较慢是因为包含完整的 persistence 和 event generation 开销。
+
+### 3. Balance Events 差异说明
+
+`verify_balance_events.py` 脚本可能报告 lock events 数量不匹配：
+
+```
+Lock events (1000000) != Accepted orders (1300000)
+```
+
+这是**正常预期行为**：
+- Lock events = **Place orders** (1,000,000)
+- Cancel orders (300,000) 不会产生新的 lock events
+- 最终 frozen balances 验证通过即表示正确
+
+### 4. Push Queue 溢出警告
+
+多线程模式会出现大量 `[PUSH] queue full` 警告：
+
+```
+[PUSH] ❌ Failed to push OrderUpdate - queue full!
+```
+
+这是**预期行为**，不影响测试结果。push queue 容量有限，高速处理时消费跟不上生产是正常的。
+
+### 5. 测试脚本超时设置
+
+`test_integration_full.sh` 对各阶段设置了超时：
+- 100K 测试: 600 秒
+- 1.3M 测试: 3600 秒
+
+如需调整，修改脚本中的 `timeout` 参数。
+
