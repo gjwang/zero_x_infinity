@@ -207,6 +207,8 @@ def inject_orders(input_file: str, rate_limit: int = 0, limit: int = 0, quiet: b
         print(f"Submitted:     {stats['submitted']}")
         print(f"Accepted:      {stats['accepted']}")
         print(f"Failed:        {stats['failed']}")
+        if stats['failed'] > 0 and last_error:
+            print(f"Last error:    {last_error}")
         print(f"Time:          {elapsed:.2f} seconds")
         print(f"Rate:          {rate:.0f} orders/sec")
     
