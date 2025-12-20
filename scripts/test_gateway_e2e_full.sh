@@ -9,8 +9,10 @@
 #   3. Inject orders from CSV through Gateway HTTP API
 #   4. Verify all data in TDengine
 #
-# NOTE: This script uses explicit sleep between pkill and docker exec
-#       to avoid Antigravity IDE crash (reactive component RPC error).
+# IMPORTANT: Do NOT use `pkill -f "zero_x_infinity"` in this project!
+#            It will kill Antigravity IDE's language_server (whose workspace_id
+#            contains the project path). Use pgrep + kill with specific PID instead.
+#            See: docs/src/agent-testing-notes.md for details.
 #
 # USAGE:
 #   ./scripts/test_gateway_e2e_full.sh 100k     # Test with 100K dataset
