@@ -49,7 +49,7 @@ This is a pilgrimage from `Hello World` to `Microsecond Latency`.
 
 ---
 
-## 🏃 Quick Start
+## 🏃 快速开始
 
 ```bash
 # Install git hooks
@@ -76,15 +76,15 @@ cargo test
 
 ---
 
-## 💾 Settlement Persistence (TDengine)
+## 💾 结算持久化 (TDengine)
 
-### Start TDengine
+### 启动 TDengine
 
 ```bash
 docker run -d --name tdengine -p 6030:6030 -p 6041:6041 tdengine/tdengine:latest
 ```
 
-### Enable Persistence
+### 启用持久化
 
 Edit `config/dev.yaml`:
 
@@ -94,13 +94,13 @@ persistence:
   tdengine_dsn: "taos+ws://root:taosdata@localhost:6041"
 ```
 
-### Run with Persistence
+### 启动持久化模式
 
 ```bash
 cargo run --release -- --gateway --env dev
 ```
 
-### Query Data
+### 查询数据
 
 ```bash
 # Connect to TDengine
@@ -117,16 +117,17 @@ SELECT * FROM trades LIMIT 10;
 SELECT * FROM balances LIMIT 10;
 ```
 
-### API Endpoints
+### API 端点
 
-- `POST /api/v1/create_order` - Create order ✅
-- `POST /api/v1/cancel_order` - Cancel order ✅
-- `GET /api/v1/order/:order_id` - Query order ✅
-- `GET /api/v1/orders?user_id=&limit=` - Query orders list ✅
-- `GET /api/v1/trades?limit=` - Query trades ✅
-- `GET /api/v1/balances?user_id=&asset_id=` - Query balances ✅
-- `GET /api/v1/klines?interval=&limit=` - Query K-Line ✅
-- `WS /ws?user_id=` - WebSocket real-time push ✅
+- `POST /api/v1/create_order` - 创建订单 ✅
+- `POST /api/v1/cancel_order` - 取消订单 ✅
+- `GET /api/v1/order/:order_id` - 查询订单 ✅
+- `GET /api/v1/orders?user_id=&limit=` - 查询订单列表 ✅
+- `GET /api/v1/trades?limit=` - 查询成交记录 ✅
+- `GET /api/v1/balances?user_id=&asset_id=` - 查询余额 ✅
+- `GET /api/v1/klines?interval=&limit=` - 查询 K 线 ✅
+- `GET /api/v1/depth?symbol=&limit=` - 查询盘口深度 ✅
+- `WS /ws?user_id=` - WebSocket 实时推送 ✅
 
 ---
 
