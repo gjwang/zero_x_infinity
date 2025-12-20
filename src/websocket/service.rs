@@ -77,31 +77,31 @@ impl WsService {
 
     /// Handle a single push event
     async fn handle_event(&self, event: PushEvent) {
-        tracing::debug!(
-            "[WsService] Handling event: {:?}",
-            match &event {
-                PushEvent::OrderUpdate {
-                    user_id, order_id, ..
-                } => format!("OrderUpdate(user={}, order={})", user_id, order_id),
-                PushEvent::Trade {
-                    user_id, trade_id, ..
-                } => format!("Trade(user={}, trade={})", user_id, trade_id),
-                PushEvent::BalanceUpdate {
-                    user_id, asset_id, ..
-                } => format!("BalanceUpdate(user={}, asset={})", user_id, asset_id),
-            }
-        );
+        // tracing::debug!(
+        //     "[WsService] Handling event: {:?}",
+        //     match &event {
+        //         PushEvent::OrderUpdate {
+        //             user_id, order_id, ..
+        //         } => format!("OrderUpdate(user={}, order={})", user_id, order_id),
+        //         PushEvent::Trade {
+        //             user_id, trade_id, ..
+        //         } => format!("Trade(user={}, trade={})", user_id, trade_id),
+        //         PushEvent::BalanceUpdate {
+        //             user_id, asset_id, ..
+        //         } => format!("BalanceUpdate(user={}, asset={})", user_id, asset_id),
+        //     }
+        // );
 
-        match &event {
-            PushEvent::OrderUpdate {
-                order_id, user_id, ..
-            } => tracing::info!(
-                "[TRACE] Order {}: WsService Picked Up (User {})",
-                order_id,
-                user_id
-            ),
-            _ => {}
-        }
+        // match &event {
+        //     PushEvent::OrderUpdate {
+        //         order_id, user_id, ..
+        //     } => tracing::info!(
+        //         "[WsService] Order {}: WsService Picked Up (User {})",
+        //         order_id,
+        //         user_id
+        //     ),
+        //     _ => {}
+        // }
 
         match event {
             PushEvent::OrderUpdate {

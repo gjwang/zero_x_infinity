@@ -664,10 +664,10 @@ impl PipelineStats {
         self.trades_settled.fetch_add(1, Ordering::Relaxed);
     }
 
-    pub fn incr_backpressure(&self) {
+    pub fn incr_backpressure(&self, queue_name: &str) {
         let count = self.backpressure_events.fetch_add(1, Ordering::Relaxed);
         if count % 10000 == 0 {
-            tracing::warn!(target: "0XINFI", total_backpressure = count + 1, "Backpressure detected (1/10000)");
+            tracing::warn!(target: "0XINFI", queue = queue_name, total = count + 1, "Backpressure");
         }
     }
 
@@ -767,7 +767,7 @@ pub fn push_with_backpressure<T>(queue: &ArrayQueue<T>, item: T, stats: &Pipelin
             Ok(()) => return true,
             Err(returned) => {
                 item = returned;
-                stats.incr_backpressure();
+                stats.incr_backpressure("push_with_backpressure");
                 std::hint::spin_loop();
             }
         }
@@ -837,7 +837,7 @@ impl SingleThreadPipeline {
                 true
             }
             Err(_) => {
-                self.stats.incr_backpressure();
+                self.stats.incr_backpressure("st_order_queue");
                 false
             }
         }

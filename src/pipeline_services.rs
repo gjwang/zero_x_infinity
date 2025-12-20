@@ -104,7 +104,7 @@ impl IngestionService {
                 match self.queues.order_queue.push(action.clone()) {
                     Ok(()) => break,
                     Err(_) => {
-                        self.stats.incr_backpressure();
+                        self.stats.incr_backpressure("mt_order_queue");
                         // std::hint::spin_loop();
                         std::thread::sleep(IDLE_SLEEP_US);
                     }
@@ -252,7 +252,7 @@ impl UBSCoreService {
                 for event in self.batch_events.drain(..) {
                     let lat_ingested = event.ingested_at_ns;
                     while let Err(_) = self.queues.balance_event_queue.push(event.clone()) {
-                        self.stats.incr_backpressure();
+                        self.stats.incr_backpressure("balance_event_queue");
                         std::thread::sleep(IDLE_SLEEP_US);
                         // std::hint::spin_loop();
                         if shutdown.is_shutdown_requested() {
@@ -444,7 +444,7 @@ impl MatchingService {
                                 match self.queues.trade_queue.push(trade_event.clone()) {
                                     Ok(()) => break,
                                     Err(_) => {
-                                        self.stats.incr_backpressure();
+                                        self.stats.incr_backpressure("me_trade_queue");
                                         // std::hint::spin_loop();
                                         std::thread::sleep(IDLE_SLEEP_US);
                                     }
@@ -464,7 +464,7 @@ impl MatchingService {
                                 {
                                     Ok(()) => break,
                                     Err(_) => {
-                                        self.stats.incr_backpressure();
+                                        self.stats.incr_backpressure("balance_update_queue");
                                         // std::hint::spin_loop();
                                         std::thread::sleep(IDLE_SLEEP_US);
                                     }
@@ -520,7 +520,7 @@ impl MatchingService {
                                     {
                                         Ok(()) => break,
                                         Err(_) => {
-                                            self.stats.incr_backpressure();
+                                            self.stats.incr_backpressure("depth_event_queue");
                                             // std::hint::spin_loop();
                                             std::thread::sleep(IDLE_SLEEP_US);
                                         }
