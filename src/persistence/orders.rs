@@ -394,4 +394,84 @@ mod tests {
             .await
             .expect("Failed to insert order");
     }
+
+    #[tokio::test]
+    #[ignore] // Requires TDengine running
+    async fn test_batch_insert_me_results() {
+        use crate::messages::{MEResult, TradeEvent};
+        use crate::models::{OrderStatus, Trade};
+
+        let client =
+            crate::persistence::TDengineClient::connect("taos+ws://root:taosdata@localhost:6041")
+                .await
+                .expect("Failed to connect");
+
+        client.init_schema().await.expect("Failed to init schema");
+
+        // Create test orders
+        let mut order1 = InternalOrder::new(100, 1001, 1, 85000_00000000, 1_000000, Side::Buy);
+        order1.order_type = OrderType::Limit;
+        order1.status = OrderStatus::PARTIALLY_FILLED;
+        order1.filled_qty = 500000;
+        order1.cid = Some("test-batch-001".to_string());
+
+        let mut order2 = InternalOrder::new(101, 1002, 1, 85100_00000000, 2_000000, Side::Sell);
+        order2.order_type = OrderType::Limit;
+        order2.status = OrderStatus::NEW;
+        order2.cid = Some("test-batch-002".to_string());
+
+        // Create test trade
+        let trade = Trade {
+            trade_id: 1000,
+            buyer_order_id: 100,
+            seller_order_id: 101,
+            buyer_user_id: 1001,
+            seller_user_id: 1002,
+            price: 85050_00000000,
+            qty: 500000,
+            fee: 100,
+            role: 1,
+        };
+
+        let trade_event = TradeEvent::new(
+            trade,
+            100,       // taker_order_id
+            101,       // maker_order_id
+            Side::Buy, // taker_side
+            1_000000,  // taker_order_qty
+            500000,    // taker_filled_qty
+            2_000000,  // maker_order_qty
+            500000,    // maker_filled_qty
+            1,         // base_asset_id
+            2,         // quote_asset_id
+            1_000000,  // qty_unit
+            0,         // taker_ingested_at_ns
+        );
+
+        // Create MEResults
+        let results = vec![
+            MEResult {
+                order: order1,
+                trades: vec![trade_event.clone()],
+                symbol_id: 1,
+                final_status: OrderStatus::PARTIALLY_FILLED,
+            },
+            MEResult {
+                order: order2,
+                trades: vec![],
+                symbol_id: 1,
+                final_status: OrderStatus::NEW,
+            },
+        ];
+
+        batch_insert_me_results(client.taos(), &results)
+            .await
+            .expect("Failed to batch insert ME results");
+
+        println!(
+            "✅ Batch insert ME results: {} orders, {} trades inserted successfully",
+            results.len(),
+            results.iter().map(|r| r.trades.len() * 2).sum::<usize>() // buyer + seller
+        );
+    }
 }

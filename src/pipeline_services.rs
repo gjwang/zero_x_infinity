@@ -680,7 +680,7 @@ impl SettlementService {
         db_client: Option<Arc<crate::persistence::TDengineClient>>,
         shutdown: Arc<ShutdownSignal>,
     ) -> std::thread::JoinHandle<()> {
-        const BATCH_SIZE: usize = 50;
+        const BATCH_SIZE: usize = 128;
 
         std::thread::Builder::new()
             .name("settlement-balance".to_string())

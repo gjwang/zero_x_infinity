@@ -229,4 +229,66 @@ mod tests {
             .await
             .expect("Failed to snapshot balance");
     }
+
+    #[tokio::test]
+    #[ignore] // Requires TDengine running
+    async fn test_batch_upsert_balance_events() {
+        let client =
+            crate::persistence::TDengineClient::connect("taos+ws://root:taosdata@localhost:6041")
+                .await
+                .expect("Failed to connect");
+
+        client.init_schema().await.expect("Failed to init schema");
+
+        // Create test balance events using the new() constructor
+        use crate::messages::{BalanceEventType, SourceType};
+
+        let events = vec![
+            crate::messages::BalanceEvent::new(
+                1001,                   // user_id
+                1,                      // asset_id
+                BalanceEventType::Lock, // event_type
+                1,                      // version
+                SourceType::Order,      // source_type
+                100,                    // source_id
+                -10_00000000,           // delta
+                90_00000000,            // avail_after
+                10_00000000,            // frozen_after
+                0,                      // ingested_at_ns
+            ),
+            crate::messages::BalanceEvent::new(
+                1001,                   // user_id
+                1,                      // asset_id
+                BalanceEventType::Lock, // event_type
+                2,                      // version
+                SourceType::Order,      // source_type
+                101,                    // source_id
+                -10_00000000,           // delta
+                80_00000000,            // avail_after
+                20_00000000,            // frozen_after
+                0,                      // ingested_at_ns
+            ),
+            crate::messages::BalanceEvent::new(
+                1002,                   // user_id
+                1,                      // asset_id
+                BalanceEventType::Lock, // event_type
+                1,                      // version
+                SourceType::Order,      // source_type
+                102,                    // source_id
+                -5_00000000,            // delta
+                45_00000000,            // avail_after
+                5_00000000,             // frozen_after
+                0,                      // ingested_at_ns
+            ),
+        ];
+
+        batch_upsert_balance_events(client.taos(), &events)
+            .await
+            .expect("Failed to batch upsert balance events");
+
+        println!(
+            "✅ Batch upsert balance events: {} events inserted successfully",
+            events.len()
+        );
+    }
 }
