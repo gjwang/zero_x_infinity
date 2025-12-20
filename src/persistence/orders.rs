@@ -91,9 +91,32 @@ pub async fn batch_insert_me_results(
         .unwrap();
     }
 
-    taos.exec(&orders_sql)
-        .await
-        .map_err(|e| anyhow::anyhow!("Batch orders insert failed: {}", e))?;
+    // First attempt for orders
+    let orders_insert_result = taos.exec(&orders_sql).await;
+    if let Err(e) = &orders_insert_result {
+        let err_str = e.to_string();
+        if err_str.contains("Table does not exist") || err_str.contains("0x2662") {
+            tracing::debug!("Orders table not found, auto-creating...");
+            // Auto-create missing orders tables
+            let mut created_symbols = std::collections::HashSet::new();
+            for r in results {
+                if !created_symbols.contains(&r.symbol_id) {
+                    let create_sql = format!(
+                        "CREATE TABLE IF NOT EXISTS orders_{} USING orders TAGS ({})",
+                        r.symbol_id, r.symbol_id
+                    );
+                    let _ = taos.exec(&create_sql).await;
+                    created_symbols.insert(r.symbol_id);
+                }
+            }
+            // Retry
+            taos.exec(&orders_sql).await.map_err(|e| {
+                anyhow::anyhow!("Batch orders insert failed after auto-create: {}", e)
+            })?;
+        } else {
+            return Err(anyhow::anyhow!("Batch orders insert failed: {}", e));
+        }
+    }
 
     // === BATCH INSERT TRADES ===
     let has_trades = results.iter().any(|r| !r.trades.is_empty());
@@ -151,9 +174,32 @@ pub async fn batch_insert_me_results(
             }
         }
 
-        taos.exec(&trades_sql)
-            .await
-            .map_err(|e| anyhow::anyhow!("Batch trades insert failed: {}", e))?;
+        // First attempt for trades
+        let trades_insert_result = taos.exec(&trades_sql).await;
+        if let Err(e) = &trades_insert_result {
+            let err_str = e.to_string();
+            if err_str.contains("Table does not exist") || err_str.contains("0x2662") {
+                tracing::debug!("Trades table not found, auto-creating...");
+                // Auto-create missing trades tables
+                let mut created_symbols = std::collections::HashSet::new();
+                for r in results {
+                    if !created_symbols.contains(&r.symbol_id) {
+                        let create_sql = format!(
+                            "CREATE TABLE IF NOT EXISTS trades_{} USING trades TAGS ({})",
+                            r.symbol_id, r.symbol_id
+                        );
+                        let _ = taos.exec(&create_sql).await;
+                        created_symbols.insert(r.symbol_id);
+                    }
+                }
+                // Retry
+                taos.exec(&trades_sql).await.map_err(|e| {
+                    anyhow::anyhow!("Batch trades insert failed after auto-create: {}", e)
+                })?;
+            } else {
+                return Err(anyhow::anyhow!("Batch trades insert failed: {}", e));
+            }
+        }
     }
 
     Ok(())
