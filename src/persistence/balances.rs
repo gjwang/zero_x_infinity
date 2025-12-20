@@ -182,15 +182,15 @@ pub async fn batch_upsert_balance_events(
         let timestamps: Vec<i64> = (0..table_events.len()).map(|i| now_ms + i as i64).collect();
         let avails: Vec<u64> = table_events.iter().map(|e| e.avail_after).collect();
         let frozens: Vec<u64> = table_events.iter().map(|e| e.frozen_after).collect();
-        let lock_versions: Vec<i64> = vec![0; table_events.len()];
-        let settle_versions: Vec<i64> = vec![0; table_events.len()];
+        let lock_versions: Vec<u64> = vec![0; table_events.len()];
+        let settle_versions: Vec<u64> = vec![0; table_events.len()];
 
         let params = vec![
             ColumnView::from_millis_timestamp(timestamps),
             ColumnView::from_unsigned_big_ints(avails),
             ColumnView::from_unsigned_big_ints(frozens),
-            ColumnView::from_big_ints(lock_versions),
-            ColumnView::from_big_ints(settle_versions),
+            ColumnView::from_unsigned_big_ints(lock_versions),
+            ColumnView::from_unsigned_big_ints(settle_versions),
         ];
 
         stmt.bind(&params)
