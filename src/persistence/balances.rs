@@ -100,10 +100,10 @@ pub async fn upsert_balance_values(
     Ok(())
 }
 
-/// Batch upsert balance events (efficient multi-row insert)
+/// Batch upsert balance events using Stmt parameter binding
 ///
-/// Groups events by user+asset, creates subtables if needed,
-/// then inserts all values in one SQL statement.
+/// Uses prepared statement with parameter binding for better performance.
+/// Skips SQL parsing by sending binary data directly.
 /// Uses static cache to avoid repeated CREATE TABLE calls.
 pub async fn batch_upsert_balance_events(
     taos: &Taos,
@@ -111,6 +111,8 @@ pub async fn batch_upsert_balance_events(
 ) -> Result<()> {
     use once_cell::sync::Lazy;
     use std::sync::Mutex;
+    use taos::AsyncBindable;
+    use taos_query::prelude::ColumnView;
 
     // Cache of already-created tables (survives across calls)
     static CREATED_TABLES: Lazy<Mutex<std::collections::HashSet<(u64, u32)>>> =
@@ -145,21 +147,63 @@ pub async fn batch_upsert_balance_events(
         }
     }
 
-    // Build batch INSERT statement
-    // TDengine supports: INSERT INTO t1 VALUES (...) t2 VALUES (...) ...
-    let mut sql = String::from("INSERT INTO ");
+    // Group events by (user_id, asset_id) for batch binding
+    let mut grouped: std::collections::HashMap<(u64, u32), Vec<&crate::messages::BalanceEvent>> =
+        std::collections::HashMap::new();
     for event in events {
-        let table_name = format!("balances_{}_{}", event.user_id, event.asset_id);
-        sql.push_str(&format!(
-            "{} VALUES (NOW, {}, {}, 0, 0) ",
-            table_name, event.avail_after, event.frozen_after
-        ));
+        grouped
+            .entry((event.user_id, event.asset_id))
+            .or_default()
+            .push(event);
     }
 
-    taos.exec(&sql)
+    // Use Stmt for each table group
+    // balances schema: ts TIMESTAMP, avail BIGINT UNSIGNED, frozen BIGINT UNSIGNED,
+    //                  lock_version BIGINT, settle_version BIGINT
+    let mut stmt: taos::Stmt = <taos::Stmt as taos::AsyncBindable<Taos>>::init(taos)
         .await
-        .map_err(|e| anyhow::anyhow!("Batch balance insert failed: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Stmt init failed: {}", e))?;
+    stmt.prepare("INSERT INTO ? VALUES(?, ?, ?, ?, ?)")
+        .await
+        .map_err(|e| anyhow::anyhow!("Stmt prepare failed: {}", e))?;
 
+    for ((user_id, asset_id), table_events) in grouped {
+        let table_name = format!("balances_{}_{}", user_id, asset_id);
+        stmt.set_tbname(&table_name)
+            .await
+            .map_err(|e| anyhow::anyhow!("Stmt set_tbname failed: {}", e))?;
+
+        // Build columns for batch binding
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as i64;
+
+        let timestamps: Vec<i64> = (0..table_events.len()).map(|i| now_ms + i as i64).collect();
+        let avails: Vec<u64> = table_events.iter().map(|e| e.avail_after).collect();
+        let frozens: Vec<u64> = table_events.iter().map(|e| e.frozen_after).collect();
+        let lock_versions: Vec<i64> = vec![0; table_events.len()];
+        let settle_versions: Vec<i64> = vec![0; table_events.len()];
+
+        let params = vec![
+            ColumnView::from_millis_timestamp(timestamps),
+            ColumnView::from_unsigned_big_ints(avails),
+            ColumnView::from_unsigned_big_ints(frozens),
+            ColumnView::from_big_ints(lock_versions),
+            ColumnView::from_big_ints(settle_versions),
+        ];
+
+        stmt.bind(&params)
+            .await
+            .map_err(|e| anyhow::anyhow!("Stmt bind failed: {}", e))?;
+        stmt.add_batch()
+            .await
+            .map_err(|e| anyhow::anyhow!("Stmt add_batch failed: {}", e))?;
+    }
+
+    stmt.execute()
+        .await
+        .map_err(|e| anyhow::anyhow!("Stmt execute failed: {}", e))?;
     Ok(())
 }
 
