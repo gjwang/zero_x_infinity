@@ -127,6 +127,15 @@ def submit_order(order_data: dict) -> bool:
                 retry_delay *= 2
                 continue
             return False, f"{type(e).__name__}: {e}"
+        
+        except KeyboardInterrupt:
+            # Gateway blocking during socket.connect() - retry like network error
+            if attempt < max_retries:
+                print(f"  ⏳ Retry {attempt+1}/{max_retries}: Gateway blocked (socket)")
+                time.sleep(retry_delay)
+                retry_delay *= 2
+                continue
+            return False, "Gateway blocked (max retries)"
             
         except Exception as e:
             # Unknown error - exit immediately, don't hide it
