@@ -43,40 +43,58 @@ pub async fn insert_order(taos: &Taos, order: &InternalOrder, symbol_id: u32) ->
 /// Batch insert MEResults (orders + trades) efficiently
 ///
 /// Combines all orders and trades into single SQL statements for each table.
+/// Uses static cache to avoid repeated CREATE TABLE calls.
 pub async fn batch_insert_me_results(
     taos: &Taos,
     results: &[crate::messages::MEResult],
 ) -> Result<()> {
     use crate::models::Side;
+    use once_cell::sync::Lazy;
+    use std::sync::Mutex;
+
+    // Cache of already-created tables (survives across calls)
+    static CREATED_SYMBOLS: Lazy<Mutex<std::collections::HashSet<u32>>> =
+        Lazy::new(|| Mutex::new(std::collections::HashSet::new()));
 
     if results.is_empty() {
         return Ok(());
     }
 
-    // Group by symbol_id and ensure subtables exist
-    let mut symbol_ids: std::collections::HashSet<u32> = std::collections::HashSet::new();
-    for r in results {
-        symbol_ids.insert(r.symbol_id);
+    // Find symbol_ids that need table creation
+    let mut new_symbols: Vec<u32> = Vec::new();
+    {
+        let created = CREATED_SYMBOLS.lock().unwrap();
+        for r in results {
+            if !created.contains(&r.symbol_id) && !new_symbols.contains(&r.symbol_id) {
+                new_symbols.push(r.symbol_id);
+            }
+        }
     }
 
-    // Create subtables for orders and trades
-    for symbol_id in &symbol_ids {
+    // Create only NEW subtables for orders and trades
+    for symbol_id in &new_symbols {
         let orders_table = format!("orders_{}", symbol_id);
         let trades_table = format!("trades_{}", symbol_id);
 
-        taos.exec(&format!(
-            "CREATE TABLE IF NOT EXISTS {} USING orders TAGS ({})",
-            orders_table, symbol_id
-        ))
-        .await
-        .ok();
+        let orders_ok = taos
+            .exec(&format!(
+                "CREATE TABLE IF NOT EXISTS {} USING orders TAGS ({})",
+                orders_table, symbol_id
+            ))
+            .await
+            .is_ok();
 
-        taos.exec(&format!(
-            "CREATE TABLE IF NOT EXISTS {} USING trades TAGS ({})",
-            trades_table, symbol_id
-        ))
-        .await
-        .ok();
+        let trades_ok = taos
+            .exec(&format!(
+                "CREATE TABLE IF NOT EXISTS {} USING trades TAGS ({})",
+                trades_table, symbol_id
+            ))
+            .await
+            .is_ok();
+
+        if orders_ok && trades_ok {
+            CREATED_SYMBOLS.lock().unwrap().insert(*symbol_id);
+        }
     }
 
     // Batch INSERT orders

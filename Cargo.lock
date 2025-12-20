@@ -3445,6 +3445,7 @@ dependencies = [
  "crossbeam-queue",
  "dashmap",
  "futures",
+ "once_cell",
  "rust_decimal",
  "rustc-hash",
  "serde",
