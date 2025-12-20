@@ -797,7 +797,12 @@ impl SettlementService {
                         let symbol_id = me_result.symbol_id;
 
                         for trade_event in &me_result.trades {
-                            Self::push_trade_events(&queues, trade_event, &trade_event.trade);
+                            Self::push_trade_events(
+                                &queues,
+                                trade_event,
+                                &trade_event.trade,
+                                symbol_id,
+                            );
                         }
 
                         if me_result.trades.is_empty() {
@@ -831,7 +836,9 @@ impl SettlementService {
         queues: &Arc<MultiThreadQueues>,
         trade_event: &TradeEvent,
         trade: &crate::models::Trade,
+        symbol_id: u32,
     ) {
+        // --- Taker Side ---
         let taker_status = if trade_event.taker_filled_qty >= trade_event.taker_order_qty {
             OrderStatus::FILLED
         } else {
@@ -843,15 +850,39 @@ impl SettlementService {
             trade.seller_user_id
         };
 
-        // Order update
+        // Taker Order update
         let _ = queues
             .push_event_queue
             .push(crate::websocket::PushEvent::OrderUpdate {
                 user_id: taker_user_id,
                 order_id: trade_event.taker_order_id,
-                symbol_id: 0,
+                symbol_id,
                 status: taker_status,
                 filled_qty: trade_event.taker_filled_qty,
+                avg_price: Some(trade.price),
+            });
+
+        // --- Maker Side ---
+        let maker_status = if trade_event.maker_filled_qty >= trade_event.maker_order_qty {
+            OrderStatus::FILLED
+        } else {
+            OrderStatus::PARTIALLY_FILLED
+        };
+        let maker_user_id = if trade_event.taker_side == Side::Buy {
+            trade.seller_user_id
+        } else {
+            trade.buyer_user_id
+        };
+
+        // Maker Order update
+        let _ = queues
+            .push_event_queue
+            .push(crate::websocket::PushEvent::OrderUpdate {
+                user_id: maker_user_id,
+                order_id: trade_event.maker_order_id,
+                symbol_id,
+                status: maker_status,
+                filled_qty: trade_event.maker_filled_qty,
                 avg_price: Some(trade.price),
             });
 
@@ -862,7 +893,7 @@ impl SettlementService {
                 user_id: trade.buyer_user_id,
                 trade_id: trade.trade_id,
                 order_id: trade.buyer_order_id,
-                symbol_id: 0,
+                symbol_id,
                 side: Side::Buy,
                 price: trade.price,
                 qty: trade.qty,
@@ -880,7 +911,7 @@ impl SettlementService {
                 user_id: trade.seller_user_id,
                 trade_id: trade.trade_id,
                 order_id: trade.seller_order_id,
-                symbol_id: 0,
+                symbol_id,
                 side: Side::Sell,
                 price: trade.price,
                 qty: trade.qty,
