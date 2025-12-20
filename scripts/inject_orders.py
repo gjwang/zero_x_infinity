@@ -283,24 +283,90 @@ def inject_orders(input_file: str, rate_limit: int = 0, limit: int = 0, quiet: b
     return stats['failed'] == 0
 
 
-def clear_tdengine():
-    """Clear all data from TDengine trading tables."""
-    print("[CLEAN] Clearing TDengine data...")
+def clean_start():
+    """
+    Clean start: Reset everything and start fresh Gateway.
+    1. Kill any running Gateway
+    2. Clear TDengine data and confirm
+    3. Start Gateway and wait for it to be ready
+    Returns True if all steps succeed.
+    """
+    print("[CLEAN_START] Preparing fresh environment...")
+    
+    # 1. Kill any running Gateway
+    print("[1/4] Stopping any running Gateway...")
+    try:
+        subprocess.run(["pkill", "-f", "zero_x_infinity.*--gateway"], 
+                      capture_output=True, timeout=5)
+        time.sleep(2)
+        print("    ✅ Gateway stopped")
+    except:
+        print("    ✅ No Gateway was running")
+    
+    # 2. Clear TDengine data
+    print("[2/4] Clearing TDengine data...")
     try:
         result = subprocess.run(
             ["docker", "exec", "tdengine", "taos", "-s",
              "DELETE FROM trading.orders; DELETE FROM trading.trades; DELETE FROM trading.balances;"],
             capture_output=True, text=True, timeout=30
         )
-        if result.returncode == 0:
-            print("[CLEAN] ✅ Data cleared successfully")
-            return True
-        else:
-            print(f"[CLEAN] ⚠️ Warning: {result.stderr}")
+        if result.returncode != 0:
+            print(f"    ❌ Failed: {result.stderr}")
             return False
+        print("    ✅ Data cleared")
     except Exception as e:
-        print(f"[CLEAN] ❌ Failed to clear data: {e}")
+        print(f"    ❌ Failed: {e}")
         return False
+    
+    # 3. Confirm data is cleared
+    print("[3/4] Verifying data cleared...")
+    try:
+        result = subprocess.run(
+            ["docker", "exec", "tdengine", "taos", "-s", "SELECT COUNT(*) FROM trading.orders"],
+            capture_output=True, text=True, timeout=10
+        )
+        if "0 |" not in result.stdout and "|                     0 |" not in result.stdout:
+            print(f"    ❌ Data not cleared properly")
+            return False
+        print("    ✅ Confirmed: 0 orders")
+    except Exception as e:
+        print(f"    ⚠️ Could not verify: {e}")
+    
+    # 4. Start Gateway
+    print("[4/4] Starting Gateway...")
+    try:
+        import os
+        if not os.path.exists("./target/release/zero_x_infinity"):
+            print("    ❌ Binary not found. Run: cargo build --release")
+            return False
+        
+        subprocess.Popen(
+            ["./target/release/zero_x_infinity", "--gateway", "--port", "8080"],
+            stdout=open("/tmp/gw.log", "w"),
+            stderr=subprocess.STDOUT,
+            start_new_session=True
+        )
+        time.sleep(3)
+        
+        # Verify Gateway is running
+        import socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(2)
+        if sock.connect_ex(('localhost', 8080)) != 0:
+            print("    ❌ Gateway failed to start")
+            sock.close()
+            return False
+        sock.close()
+        print("    ✅ Gateway started and ready")
+    except Exception as e:
+        print(f"    ❌ Failed: {e}")
+        return False
+    
+    print()
+    print("[CLEAN_START] ✅ Environment ready, starting injection...")
+    print()
+    return True
 
 
 def main():
@@ -310,10 +376,8 @@ def main():
     parser.add_argument('--rate', '-r', type=int, default=0, help='Rate limit (orders/sec, 0=unlimited)')
     parser.add_argument('--limit', '-l', type=int, default=0, help='Max orders to inject (0=all)')
     parser.add_argument('--quiet', '-q', action='store_true', help='Suppress progress output')
-    parser.add_argument('--clean', '-c', action='store_true', default=True, 
-                       help='Clear TDengine data before injection (default: True)')
-    parser.add_argument('--no-clean', dest='clean', action='store_false',
-                       help='Do NOT clear TDengine data before injection')
+    parser.add_argument('--clean_start', action='store_true',
+                       help='Clean start: pkill Gateway, clear DB, start fresh Gateway, then inject')
     args = parser.parse_args()
     
     print("╔════════════════════════════════════════════════════════════╗")
@@ -321,11 +385,12 @@ def main():
     print("╚════════════════════════════════════════════════════════════╝")
     print()
     
-    # Clear TDengine data if requested
-    if args.clean:
-        if not clear_tdengine():
-            print("⚠️ Warning: Failed to clear TDengine data, continuing anyway...")
-        time.sleep(1)  # Wait for TDengine to sync
+    # --clean_start: Do everything from scratch
+    if args.clean_start:
+        if not clean_start():
+            print("❌ Clean start failed, aborting")
+            return 1
+        # Continue to injection below...
     
     # Check Gateway is reachable (use OPTIONS on root or try create_order endpoint)
     try:
