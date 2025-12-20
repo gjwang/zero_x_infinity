@@ -127,6 +127,9 @@ pub fn run_pipeline_multi_thread(
     services: MultiThreadServices,
     config: PipelineConfig,
     queues: Arc<MultiThreadQueues>,
+    // TDengine persistence support (Gateway mode)
+    rt_handle: Option<tokio::runtime::Handle>,
+    db_client: Option<Arc<crate::persistence::TDengineClient>>,
 ) -> MultiThreadPipelineResult {
     tracing::info!(
         "[TRACE] Starting Multi-Thread Pipeline with {} orders...",
@@ -201,6 +204,9 @@ pub fn run_pipeline_multi_thread(
             services.ledger,
             queues.clone(),
             stats.clone(),
+            rt_handle.clone(),
+            db_client.clone(),
+            active_symbol_id,
         );
         let s = shutdown.clone();
         thread::spawn(move || {

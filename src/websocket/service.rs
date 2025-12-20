@@ -186,26 +186,7 @@ impl WsService {
                     role: if role == 0 { "MAKER" } else { "TAKER" }.to_string(),
                 };
                 self.manager.send_to_user(user_id, message);
-
-                // Persist trade to TDengine for K-Line aggregation
-                if let Some(ref db_client) = self.db_client {
-                    if let Err(e) = crate::persistence::trades::insert_trade_record(
-                        db_client.taos(),
-                        trade_id,
-                        order_id,
-                        user_id,
-                        side,
-                        price,
-                        qty,
-                        0, // fee placeholder
-                        role,
-                        self.active_symbol_id,
-                    )
-                    .await
-                    {
-                        tracing::error!("Failed to persist trade to TDengine: {}", e);
-                    }
-                }
+                // NOTE: Trade persistence moved to SettlementService (correct architecture)
             }
             PushEvent::BalanceUpdate {
                 user_id,

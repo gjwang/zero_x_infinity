@@ -68,6 +68,38 @@ pub async fn query_latest_balance(
     Ok(None)
 }
 
+/// Insert balance values directly (from BalanceEvent)
+pub async fn upsert_balance_values(
+    taos: &Taos,
+    user_id: u64,
+    asset_id: u32,
+    avail: u64,
+    frozen: u64,
+) -> Result<()> {
+    let table_name = format!("balances_{}_{}", user_id, asset_id);
+
+    // Create subtable if not exists
+    let create_subtable = format!(
+        "CREATE TABLE IF NOT EXISTS {} USING balances TAGS ({}, {})",
+        table_name, user_id, asset_id
+    );
+    taos.exec(&create_subtable)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to create balances subtable: {}", e))?;
+
+    // Insert balance values (use 0 for version fields)
+    let sql = format!(
+        "INSERT INTO {} VALUES (NOW, {}, {}, 0, 0)",
+        table_name, avail, frozen
+    );
+
+    taos.exec(&sql)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to insert balance values: {}", e))?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
