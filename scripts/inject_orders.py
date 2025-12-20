@@ -79,25 +79,43 @@ def submit_order(order_data: dict) -> bool:
             "qty": order_data.get("qty", "0"),
         }
     
-    try:
-        data = json.dumps(payload).encode('utf-8')
-        req = urllib.request.Request(url, data=data)
-        req.add_header('Content-Type', 'application/json')
-        req.add_header('X-User-ID', str(user_id))
-        
-        with urllib.request.urlopen(req, timeout=30) as response:
-            result = json.loads(response.read().decode())
-            return result.get('code') == 0, None
-    except urllib.error.HTTPError as e:
-        return False, f"HTTP {e.code}"
-    except urllib.error.URLError as e:
-        return False, f"Connection: {e.reason}"
-    except ConnectionRefusedError:
-        return False, "Connection refused"
-    except TimeoutError:
-        return False, "Timeout"
-    except Exception as e:
-        return False, str(e)
+    max_retries = 10  # More retries for queue full (backpressure)
+    retry_delay = 0.05  # 50ms initial delay, doubles each retry (max ~25s total)
+    
+    for attempt in range(max_retries + 1):
+        try:
+            data = json.dumps(payload).encode('utf-8')
+            req = urllib.request.Request(url, data=data)
+            req.add_header('Content-Type', 'application/json')
+            req.add_header('X-User-ID', str(user_id))
+            
+            with urllib.request.urlopen(req, timeout=30) as response:
+                result = json.loads(response.read().decode())
+                return result.get('code') == 0, None
+        except urllib.error.HTTPError as e:
+            # Capture response body for detailed error info
+            try:
+                body = e.read().decode()
+                error_detail = f"HTTP {e.code}: {body[:200]}"  # Limit body length
+            except:
+                error_detail = f"HTTP {e.code}"
+            
+            # Retry on 503 (Service Unavailable) - this is backpressure
+            if e.code == 503 and attempt < max_retries:
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+                continue
+            return False, error_detail
+        except urllib.error.URLError as e:
+            return False, f"Connection: {e.reason}"
+        except ConnectionRefusedError:
+            return False, "Connection refused"
+        except TimeoutError:
+            return False, "Timeout"
+        except Exception as e:
+            return False, str(e)
+    
+    return False, "Max retries exceeded"
 
 
 
