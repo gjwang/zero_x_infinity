@@ -80,8 +80,9 @@ def submit_order(order_data: dict) -> bool:
             "qty": order_data.get("qty", "0"),
         }
     
-    max_retries = 10
-    retry_delay = 0.05  # 50ms initial, doubles each retry
+    max_retries = 20
+    max_delay = 5.0    # Cap delay at 5 seconds
+    retry_delay = 0.05 # 50ms initial, doubles each retry (capped at max_delay)
     
     # Errors that are safe to retry (network/transient issues)
     RETRYABLE_ERRORS = (
@@ -110,7 +111,7 @@ def submit_order(order_data: dict) -> bool:
             if e.code == 503 and attempt < max_retries:
                 print(f"  ⏳ Retry {attempt+1}/{max_retries}: HTTP 503 (backpressure)")
                 time.sleep(retry_delay)
-                retry_delay *= 2
+                retry_delay = min(retry_delay * 2, max_delay)
                 continue
             # Non-retryable HTTP error
             try:
@@ -124,7 +125,7 @@ def submit_order(order_data: dict) -> bool:
             if attempt < max_retries:
                 print(f"  ⏳ Retry {attempt+1}/{max_retries}: {type(e).__name__}")
                 time.sleep(retry_delay)
-                retry_delay *= 2
+                retry_delay = min(retry_delay * 2, max_delay)
                 continue
             return False, f"{type(e).__name__}: {e}"
         
@@ -133,7 +134,7 @@ def submit_order(order_data: dict) -> bool:
             if attempt < max_retries:
                 print(f"  ⏳ Retry {attempt+1}/{max_retries}: Gateway blocked (socket)")
                 time.sleep(retry_delay)
-                retry_delay *= 2
+                retry_delay = min(retry_delay * 2, max_delay)
                 continue
             return False, "Gateway blocked (max retries)"
             
