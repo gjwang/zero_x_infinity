@@ -318,9 +318,10 @@ Lock events (1000000) != Accepted orders (1300000)
 |--------|----------|----------|------|
 | **记录数** | 47,886 | 47,886 | ✅ **100% MATCH** |
 | 结构验证 | Maker/Taker 双方记录 | 正确记录 (role 0/1) | ✅ **100% MATCH** |
+| **成交量匹配** | - | - | ✅ **100% 匹配** (对齐 Orders filled_qty) |
 
 > [!NOTE]
-> Trades 记录数匹配，字段级别详细比较待完成。
+> **成交一致性已验证**：通过 `compare_trades_tdengine.py` 验证了 TDengine 内部 M/T 撮合对的完整性，并确认成交总量与 `orders` 表的 `filled_qty` 100% 闭环。
 
 ##### Balances 比较
 
