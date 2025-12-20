@@ -42,6 +42,15 @@ stats = {
 stats_lock = Lock()
 
 
+def safe_sleep(seconds: float) -> bool:
+    """Sleep that handles KeyboardInterrupt. Returns False if interrupted."""
+    try:
+        time.sleep(seconds)
+        return True
+    except KeyboardInterrupt:
+        print(f"  ⚠️  Interrupted during retry sleep")
+        return False
+
 def submit_order(order_data: dict) -> bool:
     """
     Submit a single order through Gateway API.
@@ -110,7 +119,8 @@ def submit_order(order_data: dict) -> bool:
             # HTTP errors: only retry 503 (backpressure)
             if e.code == 503 and attempt < max_retries:
                 print(f"  ⏳ Retry {attempt+1}/{max_retries}: HTTP 503 (backpressure)")
-                time.sleep(retry_delay)
+                if not safe_sleep(retry_delay):
+                    return False, "Interrupted during retry"
                 retry_delay = min(retry_delay * 2, max_delay)
                 continue
             # Non-retryable HTTP error
@@ -124,7 +134,8 @@ def submit_order(order_data: dict) -> bool:
             # Network error - retry with logging
             if attempt < max_retries:
                 print(f"  ⏳ Retry {attempt+1}/{max_retries}: {type(e).__name__}")
-                time.sleep(retry_delay)
+                if not safe_sleep(retry_delay):
+                    return False, "Interrupted during retry"
                 retry_delay = min(retry_delay * 2, max_delay)
                 continue
             return False, f"{type(e).__name__}: {e}"
@@ -133,7 +144,8 @@ def submit_order(order_data: dict) -> bool:
             # Gateway blocking during socket.connect() - retry like network error
             if attempt < max_retries:
                 print(f"  ⏳ Retry {attempt+1}/{max_retries}: Gateway blocked (socket)")
-                time.sleep(retry_delay)
+                if not safe_sleep(retry_delay):
+                    return False, "Interrupted during retry"
                 retry_delay = min(retry_delay * 2, max_delay)
                 continue
             return False, "Gateway blocked (max retries)"
