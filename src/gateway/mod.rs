@@ -58,6 +58,8 @@ pub async fn run_server(
     let app = Router::new()
         // WebSocket endpoint
         .route("/ws", get(ws_handler))
+        // Health check (no internal details exposed)
+        .route("/api/v1/health", get(handlers::health_check))
         // Write endpoints
         .route("/api/v1/create_order", post(handlers::create_order))
         .route("/api/v1/cancel_order", post(handlers::cancel_order))
