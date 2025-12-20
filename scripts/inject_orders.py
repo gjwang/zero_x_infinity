@@ -21,6 +21,7 @@ USAGE:
 import argparse
 import csv
 import json
+import socket
 import sys
 import time
 import urllib.request
@@ -107,13 +108,24 @@ def submit_order(order_data: dict) -> bool:
                 continue
             return False, error_detail
         except urllib.error.URLError as e:
+            # URLError can wrap socket.timeout or other errors
+            if isinstance(e.reason, socket.timeout):
+                return False, "Request timeout (socket)"
             return False, f"Connection: {e.reason}"
+        except socket.timeout:
+            return False, "Request timeout"
         except ConnectionRefusedError:
             return False, "Connection refused"
+        except ConnectionResetError:
+            return False, "Connection reset by peer"
+        except BrokenPipeError:
+            return False, "Broken pipe"
+        except OSError as e:
+            return False, f"OS error: {e}"
         except TimeoutError:
             return False, "Timeout"
         except Exception as e:
-            return False, str(e)
+            return False, f"Unexpected: {type(e).__name__}: {e}"
     
     return False, "Max retries exceeded"
 
@@ -193,7 +205,10 @@ def inject_orders(input_file: str, rate_limit: int = 0, limit: int = 0, quiet: b
                 print(f"  Progress: {i + 1}/{total} ({100*(i+1)//total}%) - {rate:.0f} orders/sec")
     
     except KeyboardInterrupt:
-        print(f"\n\n⚠️  Interrupted by user at {stats['submitted']}/{total} orders")
+        import traceback
+        print(f"\n\n⚠️  Interrupted at {stats['submitted']}/{total} orders")
+        print("Traceback:")
+        traceback.print_exc()
         # Continue to print summary
     
     elapsed = time.time() - start_time
