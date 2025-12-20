@@ -70,7 +70,8 @@ pub async fn batch_insert_me_results(
     let mut orders_sql = String::with_capacity(results.len() * 200 + 20);
     orders_sql.push_str("INSERT INTO ");
 
-    for (i, r) in results.iter().enumerate() {
+    let mut ts_offset = 0i64;
+    for r in results {
         // Taker order update
         let o = &r.order;
         let cid = o.cid.as_deref().unwrap_or("");
@@ -78,7 +79,7 @@ pub async fn batch_insert_me_results(
             orders_sql,
             "orders_{} VALUES({}, {}, {}, {}, {}, {}, {}, {}, {}, '{}') ",
             r.symbol_id,
-            now_us + i as i64 * 10, // Ensure unique TS even within same batch
+            now_us + ts_offset,
             o.order_id,
             o.user_id,
             o.side as u8,
@@ -90,15 +91,16 @@ pub async fn batch_insert_me_results(
             cid
         )
         .unwrap();
+        ts_offset += 1;
 
         // Maker order updates
-        for (j, m) in r.maker_updates.iter().enumerate() {
+        for m in r.maker_updates.iter() {
             let m_cid = m.cid.as_deref().unwrap_or("");
             write!(
                 orders_sql,
                 "orders_{} VALUES({}, {}, {}, {}, {}, {}, {}, {}, {}, '{}') ",
                 r.symbol_id,
-                now_us + i as i64 * 10 + (j + 1) as i64,
+                now_us + ts_offset,
                 m.order_id,
                 m.user_id,
                 m.side as u8,
@@ -110,6 +112,7 @@ pub async fn batch_insert_me_results(
                 m_cid
             )
             .unwrap();
+            ts_offset += 1;
         }
     }
 
