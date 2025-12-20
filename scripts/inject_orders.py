@@ -178,6 +178,7 @@ def inject_orders(input_file: str, rate_limit: int = 0, limit: int = 0, quiet: b
                 stats["failed"] += 1
                 consecutive_errors += 1
                 last_error = error
+                print(f"  ❌ Order {i+1} failed: {error}")
                 
                 # Check for too many consecutive errors
                 if consecutive_errors >= max_consecutive_errors:
