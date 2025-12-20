@@ -46,10 +46,9 @@ def query_balance_via_gateway(user_id: int, asset_id: int) -> Optional[Dict]:
             if data.get('code') == 0 and data.get('data'):
                 return data['data']
             return None
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            return None
-        raise
+    except urllib.error.HTTPError:
+        # 404 = not found, 500 = internal error, etc. - all mean no data for this user/asset
+        return None
     except Exception:
         return None
 

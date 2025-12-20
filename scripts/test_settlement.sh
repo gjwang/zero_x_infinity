@@ -120,7 +120,7 @@ if ! python3 "${SCRIPT_DIR}/dump_balances.py" \
     --output "$DB_DUMP_CSV" \
     --users "$USERS" \
     --assets "$ASSETS" \
-    --method direct; then
+    --method gateway; then
     fail_at_step $STEP "Failed to dump balances from TDengine"
 fi
 
