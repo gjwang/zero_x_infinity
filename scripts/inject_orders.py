@@ -262,4 +262,13 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        print("\n⚠️  Interrupted by user")
+        sys.exit(130)
+    except Exception as e:
+        import traceback
+        print(f"\n❌ FATAL ERROR: {e}")
+        traceback.print_exc()
+        sys.exit(1)
