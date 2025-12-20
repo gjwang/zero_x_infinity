@@ -267,3 +267,10 @@ Lock events (1000000) != Accepted orders (1300000)
 
 如需调整，修改脚本中的 `timeout` 参数。
 
+---
+
+## 测试报告
+
+### Phase 1: Gateway E2E 注入测试
+
+详见 [E2E 测试报告](./0x09-f-e2e-test-report.md)

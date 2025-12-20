@@ -1,7 +1,6 @@
 # Gateway E2E 注入测试报告
 
 **测试日期**: 2025-12-20  
-**测试人员**: Antigravity AI  
 **测试分支**: `0x09-f-integration-test`
 
 ---
