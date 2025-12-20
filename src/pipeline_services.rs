@@ -631,337 +631,271 @@ impl SettlementService {
         }
     }
 
-    /// Run the settlement service (MT blocking mode)
-    pub fn run(&mut self, shutdown: &ShutdownSignal) {
-        let mut spin_count = 0u32;
+    /// Run the settlement service (two independent threads for parallel processing)
+    pub fn run(&mut self, shutdown: Arc<ShutdownSignal>) {
+        // Extract shared resources for threads
+        let queues = self.queues.clone();
+        let stats = self.stats.clone();
+        let rt_handle = self.rt_handle.clone();
+        let db_client = self.db_client.clone();
+        let symbol_id = self.symbol_id;
 
-        loop {
-            let mut did_work = false;
+        // Clone shutdown for threads
+        let shutdown_balance = shutdown.clone();
+        let shutdown_trade = shutdown.clone();
 
-            // ============================================
-            // PRIORITY 1: Balance Events from UBSCore
-            // Drain balance_event_queue first
-            // ============================================
-            while let Some(balance_event) = self.queues.balance_event_queue.pop() {
-                did_work = true;
-                let task_start = Instant::now();
-                self.balance_events_count += 1;
+        // Clone resources for balance thread
+        let queues_balance = queues.clone();
+        let _stats_balance = stats.clone();
+        let rt_handle_balance = rt_handle.clone();
+        let db_client_balance = db_client.clone();
 
-                // Persist balance event to event log
-                self.ledger.write_balance_event(&balance_event);
+        // ============================================
+        // THREAD 1: Balance Event Processing
+        // ============================================
+        let balance_handle = std::thread::Builder::new()
+            .name("settlement-balance".to_string())
+            .spawn(move || {
+                let mut spin_count = 0u32;
+                loop {
+                    if let Some(balance_event) = queues_balance.balance_event_queue.pop() {
+                        // [LEDGER] Commented out for now
+                        // self.ledger.write_balance_event(&balance_event);
 
-                // [TDENGINE] Persist Balance to TDengine (if configured)
-                if let (Some(handle), Some(db)) = (&self.rt_handle, &self.db_client) {
-                    let balance_start = Instant::now();
-                    let result =
-                        handle.block_on(crate::persistence::balances::upsert_balance_values(
-                            db.taos(),
-                            balance_event.user_id,
-                            balance_event.asset_id,
-                            balance_event.avail_after,
-                            balance_event.frozen_after,
-                        ));
-                    let balance_elapsed = balance_start.elapsed();
-                    if let Err(e) = result {
-                        tracing::error!("[PERSIST] balance failed: {}", e);
-                    }
-                    if balance_elapsed.as_millis() > 10 {
-                        tracing::warn!(
-                            "[PROFILE] balance_persist={}ms",
-                            balance_elapsed.as_millis()
-                        );
-                    }
-                }
-
-                // ⭐ WebSocket Push: Generate BalanceUpdate after persistence (Settlement-first)
-                let _ =
-                    self.queues
-                        .push_event_queue
-                        .push(crate::websocket::PushEvent::BalanceUpdate {
-                            user_id: balance_event.user_id,
-                            asset_id: balance_event.asset_id,
-                            avail: balance_event.avail_after,
-                            frozen: balance_event.frozen_after,
-                        });
-
-                self.stats
-                    .add_event_log_time(task_start.elapsed().as_nanos() as u64);
-            }
-
-            // ============================================
-            // PRIORITY 2: Trade Events from ME
-            // ============================================
-            if let Some(trade_event) = self.queues.trade_queue.pop() {
-                did_work = true;
-                let task_start = Instant::now();
-
-                let trade = &trade_event.trade;
-                let span = p_span!(
-                    TARGET_PERS,
-                    LOG_TRADE,
-                    trade_id = trade.trade_id,
-                    buyer = trade.buyer_user_id,
-                    seller = trade.seller_user_id
-                );
-                let _enter = span.enter();
-
-                let trade_cost = ((trade.price as u128) * (trade.qty as u128)
-                    / (trade_event.qty_unit as u128)) as u64;
-
-                // Persist to Ledger (legacy format)
-                self.ledger.write_entry(&LedgerEntry {
-                    trade_id: trade.trade_id,
-                    user_id: trade.buyer_user_id,
-                    asset_id: trade_event.quote_asset_id,
-                    op: OP_DEBIT,
-                    delta: trade_cost,
-                    balance_after: 0,
-                });
-                self.ledger.write_entry(&LedgerEntry {
-                    trade_id: trade.trade_id,
-                    user_id: trade.buyer_user_id,
-                    asset_id: trade_event.base_asset_id,
-                    op: OP_CREDIT,
-                    delta: trade.qty,
-                    balance_after: 0,
-                });
-
-                // Seller: debit base, credit quote
-                self.ledger.write_entry(&LedgerEntry {
-                    trade_id: trade.trade_id,
-                    user_id: trade.seller_user_id,
-                    asset_id: trade_event.base_asset_id,
-                    op: OP_DEBIT,
-                    delta: trade.qty,
-                    balance_after: 0,
-                });
-                self.ledger.write_entry(&LedgerEntry {
-                    trade_id: trade.trade_id,
-                    user_id: trade.seller_user_id,
-                    asset_id: trade_event.quote_asset_id,
-                    op: OP_CREDIT,
-                    delta: trade_cost,
-                    balance_after: 0,
-                });
-                p_info!(TARGET_PERS, "Settlement persisted to ledger");
-
-                // [TDENGINE] Persist Trade + Order to TDengine (PARALLELIZED)
-                if let (Some(handle), Some(db)) = (&self.rt_handle, &self.db_client) {
-                    let taker_user_id = if trade_event.taker_side == Side::Buy {
-                        trade.buyer_user_id
-                    } else {
-                        trade.seller_user_id
-                    };
-                    let maker_user_id = if trade_event.taker_side == Side::Buy {
-                        trade.seller_user_id
-                    } else {
-                        trade.buyer_user_id
-                    };
-                    let maker_side = if trade_event.taker_side == Side::Buy {
-                        Side::Sell
-                    } else {
-                        Side::Buy
-                    };
-                    let taker_status =
-                        if trade_event.taker_filled_qty >= trade_event.taker_order_qty {
-                            OrderStatus::FILLED
-                        } else {
-                            OrderStatus::PARTIALLY_FILLED
-                        };
-
-                    // Clone refs for async block
-                    let db = db.clone();
-                    let symbol_id = self.symbol_id;
-
-                    // Run all 3 writes in parallel
-                    let persist_start = Instant::now();
-                    let (taker_result, maker_result, order_result) = handle.block_on(async {
-                        tokio::join!(
-                            // Taker trade
-                            async {
-                                let start = Instant::now();
-                                let r = crate::persistence::trades::insert_trade_record(
+                        // [TDENGINE] Persist Balance to TDengine
+                        if let (Some(handle), Some(db)) = (&rt_handle_balance, &db_client_balance) {
+                            let balance_start = Instant::now();
+                            let result = handle.block_on(
+                                crate::persistence::balances::upsert_balance_values(
                                     db.taos(),
-                                    trade.trade_id,
-                                    trade_event.taker_order_id,
-                                    taker_user_id,
-                                    trade_event.taker_side,
-                                    trade.price,
-                                    trade.qty,
-                                    0,
-                                    1, // taker
-                                    symbol_id,
-                                )
-                                .await;
-                                (r, start.elapsed())
-                            },
-                            // Maker trade
-                            async {
-                                let start = Instant::now();
-                                let r = crate::persistence::trades::insert_trade_record(
-                                    db.taos(),
-                                    trade.trade_id,
-                                    trade_event.maker_order_id,
-                                    maker_user_id,
-                                    maker_side,
-                                    trade.price,
-                                    trade.qty,
-                                    0,
-                                    0, // maker
-                                    symbol_id,
-                                )
-                                .await;
-                                (r, start.elapsed())
-                            },
-                            // Order status
-                            async {
-                                let start = Instant::now();
-                                let r = crate::persistence::orders::update_order_status(
-                                    db.taos(),
-                                    trade_event.taker_order_id,
-                                    taker_user_id,
-                                    symbol_id,
-                                    trade_event.taker_filled_qty,
-                                    taker_status,
-                                    None,
-                                )
-                                .await;
-                                (r, start.elapsed())
+                                    balance_event.user_id,
+                                    balance_event.asset_id,
+                                    balance_event.avail_after,
+                                    balance_event.frozen_after,
+                                ),
+                            );
+                            let balance_elapsed = balance_start.elapsed();
+                            if let Err(e) = result {
+                                tracing::error!("[PERSIST] balance failed: {}", e);
                             }
-                        )
-                    });
-                    let persist_total = persist_start.elapsed();
+                            if balance_elapsed.as_millis() > 10 {
+                                tracing::warn!(
+                                    "[PROFILE] balance_persist={}ms",
+                                    balance_elapsed.as_millis()
+                                );
+                            }
+                        }
 
-                    // Log errors
-                    if let Err(e) = taker_result.0 {
-                        tracing::error!("[PERSIST] taker_trade failed: {}", e);
-                    }
-                    if let Err(e) = maker_result.0 {
-                        tracing::error!("[PERSIST] maker_trade failed: {}", e);
-                    }
-                    if let Err(e) = order_result.0 {
-                        tracing::error!("[PERSIST] order_status failed: {}", e);
-                    }
-
-                    // Profile: log slowest operation
-                    if persist_total.as_millis() > 10 {
-                        tracing::warn!(
-                            "[PROFILE] persist_total={}ms taker={}ms maker={}ms order={}ms",
-                            persist_total.as_millis(),
-                            taker_result.1.as_millis(),
-                            maker_result.1.as_millis(),
-                            order_result.1.as_millis()
+                        // WebSocket Push
+                        let _ = queues_balance.push_event_queue.push(
+                            crate::websocket::PushEvent::BalanceUpdate {
+                                user_id: balance_event.user_id,
+                                asset_id: balance_event.asset_id,
+                                avail: balance_event.avail_after,
+                                frozen: balance_event.frozen_after,
+                            },
                         );
+
+                        spin_count = 0;
+                    } else {
+                        // Check shutdown
+                        if shutdown_balance.is_shutdown_requested()
+                            && queues_balance.balance_event_queue.is_empty()
+                        {
+                            break;
+                        }
+                        spin_count += 1;
+                        if spin_count > IDLE_SPIN_LIMIT {
+                            std::thread::sleep(IDLE_SLEEP_US);
+                            spin_count = 0;
+                        } else {
+                            std::hint::spin_loop();
+                        }
                     }
                 }
+                tracing::info!("[SETTLEMENT] Balance thread exiting");
+            })
+            .expect("Failed to spawn balance thread");
 
-                // ⭐ WebSocket Push: Generate events after persistence (Settlement-first)
-                let taker_status = if trade_event.taker_filled_qty >= trade_event.taker_order_qty {
-                    OrderStatus::FILLED
-                } else {
-                    OrderStatus::PARTIALLY_FILLED
-                };
-                let taker_user_id = if trade_event.taker_side == Side::Buy {
-                    trade.buyer_user_id
-                } else {
-                    trade.seller_user_id
-                };
-                let push_result =
-                    self.queues
-                        .push_event_queue
-                        .push(crate::websocket::PushEvent::OrderUpdate {
-                            user_id: taker_user_id,
-                            order_id: trade_event.taker_order_id,
-                            symbol_id: 0,
-                            status: taker_status,
-                            filled_qty: trade_event.taker_filled_qty,
-                            avg_price: Some(trade.price),
-                        });
-                if push_result.is_err() {
-                    eprintln!("[PUSH] ❌ Failed to push OrderUpdate - queue full!");
-                    tracing::error!("[PUSH] ❌ Failed to push OrderUpdate - queue full!");
-                } else {
-                    eprintln!("[PUSH] ✅ OrderUpdate pushed to queue");
-                    tracing::info!("[PUSH] ✅ OrderUpdate pushed to queue");
-                }
+        // ============================================
+        // THREAD 2: Trade Event Processing
+        // ============================================
+        let trade_handle = std::thread::Builder::new()
+            .name("settlement-trade".to_string())
+            .spawn(move || {
+                let mut spin_count = 0u32;
+                loop {
+                    if let Some(trade_event) = queues.trade_queue.pop() {
+                        let trade = &trade_event.trade;
 
-                tracing::info!(
-                    "[TRACE] Order {}: Settlement -> Push Event Queue (Status: {:?})",
-                    trade_event.taker_order_id,
-                    taker_status
-                );
+                        // [LEDGER] Commented out for now
+                        // self.ledger.write_entry(...)
 
-                // Push trade notifications
-                eprintln!(
-                    "[PUSH] Generating Trade events for buyer {} and seller {}",
-                    trade.buyer_user_id, trade.seller_user_id
-                );
-                tracing::info!(
-                    "[PUSH] Generating Trade events for buyer {} and seller {}",
-                    trade.buyer_user_id,
-                    trade.seller_user_id
-                );
-                let _ = self
-                    .queues
-                    .push_event_queue
-                    .push(crate::websocket::PushEvent::Trade {
-                        user_id: trade.buyer_user_id,
-                        trade_id: trade.trade_id,
-                        order_id: trade.buyer_order_id,
-                        symbol_id: 0,
-                        side: Side::Buy,
-                        price: trade.price,
-                        qty: trade.qty,
-                        role: if trade_event.taker_side == Side::Buy {
-                            1
+                        // [TDENGINE] Persist Trade + Order (PARALLELIZED within block_on)
+                        if let (Some(handle), Some(db)) = (&rt_handle, &db_client) {
+                            let taker_user_id = if trade_event.taker_side == Side::Buy {
+                                trade.buyer_user_id
+                            } else {
+                                trade.seller_user_id
+                            };
+                            let maker_user_id = if trade_event.taker_side == Side::Buy {
+                                trade.seller_user_id
+                            } else {
+                                trade.buyer_user_id
+                            };
+                            let maker_side = if trade_event.taker_side == Side::Buy {
+                                Side::Sell
+                            } else {
+                                Side::Buy
+                            };
+                            let taker_status =
+                                if trade_event.taker_filled_qty >= trade_event.taker_order_qty {
+                                    OrderStatus::FILLED
+                                } else {
+                                    OrderStatus::PARTIALLY_FILLED
+                                };
+
+                            let db = db.clone();
+                            let persist_start = Instant::now();
+                            let (taker_r, maker_r, order_r) = handle.block_on(async {
+                                tokio::join!(
+                                    crate::persistence::trades::insert_trade_record(
+                                        db.taos(),
+                                        trade.trade_id,
+                                        trade_event.taker_order_id,
+                                        taker_user_id,
+                                        trade_event.taker_side,
+                                        trade.price,
+                                        trade.qty,
+                                        0,
+                                        1,
+                                        symbol_id,
+                                    ),
+                                    crate::persistence::trades::insert_trade_record(
+                                        db.taos(),
+                                        trade.trade_id,
+                                        trade_event.maker_order_id,
+                                        maker_user_id,
+                                        maker_side,
+                                        trade.price,
+                                        trade.qty,
+                                        0,
+                                        0,
+                                        symbol_id,
+                                    ),
+                                    crate::persistence::orders::update_order_status(
+                                        db.taos(),
+                                        trade_event.taker_order_id,
+                                        taker_user_id,
+                                        symbol_id,
+                                        trade_event.taker_filled_qty,
+                                        taker_status,
+                                        None,
+                                    )
+                                )
+                            });
+                            let persist_total = persist_start.elapsed();
+
+                            if let Err(e) = taker_r {
+                                tracing::error!("[PERSIST] taker_trade failed: {}", e);
+                            }
+                            if let Err(e) = maker_r {
+                                tracing::error!("[PERSIST] maker_trade failed: {}", e);
+                            }
+                            if let Err(e) = order_r {
+                                tracing::error!("[PERSIST] order_status failed: {}", e);
+                            }
+                            if persist_total.as_millis() > 10 {
+                                tracing::warn!(
+                                    "[PROFILE] trade_persist={}ms",
+                                    persist_total.as_millis()
+                                );
+                            }
+                        }
+
+                        // WebSocket Push: OrderUpdate
+                        let taker_status =
+                            if trade_event.taker_filled_qty >= trade_event.taker_order_qty {
+                                OrderStatus::FILLED
+                            } else {
+                                OrderStatus::PARTIALLY_FILLED
+                            };
+                        let taker_user_id = if trade_event.taker_side == Side::Buy {
+                            trade.buyer_user_id
                         } else {
-                            0
-                        },
-                    });
-                let _ = self
-                    .queues
-                    .push_event_queue
-                    .push(crate::websocket::PushEvent::Trade {
-                        user_id: trade.seller_user_id,
-                        trade_id: trade.trade_id,
-                        order_id: trade.seller_order_id,
-                        symbol_id: 0,
-                        side: Side::Sell,
-                        price: trade.price,
-                        qty: trade.qty,
-                        role: if trade_event.taker_side == Side::Sell {
-                            1
+                            trade.seller_user_id
+                        };
+                        let _ = queues.push_event_queue.push(
+                            crate::websocket::PushEvent::OrderUpdate {
+                                user_id: taker_user_id,
+                                order_id: trade_event.taker_order_id,
+                                symbol_id: 0,
+                                status: taker_status,
+                                filled_qty: trade_event.taker_filled_qty,
+                                avg_price: Some(trade.price),
+                            },
+                        );
+
+                        // WebSocket Push: Trade events
+                        let _ = queues
+                            .push_event_queue
+                            .push(crate::websocket::PushEvent::Trade {
+                                user_id: trade.buyer_user_id,
+                                trade_id: trade.trade_id,
+                                order_id: trade.buyer_order_id,
+                                symbol_id: 0,
+                                side: Side::Buy,
+                                price: trade.price,
+                                qty: trade.qty,
+                                role: if trade_event.taker_side == Side::Buy {
+                                    1
+                                } else {
+                                    0
+                                },
+                            });
+                        let _ = queues
+                            .push_event_queue
+                            .push(crate::websocket::PushEvent::Trade {
+                                user_id: trade.seller_user_id,
+                                trade_id: trade.trade_id,
+                                order_id: trade.seller_order_id,
+                                symbol_id: 0,
+                                side: Side::Sell,
+                                price: trade.price,
+                                qty: trade.qty,
+                                role: if trade_event.taker_side == Side::Sell {
+                                    1
+                                } else {
+                                    0
+                                },
+                            });
+
+                        stats.add_event_log_time(0);
+                        spin_count = 0;
+                    } else {
+                        // Check shutdown
+                        if shutdown_trade.is_shutdown_requested() && queues.trade_queue.is_empty() {
+                            break;
+                        }
+                        spin_count += 1;
+                        if spin_count > IDLE_SPIN_LIMIT {
+                            std::thread::sleep(IDLE_SLEEP_US);
+                            spin_count = 0;
                         } else {
-                            0
-                        },
-                    });
-
-                self.stats
-                    .add_event_log_time(task_start.elapsed().as_nanos() as u64);
-            }
-
-            // Check for shutdown
-            if shutdown.is_shutdown_requested()
-                && self.queues.trade_queue.is_empty()
-                && self.queues.balance_event_queue.is_empty()
-            {
-                break;
-            }
-
-            if !did_work {
-                spin_count += 1;
-                if spin_count > IDLE_SPIN_LIMIT {
-                    std::thread::sleep(IDLE_SLEEP_US);
-                    spin_count = 0;
-                } else {
-                    std::hint::spin_loop();
+                            std::hint::spin_loop();
+                        }
+                    }
                 }
-            } else {
-                spin_count = 0;
-            }
-        }
+                tracing::info!("[SETTLEMENT] Trade thread exiting");
+            })
+            .expect("Failed to spawn trade thread");
 
-        self.ledger.flush();
+        // Wait for both threads to complete
+        balance_handle.join().expect("Balance thread panicked");
+        trade_handle.join().expect("Trade thread panicked");
+
+        // [LEDGER] Commented out for now
+        // self.ledger.flush();
     }
 
     /// Consume the service and return the inner LedgerWriter
