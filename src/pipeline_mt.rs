@@ -209,22 +209,18 @@ pub fn run_pipeline_multi_thread(
             active_symbol_id,
         );
         let s = shutdown.clone();
-        let use_async = rt_handle.is_some() && db_client.is_some();
 
-        if use_async {
-            // Async mode: use tokio for zero block_on overhead
-            let rt = rt_handle.clone().unwrap();
-            thread::spawn(move || {
+        // Always use async mode for consistency (creates runtime if needed)
+        thread::spawn(move || {
+            if let Some(rt) = rt_handle {
+                // Use existing runtime
                 rt.block_on(service.run_async(s));
-            })
-        } else {
-            // Sync mode: use traditional thread + block_on
-            thread::spawn(move || {
-                let mut service = service;
-                service.run(s);
-                // Drop ledger to match JoinHandle<()> type
-            })
-        }
+            } else {
+                // Create temporary runtime for async execution
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                rt.block_on(service.run_async(s));
+            }
+        })
     };
     // Wait for completion
     // ================================================================
