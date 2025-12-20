@@ -215,7 +215,7 @@ mod tests {
     #[ignore] // Requires TDengine running
     async fn test_snapshot_balance() {
         let client =
-            crate::persistence::TDengineClient::connect("taos+ws://root:taosdata@localhost:6041")
+            crate::persistence::TDengineClient::connect("taos://root:taosdata@localhost:6030")
                 .await
                 .expect("Failed to connect");
 
@@ -234,7 +234,7 @@ mod tests {
     #[ignore] // Requires TDengine running
     async fn test_batch_upsert_balance_events() {
         let client =
-            crate::persistence::TDengineClient::connect("taos+ws://root:taosdata@localhost:6041")
+            crate::persistence::TDengineClient::connect("taos://root:taosdata@localhost:6030")
                 .await
                 .expect("Failed to connect");
 
