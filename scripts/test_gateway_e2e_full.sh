@@ -87,17 +87,26 @@ ORDER_COUNT=$(wc -l < "$INPUT_FILE" | tr -d ' ')
 echo -e "    ${GREEN}✓${NC} Input file: $INPUT_FILE ($ORDER_COUNT lines)"
 
 # ============================================================================
-# Step 2: Stop any running Gateway (isolated from docker exec to avoid IDE crash)
+# Step 2: Stop any running Gateway
 # ============================================================================
+#
+# IMPORTANT: Do NOT use `pkill -f "zero_x_infinity"` because it will also kill
+# Antigravity IDE's language_server process (whose workspace_id contains this path).
+# Instead, use pgrep with more specific pattern + kill with PID.
+#
 STEP=2
 echo ""
 echo "[Step $STEP] Stopping any running Gateway..."
 
-pkill -f "zero_x_infinity" 2>/dev/null || true
-# NOTE: Explicit sleep to avoid Antigravity IDE crash (reactive component RPC error)
-#       when pkill and docker exec are combined in rapid succession.
-sleep 3
-echo -e "    ${GREEN}✓${NC} Old Gateway stopped"
+# Use pgrep to find gateway binary specifically, avoid matching IDE processes
+GW_PID=$(pgrep -f "./target/release/zero_x_infinity" 2>/dev/null | head -1)
+if [ -n "$GW_PID" ]; then
+    kill "$GW_PID" 2>/dev/null || true
+    sleep 2
+    echo -e "    ${GREEN}✓${NC} Old Gateway (PID $GW_PID) stopped"
+else
+    echo -e "    ${GREEN}✓${NC} No Gateway running"
+fi
 
 # ============================================================================
 # Step 2b: Clear TDengine database (separate step for IDE stability)
