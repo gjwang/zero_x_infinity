@@ -323,11 +323,11 @@ pub struct PipelineQueues {
     /// Consumer: ME thread
     pub valid_order_queue: Arc<ArrayQueue<ValidOrder>>,
 
-    /// Trade events from ME → Settlement (and back to UBSCore for balance)
+    /// ME results from ME → Settlement
     ///
     /// Producer: ME thread
-    /// Consumer: Settlement/UBSCore thread
-    pub trade_queue: Arc<ArrayQueue<TradeEvent>>,
+    /// Consumer: Settlement thread
+    pub me_result_queue: Arc<ArrayQueue<crate::messages::MEResult>>,
 }
 
 impl PipelineQueues {
@@ -336,7 +336,7 @@ impl PipelineQueues {
         Self {
             order_queue: Arc::new(ArrayQueue::new(ORDER_QUEUE_CAPACITY)),
             valid_order_queue: Arc::new(ArrayQueue::new(VALID_ORDER_QUEUE_CAPACITY)),
-            trade_queue: Arc::new(ArrayQueue::new(TRADE_QUEUE_CAPACITY)),
+            me_result_queue: Arc::new(ArrayQueue::new(TRADE_QUEUE_CAPACITY)),
         }
     }
 
@@ -349,7 +349,7 @@ impl PipelineQueues {
         Self {
             order_queue: Arc::new(ArrayQueue::new(order_capacity)),
             valid_order_queue: Arc::new(ArrayQueue::new(valid_order_capacity)),
-            trade_queue: Arc::new(ArrayQueue::new(trade_capacity)),
+            me_result_queue: Arc::new(ArrayQueue::new(trade_capacity)),
         }
     }
 }
@@ -847,7 +847,7 @@ impl SingleThreadPipeline {
     pub fn has_pending_work(&self) -> bool {
         !self.queues.order_queue.is_empty()
             || !self.queues.valid_order_queue.is_empty()
-            || !self.queues.trade_queue.is_empty()
+            || !self.queues.me_result_queue.is_empty()
     }
 
     /// Request graceful shutdown
@@ -875,9 +875,9 @@ impl SingleThreadPipeline {
         &self.queues.valid_order_queue
     }
 
-    /// Get reference to trade queue (for external processing)
-    pub fn trade_queue(&self) -> &Arc<ArrayQueue<TradeEvent>> {
-        &self.queues.trade_queue
+    /// Get reference to ME result queue (for external processing)
+    pub fn me_result_queue(&self) -> &Arc<ArrayQueue<crate::messages::MEResult>> {
+        &self.queues.me_result_queue
     }
 
     /// Get reference to stats (for external update)
@@ -905,14 +905,14 @@ mod tests {
 
         assert!(queues.order_queue.is_empty());
         assert!(queues.valid_order_queue.is_empty());
-        assert!(queues.trade_queue.is_empty());
+        assert!(queues.me_result_queue.is_empty());
 
         assert_eq!(queues.order_queue.capacity(), ORDER_QUEUE_CAPACITY);
         assert_eq!(
             queues.valid_order_queue.capacity(),
             VALID_ORDER_QUEUE_CAPACITY
         );
-        assert_eq!(queues.trade_queue.capacity(), TRADE_QUEUE_CAPACITY);
+        assert_eq!(queues.me_result_queue.capacity(), TRADE_QUEUE_CAPACITY);
     }
 
     #[test]
