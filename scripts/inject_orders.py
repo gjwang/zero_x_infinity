@@ -181,9 +181,7 @@ def inject_orders(input_file: str, rate_limit: int = 0, limit: int = 0, quiet: b
     start_time = time.time()
     
     # Sequential injection - MUST preserve order!
-    consecutive_errors = 0
-    max_consecutive_errors = 10  # Stop if 10 consecutive connection failures
-    last_error = None
+    # Any failure after retries = exit (order sequence critical)
     
     try:
         for i, order in enumerate(orders):
@@ -200,18 +198,11 @@ def inject_orders(input_file: str, rate_limit: int = 0, limit: int = 0, quiet: b
             stats["submitted"] += 1
             if success:
                 stats["accepted"] += 1
-                consecutive_errors = 0
             else:
                 stats["failed"] += 1
-                consecutive_errors += 1
-                last_error = error
-                print(f"  ❌ Order {i+1} failed: {error}")
-                
-                # Check for too many consecutive errors
-                if consecutive_errors >= max_consecutive_errors:
-                    print(f"\n\u274c ERROR: {max_consecutive_errors} consecutive failures. Last error: {last_error}")
-                    print("Stopping injection to prevent further issues.")
-                    break
+                print(f"  ❌ Order {i+1} failed after retries: {error}")
+                print(f"\n❌ FATAL: Order sequence must be maintained. Exiting.")
+                break  # Exit immediately - order sequence is critical
             
             # Progress logging
             if not quiet and (i + 1) % 1000 == 0:
