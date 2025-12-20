@@ -363,3 +363,25 @@ curl "http://localhost:8080/api/v1/depth?symbol=BTC_USDT&limit=10" | jq .
 - 高频场景：从每笔订单 1 次快照 → 每秒最多 10 次
 - 低频场景：无变化时不发送（dirty flag）
 - ME 开销：最小化（仅设置 flag）
+
+---
+
+## 9. 增量更新方案调研
+
+> **说明**：当前实现为快照模式（Snapshot），增量更新（Incremental Updates）作为未来优化方向。
+
+详细的增量更新方案调研和对比，请参考：
+
+📚 **[Order Book Depth 增量更新方案调研](./0x09-e-orderbook-depth-incremental-research.md)**
+
+**调研内容包括：**
+- Binance Snapshot + Delta 方案
+- Coinbase L2 Update 方案  
+- Kraken Checksum 验证方案
+- 性能对比和推荐方案
+- 实现路线图
+
+**核心结论：**
+- 推荐采用 Binance 方案（生态最大，容错性好）
+- 服务端实现成本低（~2μs diff）
+- 可渐进式实现（先快照，后增量）
