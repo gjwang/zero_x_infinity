@@ -210,16 +210,10 @@ pub fn run_pipeline_multi_thread(
         );
         let s = shutdown.clone();
 
-        // Always use async mode for consistency (creates runtime if needed)
+        // Always use async mode with dedicated runtime
         thread::spawn(move || {
-            if let Some(rt) = rt_handle {
-                // Use existing runtime
-                rt.block_on(service.run_async(s));
-            } else {
-                // Create temporary runtime for async execution
-                let rt = tokio::runtime::Runtime::new().unwrap();
-                rt.block_on(service.run_async(s));
-            }
+            let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+            rt.block_on(service.run_async(s));
         })
     };
     // Wait for completion
