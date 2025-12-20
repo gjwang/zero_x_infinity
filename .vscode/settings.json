@@ -1,0 +1,24 @@
+{
+    "files.exclude": {
+        "logs/": true,
+        "**/target/": true,
+        "**/.git": true,
+        "baseline/": true,
+        "output/": true,
+        "fixtures/test_with_cancel_highbal/": true,
+        "**/*.log": true
+    },
+    "search.exclude": {
+        "logs/": true,
+        "**/target/": true,
+        "baseline/": true,
+        "output/": true,
+        "fixtures/test_with_cancel_highbal/": true
+    },
+    "python.analysis.exclude": [
+        "logs/",
+        "baseline/",
+        "output/",
+        "target/"
+    ]
+}
