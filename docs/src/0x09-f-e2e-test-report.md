@@ -161,18 +161,33 @@ got retryable useReactiveState RPC error on attempt [3 / Infinity]
 ConnectError: [unknown] reactive component f3e07a43-...not found
 ```
 
-### 关键发现
-1. 命令实际**成功完成** (`Exit code 0`)
-2. 崩溃发生在命令**完成后**
-3. 只有复合命令触发
+### 根因分析
 
-### 临时解决方案
-分开执行命令：
+**问题**：`pkill -f "zero_x_infinity"` 不仅 kill 了 Gateway，还 kill 了 IDE 的 language_server！
+
 ```bash
-# 先执行
-pkill -f "zero_x_infinity"
-# IDE 恢复后再执行
-docker exec tdengine taos -s "DROP DATABASE IF EXISTS trading"
+# IDE 进程的命令行包含项目路径：
+/Applications/Antigravity.app/.../language_server_macos_arm \
+  --workspace_id file_Users_gjwang_eclipse_workspace_rust_source_zero_x_infinity
+```
+
+`pkill -f "zero_x_infinity"` 会匹配到这个进程，导致 IDE 崩溃。
+
+### 对比测试结果
+| 命令 | 结果 |
+|------|------|
+| `kill <PID>` | ✅ 不崩溃 |
+| `pkill -f "zero_x_infinity"` | ❌ 崩溃 |
+
+### 修复方案 (commit 8e89167)
+使用更精确的匹配 + kill：
+```bash
+# 不要这样：
+pkill -f "zero_x_infinity"  # 会 kill IDE！
+
+# 应该这样：
+GW_PID=$(pgrep -f "./target/release/zero_x_infinity" | head -1)
+kill "$GW_PID"
 ```
 
 ---
