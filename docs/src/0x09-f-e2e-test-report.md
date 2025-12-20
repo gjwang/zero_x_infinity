@@ -201,16 +201,16 @@ kill "$GW_PID"
 > **Created**: 2025-12-20  
 > **Branch**: `0x09-f-integration-test`
 
-### P1 - 生产阻塞
-| 任务 | 状态 | 预计 |
-|------|------|------|
-| 修复 Orders 持久化 | ⏳ Pending | 0x09-g |
-| 修复 Balances 持久化 | ⏳ Pending | 0x09-g |
+### P1 - 生产阻塞 ✅ 已修复
+| 任务 | 状态 | 完成日期 |
+|------|------|----------|
+| 修复 Orders 持久化 | ✅ 完成 | 2025-12-20 |
+| 修复 Balances 持久化 | ✅ 完成 | 2025-12-20 |
 
 ### P2 - 功能增强
 | 任务 | 状态 | 预计 |
 |------|------|------|
-| 修复 Pipeline MT TDengine 集成 | ⏳ Pending | 0x09-h |
+| 修复 Pipeline MT TDengine 集成 | ✅ 完成 | 2025-12-20 |
 | 添加 `/api/v1/health` 健康检查 API | ⏳ Pending | 0x09-h |
 
 ### P3 - 测试优化
@@ -218,3 +218,43 @@ kill "$GW_PID"
 |------|------|------|
 | 添加持久化自动化测试 | ⏳ Pending | 0x10 |
 | 运行 100K 完整注入测试 | ⏳ Pending | 0x10 |
+
+---
+
+## 8. P1 修复验证 (2025-12-20)
+
+### 8.1 修复内容
+
+**根因分析**: Trade 持久化错误地放在 WsService (实现错误, 违反架构设计)
+
+**修复方案**: 将所有 TDengine 持久化从 WsService 迁移到 SettlementService
+
+### 8.2 修改文件
+
+| 文件 | 改动 |
+|------|------|
+| `src/pipeline_services.rs` | +87: SettlementService 添加 TDengine 持久化 |
+| `src/main.rs` | +73/-44: 共享 db_client 创建在主线程 |
+| `src/persistence/balances.rs` | +32: 添加 `upsert_balance_values` 函数 |
+| `src/persistence/orders.rs` | +9: 修复 `update_order_status` 创建子表 |
+| `src/pipeline_mt.rs` | +6: 添加 rt_handle/db_client 参数 |
+| `src/websocket/service.rs` | -21: 删除 Trade 持久化 |
+
+### 8.3 E2E 验证结果
+
+```bash
+docker exec tdengine taos -s "USE trading; SELECT COUNT(*) FROM orders; SELECT COUNT(*) FROM trades; SELECT COUNT(*) FROM balances"
+```
+
+| 表 | 修复前 | 修复后 | 状态 |
+|----|--------|--------|------|
+| orders | 0 | 43 | ✅ |
+| trades | 1262 | 86 | ✅ |
+| balances | 0 | 295 | ✅ |
+
+### 8.4 Commits
+
+```
+a65dd4d fix(P1): add CREATE TABLE IF NOT EXISTS to update_order_status
+5ed1a0e fix(P1): move TDengine persistence from WsService to SettlementService
+```
