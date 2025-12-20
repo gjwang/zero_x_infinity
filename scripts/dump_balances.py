@@ -54,6 +54,68 @@ def query_balance_via_gateway(user_id: int, asset_id: int) -> Optional[Dict]:
         return None
 
 
+def query_balances_taos_shell(output_path: str, quiet: bool = False) -> int:
+    """
+    Dump balances using taos shell SQL >> redirect (FASTEST method).
+    
+    Uses: SELECT * FROM balances >> "/tmp/dump.csv" (inside container)
+    Then: docker cp tdengine:/tmp/dump.csv output_path
+    
+    Returns: number of records exported
+    """
+    import subprocess
+    import os
+    
+    # Container internal path (must be writable inside container)
+    container_path = "/tmp/balances_dump.csv"
+    abs_output = os.path.abspath(output_path)
+    
+    # SQL to export all balances from super table
+    sql = f'SELECT user_id, asset_id, avail, frozen, lock_version, settle_version FROM balances >> "{container_path}"'
+    
+    if not quiet:
+        print(f"Executing: taos shell SQL >> redirect")
+    
+    try:
+        # Step 1: Run SQL inside container
+        cmd = [
+            'docker', 'exec', 'tdengine',
+            'taos', '-s', f'USE exchange; {sql}'
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        
+        if result.returncode != 0:
+            if not quiet:
+                print(f"  Warning: taos command returned {result.returncode}")
+                if result.stderr:
+                    print(f"  stderr: {result.stderr[:200]}")
+            return 0
+        
+        # Step 2: Copy file from container to host
+        cp_cmd = ['docker', 'cp', f'tdengine:{container_path}', abs_output]
+        cp_result = subprocess.run(cp_cmd, capture_output=True, text=True, timeout=30)
+        
+        if cp_result.returncode != 0:
+            if not quiet:
+                print(f"  Warning: docker cp failed: {cp_result.stderr[:200]}")
+            return 0
+        
+        # Count lines in output file
+        if os.path.exists(abs_output):
+            with open(abs_output, 'r') as f:
+                lines = sum(1 for _ in f)
+            return max(0, lines - 1)  # Subtract header
+        return 0
+    except subprocess.TimeoutExpired:
+        if not quiet:
+            print("  Error: command timed out")
+        return 0
+    except Exception as e:
+        if not quiet:
+            print(f"  Error: {e}")
+        return 0
+
+
 def query_balances_direct(user_ids: List[int], asset_ids: List[int]) -> List[Dict]:
     """
     Query balances directly from TDengine via REST API.
@@ -111,22 +173,34 @@ def main():
     parser.add_argument('--output', '-o', required=True, help='Output CSV file path')
     parser.add_argument('--users', default='0-100', help='User ID range (e.g., 0-100 or 1,2,3)')
     parser.add_argument('--assets', default='1,2', help='Asset IDs (e.g., 1,2)')
-    parser.add_argument('--method', choices=['gateway', 'direct'], default='direct',
-                        help='Query method: gateway (via API) or direct (TDengine REST)')
+    parser.add_argument('--method', choices=['taos', 'gateway', 'direct'], default='gateway',
+                        help='Query method: taos (fastest, requires DB), gateway (via API, default), direct (REST)')
     parser.add_argument('--quiet', '-q', action='store_true', help='Suppress progress output')
     args = parser.parse_args()
     
-    user_ids = parse_range(args.users)
-    asset_ids = parse_range(args.assets)
-    
     if not args.quiet:
-        print(f"Dumping balances: {len(user_ids)} users × {len(asset_ids)} assets")
         print(f"Method: {args.method}")
     
-    # Query balances
-    if args.method == 'direct':
+    # Query balances based on method
+    if args.method == 'taos':
+        # FASTEST: Use taos shell SQL >> redirect
+        count = query_balances_taos_shell(args.output, args.quiet)
+        if not args.quiet:
+            print(f"✅ Exported {count} records to {args.output}")
+        return 0 if count > 0 else 1
+    
+    elif args.method == 'direct':
+        user_ids = parse_range(args.users)
+        asset_ids = parse_range(args.assets)
+        if not args.quiet:
+            print(f"Dumping balances: {len(user_ids)} users × {len(asset_ids)} assets")
         balances = query_balances_direct(user_ids, asset_ids)
-    else:
+    
+    else:  # gateway
+        user_ids = parse_range(args.users)
+        asset_ids = parse_range(args.assets)
+        if not args.quiet:
+            print(f"Dumping balances: {len(user_ids)} users × {len(asset_ids)} assets")
         balances = []
         total = len(user_ids) * len(asset_ids)
         count = 0
@@ -149,7 +223,7 @@ def main():
         if not args.quiet:
             print()
     
-    # Write CSV
+    # Write CSV for gateway/direct methods
     with open(args.output, 'w', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=['user_id', 'asset_id', 'avail', 'frozen', 'lock_version', 'settle_version'])
         writer.writeheader()
