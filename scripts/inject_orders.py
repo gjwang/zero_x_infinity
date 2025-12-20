@@ -87,11 +87,17 @@ def submit_order(order_data: dict) -> bool:
         
         with urllib.request.urlopen(req, timeout=30) as response:
             result = json.loads(response.read().decode())
-            return result.get('code') == 0
-    except urllib.error.HTTPError:
-        return False
-    except Exception:
-        return False
+            return result.get('code') == 0, None
+    except urllib.error.HTTPError as e:
+        return False, f"HTTP {e.code}"
+    except urllib.error.URLError as e:
+        return False, f"Connection: {e.reason}"
+    except ConnectionRefusedError:
+        return False, "Connection refused"
+    except TimeoutError:
+        return False, "Timeout"
+    except Exception as e:
+        return False, str(e)
 
 
 
@@ -130,28 +136,46 @@ def inject_orders(input_file: str, rate_limit: int = 0, limit: int = 0, quiet: b
     start_time = time.time()
     
     # Sequential injection - MUST preserve order!
-    for i, order in enumerate(orders):
-        # Rate limiting
-        if rate_limit > 0:
-            expected_time = start_time + (i / rate_limit)
-            sleep_time = expected_time - time.time()
-            if sleep_time > 0:
-                time.sleep(sleep_time)
-        
-        # Submit order
-        success = submit_order(order)
-        
-        stats["submitted"] += 1
-        if success:
-            stats["accepted"] += 1
-        else:
-            stats["failed"] += 1
-        
-        # Progress logging
-        if not quiet and (i + 1) % 1000 == 0:
-            elapsed = time.time() - start_time
-            rate = (i + 1) / elapsed if elapsed > 0 else 0
-            print(f"  Progress: {i + 1}/{total} ({100*(i+1)//total}%) - {rate:.0f} orders/sec")
+    consecutive_errors = 0
+    max_consecutive_errors = 10  # Stop if 10 consecutive connection failures
+    last_error = None
+    
+    try:
+        for i, order in enumerate(orders):
+            # Rate limiting
+            if rate_limit > 0:
+                expected_time = start_time + (i / rate_limit)
+                sleep_time = expected_time - time.time()
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
+            
+            # Submit order with retry
+            success, error = submit_order(order)
+            
+            stats["submitted"] += 1
+            if success:
+                stats["accepted"] += 1
+                consecutive_errors = 0
+            else:
+                stats["failed"] += 1
+                consecutive_errors += 1
+                last_error = error
+                
+                # Check for too many consecutive errors
+                if consecutive_errors >= max_consecutive_errors:
+                    print(f"\n\u274c ERROR: {max_consecutive_errors} consecutive failures. Last error: {last_error}")
+                    print("Stopping injection to prevent further issues.")
+                    break
+            
+            # Progress logging
+            if not quiet and (i + 1) % 1000 == 0:
+                elapsed = time.time() - start_time
+                rate = (i + 1) / elapsed if elapsed > 0 else 0
+                print(f"  Progress: {i + 1}/{total} ({100*(i+1)//total}%) - {rate:.0f} orders/sec")
+    
+    except KeyboardInterrupt:
+        print(f"\n\n⚠️  Interrupted by user at {stats['submitted']}/{total} orders")
+        # Continue to print summary
     
     elapsed = time.time() - start_time
     rate = total / elapsed if elapsed > 0 else 0
