@@ -24,10 +24,19 @@ import json
 import socket
 import sys
 import time
-import urllib.request
-import urllib.error
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
+
+try:
+    import requests
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
+    USE_REQUESTS = True
+except ImportError:
+    import urllib.request
+    import urllib.error
+    USE_REQUESTS = False
+    print("⚠️  requests library not found, using urllib (slower)")
 
 # Configuration
 GATEWAY_URL = "http://localhost:8080"
@@ -40,6 +49,24 @@ stats = {
     "failed": 0,
 }
 stats_lock = Lock()
+
+# Global HTTP session for connection reuse (Keep-Alive)
+_session = None
+
+def get_session():
+    """Get or create HTTP session with connection pooling."""
+    global _session
+    if _session is None and USE_REQUESTS:
+        _session = requests.Session()
+        # Configure retry strategy
+        adapter = HTTPAdapter(
+            pool_connections=10,
+            pool_maxsize=10,
+            max_retries=0  # We handle retries manually
+        )
+        _session.mount('http://', adapter)
+        _session.mount('https://', adapter)
+    return _session
 
 
 def safe_sleep(seconds: float) -> bool:
@@ -95,7 +122,6 @@ def submit_order(order_data: dict) -> bool:
     
     # Errors that are safe to retry (network/transient issues)
     RETRYABLE_ERRORS = (
-        urllib.error.URLError,  # Connection issues
         socket.timeout,         # Timeout
         ConnectionRefusedError, # Gateway not ready
         ConnectionResetError,   # Connection dropped
@@ -106,54 +132,62 @@ def submit_order(order_data: dict) -> bool:
     
     for attempt in range(max_retries + 1):
         try:
-            data = json.dumps(payload).encode('utf-8')
-            req = urllib.request.Request(url, data=data)
-            req.add_header('Content-Type', 'application/json')
-            req.add_header('X-User-ID', str(user_id))
+            headers = {
+                'Content-Type': 'application/json',
+                'X-User-ID': str(user_id)
+            }
             
-            with urllib.request.urlopen(req, timeout=30) as response:
-                result = json.loads(response.read().decode())
-                return result.get('code') == 0, None
+            if USE_REQUESTS:
+                # Use requests with session for Keep-Alive
+                session = get_session()
+                response = session.post(url, json=payload, headers=headers, timeout=30)
                 
-        except urllib.error.HTTPError as e:
-            # HTTP errors: only retry 503 (backpressure)
-            if e.code == 503 and attempt < max_retries:
-                print(f"  ⏳ Retry {attempt+1}/{max_retries}: HTTP 503 (backpressure)")
-                if not safe_sleep(retry_delay):
-                    return False, "Interrupted during retry"
-                retry_delay = min(retry_delay * 2, max_delay)
-                continue
-            # Non-retryable HTTP error
-            try:
-                body = e.read().decode()[:200]
-            except:
-                body = ""
-            return False, f"HTTP {e.code}: {body}"
-            
-        except RETRYABLE_ERRORS as e:
-            # Network error - retry with logging
-            if attempt < max_retries:
-                print(f"  ⏳ Retry {attempt+1}/{max_retries}: {type(e).__name__}")
-                if not safe_sleep(retry_delay):
-                    return False, "Interrupted during retry"
-                retry_delay = min(retry_delay * 2, max_delay)
-                continue
-            return False, f"{type(e).__name__}: {e}"
-        
-        except KeyboardInterrupt:
-            # Gateway blocking during socket.connect() - retry like network error
-            if attempt < max_retries:
-                print(f"  ⏳ Retry {attempt+1}/{max_retries}: Gateway blocked (socket)")
-                if not safe_sleep(retry_delay):
-                    return False, "Interrupted during retry"
-                retry_delay = min(retry_delay * 2, max_delay)
-                continue
-            return False, "Gateway blocked (max retries)"
-            
+                if response.status_code == 503 and attempt < max_retries:
+                    print(f"  ⏳ Retry {attempt+1}/{max_retries}: HTTP 503 (backpressure)")
+                    if not safe_sleep(retry_delay):
+                        return False, "Interrupted during retry"
+                    retry_delay = min(retry_delay * 2, max_delay)
+                    continue
+                
+                if response.status_code >= 400:
+                    return False, f"HTTP {response.status_code}: {response.text[:200]}"
+                
+                result = response.json()
+                return result.get('code') == 0, None
+            else:
+                # Fallback to urllib
+                data = json.dumps(payload).encode('utf-8')
+                req = urllib.request.Request(url, data=data)
+                req.add_header('Content-Type', 'application/json')
+                req.add_header('X-User-ID', str(user_id))
+                
+                with urllib.request.urlopen(req, timeout=30) as response:
+                    result = json.loads(response.read().decode())
+                    return result.get('code') == 0, None
+                
         except Exception as e:
-            # Unknown error - exit immediately, don't hide it
-            print(f"\n❌ FATAL: {type(e).__name__}: {e}")
-            raise  # Re-raise to trigger traceback and exit
+            # Handle request exceptions - check if retryable
+            error_name = type(e).__name__
+            is_retryable = (
+                isinstance(e, (socket.timeout, ConnectionRefusedError, 
+                              ConnectionResetError, BrokenPipeError, 
+                              TimeoutError, OSError)) or
+                (USE_REQUESTS and hasattr(requests, 'exceptions') and 
+                 isinstance(e, requests.exceptions.RequestException)) or
+                (not USE_REQUESTS and hasattr(e, 'code') and e.code == 503)
+            )
+            
+            if is_retryable and attempt < max_retries:
+                print(f"  ⏳ Retry {attempt+1}/{max_retries}: {error_name}")
+                if not safe_sleep(retry_delay):
+                    return False, "Interrupted during retry"
+                retry_delay = min(retry_delay * 2, max_delay)
+                continue
+            
+            # Non-retryable error or max retries exceeded
+            if isinstance(e, KeyboardInterrupt):
+                return False, "Gateway blocked (max retries)"
+            return False, f"{error_name}: {e}"
     
     return False, "Max retries exceeded"
 
