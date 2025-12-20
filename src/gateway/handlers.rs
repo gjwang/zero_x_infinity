@@ -11,12 +11,95 @@ use crate::pipeline::OrderAction;
 use super::state::AppState;
 use super::types::{ApiResponse, CancelOrderRequest, ClientOrder, OrderResponseData, error_codes};
 
+use crate::symbol_manager::SymbolManager;
+
 // ============================================================================
-// Format Helpers (local to handlers)
+// Depth Formatter - Encapsulated to prevent parameter errors
 // ============================================================================
 
-/// Format price with display decimals
-fn format_price(value: u64, display_decimals: u32) -> String {
+/// Depth data formatter that encapsulates conversion logic
+///
+/// This prevents parameter errors by internally fetching the correct
+/// decimals and display_decimals from symbol_mgr.
+pub struct DepthFormatter<'a> {
+    symbol_mgr: &'a SymbolManager,
+}
+
+impl<'a> DepthFormatter<'a> {
+    pub fn new(symbol_mgr: &'a SymbolManager) -> Self {
+        Self { symbol_mgr }
+    }
+
+    /// Format quantity for a given symbol
+    ///
+    /// Automatically fetches base_asset.decimals and display_decimals
+    /// from symbol_mgr, preventing parameter errors.
+    pub fn format_qty(&self, value: u64, symbol_id: u32) -> Result<String, String> {
+        let symbol = self
+            .symbol_mgr
+            .get_symbol_info_by_id(symbol_id)
+            .ok_or_else(|| format!("Symbol {} not found", symbol_id))?;
+
+        let asset = self
+            .symbol_mgr
+            .assets
+            .get(&symbol.base_asset_id)
+            .ok_or_else(|| format!("Asset {} not found", symbol.base_asset_id))?;
+
+        Ok(format_qty_internal(
+            value,
+            asset.decimals,
+            asset.display_decimals,
+        ))
+    }
+
+    /// Format price for a given symbol
+    pub fn format_price(&self, value: u64, symbol_id: u32) -> Result<String, String> {
+        let symbol = self
+            .symbol_mgr
+            .get_symbol_info_by_id(symbol_id)
+            .ok_or_else(|| format!("Symbol {} not found", symbol_id))?;
+
+        Ok(format_price_internal(value, symbol.price_display_decimal))
+    }
+
+    /// Format depth data (bids/asks) for a symbol
+    pub fn format_depth_data(
+        &self,
+        bids: &[(u64, u64)],
+        asks: &[(u64, u64)],
+        symbol_id: u32,
+    ) -> Result<(Vec<[String; 2]>, Vec<[String; 2]>), String> {
+        let formatted_bids: Vec<[String; 2]> = bids
+            .iter()
+            .map(|(p, q)| {
+                Ok([
+                    self.format_price(*p, symbol_id)?,
+                    self.format_qty(*q, symbol_id)?,
+                ])
+            })
+            .collect::<Result<_, String>>()?;
+
+        let formatted_asks: Vec<[String; 2]> = asks
+            .iter()
+            .map(|(p, q)| {
+                Ok([
+                    self.format_price(*p, symbol_id)?,
+                    self.format_qty(*q, symbol_id)?,
+                ])
+            })
+            .collect::<Result<_, String>>()?;
+
+        Ok((formatted_bids, formatted_asks))
+    }
+}
+
+// ============================================================================
+// Internal Format Helpers (private)
+// ============================================================================
+
+/// Format price with display decimals (internal use only)
+fn format_price_internal(value: u64, display_decimals: u32) -> String {
     let divisor = 10u64.pow(display_decimals);
     format!(
         "{:.prec$}",
@@ -25,8 +108,8 @@ fn format_price(value: u64, display_decimals: u32) -> String {
     )
 }
 
-/// Format quantity with display decimals
-fn format_qty(value: u64, decimals: u32, display_decimals: u32) -> String {
+/// Format quantity with display decimals (internal use only)
+fn format_qty_internal(value: u64, decimals: u32, display_decimals: u32) -> String {
     let divisor = 10u64.pow(decimals);
     format!(
         "{:.prec$}",
@@ -594,8 +677,8 @@ pub async fn get_depth(
             .iter()
             .map(|(p, q)| {
                 [
-                    format_price(*p, price_decimals),
-                    format_qty(*q, base_asset.decimals, base_asset.display_decimals),
+                    format_price_internal(*p, price_decimals),
+                    format_qty_internal(*q, base_asset.decimals, base_asset.display_decimals),
                 ]
             })
             .collect(),
@@ -604,8 +687,8 @@ pub async fn get_depth(
             .iter()
             .map(|(p, q)| {
                 [
-                    format_price(*p, price_decimals),
-                    format_qty(*q, base_asset.decimals, base_asset.display_decimals),
+                    format_price_internal(*p, price_decimals),
+                    format_qty_internal(*q, base_asset.decimals, base_asset.display_decimals),
                 ]
             })
             .collect(),
@@ -622,110 +705,110 @@ mod tests {
     #[test]
     fn test_format_qty_normal_cases() {
         // BTC: decimals=8, display_decimals=6
-        assert_eq!(format_qty(100000000, 8, 6), "1.000000");
-        assert_eq!(format_qty(50000000, 8, 6), "0.500000");
-        assert_eq!(format_qty(123456789, 8, 6), "1.234568"); // 四舍五入
+        assert_eq!(format_qty_internal(100000000, 8, 6), "1.000000");
+        assert_eq!(format_qty_internal(50000000, 8, 6), "0.500000");
+        assert_eq!(format_qty_internal(123456789, 8, 6), "1.234568"); // 四舍五入
 
         // ETH: decimals=8, display_decimals=4
-        assert_eq!(format_qty(100000000, 8, 4), "1.0000");
-        assert_eq!(format_qty(50000000, 8, 4), "0.5000");
+        assert_eq!(format_qty_internal(100000000, 8, 4), "1.0000");
+        assert_eq!(format_qty_internal(50000000, 8, 4), "0.5000");
 
         // USDT: decimals=8, display_decimals=4
-        assert_eq!(format_qty(1000000000, 8, 4), "10.0000");
+        assert_eq!(format_qty_internal(1000000000, 8, 4), "10.0000");
     }
 
     #[test]
     fn test_format_qty_boundary_cases() {
         // 零值
-        assert_eq!(format_qty(0, 8, 6), "0.000000");
-        assert_eq!(format_qty(0, 8, 4), "0.0000");
+        assert_eq!(format_qty_internal(0, 8, 6), "0.000000");
+        assert_eq!(format_qty_internal(0, 8, 4), "0.0000");
 
         // 最小值（1 unit）
-        assert_eq!(format_qty(1, 8, 6), "0.000000"); // 小于 display_decimals，显示为 0
-        assert_eq!(format_qty(1, 8, 8), "0.00000001");
+        assert_eq!(format_qty_internal(1, 8, 6), "0.000000"); // 小于 display_decimals，显示为 0
+        assert_eq!(format_qty_internal(1, 8, 8), "0.00000001");
 
         // 大数值
-        assert_eq!(format_qty(1000000000000, 8, 6), "10000.000000");
-        assert_eq!(format_qty(u64::MAX, 8, 6), "184467440737.095520"); // u64::MAX / 10^8 (浮点精度)
+        assert_eq!(format_qty_internal(1000000000000, 8, 6), "10000.000000");
+        assert_eq!(format_qty_internal(u64::MAX, 8, 6), "184467440737.095520"); // u64::MAX / 10^8 (浮点精度)
     }
 
     #[test]
     fn test_format_qty_precision_edge_cases() {
         // display_decimals < decimals（常见情况）
-        assert_eq!(format_qty(123456789, 8, 6), "1.234568");
-        assert_eq!(format_qty(123456789, 8, 4), "1.2346");
-        assert_eq!(format_qty(123456789, 8, 2), "1.23");
+        assert_eq!(format_qty_internal(123456789, 8, 6), "1.234568");
+        assert_eq!(format_qty_internal(123456789, 8, 4), "1.2346");
+        assert_eq!(format_qty_internal(123456789, 8, 2), "1.23");
 
         // display_decimals == decimals
-        assert_eq!(format_qty(123456789, 8, 8), "1.23456789");
+        assert_eq!(format_qty_internal(123456789, 8, 8), "1.23456789");
 
         // display_decimals > decimals（不常见，但应该正确处理）
-        assert_eq!(format_qty(12345, 4, 6), "1.234500");
-        assert_eq!(format_qty(12345, 4, 8), "1.23450000");
+        assert_eq!(format_qty_internal(12345, 4, 6), "1.234500");
+        assert_eq!(format_qty_internal(12345, 4, 8), "1.23450000");
     }
 
     #[test]
     fn test_format_qty_rounding() {
         // 测试四舍五入
-        assert_eq!(format_qty(123456789, 8, 6), "1.234568"); // .789 -> .68
-        assert_eq!(format_qty(123454999, 8, 6), "1.234550"); // .4999 -> .50
-        assert_eq!(format_qty(123455000, 8, 6), "1.234550"); // .5000 -> .50
-        assert_eq!(format_qty(123455001, 8, 6), "1.234550"); // .5001 -> .50
+        assert_eq!(format_qty_internal(123456789, 8, 6), "1.234568"); // .789 -> .68
+        assert_eq!(format_qty_internal(123454999, 8, 6), "1.234550"); // .4999 -> .50
+        assert_eq!(format_qty_internal(123455000, 8, 6), "1.234550"); // .5000 -> .50
+        assert_eq!(format_qty_internal(123455001, 8, 6), "1.234550"); // .5001 -> .50
     }
 
     #[test]
     fn test_format_qty_different_decimals() {
         // decimals=6 (如某些代币)
-        assert_eq!(format_qty(1000000, 6, 4), "1.0000");
-        assert_eq!(format_qty(500000, 6, 4), "0.5000");
+        assert_eq!(format_qty_internal(1000000, 6, 4), "1.0000");
+        assert_eq!(format_qty_internal(500000, 6, 4), "0.5000");
 
         // decimals=18 (如 ETH 链上)
-        assert_eq!(format_qty(1000000000000000000, 18, 6), "1.000000");
-        assert_eq!(format_qty(500000000000000000, 18, 6), "0.500000");
+        assert_eq!(format_qty_internal(1000000000000000000, 18, 6), "1.000000");
+        assert_eq!(format_qty_internal(500000000000000000, 18, 6), "0.500000");
 
         // decimals=2 (如某些稳定币)
-        assert_eq!(format_qty(100, 2, 2), "1.00");
-        assert_eq!(format_qty(50, 2, 2), "0.50");
+        assert_eq!(format_qty_internal(100, 2, 2), "1.00");
+        assert_eq!(format_qty_internal(50, 2, 2), "0.50");
     }
 
     #[test]
     fn test_format_qty_real_world_scenarios() {
         // BTC 交易场景
         // 0.1 BTC = 10000000 (decimals=8)
-        assert_eq!(format_qty(10000000, 8, 6), "0.100000");
+        assert_eq!(format_qty_internal(10000000, 8, 6), "0.100000");
 
         // 0.00123456 BTC
-        assert_eq!(format_qty(123456, 8, 6), "0.001235");
+        assert_eq!(format_qty_internal(123456, 8, 6), "0.001235");
 
         // ETH 交易场景
         // 1.5 ETH = 150000000 (decimals=8)
-        assert_eq!(format_qty(150000000, 8, 4), "1.5000");
+        assert_eq!(format_qty_internal(150000000, 8, 4), "1.5000");
 
         // USDT 交易场景
         // 1000 USDT = 100000000000 (decimals=8)
-        assert_eq!(format_qty(100000000000, 8, 4), "1000.0000");
+        assert_eq!(format_qty_internal(100000000000, 8, 4), "1000.0000");
     }
 
     #[test]
     fn test_format_price_normal_cases() {
         // BTC/USDT: price_decimals=2
-        assert_eq!(format_price(3000000, 2), "30000.00");
-        assert_eq!(format_price(2990000, 2), "29900.00");
+        assert_eq!(format_price_internal(3000000, 2), "30000.00");
+        assert_eq!(format_price_internal(2990000, 2), "29900.00");
 
         // 小数价格
-        assert_eq!(format_price(12345, 2), "123.45");
-        assert_eq!(format_price(100, 2), "1.00");
+        assert_eq!(format_price_internal(12345, 2), "123.45");
+        assert_eq!(format_price_internal(100, 2), "1.00");
     }
 
     #[test]
     fn test_format_price_boundary_cases() {
         // 零值
-        assert_eq!(format_price(0, 2), "0.00");
+        assert_eq!(format_price_internal(0, 2), "0.00");
 
         // 最小值
-        assert_eq!(format_price(1, 2), "0.01");
+        assert_eq!(format_price_internal(1, 2), "0.01");
 
         // 大数值
-        assert_eq!(format_price(10000000, 2), "100000.00");
+        assert_eq!(format_price_internal(10000000, 2), "100000.00");
     }
 }
