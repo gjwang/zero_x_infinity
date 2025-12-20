@@ -124,6 +124,9 @@ def submit_order(order_data: dict) -> bool:
             return False, f"OS error: {e}"
         except TimeoutError:
             return False, "Timeout"
+        except KeyboardInterrupt:
+            # This can happen during socket.connect() if Gateway is slow/blocked
+            return False, "Interrupted during connect (Gateway not responding?)"
         except Exception as e:
             return False, f"Unexpected: {type(e).__name__}: {e}"
     
