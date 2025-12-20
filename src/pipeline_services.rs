@@ -683,8 +683,6 @@ impl SettlementService {
 
         tokio::spawn(async move {
             let mut batch: Vec<crate::messages::BalanceEvent> = Vec::with_capacity(BATCH_SIZE);
-            // Reusable SQL buffer (zero allocation in hot path)
-            let mut sql_buffer = String::with_capacity(BATCH_SIZE * 150);
 
             loop {
                 batch.clear();
@@ -699,61 +697,18 @@ impl SettlementService {
                 }
 
                 if !batch.is_empty() {
-                    // TDengine: batch persist (direct await, no block_on!)
+                    // TDengine: batch persist using shared function
                     if let Some(ref db) = db_client {
                         let start = std::time::Instant::now();
 
-                        // Build SQL with reusable buffer
-                        sql_buffer.clear();
-                        sql_buffer.push_str("INSERT INTO ");
-                        let now_us = std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap()
-                            .as_micros() as i64;
-
-                        for (i, event) in batch.iter().enumerate() {
-                            use std::fmt::Write;
-                            write!(
-                                sql_buffer,
-                                "balances_{}_{} VALUES({}, {}, {}, 0, 0) ",
-                                event.user_id,
-                                event.asset_id,
-                                now_us + i as i64,
-                                event.avail_after,
-                                event.frozen_after
-                            )
-                            .unwrap();
-                        }
-
-                        // Direct await (no block_on overhead!)
-                        if let Err(e) = db.taos().exec(&sql_buffer).await {
-                            // Auto-create fallback
-                            let err_str = e.to_string();
-                            if err_str.contains("Table does not exist")
-                                || err_str.contains("0x2662")
-                            {
-                                let mut created = std::collections::HashSet::new();
-                                for event in &batch {
-                                    let key = (event.user_id, event.asset_id);
-                                    if !created.contains(&key) {
-                                        let create_sql = format!(
-                                            "CREATE TABLE IF NOT EXISTS balances_{}_{} USING balances TAGS ({}, {})",
-                                            event.user_id,
-                                            event.asset_id,
-                                            event.user_id,
-                                            event.asset_id
-                                        );
-                                        let _ = db.taos().exec(&create_sql).await;
-                                        created.insert(key);
-                                    }
-                                }
-                                // Retry
-                                if let Err(e) = db.taos().exec(&sql_buffer).await {
-                                    tracing::error!("[PERSIST] async batch balance failed: {}", e);
-                                }
-                            } else {
-                                tracing::error!("[PERSIST] async batch balance failed: {}", e);
-                            }
+                        // Call the shared batch insert function (includes auto-create fallback)
+                        if let Err(e) = crate::persistence::balances::batch_upsert_balance_events(
+                            db.taos(),
+                            &batch,
+                        )
+                        .await
+                        {
+                            tracing::error!("[PERSIST] async batch balance failed: {}", e);
                         }
 
                         if start.elapsed().as_millis() > 5 {
