@@ -100,110 +100,53 @@ pub async fn upsert_balance_values(
     Ok(())
 }
 
-/// Batch upsert balance events using Stmt parameter binding
+/// Fast batch upsert balance events using single SQL statement
 ///
-/// Uses prepared statement with parameter binding for better performance.
-/// Skips SQL parsing by sending binary data directly.
-/// Uses static cache to avoid repeated CREATE TABLE calls.
+/// Optimized for high-frequency writes:
+/// - One network round-trip (single exec() call)
+/// - No Mutex locks
+/// - Pre-allocated string buffer
+/// - No Stmt set_tbname overhead
+///
+/// Note: Tables must exist (created during user onboarding, not here)
 pub async fn batch_upsert_balance_events(
     taos: &Taos,
     events: &[crate::messages::BalanceEvent],
 ) -> Result<()> {
-    use once_cell::sync::Lazy;
-    use std::sync::Mutex;
-    use taos::AsyncBindable;
-    use taos_query::prelude::ColumnView;
-
-    // Cache of already-created tables (survives across calls)
-    static CREATED_TABLES: Lazy<Mutex<std::collections::HashSet<(u64, u32)>>> =
-        Lazy::new(|| Mutex::new(std::collections::HashSet::new()));
+    use std::fmt::Write;
 
     if events.is_empty() {
         return Ok(());
     }
 
-    // Find tables that need creation (not in cache)
-    let mut new_tables: Vec<(u64, u32)> = Vec::new();
-    {
-        let created = CREATED_TABLES.lock().unwrap();
-        for event in events {
-            let key = (event.user_id, event.asset_id);
-            if !created.contains(&key) && !new_tables.contains(&key) {
-                new_tables.push(key);
-            }
-        }
+    // Pre-allocate buffer: ~100 bytes per record
+    let mut sql = String::with_capacity(events.len() * 100 + 20);
+    sql.push_str("INSERT INTO ");
+
+    let now_us = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_micros() as i64;
+
+    for (i, event) in events.iter().enumerate() {
+        // Each record: balances_<user>_<asset> VALUES(<ts>, <avail>, <frozen>, 0, 0)
+        write!(
+            sql,
+            "balances_{}_{} VALUES({}, {}, {}, 0, 0) ",
+            event.user_id,
+            event.asset_id,
+            now_us + i as i64,
+            event.avail_after,
+            event.frozen_after
+        )
+        .unwrap();
     }
 
-    // Create only NEW subtables
-    for (user_id, asset_id) in &new_tables {
-        let table_name = format!("balances_{}_{}", user_id, asset_id);
-        let create_subtable = format!(
-            "CREATE TABLE IF NOT EXISTS {} USING balances TAGS ({}, {})",
-            table_name, user_id, asset_id
-        );
-        if taos.exec(&create_subtable).await.is_ok() {
-            // Add to cache on success
-            CREATED_TABLES.lock().unwrap().insert((*user_id, *asset_id));
-        }
-    }
-
-    // Group events by (user_id, asset_id) for batch binding
-    let mut grouped: std::collections::HashMap<(u64, u32), Vec<&crate::messages::BalanceEvent>> =
-        std::collections::HashMap::new();
-    for event in events {
-        grouped
-            .entry((event.user_id, event.asset_id))
-            .or_default()
-            .push(event);
-    }
-
-    // Use Stmt for each table group
-    // balances schema: ts TIMESTAMP, avail BIGINT UNSIGNED, frozen BIGINT UNSIGNED,
-    //                  lock_version BIGINT, settle_version BIGINT
-    let mut stmt: taos::Stmt = <taos::Stmt as taos::AsyncBindable<Taos>>::init(taos)
+    // Single network call - TDengine distributes to vnodes
+    taos.exec(&sql)
         .await
-        .map_err(|e| anyhow::anyhow!("Stmt init failed: {}", e))?;
-    stmt.prepare("INSERT INTO ? VALUES(?, ?, ?, ?, ?)")
-        .await
-        .map_err(|e| anyhow::anyhow!("Stmt prepare failed: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Batch balance insert failed: {}", e))?;
 
-    for ((user_id, asset_id), table_events) in grouped {
-        let table_name = format!("balances_{}_{}", user_id, asset_id);
-        stmt.set_tbname(&table_name)
-            .await
-            .map_err(|e| anyhow::anyhow!("Stmt set_tbname failed: {}", e))?;
-
-        // Build columns for batch binding
-        let now_us = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_micros() as i64;
-
-        let timestamps: Vec<i64> = (0..table_events.len()).map(|i| now_us + i as i64).collect();
-        let avails: Vec<u64> = table_events.iter().map(|e| e.avail_after).collect();
-        let frozens: Vec<u64> = table_events.iter().map(|e| e.frozen_after).collect();
-        let lock_versions: Vec<u64> = vec![0; table_events.len()];
-        let settle_versions: Vec<u64> = vec![0; table_events.len()];
-
-        let params = vec![
-            ColumnView::from_micros_timestamp(timestamps),
-            ColumnView::from_unsigned_big_ints(avails),
-            ColumnView::from_unsigned_big_ints(frozens),
-            ColumnView::from_unsigned_big_ints(lock_versions),
-            ColumnView::from_unsigned_big_ints(settle_versions),
-        ];
-
-        stmt.bind(&params)
-            .await
-            .map_err(|e| anyhow::anyhow!("Stmt bind failed: {}", e))?;
-        stmt.add_batch()
-            .await
-            .map_err(|e| anyhow::anyhow!("Stmt add_batch failed: {}", e))?;
-    }
-
-    stmt.execute()
-        .await
-        .map_err(|e| anyhow::anyhow!("Stmt execute failed: {}", e))?;
     Ok(())
 }
 
