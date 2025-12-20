@@ -1,0 +1,143 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [ main, 'feature/*', '0x*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      run_full_tests:
+        description: 'Run full 1.3M dataset tests'
+        required: false
+        default: 'false'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # Quick tests - runs on every push
+  quick-tests:
+    name: Quick Tests
+    runs-on: ubuntu-latest
+    
+    services:
+      tdengine:
+        image: tdengine/tdengine:latest
+        ports:
+          - 6030:6030
+          - 6041:6041
+        options: >-
+          --health-cmd "taos -s 'SELECT SERVER_VERSION();'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+      
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      
+      - name: Clippy
+        run: cargo clippy -- -D warnings
+      
+      - name: Build
+        run: cargo build --release
+      
+      - name: Unit Tests
+        run: cargo test
+      
+      - name: Integration Tests (Quick Mode)
+        run: ./scripts/test_ci.sh --quick
+        env:
+          CI: true
+          SKIP_LARGE_DATASET: 1
+      
+      - name: Upload test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-reports
+          path: test-reports/
+          retention-days: 7
+
+  # Full tests - runs on main branch or manually triggered
+  full-tests:
+    name: Full Integration Tests
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.event.inputs.run_full_tests == 'true'
+    
+    services:
+      tdengine:
+        image: tdengine/tdengine:latest
+        ports:
+          - 6030:6030
+          - 6041:6041
+        options: >-
+          --health-cmd "taos -s 'SELECT SERVER_VERSION();'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Build
+        run: cargo build --release
+      
+      - name: Full Integration Tests (including 1.3M dataset)
+        run: ./scripts/test_ci.sh --full
+        timeout-minutes: 90
+        env:
+          CI: true
+      
+      - name: Upload test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: full-test-reports
+          path: test-reports/
+          retention-days: 30
+      
+      - name: Upload performance baseline
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-baseline
+          path: |
+            output/t2_summary.txt
+            output/t2_perf.txt
+          retention-days: 90
