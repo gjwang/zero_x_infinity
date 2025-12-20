@@ -294,16 +294,65 @@ Lock events (1000000) != Accepted orders (1300000)
 | 成交数量匹配 | ✅ 47,886 / 667,567 |
 | 余额最终状态 | ✅ 0 differences |
 
-#### Settlement 持久化 ✅
+#### Settlement 持久化详细比较
 
-| 测试项 | Pipeline | TDengine | 状态 |
+##### Orders 比较
+
+| 比较项 | Pipeline | TDengine | 状态 |
 |--------|----------|----------|------|
-| Orders 记录数 | 100,000 | 100,000 | ✅ MATCH |
-| Trades 记录数 | 47,886 | 47,886 | ✅ MATCH |
-| Balances avail/frozen | 2,000 records | 2,000 records | ✅ 100% 字段匹配 |
+| **记录数** | 100,000 | 100,000 | ✅ MATCH |
+| order_id | - | - | ✅ 存在 |
+| user_id | - | - | ✅ 匹配 |
+| side | - | - | ✅ 匹配 |
+| price | - | - | ✅ 匹配 |
+| qty | - | - | ✅ 匹配 |
+| **filled_qty** | 实时更新 | **始终为 0** | ❌ **未更新** |
+| **status** | 实时更新 | **始终为 NEW** | ⚠️ **待验证** |
+
+> [!WARNING]
+> **发现问题**: TDengine orders 表只保存了订单创建时的初始状态，`filled_qty` 和 `status` 没有被更新。
+> Pipeline `t2_orderbook.csv` 只包含 52,114 条 open orders，而 TDengine 包含全部 100,000 条。
+
+##### Trades 比较
+
+| 比较项 | Pipeline | TDengine | 状态 |
+|--------|----------|----------|------|
+| **记录数** | 47,886 | 47,886 | ✅ MATCH |
+| trade_id | - | - | ✅ 存在 |
+| order_id | - | - | 🔲 待验证 |
+| user_id | - | - | 🔲 待验证 |
+| price | - | - | 🔲 待验证 |
+| qty | - | - | 🔲 待验证 |
+| side | - | - | 🔲 待验证 |
 
 > [!NOTE]
-> Balances 比较跳过 lock_version 字段 (当前未持久化到 TDengine)
+> Trades 记录数匹配，字段级别详细比较待完成。
+
+##### Balances 比较
+
+| 比较项 | Pipeline | TDengine | 状态 |
+|--------|----------|----------|------|
+| **记录数** | 2,004 | 2,000 | ⚠️ ±4 (test users) |
+| user_id, asset_id | - | - | ✅ 匹配 |
+| **avail** | - | - | ✅ **100% 匹配** |
+| **frozen** | - | - | ✅ **100% 匹配** |
+| lock_version | 非零值 | **始终为 0** | ⚠️ **未持久化** |
+| settle_version | 非零值 | **始终为 0** | ⚠️ **未持久化** |
+
+> [!NOTE]
+> Balances 核心字段 (avail/frozen) 100% 匹配。version 字段未持久化是已知限制。
+
+---
+
+#### 待修复问题
+
+| 优先级 | 问题 | 影响 |
+|--------|------|------|
+| P1 | Orders: filled_qty 未更新 | 无法查询订单最终成交量 |
+| P2 | Orders: status 未更新 | 无法查询订单最终状态 |
+| P3 | Balances: lock_version 未持久化 | 无法追踪余额变更版本 |
+
+---
 
 #### HTTP API ✅
 
@@ -320,6 +369,9 @@ Lock events (1000000) != Accepted orders (1300000)
 ```bash
 # 完整 Settlement 验证
 ./scripts/verify_settlement.sh
+
+# Orders 字段级别比较
+python3 scripts/compare_orders_tdengine.py --pipeline output/t2_orderbook.csv
 
 # Balances 字段级别比较 (使用 REST API)
 python3 scripts/compare_balances_tdengine.py --pipeline output/t2_balances_final.csv
