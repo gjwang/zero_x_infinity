@@ -204,7 +204,6 @@ pub fn run_pipeline_multi_thread(
             services.ledger,
             queues.clone(),
             stats.clone(),
-            rt_handle.clone(),
             db_client.clone(),
             active_symbol_id,
         );
