@@ -269,10 +269,35 @@ fn main() {
         let mut ubscore =
             UBSCore::new((*symbol_mgr).clone(), wal_config).expect("Failed to create UBSCore");
 
-        // Transfer initial balances to UBSCore
+        // Transfer initial balances to UBSCore and pre-create TDengine tables
         let symbol_info = symbol_mgr.get_symbol_info_by_id(active_symbol_id).unwrap();
         let base_id = symbol_info.base_asset_id;
         let quote_id = symbol_info.quote_asset_id;
+
+        // Pre-create balance tables in TDengine (if connected)
+        if let Some(ref db) = db_client {
+            let db_clone = db.clone();
+            let accounts_clone: Vec<(u64, u32)> = accounts
+                .keys()
+                .copied()
+                .flat_map(|uid| [base_id, quote_id].map(move |aid| (uid, aid)))
+                .collect();
+
+            shared_rt.block_on(async {
+                for (user_id, asset_id) in accounts_clone {
+                    if let Err(e) = zero_x_infinity::persistence::schema::ensure_balance_table(
+                        db_clone.taos(),
+                        user_id,
+                        asset_id,
+                    )
+                    .await
+                    {
+                        tracing::warn!("Failed to pre-create balance table: {}", e);
+                    }
+                }
+            });
+            println!("✅ Balance tables pre-created for {} users", accounts.len());
+        }
 
         for (user_id, account) in &accounts {
             for asset_id in [base_id, quote_id] {
