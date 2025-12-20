@@ -200,7 +200,7 @@ pub fn run_pipeline_multi_thread(
     };
 
     let t4_settlement = {
-        let mut service = crate::pipeline_services::SettlementService::new(
+        let service = crate::pipeline_services::SettlementService::new(
             services.ledger,
             queues.clone(),
             stats.clone(),
@@ -209,10 +209,22 @@ pub fn run_pipeline_multi_thread(
             active_symbol_id,
         );
         let s = shutdown.clone();
-        thread::spawn(move || {
-            service.run(s);
-            service.into_inner()
-        })
+        let use_async = rt_handle.is_some() && db_client.is_some();
+
+        if use_async {
+            // Async mode: use tokio for zero block_on overhead
+            let rt = rt_handle.clone().unwrap();
+            thread::spawn(move || {
+                rt.block_on(service.run_async(s));
+            })
+        } else {
+            // Sync mode: use traditional thread + block_on
+            thread::spawn(move || {
+                let mut service = service;
+                service.run(s);
+                // Drop ledger to match JoinHandle<()> type
+            })
+        }
     };
     // Wait for completion
     // ================================================================

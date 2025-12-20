@@ -11,6 +11,7 @@
 
 use std::sync::Arc;
 use std::time::Instant;
+use taos::AsyncQueryable;
 
 use crate::csv_io::{ACTION_CANCEL, ACTION_PLACE, InputOrder};
 use crate::models::{InternalOrder, OrderStatus};
@@ -743,6 +744,239 @@ impl SettlementService {
                 tracing::info!("[SETTLEMENT] Balance processor exiting");
             })
             .expect("Failed to spawn balance processor")
+    }
+
+    /// Run the settlement service in async mode (zero block_on overhead)
+    ///
+    /// This version runs entirely within the tokio runtime, eliminating
+    /// the overhead of block_on() calls per batch.
+    pub async fn run_async(self, shutdown: Arc<ShutdownSignal>) {
+        let db_client = self.db_client.clone();
+        let queues = self.queues.clone();
+        let stats = self.stats.clone();
+        let symbol_id = self.symbol_id;
+
+        // Spawn async balance processor
+        let balance_task = Self::spawn_balance_processor_async(
+            queues.clone(),
+            db_client.clone(),
+            shutdown.clone(),
+        );
+
+        // Spawn async trade processor
+        let trade_task = Self::spawn_trade_processor_async(
+            queues.clone(),
+            stats.clone(),
+            db_client.clone(),
+            symbol_id,
+            shutdown.clone(),
+        );
+
+        // Wait for both to complete
+        let _ = tokio::join!(balance_task, trade_task);
+    }
+
+    /// Spawn async balance processor (zero block_on overhead)
+    ///
+    /// Uses tokio::spawn with smart batching:
+    /// - Wait for first item (with timeout)
+    /// - Greedy drain remaining items
+    /// - Single async exec per batch
+    fn spawn_balance_processor_async(
+        queues: Arc<MultiThreadQueues>,
+        db_client: Option<Arc<crate::persistence::TDengineClient>>,
+        shutdown: Arc<ShutdownSignal>,
+    ) -> tokio::task::JoinHandle<()> {
+        const BATCH_SIZE: usize = 128;
+        const POLL_INTERVAL_MS: u64 = 1; // Fast polling for low latency
+
+        tokio::spawn(async move {
+            let mut batch: Vec<crate::messages::BalanceEvent> = Vec::with_capacity(BATCH_SIZE);
+            // Reusable SQL buffer (zero allocation in hot path)
+            let mut sql_buffer = String::with_capacity(BATCH_SIZE * 150);
+
+            loop {
+                batch.clear();
+
+                // Greedy drain: pop all available events
+                while batch.len() < BATCH_SIZE {
+                    if let Some(event) = queues.balance_event_queue.pop() {
+                        batch.push(event);
+                    } else {
+                        break;
+                    }
+                }
+
+                if !batch.is_empty() {
+                    // TDengine: batch persist (direct await, no block_on!)
+                    if let Some(ref db) = db_client {
+                        let start = std::time::Instant::now();
+
+                        // Build SQL with reusable buffer
+                        sql_buffer.clear();
+                        sql_buffer.push_str("INSERT INTO ");
+                        let now_us = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_micros() as i64;
+
+                        for (i, event) in batch.iter().enumerate() {
+                            use std::fmt::Write;
+                            write!(
+                                sql_buffer,
+                                "balances_{}_{} VALUES({}, {}, {}, 0, 0) ",
+                                event.user_id,
+                                event.asset_id,
+                                now_us + i as i64,
+                                event.avail_after,
+                                event.frozen_after
+                            )
+                            .unwrap();
+                        }
+
+                        // Direct await (no block_on overhead!)
+                        if let Err(e) = db.taos().exec(&sql_buffer).await {
+                            // Auto-create fallback
+                            let err_str = e.to_string();
+                            if err_str.contains("Table does not exist")
+                                || err_str.contains("0x2662")
+                            {
+                                let mut created = std::collections::HashSet::new();
+                                for event in &batch {
+                                    let key = (event.user_id, event.asset_id);
+                                    if !created.contains(&key) {
+                                        let create_sql = format!(
+                                            "CREATE TABLE IF NOT EXISTS balances_{}_{} USING balances TAGS ({}, {})",
+                                            event.user_id,
+                                            event.asset_id,
+                                            event.user_id,
+                                            event.asset_id
+                                        );
+                                        let _ = db.taos().exec(&create_sql).await;
+                                        created.insert(key);
+                                    }
+                                }
+                                // Retry
+                                if let Err(e) = db.taos().exec(&sql_buffer).await {
+                                    tracing::error!("[PERSIST] async batch balance failed: {}", e);
+                                }
+                            } else {
+                                tracing::error!("[PERSIST] async batch balance failed: {}", e);
+                            }
+                        }
+
+                        if start.elapsed().as_millis() > 5 {
+                            tracing::warn!(
+                                "[PROFILE] async_balance_persist={}ms count={}",
+                                start.elapsed().as_millis(),
+                                batch.len()
+                            );
+                        }
+                    }
+
+                    // WebSocket: push balance updates
+                    for event in &batch {
+                        let _ = queues.push_event_queue.push(
+                            crate::websocket::PushEvent::BalanceUpdate {
+                                user_id: event.user_id,
+                                asset_id: event.asset_id,
+                                avail: event.avail_after,
+                                frozen: event.frozen_after,
+                            },
+                        );
+                    }
+                } else {
+                    // Queue empty - check shutdown or yield
+                    if shutdown.is_shutdown_requested() {
+                        break;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(POLL_INTERVAL_MS)).await;
+                }
+            }
+            tracing::info!("[SETTLEMENT] Async balance processor exiting");
+        })
+    }
+
+    /// Spawn async trade processor (zero block_on overhead)
+    fn spawn_trade_processor_async(
+        queues: Arc<MultiThreadQueues>,
+        stats: Arc<PipelineStats>,
+        db_client: Option<Arc<crate::persistence::TDengineClient>>,
+        _symbol_id: u32,
+        shutdown: Arc<ShutdownSignal>,
+    ) -> tokio::task::JoinHandle<()> {
+        const BATCH_SIZE: usize = 128;
+        const POLL_INTERVAL_MS: u64 = 1;
+
+        tokio::spawn(async move {
+            let mut batch: Vec<crate::messages::MEResult> = Vec::with_capacity(BATCH_SIZE);
+
+            loop {
+                batch.clear();
+
+                // Greedy drain
+                while batch.len() < BATCH_SIZE {
+                    if let Some(result) = queues.me_result_queue.pop() {
+                        batch.push(result);
+                    } else {
+                        break;
+                    }
+                }
+
+                if !batch.is_empty() {
+                    // TDengine: batch persist (direct await, no block_on!)
+                    if let Some(ref db) = db_client {
+                        let start = std::time::Instant::now();
+                        let result =
+                            crate::persistence::orders::batch_insert_me_results(db.taos(), &batch)
+                                .await;
+
+                        if let Err(e) = result {
+                            tracing::error!("[PERSIST] async batch me_result failed: {}", e);
+                        }
+
+                        if start.elapsed().as_millis() > 5 {
+                            tracing::warn!(
+                                "[PROFILE] async_me_persist={}ms orders={} trades={}",
+                                start.elapsed().as_millis(),
+                                batch.len(),
+                                batch.iter().map(|r| r.trades.len()).sum::<usize>()
+                            );
+                        }
+                    }
+
+                    // WebSocket: push order update + trade events
+                    for me_result in &batch {
+                        let symbol_id = me_result.symbol_id;
+
+                        for trade_event in &me_result.trades {
+                            Self::push_trade_events(&queues, trade_event, &trade_event.trade);
+                        }
+
+                        if me_result.trades.is_empty() {
+                            let _ = queues.push_event_queue.push(
+                                crate::websocket::PushEvent::OrderUpdate {
+                                    user_id: me_result.order.user_id,
+                                    order_id: me_result.order.order_id,
+                                    symbol_id,
+                                    status: me_result.final_status,
+                                    filled_qty: me_result.order.filled_qty,
+                                    avg_price: None,
+                                },
+                            );
+                        }
+                    }
+
+                    stats.add_event_log_time(0);
+                } else {
+                    if shutdown.is_shutdown_requested() {
+                        break;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(POLL_INTERVAL_MS)).await;
+                }
+            }
+            tracing::info!("[SETTLEMENT] Async trade processor exiting");
+        })
     }
 
     /// Spawn ME result processor thread (BATCH mode)
