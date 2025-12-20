@@ -39,11 +39,11 @@ use crate::models::InternalOrder;
 
 /// Capacity for order queue (Ingestion → UBSCore)
 /// Should handle burst without blocking, but not too large to waste memory
-pub const ORDER_QUEUE_CAPACITY: usize = 4096;
+pub const ORDER_QUEUE_CAPACITY: usize = 16384;
 
 /// Capacity for valid order queue (UBSCore → ME)
 /// Smaller than order_queue since rejects are filtered out
-pub const VALID_ORDER_QUEUE_CAPACITY: usize = 4096;
+pub const VALID_ORDER_QUEUE_CAPACITY: usize = 16384;
 
 /// Capacity for trade queue (ME → Settlement + UBSCore)
 /// Larger because one order may generate multiple trades
@@ -55,7 +55,7 @@ pub const PUSH_EVENT_QUEUE_CAPACITY: usize = 65536;
 
 /// Capacity for depth event queue (ME → DepthService)
 /// Market data can be dropped if queue is full
-pub const DEPTH_EVENT_QUEUE_CAPACITY: usize = 1024;
+pub const DEPTH_EVENT_QUEUE_CAPACITY: usize = 1;
 
 // ============================================================
 // PIPELINE INPUT/OUTPUT TYPES
