@@ -288,6 +288,8 @@ impl Trade {
 pub struct OrderResult {
     pub order: InternalOrder,
     pub trades: Vec<Trade>,
+    /// Maker orders that were updated during matching
+    pub maker_orders: Vec<InternalOrder>,
 }
 
 // ============================================================

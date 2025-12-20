@@ -71,13 +71,14 @@ pub async fn batch_insert_me_results(
     orders_sql.push_str("INSERT INTO ");
 
     for (i, r) in results.iter().enumerate() {
+        // Taker order update
         let o = &r.order;
         let cid = o.cid.as_deref().unwrap_or("");
         write!(
             orders_sql,
             "orders_{} VALUES({}, {}, {}, {}, {}, {}, {}, {}, {}, '{}') ",
             r.symbol_id,
-            now_us + i as i64,
+            now_us + i as i64 * 10, // Ensure unique TS even within same batch
             o.order_id,
             o.user_id,
             o.side as u8,
@@ -89,6 +90,27 @@ pub async fn batch_insert_me_results(
             cid
         )
         .unwrap();
+
+        // Maker order updates
+        for (j, m) in r.maker_updates.iter().enumerate() {
+            let m_cid = m.cid.as_deref().unwrap_or("");
+            write!(
+                orders_sql,
+                "orders_{} VALUES({}, {}, {}, {}, {}, {}, {}, {}, {}, '{}') ",
+                r.symbol_id,
+                now_us + i as i64 * 10 + (j + 1) as i64,
+                m.order_id,
+                m.user_id,
+                m.side as u8,
+                m.order_type as u8,
+                m.price,
+                m.qty,
+                m.filled_qty,
+                m.status as u8,
+                m_cid
+            )
+            .unwrap();
+        }
     }
 
     // First attempt for orders
@@ -368,12 +390,14 @@ mod tests {
             MEResult {
                 order: order1,
                 trades: vec![trade_event.clone()],
+                maker_updates: vec![],
                 symbol_id: 1,
                 final_status: OrderStatus::PARTIALLY_FILLED,
             },
             MEResult {
                 order: order2,
                 trades: vec![],
+                maker_updates: vec![],
                 symbol_id: 1,
                 final_status: OrderStatus::NEW,
             },
@@ -431,6 +455,7 @@ mod tests {
         let results = vec![crate::messages::MEResult {
             order,
             trades: vec![],
+            maker_updates: vec![],
             symbol_id: test_symbol_id,
             final_status: crate::models::OrderStatus::NEW,
         }];

@@ -30,7 +30,7 @@ impl MatchingEngine {
     /// 3. If partially filled or unfilled, rest in book
     /// 4. Return order status and any trades generated
     pub fn process_order(book: &mut OrderBook, mut order: InternalOrder) -> OrderResult {
-        let pending_trades = match order.side {
+        let (pending_trades, maker_orders) = match order.side {
             Side::Buy => Self::match_buy(book, &mut order),
             Side::Sell => Self::match_sell(book, &mut order),
         };
@@ -68,13 +68,21 @@ impl MatchingEngine {
             }
         }
 
-        OrderResult { order, trades }
+        OrderResult {
+            order,
+            trades,
+            maker_orders,
+        }
     }
 
     /// Match a buy order against asks (sell orders)
     /// NOTE: Does NOT update status - that's done in process_order
-    fn match_buy(book: &mut OrderBook, buy_order: &mut InternalOrder) -> Vec<PendingTrade> {
+    fn match_buy(
+        book: &mut OrderBook,
+        buy_order: &mut InternalOrder,
+    ) -> (Vec<PendingTrade>, Vec<InternalOrder>) {
         let mut pending_trades = Vec::new();
+        let mut maker_orders = Vec::new();
         let mut prices_to_remove = Vec::new();
         let mut filled_order_ids = Vec::new();
 
@@ -110,6 +118,16 @@ impl MatchingEngine {
                     buy_order.filled_qty += trade_qty;
                     sell_order.filled_qty += trade_qty;
 
+                    // Update maker status before cloning for persistence
+                    sell_order.status = if sell_order.is_filled() {
+                        OrderStatus::FILLED
+                    } else {
+                        OrderStatus::PARTIALLY_FILLED
+                    };
+
+                    // Record maker state update
+                    maker_orders.push(sell_order.clone());
+
                     // Record pending trade
                     pending_trades.push(PendingTrade {
                         buyer_order_id: buy_order.order_id,
@@ -143,13 +161,17 @@ impl MatchingEngine {
             book.remove_from_index(order_id);
         }
 
-        pending_trades
+        (pending_trades, maker_orders)
     }
 
     /// Match a sell order against bids (buy orders)
     /// NOTE: Does NOT update status - that's done in process_order
-    fn match_sell(book: &mut OrderBook, sell_order: &mut InternalOrder) -> Vec<PendingTrade> {
+    fn match_sell(
+        book: &mut OrderBook,
+        sell_order: &mut InternalOrder,
+    ) -> (Vec<PendingTrade>, Vec<InternalOrder>) {
         let mut pending_trades = Vec::new();
+        let mut maker_orders = Vec::new();
         let mut keys_to_remove = Vec::new();
         let mut filled_order_ids = Vec::new();
 
@@ -188,6 +210,16 @@ impl MatchingEngine {
                     sell_order.filled_qty += trade_qty;
                     buy_order.filled_qty += trade_qty;
 
+                    // Update maker status before cloning for persistence
+                    buy_order.status = if buy_order.is_filled() {
+                        OrderStatus::FILLED
+                    } else {
+                        OrderStatus::PARTIALLY_FILLED
+                    };
+
+                    // Record maker state update
+                    maker_orders.push(buy_order.clone());
+
                     // Record pending trade
                     pending_trades.push(PendingTrade {
                         buyer_order_id: buy_order.order_id,
@@ -221,7 +253,7 @@ impl MatchingEngine {
             book.remove_from_index(order_id);
         }
 
-        pending_trades
+        (pending_trades, maker_orders)
     }
 }
 

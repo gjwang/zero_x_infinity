@@ -473,6 +473,7 @@ impl MatchingService {
                         let me_result = crate::messages::MEResult {
                             order: result.order.clone(),
                             trades: trade_events,
+                            maker_updates: result.maker_orders,
                             final_status: result.order.status,
                             symbol_id: valid_order.order.symbol_id,
                         };
