@@ -34,6 +34,7 @@ pub mod engine;
 pub mod gateway;
 pub mod ledger;
 pub mod logging;
+pub mod market; // Market data services (depth, etc.)
 pub mod messages;
 pub mod models;
 pub mod orderbook;

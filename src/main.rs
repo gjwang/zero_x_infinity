@@ -147,6 +147,11 @@ fn main() {
         let queues = std::sync::Arc::new(zero_x_infinity::MultiThreadQueues::new());
         let symbol_mgr = std::sync::Arc::new(symbol_mgr);
 
+        // Create DepthService
+        let depth_service = std::sync::Arc::new(
+            zero_x_infinity::market::depth_service::DepthService::new(queues.clone()),
+        );
+
         // Start HTTP Server in separate thread with tokio runtime
         let queues_clone = queues.clone();
         let symbol_mgr_clone = symbol_mgr.clone();
@@ -154,6 +159,13 @@ fn main() {
         let gateway_thread = std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().unwrap();
             rt.block_on(async {
+                // Spawn DepthService task (inside tokio runtime)
+                let depth_service_clone = depth_service.clone();
+                tokio::spawn(async move {
+                    depth_service_clone.run().await;
+                });
+                println!("📊 DepthService started");
+
                 // Initialize TDengine client inside Gateway's tokio runtime
                 let db_client = if persistence_config.enabled {
                     println!("\n[Persistence] Connecting to TDengine...");
@@ -200,6 +212,7 @@ fn main() {
                     active_symbol_id,
                     db_client,
                     queues_clone.push_event_queue.clone(),
+                    depth_service,
                 )
                 .await;
             });
@@ -219,8 +232,7 @@ fn main() {
         let events_path = format!("{}/t2_events.csv", output_dir);
         let wal_path = format!("{}/orders.wal", output_dir);
 
-        // Initialize services
-        let mut book = OrderBook::new();
+        // Initialize services (use the SHARED OrderBook)
         let mut ledger = LedgerWriter::new(&ledger_path);
         ledger.enable_event_logging(&events_path);
 
@@ -256,6 +268,9 @@ fn main() {
             port
         );
         println!("Press Ctrl+C to shutdown\n");
+
+        // Create OrderBook for Trading Core
+        let book = OrderBook::new();
 
         // Run Trading Core (this will block and process orders from gateway)
         let _result = run_pipeline_multi_thread(
