@@ -11,11 +11,11 @@
 //! │              │                      │ (Pre-Trade)  │                          │  (Matching)  │
 //! └──────────────┘                      └──────────────┘                          └──────┬───────┘
 //!                                                                                        │
-//!                                                                                        │ trade_queue
+//!                                                                                        │ me_result_queue
 //!                                                                                        ▼
 //!                                       ┌──────────────┐                          ┌──────────────┐
 //!                                       │   UBSCore    │ ◀──────────────────────── │  Settlement  │
-//!                                       │   (Settle)   │       trade_queue         │   (Persist)  │
+//!                                       │   (Settle)   │       me_result_queue         │   (Persist)  │
 //!                                       └──────────────┘                          └──────────────┘
 //! ```
 //!
@@ -381,7 +381,7 @@ pub const EVENT_QUEUE_CAPACITY: usize = 65536;
 /// Extended queues for multi-threaded pipeline
 ///
 /// Architecture from 0x08-a Trading Pipeline Design:
-/// - ME → trade_queue → Settlement (持久化)
+/// - ME → me_result_queue → Settlement (持久化)
 /// - ME → balance_update_queue → UBSCore (余额更新)
 /// - UBSCore → balance_event_queue → Settlement (余额事件持久化)
 pub struct MultiThreadQueues {
@@ -792,8 +792,8 @@ pub fn try_pop<T>(queue: &ArrayQueue<T>) -> Option<T> {
 ///
 /// # Flow
 /// 1. Pop from order_queue → UBSCore → push to valid_order_queue (or reject)
-/// 2. Pop from valid_order_queue → ME → push trades to trade_queue
-/// 3. Pop from trade_queue → Settlement (persist) + UBSCore (settle balance)
+/// 2. Pop from valid_order_queue → ME → push trades to me_result_queue
+/// 3. Pop from me_result_queue → Settlement (persist) + UBSCore (settle balance)
 pub struct SingleThreadPipeline {
     pub queues: PipelineQueues,
     pub stats: Arc<PipelineStats>,
