@@ -27,8 +27,8 @@
 
 | 工具 | 用途 |
 |------|------|
-| [inject_orders.py](../scripts/inject_orders.py) | 顺序注入 CSV 订单到 Gateway API |
-| [test_gateway_e2e_full.sh](../scripts/test_gateway_e2e_full.sh) | 完整 E2E 测试流程 |
+| `scripts/inject_orders.py` | 顺序注入 CSV 订单到 Gateway API |
+| `scripts/test_gateway_e2e_full.sh` | 完整 E2E 测试流程 |
 
 ---
 
@@ -100,7 +100,7 @@ self.manager.send_to_user(user_id, message);
 
 **影响**: 无法通过 TDengine 验证 Pipeline 结果
 
-**跟踪**: [pipeline-mt-tdengine-gap.md](issues/pipeline-mt-tdengine-gap.md)
+**跟踪**: 待创建 issue 文档
 
 ---
 
@@ -143,7 +143,7 @@ docker exec tdengine taos -s "USE trading; \
 
 ---
 
-## 7. IDE 崩溃问题
+## 8. IDE 崩溃问题
 
 ### 现象
 在执行复合命令时，Antigravity IDE 崩溃：
@@ -196,19 +196,26 @@ kill "$GW_PID"
 
 ---
 
-## 8. 待办事项
+## 9. 待办事项
+
+> **Owner**: TBD  
+> **Created**: 2025-12-20  
+> **Branch**: `0x09-f-integration-test`
 
 ### P1 - 生产阻塞
-- [ ] 修复 Orders 持久化
-- [ ] 修复 Balances 持久化
+| 任务 | 状态 | 预计 |
+|------|------|------|
+| 修复 Orders 持久化 | ⏳ Pending | 0x09-g |
+| 修复 Balances 持久化 | ⏳ Pending | 0x09-g |
 
 ### P2 - 功能增强
-- [ ] 修复 Pipeline MT TDengine 集成
-- [ ] **添加健康检查 API** `/api/v1/health`
-  - 对外响应：简单状态（不暴露内部细节）
-  - 日志：记录详细内部状态（TDengine 连接、队列深度等）
-  - 用途：脚本健康检查替代 `nc -z` 端口检查
+| 任务 | 状态 | 预计 |
+|------|------|------|
+| 修复 Pipeline MT TDengine 集成 | ⏳ Pending | 0x09-h |
+| 添加 `/api/v1/health` 健康检查 API | ⏳ Pending | 0x09-h |
 
 ### P3 - 测试优化
-- [ ] 添加持久化自动化测试
-- [ ] 运行 100K 完整注入测试
+| 任务 | 状态 | 预计 |
+|------|------|------|
+| 添加持久化自动化测试 | ⏳ Pending | 0x10 |
+| 运行 100K 完整注入测试 | ⏳ Pending | 0x10 |
