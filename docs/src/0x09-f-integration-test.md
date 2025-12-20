@@ -274,3 +274,56 @@ Lock events (1000000) != Accepted orders (1300000)
 ### Phase 1: Gateway E2E 注入测试
 
 详见 [E2E 测试报告](./0x09-f-e2e-test-report.md)
+
+### Phase 2: 集成测试结果 (2025-12-21)
+
+#### 性能基线
+
+| 版本 | 时间 | 速率 | vs 基线 |
+|------|------|------|---------|
+| 基线 (urllib) | 576s | 174/s | - |
+| HTTP Keep-Alive | 117s | 857/s | +393% |
+| **优化后 (当前)** | **77s** | **1,298/s** | **+646%** |
+
+#### Pipeline 正确性 ✅
+
+| 测试项 | 结果 |
+|--------|------|
+| 100K 单线程 vs 多线程 | ✅ 完全一致 |
+| 1.3M 单线程 vs 多线程 | ✅ 完全一致 |
+| 成交数量匹配 | ✅ 47,886 / 667,567 |
+| 余额最终状态 | ✅ 0 differences |
+
+#### Settlement 持久化 ✅
+
+| 测试项 | Pipeline | TDengine | 状态 |
+|--------|----------|----------|------|
+| Orders 记录数 | 100,000 | 100,000 | ✅ MATCH |
+| Trades 记录数 | 47,886 | 47,886 | ✅ MATCH |
+| Balances avail/frozen | 2,000 records | 2,000 records | ✅ 100% 字段匹配 |
+
+> [!NOTE]
+> Balances 比较跳过 lock_version 字段 (当前未持久化到 TDengine)
+
+#### HTTP API ✅
+
+| 端点 | 状态 |
+|------|------|
+| GET /health | ✅ |
+| POST /create_order | ✅ |
+| GET /trades | ✅ |
+| GET /klines | ✅ |
+| GET /depth | ✅ |
+
+#### 验证脚本
+
+```bash
+# 完整 Settlement 验证
+./scripts/verify_settlement.sh
+
+# Balances 字段级别比较 (使用 REST API)
+python3 scripts/compare_balances_tdengine.py --pipeline output/t2_balances_final.csv
+
+# 100K 性能测试
+python3 scripts/inject_orders.py --input fixtures/orders.csv --limit 0
+```
