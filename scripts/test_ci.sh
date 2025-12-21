@@ -324,7 +324,12 @@ main() {
     echo "Phase 3: Settlement Persistence"
     echo "═══════════════════════════════════════════════════════════════"
     
-    if docker ps 2>/dev/null | grep -q tdengine; then
+    # Note: test_persistence.sh uses 'docker exec tdengine' which doesn't work
+    # with GitHub Actions service containers. Skip in CI and rely on API tests.
+    if [ "$CI" = "true" ]; then
+        log_test_start "Persistence"
+        log_test_skip "(skipped in CI - service container incompatible with docker exec)"
+    elif docker ps 2>/dev/null | grep -q tdengine; then
         run_test "Persistence" "scripts/test_persistence.sh" 300
     else
         log_test_start "Persistence"
