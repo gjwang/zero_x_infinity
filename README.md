@@ -46,6 +46,7 @@ This is a pilgrimage from `Hello World` to `Microsecond Latency`.
 | 0x09-c | [WebSocket Push](./docs/src/0x09-c-websocket-push.md) | 实时推送 |
 | 0x09-d | [K-Line Aggregation](./docs/src/0x09-d-kline-aggregation.md) | K线聚合 |
 | 0x09-e | [Order Book Depth](./docs/src/0x09-e-orderbook-depth.md) | 盘口深度 |
+| 0x09-f | [Full Integration Test](./docs/src/0x09-f-integration-test.md) | 全功能集成与回归验收 |
 
 ---
 
@@ -64,15 +65,25 @@ cargo run --release -- --pipeline --input fixtures/test_with_cancel_highbal
 # Run multi-threaded pipeline
 cargo run --release -- --pipeline-mt --input fixtures/test_with_cancel_highbal
 
-# Compare both pipelines (correctness test)
+# Compare both pipelines (ST vs MT)
 ./scripts/test_pipeline_compare.sh highbal
 
-# Run unit tests
-cargo test
+# Regression check (vs Golden Baseline)
+./scripts/test_pipeline_compare.sh 100k
 
-# Test Gateway API
-./scripts/test_gateway_simple.sh
+# Generate new baseline (requires --force)
+./scripts/generate_baseline.sh 100k -f
 ```
+
+---
+
+## 📑 回归测试与基线 (Regression)
+
+本项目采用 **Golden Set** 基线比对策略。基线数据存储在 `baseline/` 目录下，代表了系统 100% 正确的状态。
+
+- **100% 资产一致性**：多线程模式必须在 `avail` 和 `frozen` 金额上与单线程基准完全对齐。
+- **DB 持久化优先**：多线程模式已移除本地 CSV 流水，全面采用 **TDengine** 进行审计。
+- **基线保护**：禁止随意修改基线，更新必须通过 `generate_baseline.sh --force` 并在确认逻辑正确后提交。
 
 ---
 
