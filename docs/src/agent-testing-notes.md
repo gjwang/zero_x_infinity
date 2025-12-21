@@ -76,14 +76,14 @@ docker exec tdengine taos -s "USE trading; ..."
 docker exec tdengine taos -s "USE exchange; ..."
 ```
 
-### P1 已知问题
+### P1 已知问题 (已修复)
 
-以下问题待修复：
-1. **Orders 不持久化** - `WsService` 只推送 WebSocket，未写入 TDengine
-2. **Balances 不持久化** - 同上
-3. **Pipeline MT 不写入 TDengine** - 只输出 CSV 文件
+在 Phase 0x09-f 中，已解决了以下关键持久化问题：
+1. **Orders 持久化** - `SettlementService` 已实现订单状态同步。
+2. **Balances 持久化** - 已实现。
+3. **Pipeline MT 写入 TDengine** - 已实现海量流水的高效写入。
 
-详见：`docs/src/0x09-f-e2e-test-report.md`
+详见：`docs/src/0x09-f-integration-test.md`
 
 ---
 
