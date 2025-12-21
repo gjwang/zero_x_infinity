@@ -181,6 +181,12 @@ check_dependencies() {
     echo -n "[DEP] Python3... "
     if command -v python3 &> /dev/null; then
         echo -e "${GREEN}OK${NC} ($(python3 --version 2>/dev/null | cut -d' ' -f2))"
+        # In CI, ensure required packages are present
+        if [ "$CI" = "true" ]; then
+            echo "    Installing Python dependencies..."
+            python3 -m pip install --upgrade pip &>/dev/null
+            python3 -m pip install pandas taos-ws-py &>/dev/null || echo "    Warning: Python dependency install failed"
+        fi
     else
         echo -e "${RED}MISSING${NC}"
         ((missing++))
@@ -202,8 +208,18 @@ check_dependencies() {
         echo -e "${YELLOW}NOT RUNNING${NC} (attempting to start...)"
         if docker start tdengine 2>/dev/null || \
            docker run -d --name tdengine -p 6030:6030 -p 6041:6041 tdengine/tdengine:latest 2>/dev/null; then
-            sleep 5
-            echo "    TDengine started"
+            echo -n "    Waiting for TDengine to be ready..."
+            for i in {1..30}; do
+                if docker exec tdengine taos -s "SELECT SERVER_VERSION();" &>/dev/null; then
+                    echo -e " ${GREEN}READY${NC}"
+                    break
+                fi
+                echo -n "."
+                sleep 2
+                if [ $i -eq 30 ]; then
+                    echo -e " ${RED}TIMEOUT${NC}"
+                fi
+            done
         else
             echo "    Could not start TDengine"
         fi
