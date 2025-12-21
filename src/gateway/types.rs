@@ -266,6 +266,7 @@ pub struct OrderResponse {
     pub accepted_at: u64,
 }
 
+#[allow(deprecated)]
 #[deprecated(note = "Use ApiResponse::error() instead")]
 #[derive(Debug, Serialize)]
 pub struct ErrorResponse {

@@ -65,6 +65,7 @@ impl<'a> DepthFormatter<'a> {
     }
 
     /// Format depth data (bids/asks) for a symbol
+    #[allow(clippy::type_complexity)]
     pub fn format_depth_data(
         &self,
         bids: &[(u64, u64)],
