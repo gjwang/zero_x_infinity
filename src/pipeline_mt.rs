@@ -40,23 +40,8 @@ use std::time::{Duration, Instant};
 
 // High-frequency lifecycle logs are sent to hierarchical targets under "0XINFI"
 // Example: "0XINFI::ME", "0XINFI::UBSC". This allows per-service toggling.
-macro_rules! p_info {
-    ($target:expr, $($arg:tt)+) => {
-        tracing::info!(target: $target, $($arg)+);
-    }
-}
-
-macro_rules! p_span {
-    ($target:expr, $name:expr, $($arg:tt)*) => {
-        tracing::info_span!(target: $target, $name, $($arg)*)
-    }
-}
-
-use crate::csv_io::{ACTION_CANCEL, ACTION_PLACE, InputOrder};
-use crate::engine::MatchingEngine;
-use crate::ledger::{LedgerEntry, LedgerWriter, OP_CREDIT, OP_DEBIT};
-use crate::messages::TradeEvent;
-use crate::models::{InternalOrder, OrderStatus, OrderType, Side};
+use crate::csv_io::InputOrder;
+use crate::ledger::LedgerWriter;
 use crate::orderbook::OrderBook;
 use crate::ubscore::UBSCore;
 use crate::user_account::UserAccount;
@@ -65,19 +50,6 @@ use rustc_hash::FxHashMap;
 // ============================================================
 // LOGGING & PERFORMANCE CONSTANTS
 // ============================================================
-
-const TARGET_ME: &str = "0XINFI::ME";
-const TARGET_PERS: &str = "0XINFI::PERS";
-
-const LOG_ORDER: &str = "ORDER";
-const LOG_CANCEL: &str = "CANCEL";
-const LOG_TRADE: &str = "TRADE";
-
-const IDLE_SPIN_LIMIT: u32 = 1000;
-const IDLE_SLEEP_US: Duration = Duration::from_micros(100);
-
-const UBSC_SETTLE_BATCH: usize = 128; // Max settlements per round
-const UBSC_ORDER_BATCH: usize = 16; // Max new orders per round
 
 // ============================================================
 // MULTI-THREAD PIPELINE RESULT
@@ -94,8 +66,7 @@ pub struct MultiThreadPipelineResult {
 }
 
 use crate::pipeline::{
-    BalanceUpdateRequest, MultiThreadQueues, OrderAction, PipelineConfig, PipelineServices,
-    PipelineStats, PriceImprovement, SequencedOrder, ShutdownSignal, ValidAction,
+    MultiThreadQueues, PipelineConfig, PipelineServices, PipelineStats, ShutdownSignal,
 };
 
 /// Type alias for owned multi-threaded services
@@ -128,7 +99,7 @@ pub fn run_pipeline_multi_thread(
     config: PipelineConfig,
     queues: Arc<MultiThreadQueues>,
     // TDengine persistence support (Gateway mode)
-    rt_handle: Option<tokio::runtime::Handle>,
+    _rt_handle: Option<tokio::runtime::Handle>,
     db_client: Option<Arc<crate::persistence::TDengineClient>>,
 ) -> MultiThreadPipelineResult {
     tracing::info!(
@@ -244,7 +215,7 @@ pub fn run_pipeline_multi_thread(
     // Wait for all threads
     let final_ubscore = t2_ubscore.join().expect("UBSCore thread panicked");
     let _final_book = t3_me.join().expect("ME thread panicked");
-    let _final_ledger = t4_settlement.join().expect("Settlement thread panicked");
+    t4_settlement.join().expect("Settlement thread panicked");
 
     MultiThreadPipelineResult {
         accepted: stats

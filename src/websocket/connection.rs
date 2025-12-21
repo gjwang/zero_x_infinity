@@ -44,7 +44,7 @@ impl ConnectionManager {
 
         self.connections
             .entry(user_id)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push((conn_id, tx));
 
         tracing::info!(

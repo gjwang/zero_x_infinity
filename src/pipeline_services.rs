@@ -11,7 +11,8 @@
 
 use std::sync::Arc;
 use std::time::Instant;
-use taos::AsyncQueryable;
+// unused import removed
+use crate::ledger::LedgerWriter;
 
 use crate::csv_io::{ACTION_CANCEL, ACTION_PLACE, InputOrder};
 use crate::models::{InternalOrder, OrderStatus};
@@ -224,7 +225,7 @@ impl UBSCoreService {
                 // Publish results to downstream
                 for action in self.batch_actions.drain(..) {
                     // [1] Push to Matching Engine
-                    while let Err(_) = self.queues.action_queue.push(action.clone()) {
+                    while self.queues.action_queue.push(action.clone()).is_err() {
                         std::hint::spin_loop();
                         if shutdown.is_shutdown_requested() {
                             break;
@@ -252,7 +253,7 @@ impl UBSCoreService {
 
                 for event in self.batch_events.drain(..) {
                     let lat_ingested = event.ingested_at_ns;
-                    while let Err(_) = self.queues.balance_event_queue.push(event.clone()) {
+                    while self.queues.balance_event_queue.push(event.clone()).is_err() {
                         self.stats.incr_backpressure("balance_event_queue");
                         std::thread::sleep(IDLE_SLEEP_US);
                         // std::hint::spin_loop();
@@ -605,10 +606,7 @@ impl MatchingService {
 // SETTLEMENT SERVICE
 // ============================================================
 
-use crate::ledger::{LedgerEntry, LedgerWriter, OP_CREDIT, OP_DEBIT};
-
-const TARGET_PERS: &str = "0XINFI::PERS";
-const LOG_TRADE: &str = "TRADE";
+// unused imports and constants removed
 
 /// Service that handles trade settlement and ledger persistence.
 ///

@@ -301,12 +301,12 @@ fn main() {
 
         for (user_id, account) in &accounts {
             for asset_id in [base_id, quote_id] {
-                if let Some(balance) = account.get_balance(asset_id) {
-                    if balance.avail() > 0 {
-                        ubscore
-                            .deposit(*user_id, asset_id, balance.avail())
-                            .unwrap();
-                    }
+                if let Some(balance) = account.get_balance(asset_id)
+                    && balance.avail() > 0
+                {
+                    ubscore
+                        .deposit(*user_id, asset_id, balance.avail())
+                        .unwrap();
                 }
             }
         }
@@ -436,20 +436,20 @@ fn main() {
         let mut deposit_count = 0u64;
         for (user_id, account) in &accounts {
             for asset_id in [base_id, quote_id] {
-                if let Some(balance) = account.get_balance(asset_id) {
-                    if balance.avail() > 0 {
-                        ubscore
-                            .deposit(*user_id, asset_id, balance.avail())
-                            .unwrap();
-                        deposit_count += 1;
-                    }
+                if let Some(balance) = account.get_balance(asset_id)
+                    && balance.avail() > 0
+                {
+                    ubscore
+                        .deposit(*user_id, asset_id, balance.avail())
+                        .unwrap();
+                    deposit_count += 1;
                 }
             }
         }
         println!("    Recorded {} deposit events", deposit_count);
 
         // Clone orders for multi-thread (takes ownership)
-        let orders_owned: Vec<_> = orders.iter().cloned().collect();
+        let orders_owned: Vec<_> = orders.to_vec();
 
         // Create queues
         let queues = std::sync::Arc::new(zero_x_infinity::MultiThreadQueues::new());
@@ -520,26 +520,26 @@ fn main() {
         let mut deposit_count = 0u64;
         for (user_id, account) in &accounts {
             for asset_id in [base_id, quote_id] {
-                if let Some(balance) = account.get_balance(asset_id) {
-                    if balance.avail() > 0 {
-                        ubscore
-                            .deposit(*user_id, asset_id, balance.avail())
-                            .unwrap();
+                if let Some(balance) = account.get_balance(asset_id)
+                    && balance.avail() > 0
+                {
+                    ubscore
+                        .deposit(*user_id, asset_id, balance.avail())
+                        .unwrap();
 
-                        // Record Deposit event
-                        if let Some(b) = ubscore.get_balance(*user_id, asset_id) {
-                            deposit_count += 1;
-                            let deposit_event = BalanceEvent::deposit(
-                                *user_id,
-                                asset_id,
-                                deposit_count,
-                                balance.avail(),
-                                b.lock_version(),
-                                b.avail(),
-                                b.frozen(),
-                            );
-                            ledger.write_balance_event(&deposit_event);
-                        }
+                    // Record Deposit event
+                    if let Some(b) = ubscore.get_balance(*user_id, asset_id) {
+                        deposit_count += 1;
+                        let deposit_event = BalanceEvent::deposit(
+                            *user_id,
+                            asset_id,
+                            deposit_count,
+                            balance.avail(),
+                            b.lock_version(),
+                            b.avail(),
+                            b.frozen(),
+                        );
+                        ledger.write_balance_event(&deposit_event);
                     }
                 }
             }
@@ -614,26 +614,26 @@ fn main() {
         let mut deposit_count = 0u64;
         for (user_id, account) in &accounts {
             for asset_id in [base_id, quote_id] {
-                if let Some(balance) = account.get_balance(asset_id) {
-                    if balance.avail() > 0 {
-                        ubscore
-                            .deposit(*user_id, asset_id, balance.avail())
-                            .unwrap();
+                if let Some(balance) = account.get_balance(asset_id)
+                    && balance.avail() > 0
+                {
+                    ubscore
+                        .deposit(*user_id, asset_id, balance.avail())
+                        .unwrap();
 
-                        // Record Deposit event
-                        if let Some(b) = ubscore.get_balance(*user_id, asset_id) {
-                            deposit_count += 1;
-                            let deposit_event = BalanceEvent::deposit(
-                                *user_id,
-                                asset_id,
-                                deposit_count, // ref_id = deposit sequence
-                                balance.avail(),
-                                b.lock_version(),
-                                b.avail(),
-                                b.frozen(),
-                            );
-                            ledger.write_balance_event(&deposit_event);
-                        }
+                    // Record Deposit event
+                    if let Some(b) = ubscore.get_balance(*user_id, asset_id) {
+                        deposit_count += 1;
+                        let deposit_event = BalanceEvent::deposit(
+                            *user_id,
+                            asset_id,
+                            deposit_count, // ref_id = deposit sequence
+                            balance.avail(),
+                            b.lock_version(),
+                            b.avail(),
+                            b.frozen(),
+                        );
+                        ledger.write_balance_event(&deposit_event);
                     }
                 }
             }
@@ -706,12 +706,12 @@ fn main() {
         // Initial deposits
         for (user_id, account) in &accounts {
             for asset_id in [base_id, quote_id] {
-                if let Some(balance) = account.get_balance(asset_id) {
-                    if balance.avail() > 0 {
-                        ubscore
-                            .deposit(*user_id, asset_id, balance.avail())
-                            .unwrap();
-                    }
+                if let Some(balance) = account.get_balance(asset_id)
+                    && balance.avail() > 0
+                {
+                    ubscore
+                        .deposit(*user_id, asset_id, balance.avail())
+                        .unwrap();
                 }
             }
         }
