@@ -17,7 +17,10 @@
 
 ## 🚀 第二阶段：产品化与业务闭环 (Productization)
 
+- [第二部分导读：产品化之路](./Part-II-Introduction.md)
+
 - [0x10 安全体系: API Key 与 鉴权 (Security & Auth)](./0x10-auth.md)
+    - [0x10-a ID 规范与账户结构](./0x10-a-id-specification.md)
 - [0x11 经济模型: 手续费与系统盈亏 (Fee System)](./0x11-fee-system.md)
 - [0x12 鲁棒性: 快照、优雅停机与恢复 (Snapshot & Recovery)](./0x12-snapshot-recovery.md)
 - [0x13 管理接口: 资产充提与后台管理 (Admin APIs)](./0x13-admin-apis.md)
