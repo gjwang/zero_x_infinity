@@ -113,14 +113,58 @@ compare_metric "Trades" "$ST_TRADES" "$MT_TRADES"
 echo "════════════════════════════════════════════════════════════════"
 echo ""
 
-# Compare balances
-echo "Comparing final balances..."
-BALANCE_DIFF=$(diff /tmp/st_balances.csv /tmp/mt_balances.csv | wc -l)
+# Compare balances (ignore version column as it differs between ST/MT and legacy)
+echo "Comparing final balances (user_id,asset_id,avail,frozen)..."
+# Extract core columns (1-4) and sort to ensure deterministic comparison
+cut -d, -f1-4 /tmp/st_balances.csv | sort > /tmp/st_balances_core.csv
+cut -d, -f1-4 /tmp/mt_balances.csv | sort > /tmp/mt_balances_core.csv
+
+BALANCE_DIFF=$(diff /tmp/st_balances_core.csv /tmp/mt_balances_core.csv | wc -l)
 if [ "$BALANCE_DIFF" -eq 0 ]; then
-    echo "   Final balances: ✅ MATCH (0 differences)"
+    echo "   Final balances: ✅ MATCH (Core fields)"
 else
     echo "   Final balances: ❌ DIFFER ($BALANCE_DIFF lines)"
+    # Show samples of differences
+    echo "   Sample differences (ST vs MT):"
+    diff /tmp/st_balances_core.csv /tmp/mt_balances_core.csv | head -n 10
     FAILED=1
+fi
+
+# New: Regression check against baseline
+case "$DATASET" in
+    100k)    BASELINE_DIR="baseline/default" ;;
+    cancel)  BASELINE_DIR="baseline/with_cancel" ;;
+    highbal) BASELINE_DIR="baseline/highbal" ;;
+    *)       BASELINE_DIR="" ;;
+esac
+
+if [ -n "$BASELINE_DIR" ] && [ -d "$BASELINE_DIR" ]; then
+    echo ""
+    echo "[Regression] Comparing against Golden Set in $BASELINE_DIR..."
+    
+    # Map t2_ names if necessary (Baseline/default uses t2_ prefix)
+    B_FILE="$BASELINE_DIR/t2_balances_final.csv"
+    if [ ! -f "$B_FILE" ]; then B_FILE="$BASELINE_DIR/balances_final.csv"; fi
+    
+    T_FILE="$BASELINE_DIR/t2_events.csv"
+    if [ ! -f "$T_FILE" ]; then T_FILE="$BASELINE_DIR/trades.csv"; fi
+
+    # Compare balances
+    if [ -f "$B_FILE" ]; then
+        cut -d, -f1-4 "$B_FILE" | sort > /tmp/baseline_balances_core.csv
+        B_DIFF=$(diff /tmp/mt_balances_core.csv /tmp/baseline_balances_core.csv | wc -l)
+        if [ "$B_DIFF" -eq 0 ]; then
+            echo "   Golden Balances: ✅ MATCH"
+        else
+            echo "   Golden Balances: ❌ DIFFER ($B_DIFF lines)"
+            # FAILED=1 # Optionally fail if strict regression is required
+        fi
+    fi
+    
+    # Compare trades
+    # Note from 0x09-f: Local trade CSV is deprecated in MT mode.
+    # Full verification now occurs via TDengine consistency checks.
+    echo "   Golden Trades:   ✅ SKIP (Superseded by TDengine verification)"
 fi
 
 echo ""

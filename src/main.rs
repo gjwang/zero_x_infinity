@@ -400,8 +400,8 @@ fn main() {
     let mut book = OrderBook::new();
     let mut ledger = LedgerWriter::new(&ledger_path);
 
-    // Enable event logging for UBSCore mode (complete event sourcing)
-    if ubscore_mode {
+    // Enable event logging ONLY for single-threaded UBSCore mode (complete event sourcing)
+    if ubscore_mode && !pipeline_mt_mode {
         ledger.enable_event_logging(&events_path);
         ledger.enable_order_logging(&order_events_path);
         println!(
@@ -422,10 +422,6 @@ fn main() {
     let (accepted, rejected, total_trades, perf, final_accounts, final_book) = if pipeline_mt_mode {
         println!("    Using Multi-Thread Pipeline (4 threads)...");
 
-        // Enable event logging for multi-thread mode
-        ledger.enable_event_logging(&events_path);
-        println!("    Event logging enabled: {}", events_path);
-
         // Create UBSCore and initialize with deposits
         let wal_config = WalConfig {
             path: wal_path.clone(),
@@ -445,21 +441,7 @@ fn main() {
                         ubscore
                             .deposit(*user_id, asset_id, balance.avail())
                             .unwrap();
-
-                        // Record Deposit event
-                        if let Some(b) = ubscore.get_balance(*user_id, asset_id) {
-                            deposit_count += 1;
-                            let deposit_event = BalanceEvent::deposit(
-                                *user_id,
-                                asset_id,
-                                deposit_count,
-                                balance.avail(),
-                                b.lock_version(),
-                                b.avail(),
-                                b.frozen(),
-                            );
-                            ledger.write_balance_event(&deposit_event);
-                        }
+                        deposit_count += 1;
                     }
                 }
             }

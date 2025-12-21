@@ -33,6 +33,15 @@ SKIPPED=0
 
 mkdir -p "$LOG_DIR"
 
+# Add timeout fallback for macOS if missing
+if ! command -v timeout &> /dev/null; then
+    timeout() {
+        local duration="$1"
+        shift
+        "$@"
+    }
+fi
+
 echo "╔════════════════════════════════════════════════════════════════╗"
 echo "║     Phase 0x09-f: Comprehensive Integration Test               ║"
 echo "╚════════════════════════════════════════════════════════════════╝"

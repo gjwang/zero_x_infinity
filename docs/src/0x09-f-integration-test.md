@@ -114,8 +114,11 @@ Phase 0x09 实现了多个关键功能：
 | 数据精度 | 价格/数量保留正确小数位 |
 
 > [!IMPORTANT]
-> **一致性要求**：不仅数量一致，**所有字段最终状态必须完全一致**。
-> 如有中间过程数据（如 Ledger），过程也需完全一致。
+> **一致性要求**：核心资产 (avail, frozen) 和订单状态 (filled_qty, status) 必须 100% 一致。
+> 
+> **说明**：
+> 1. **版本号 (lock_version)**：由于 0x09-f 引入了版本空间隔离，不同模式下可能存在漂移，验证时仅比对核心余额。
+> 2. **流水日志 (Ledger CSV)**：多线程模式已切换为 DB (TDengine) 持久化，不再同步写入本地 `t2_events.csv`，回归测试重点转向 DB 内部一致性。
 
 **验证工具**：复杂对比使用 Python3 脚本 (`scripts/compare_settlement.py`)
 
@@ -193,16 +196,24 @@ baseline/
 └── README.md                   # 基线说明（版本、生成时间）
 ```
 
-### 可重复执行
+### 基线整理与回归 (Regression)
 
-```bash
-# 一键运行全部测试
-./scripts/test_integration_full.sh
+脚本已支持基线保护和回归检查：
 
-# 生成新基线
-./scripts/generate_baseline.sh 100k
-./scripts/generate_baseline.sh 1.3m
-```
+- **生成/更新基线**：只有在确认新输出为 Ground Truth 时使用：
+  ```bash
+  ./scripts/generate_baseline.sh 100k -f
+  ./scripts/generate_baseline.sh 1.3m -f
+  ```
+- **回归测试**：`test_pipeline_compare.sh` 会自动检测 `baseline/` 目录并进行对比：
+  ```bash
+  # 自动执行 ST vs MT 以及 MT vs Baseline
+  ./scripts/test_pipeline_compare.sh 100k
+  ```
+- **全集成测试**：
+  ```bash
+  ./scripts/test_integration_full.sh
+  ```
 
 ---
 
@@ -289,10 +300,10 @@ Lock events (1000000) != Accepted orders (1300000)
 
 | 测试项 | 结果 |
 |--------|------|
-| 100K 单线程 vs 多线程 | ✅ 完全一致 |
-| 1.3M 单线程 vs 多线程 | ✅ 完全一致 (耗时 101s, 12.7K/s) |
+| 100K 单线程 vs 多线程 | ✅ 核心余额一致 |
+| 1.3M 单线程 vs 多线程 | ✅ 核心余额一致 (耗时 101s, 12.7K/s) |
 | 成交数量匹配 (1.3M) | ✅ **667,567** |
-| 余额最终状态 (1.3M) | ✅ **100% MATCH** |
+| 余额最终状态 (1.3M) | ✅ **100% MATCH** (user, asset, avail, frozen) |
 
 #### Settlement 持久化详细比较 (100K Dataset)
 
