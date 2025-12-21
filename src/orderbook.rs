@@ -118,16 +118,10 @@ impl OrderBook {
         match order.side {
             Side::Buy => {
                 let key = u64::MAX - order.price;
-                self.bids
-                    .entry(key)
-                    .or_insert_with(VecDeque::new)
-                    .push_back(order);
+                self.bids.entry(key).or_default().push_back(order);
             }
             Side::Sell => {
-                self.asks
-                    .entry(order.price)
-                    .or_insert_with(VecDeque::new)
-                    .push_back(order);
+                self.asks.entry(order.price).or_default().push_back(order);
             }
         }
     }
@@ -160,24 +154,24 @@ impl OrderBook {
             Side::Sell => self.asks.get_mut(&price),
         };
 
-        if let Some(orders) = book {
-            if let Some(pos) = orders.iter().position(|o| o.order_id == order_id) {
-                orders.remove(pos);
-                // Remove from index
-                self.order_index.remove(&order_id);
-                // Clean up empty price level
-                if orders.is_empty() {
-                    match side {
-                        Side::Buy => {
-                            self.bids.remove(&(u64::MAX - price));
-                        }
-                        Side::Sell => {
-                            self.asks.remove(&price);
-                        }
+        if let Some(orders) = book
+            && let Some(pos) = orders.iter().position(|o| o.order_id == order_id)
+        {
+            orders.remove(pos);
+            // Remove from index
+            self.order_index.remove(&order_id);
+            // Clean up empty price level
+            if orders.is_empty() {
+                match side {
+                    Side::Buy => {
+                        self.bids.remove(&(u64::MAX - price));
+                    }
+                    Side::Sell => {
+                        self.asks.remove(&price);
                     }
                 }
-                return true;
             }
+            return true;
         }
         false
     }

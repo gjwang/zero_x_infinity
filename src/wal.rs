@@ -202,11 +202,7 @@ impl WalWriter {
 
     /// Get current sequence number (last assigned)
     pub fn current_seq(&self) -> SeqNum {
-        if self.next_seq > 1 {
-            self.next_seq - 1
-        } else {
-            0
-        }
+        self.next_seq.saturating_sub(1)
     }
 
     /// Get number of pending (unflushed) entries  

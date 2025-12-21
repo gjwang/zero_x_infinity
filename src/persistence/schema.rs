@@ -132,7 +132,7 @@ CREATE STABLE IF NOT EXISTS klines (
 /// First-time table creation can take 400ms+, so we do it during startup.
 pub async fn ensure_symbol_tables(taos: &Taos, symbol_id: u32) -> Result<()> {
     // Orders subtable
-    taos.exec(&format!(
+    taos.exec(format!(
         "CREATE TABLE IF NOT EXISTS orders_{} USING orders TAGS ({})",
         symbol_id, symbol_id
     ))
@@ -140,7 +140,7 @@ pub async fn ensure_symbol_tables(taos: &Taos, symbol_id: u32) -> Result<()> {
     .map_err(|e| anyhow::anyhow!("Failed to create orders_{}: {}", symbol_id, e))?;
 
     // Trades subtable
-    taos.exec(&format!(
+    taos.exec(format!(
         "CREATE TABLE IF NOT EXISTS trades_{} USING trades TAGS ({})",
         symbol_id, symbol_id
     ))
@@ -149,7 +149,7 @@ pub async fn ensure_symbol_tables(taos: &Taos, symbol_id: u32) -> Result<()> {
 
     // K-line subtables for common intervals
     for interval in &["1m", "5m", "15m", "1h", "4h", "1d"] {
-        taos.exec(&format!(
+        taos.exec(format!(
             "CREATE TABLE IF NOT EXISTS klines_{}_{} USING klines TAGS ({}, '{}')",
             symbol_id, interval, symbol_id, interval
         ))
@@ -167,7 +167,7 @@ pub async fn ensure_symbol_tables(taos: &Taos, symbol_id: u32) -> Result<()> {
 ///
 /// Call this during user onboarding to avoid runtime table creation overhead.
 pub async fn ensure_balance_table(taos: &Taos, user_id: u64, asset_id: u32) -> Result<()> {
-    taos.exec(&format!(
+    taos.exec(format!(
         "CREATE TABLE IF NOT EXISTS balances_{}_{} USING balances TAGS ({}, {})",
         user_id, asset_id, user_id, asset_id
     ))

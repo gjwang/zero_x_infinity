@@ -168,10 +168,10 @@ impl UBSCore {
             .calculate_cost(qty_unit)
             .expect("pre_check should have caught overflow");
 
-        if let Some(account) = self.accounts.get_mut(&order.user_id) {
-            if let Ok(balance) = account.get_balance_mut(lock_asset) {
-                let _ = balance.lock(lock_amount);
-            }
+        if let Some(account) = self.accounts.get_mut(&order.user_id)
+            && let Ok(balance) = account.get_balance_mut(lock_asset)
+        {
+            let _ = balance.lock(lock_amount);
         }
     }
 
@@ -280,16 +280,16 @@ impl UBSCore {
                 price_improvement,
             } => {
                 let mut events = self.settle_trade(&trade_event)?;
-                if let Some(pi) = price_improvement {
-                    if let Ok(refund_event) = self.unlock(
+                if let Some(pi) = price_improvement
+                    && let Ok(refund_event) = self.unlock(
                         pi.user_id,
                         pi.asset_id,
                         trade_event.trade.trade_id,
                         pi.amount,
                         trade_event.taker_ingested_at_ns,
-                    ) {
-                        events.push(refund_event);
-                    }
+                    )
+                {
+                    events.push(refund_event);
                 }
                 Ok(events)
             }

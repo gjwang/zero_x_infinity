@@ -37,23 +37,12 @@ use serde::{Deserialize, Serialize};
 /// balance.spend_frozen(100)?;        // frozen = 400, settle_version++
 /// balance.unlock(200)?;              // avail = 700, frozen = 200, lock_version++
 /// ```
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct Balance {
     avail: u64,          // PRIVATE - ONLY modified through deposit/withdraw/lock/unlock
     frozen: u64,         // PRIVATE - ONLY modified through lock/unlock/spend_frozen
     lock_version: u64,   // PRIVATE - Incremented on lock/unlock/deposit/withdraw
     settle_version: u64, // PRIVATE - Incremented on spend_frozen/deposit (settlement)
-}
-
-impl Default for Balance {
-    fn default() -> Self {
-        Self {
-            avail: 0,
-            frozen: 0,
-            lock_version: 0,
-            settle_version: 0,
-        }
-    }
 }
 
 impl Balance {

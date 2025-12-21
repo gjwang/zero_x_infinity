@@ -12,7 +12,6 @@ use tokio::time::interval;
 
 use super::connection::ConnectionManager;
 use super::messages::{PushEvent, WsMessage};
-use crate::persistence::TDengineClient;
 use crate::symbol_manager::SymbolManager;
 
 /// Format internal u64 to display string with specified decimals
@@ -28,10 +27,6 @@ pub struct WsService {
     push_event_queue: Arc<ArrayQueue<PushEvent>>,
     /// Symbol manager for name/decimal lookup
     symbol_mgr: Arc<SymbolManager>,
-    /// TDengine client for trade persistence (optional)
-    db_client: Option<Arc<TDengineClient>>,
-    /// Active symbol ID for trading
-    active_symbol_id: u32,
 }
 
 impl WsService {
@@ -40,15 +35,11 @@ impl WsService {
         manager: Arc<ConnectionManager>,
         push_event_queue: Arc<ArrayQueue<PushEvent>>,
         symbol_mgr: Arc<SymbolManager>,
-        db_client: Option<Arc<TDengineClient>>,
-        active_symbol_id: u32,
     ) -> Self {
         Self {
             manager,
             push_event_queue,
             symbol_mgr,
-            db_client,
-            active_symbol_id,
         }
     }
 

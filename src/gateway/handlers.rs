@@ -4,7 +4,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
 };
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::pipeline::OrderAction;
@@ -342,7 +342,7 @@ pub async fn get_order(
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::<()>::error(
                 error_codes::SERVICE_UNAVAILABLE,
-                &format!("Query failed: {}", e),
+                format!("Query failed: {}", e),
             )),
         )),
     }
@@ -406,7 +406,7 @@ pub async fn get_orders(
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::<()>::error(
                 error_codes::SERVICE_UNAVAILABLE,
-                &format!("Query failed: {}", e),
+                format!("Query failed: {}", e),
             )),
         )),
     }
@@ -456,7 +456,7 @@ pub async fn get_trades(
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::<()>::error(
                 error_codes::SERVICE_UNAVAILABLE,
-                &format!("Query failed: {}", e),
+                format!("Query failed: {}", e),
             )),
         )),
     }
@@ -534,7 +534,7 @@ pub async fn get_balances(
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::<()>::error(
                 error_codes::SERVICE_UNAVAILABLE,
-                &format!("Query failed: {}", e),
+                format!("Query failed: {}", e),
             )),
         )),
     }
@@ -600,7 +600,7 @@ pub async fn get_klines(
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::<()>::error(
                 error_codes::SERVICE_UNAVAILABLE,
-                &format!("Query failed: {}", e),
+                format!("Query failed: {}", e),
             )),
         )),
     }
