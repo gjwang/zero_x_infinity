@@ -1,34 +1,35 @@
 # Summary
 
-# The Journey
+## 🛠️ 第一阶段：核心匹配引擎 (Core Engine)
 
-- [0x01 创世纪: 基础引擎 (Genesis: The Basic Engine)](./0x01-genesis.md)
+- [0x01 创世纪: 基础引擎 (Genesis)](./0x01-genesis.md)
 - [0x02 浮点数的诅咒 (The Curse of Float)](./0x02-the-curse-of-float.md)
 - [0x03 十进制世界 (Decimal World)](./0x03-decimal-world.md)
-- [0x04 Orderbook数据结构重构 (BTree OrderBook)](./0x04-btree-orderbook.md)
+- [0x04 Orderbook数据结构重构](./0x04-btree-orderbook.md)
 - [0x05 用户账户与余额管理 (User Balance)](./0x05-user-balance.md)
 - [0x06 强制余额管理 (Enforced Balance)](./0x06-enforced-balance.md)
-- [0x07-a 测试框架 - 正确性 (Testing Framework - Correctness)](./0x07-a-testing-framework.md)
-- [0x07-b 性能基线 - 初步建立 (Performance Baseline - Initial Setup)](./0x07-b-perf-baseline.md)
+- [0x07 测试框架与性能基线](./0x07-a-testing-framework.md)
+- [0x08 交易流水线与多线程优化](./0x08-a-trading-pipeline-design.md)
+- [0x09 接入层集成与持久化校验](./0x09-a-gateway.md)
+    - [0x09-f 全功能集成测试报告](./0x09-f-integration-test.md)
+
 ---
-- [0x08-a 交易流水线设计 (Trading Pipeline Design)](./0x08-a-trading-pipeline-design.md)
-- [0x08-b UBSCore 实现 (UBSCore Implementation)](./0x08-b-ubscore-implementation.md)
-- [0x08-c 完整事件流 (Complete Event Flow)](./0x08-c-ring-buffer-pipeline.md)
-- [0x08-d 完整订单生命周期 (Complete Order Lifecycle)](./0x08-d-complete-order-lifecycle.md)
-- [0x08-e 撤单性能优化 (Cancel Optimization: Order Index)](./0x08-e-cancel-optimization.md)
-- [0x08-f Ring Buffer Pipeline](./0x08-f-ring-buffer-pipeline.md)
-- [0x08-g 多线程 Pipeline (Multi-Thread Pipeline)](./0x08-g-multi-thread-pipeline.md)
-- [0x08-h 性能监控与可观测性 (Performance Monitoring & Observability)](./0x08-h-performance-monitoring.md)
+
+## 🚀 第二阶段：产品化与业务闭环 (Productization)
+
+- [0x10 安全体系: API Key 与 鉴权 (Security & Auth)](./0x10-auth.md)
+- [0x11 经济模型: 手续费与系统盈亏 (Fee System)](./0x11-fee-system.md)
+- [0x12 鲁棒性: 快照、优雅停机与恢复 (Snapshot & Recovery)](./0x12-snapshot-recovery.md)
+- [0x13 管理接口: 资产充提与后台管理 (Admin APIs)](./0x13-admin-apis.md)
+
 ---
-- [0x09-a Gateway: 客户端接入层 (Client Access Layer)](./0x09-a-gateway.md)
-- [0x09-b Settlement Persistence: TDengine 集成](./0x09-b-settlement-persistence.md)
-- [0x09-c WebSocket Push: 实时推送](./0x09-c-websocket-push.md)
-- [0x09-d K-Line Aggregation: K线聚合服务](./0x09-d-kline-aggregation.md)
-- [0x09-e Order Book Depth: 盘口深度](./0x09-e-orderbook-depth.md)
-  - [增量更新方案调研](./0x09-e-orderbook-depth-incremental-research.md)
-- [0x09-f 集成测试: 全功能验收](./0x09-f-integration-test.md)
-  - [E2E 测试报告](./0x09-f-e2e-test-report.md)
-  - [测试脚本指南](./0x09-f-test-scripts-guide.md)
+
+## ⚡ 第三阶段：极致单点性能优化 (Extreme Optimization)
+
+- [0x20 Zero-Copy 反序列化优化 (Zero-Copy)](./0x20-zero-copy.md)
+- [0x21 缓存友好性与 CPU 亲和性 (Cache & Affinity)](./0x21-cpu-affinity.md)
+- [0x22 SIMD 矢量化撮合加速 (SIMD Acceleration)](./0x22-simd-matching.md)
+
 ---
 
 - [Performance Report (Latest)](./perf-report.md)
