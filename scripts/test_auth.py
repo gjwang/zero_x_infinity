@@ -123,7 +123,8 @@ def test_private_endpoint_with_auth():
     """Test authenticated access to private endpoints."""
     print("\n[TEST] Private endpoint with auth...")
     client = ApiClient(API_KEY, PRIVATE_KEY_HEX)
-    resp = client.get("/api/v1/private/orders")
+    # Note: path must include query params as they are part of the signed payload
+    resp = client.get("/api/v1/private/orders?user_id=1")
     
     if resp.status_code == 200:
         print(f"  ✅ Status: {resp.status_code}")
@@ -138,19 +139,18 @@ def test_replay_attack():
     """Test that replay attacks are rejected."""
     print("\n[TEST] Replay attack detection...")
     
-    # Create two clients with same key but independent ts_nonce
-    client1 = ApiClient(API_KEY, PRIVATE_KEY_HEX)
-    client2 = ApiClient(API_KEY, PRIVATE_KEY_HEX)
+    client = ApiClient(API_KEY, PRIVATE_KEY_HEX)
+    path = "/api/v1/private/orders?user_id=1"
     
-    # First request should succeed
-    resp1 = client1.get("/api/v1/private/orders")
+    # First request - capture the auth header used
+    auth1 = client._sign_request("GET", path)
+    resp1 = requests.get(f"{GATEWAY_URL}{path}", headers={"Authorization": auth1})
     print(f"  First request: {resp1.status_code}")
     
-    # Set client2's ts_nonce to same value (simulating replay)
-    client2.last_ts_nonce = client1.last_ts_nonce - 1
-    resp2 = client2.get("/api/v1/private/orders")
+    # Replay attack - use EXACT SAME auth header again
+    resp2 = requests.get(f"{GATEWAY_URL}{path}", headers={"Authorization": auth1})
     
-    # Second request should be rejected if ts_nonce is lower
+    # Second request should be rejected (replay detected via ts_nonce)
     if resp2.status_code == 401:
         print(f"  ✅ Replay correctly rejected (401)")
         return True
