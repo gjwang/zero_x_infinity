@@ -76,6 +76,14 @@ user_id,asset_id,balance
 1002,2,100000000000
 EOF
 
+# Create test orders CSV for inject_orders.py
+cat > "$TEST_DIR/test_orders.csv" << EOF
+order_id,user_id,side,price,qty
+1,1001,buy,50000,0.1
+2,1002,sell,50000,0.1
+3,1001,buy,51000,0.05
+EOF
+
 log_success "Test data prepared in $TEST_DIR/"
 echo ""
 
@@ -102,12 +110,8 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
         exit 1
     fi
     
-    # Try to connect
-    if curl -s -X POST "$GATEWAY_URL/api/v1/create_order" \
-        -H "Content-Type: application/json" \
-        -H "X-User-ID: 1" \
-        -d '{"symbol":"BTC_USDT","side":"BUY","order_type":"LIMIT","price":1,"qty":0.001}' \
-        2>/dev/null | grep -q "code"; then
+    # Try to connect using health endpoint
+    if curl -s "$GATEWAY_URL/api/v1/health" 2>/dev/null | grep -q "ok"; then
         GATEWAY_READY=true
         break
     fi
@@ -124,84 +128,20 @@ fi
 log_success "Gateway is running and responding"
 echo ""
 
-# Step 4: Submit test orders via API
-log_step "Submitting test orders via HTTP API..."
+# Step 4: Submit test orders via inject_orders.py (Ed25519 authenticated)
+log_step "Submitting test orders via inject_orders.py (Ed25519 auth)..."
 
-# Order 1: User 1001 BUY 0.1 BTC at 50000 USDT
-log_info "Order 1: User 1001 BUY 0.1 BTC @ 50000 USDT (LIMIT)"
-RESPONSE=$(curl -s -X POST "$GATEWAY_URL/api/v1/create_order" \
-    -H "Content-Type: application/json" \
-    -H "X-User-ID: 1001" \
-    -d '{
-        "symbol": "BTC_USDT",
-        "side": "BUY",
-        "order_type": "LIMIT",
-        "price": 50000.00,
-        "qty": 0.1
-    }')
-
-ORDER1_ID=$(echo "$RESPONSE" | jq -r '.data.order_id')
-ORDER1_STATUS=$(echo "$RESPONSE" | jq -r '.data.order_status')
-
-if [[ "$ORDER1_STATUS" == "ACCEPTED" ]]; then
-    log_success "Order 1 accepted (ID: $ORDER1_ID)"
-else
-    log_error "Order 1 failed: $RESPONSE"
+# Use inject_orders.py with Ed25519 authentication
+# Set PYTHONPATH so lib/auth.py is found
+# Use venv python which has pynacl installed
+export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
+PYTHON_CMD="${PYTHON_CMD:-.venv/bin/python3.14}"
+if ! "$PYTHON_CMD" "$SCRIPT_DIR/inject_orders.py" --input "$TEST_DIR/test_orders.csv" --quiet; then
+    log_error "Order injection failed"
     exit 1
 fi
 
-sleep 0.5
-
-# Order 2: User 1002 SELL 0.1 BTC at 50000 USDT (should match Order 1)
-log_info "Order 2: User 1002 SELL 0.1 BTC @ 50000 USDT (LIMIT)"
-RESPONSE=$(curl -s -X POST "$GATEWAY_URL/api/v1/create_order" \
-    -H "Content-Type: application/json" \
-    -H "X-User-ID: 1002" \
-    -d '{
-        "symbol": "BTC_USDT",
-        "side": "SELL",
-        "order_type": "LIMIT",
-        "price": 50000.00,
-        "qty": 0.1
-    }')
-
-ORDER2_ID=$(echo "$RESPONSE" | jq -r '.data.order_id')
-ORDER2_STATUS=$(echo "$RESPONSE" | jq -r '.data.order_status')
-
-if [[ "$ORDER2_STATUS" == "ACCEPTED" ]]; then
-    log_success "Order 2 accepted (ID: $ORDER2_ID)"
-else
-    log_error "Order 2 failed: $RESPONSE"
-    exit 1
-fi
-
-sleep 0.5
-
-# Order 3: User 1001 BUY 0.05 BTC at 51000 USDT (resting order)
-log_info "Order 3: User 1001 BUY 0.05 BTC @ 51000 USDT (LIMIT)"
-RESPONSE=$(curl -s -X POST "$GATEWAY_URL/api/v1/create_order" \
-    -H "Content-Type: application/json" \
-    -H "X-User-ID: 1001" \
-    -d '{
-        "symbol": "BTC_USDT",
-        "side": "BUY",
-        "order_type": "LIMIT",
-        "price": 51000.00,
-        "qty": 0.05
-    }')
-
-ORDER3_ID=$(echo "$RESPONSE" | jq -r '.data.order_id')
-ORDER3_STATUS=$(echo "$RESPONSE" | jq -r '.data.order_status')
-
-if [[ "$ORDER3_STATUS" == "ACCEPTED" ]]; then
-    log_success "Order 3 accepted (ID: $ORDER3_ID)"
-else
-    log_error "Order 3 failed: $RESPONSE"
-    exit 1
-fi
-
-echo ""
-log_success "All orders submitted successfully"
+log_success "All 3 orders submitted successfully (Ed25519 authenticated)"
 echo ""
 
 # Step 5: Wait for processing
