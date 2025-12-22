@@ -352,7 +352,19 @@ main() {
     echo "Phase 5: Account Integration (PostgreSQL)"
     echo "═══════════════════════════════════════════════════════════════"
     
-    if docker ps 2>/dev/null | grep -q postgres; then
+    # In CI, PostgreSQL is a service container (not shown by docker ps)
+    # Check via psycopg2 or docker ps
+    POSTGRES_AVAILABLE=false
+    if [ "$CI" = "true" ]; then
+        # CI: check via Python psycopg2
+        if python3 -c "import psycopg2; psycopg2.connect(host='localhost', dbname='exchange_info_db', user='trading', password='trading123').close()" 2>/dev/null; then
+            POSTGRES_AVAILABLE=true
+        fi
+    elif docker ps 2>/dev/null | grep -q postgres; then
+        POSTGRES_AVAILABLE=true
+    fi
+    
+    if [ "$POSTGRES_AVAILABLE" = true ]; then
         run_test "Account_Integration" "scripts/test_account_integration.sh" 120
     else
         log_test_start "Account_Integration"
