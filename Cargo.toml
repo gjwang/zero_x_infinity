@@ -32,3 +32,4 @@ once_cell = "1.21.3"
 
 # PostgreSQL for account management
 sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "chrono"] }
+thiserror = "2.0.17"

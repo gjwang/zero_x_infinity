@@ -1,11 +1,14 @@
 //! Account management module
 //!
-//! PostgreSQL-based storage for users, assets, and trading pairs.
+//! PostgreSQL-based storage for users, assets,//! Account management module
 
-mod db;
-mod models;
-mod repository;
+pub mod db;
+pub mod models;
+pub mod repository;
+pub mod validation;
 
+// Re-export commonly used types
 pub use db::Database;
 pub use models::{Asset, Symbol, User, UserStatus};
 pub use repository::{AssetManager, SymbolManager, UserRepository};
+pub use validation::{AssetName, SymbolName, ValidationError};
