@@ -145,7 +145,7 @@ USDTUSDC  → USDT + USDC? 或 USD + TUSDC?
 
 // 双击选择
 BTC/USDT  // ❌ 只会选中 "BTC" 或 "USDT"，不会选中整体
-BTC-USDT // ❌ 只会选中 "BTC" 或 "USDT"，不会选中整体
+BTC-USDT  // ❌ 只会选中 "BTC" 或 "USDT"，不会选中整体
 ```
 
 **其他问题**：
