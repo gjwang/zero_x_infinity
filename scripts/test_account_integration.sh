@@ -181,6 +181,26 @@ else
     log_info "Response: $SYMBOLS_RESPONSE"
 fi
 
+# Test /api/v1/exchange_info endpoint
+test_start "Test /api/v1/exchange_info endpoint"
+EXCHANGE_INFO_RESPONSE=$(curl -s http://localhost:8080/api/v1/exchange_info)
+if echo "$EXCHANGE_INFO_RESPONSE" | jq -e '.code == 0' > /dev/null 2>&1; then
+    ASSET_COUNT=$(echo "$EXCHANGE_INFO_RESPONSE" | jq '.data.assets | length')
+    SYMBOL_COUNT=$(echo "$EXCHANGE_INFO_RESPONSE" | jq '.data.symbols | length')
+    SERVER_TIME=$(echo "$EXCHANGE_INFO_RESPONSE" | jq '.data.server_time')
+    log_success "Exchange info returned $ASSET_COUNT assets, $SYMBOL_COUNT symbols"
+    
+    # Verify structure
+    if echo "$EXCHANGE_INFO_RESPONSE" | jq -e '.data | has("assets", "symbols", "server_time")' > /dev/null 2>&1; then
+        log_success "Exchange info structure is correct"
+    else
+        log_error "Exchange info structure is incorrect"
+    fi
+else
+    log_error "Exchange info endpoint failed"
+    log_info "Response: $EXCHANGE_INFO_RESPONSE"
+fi
+
 # ============================================================================
 # Idempotency Test
 # ============================================================================

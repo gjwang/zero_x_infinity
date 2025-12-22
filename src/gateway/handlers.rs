@@ -946,3 +946,78 @@ pub async fn get_symbols(
 
     Ok((StatusCode::OK, Json(ApiResponse::success(symbols))))
 }
+
+// ============================================================================
+// Exchange Info API (Combined Assets + Symbols)
+// ============================================================================
+
+/// Exchange info response data
+#[derive(serde::Serialize)]
+pub struct ExchangeInfoData {
+    pub assets: Vec<AssetApiData>,
+    pub symbols: Vec<SymbolApiData>,
+    pub server_time: u64,
+}
+
+/// Get exchange info (combined assets and symbols)
+///
+/// GET /api/v1/exchange_info
+/// Returns all assets and symbols in a single response.
+pub async fn get_exchange_info(
+    State(state): State<Arc<AppState>>,
+) -> Result<(StatusCode, Json<ApiResponse<ExchangeInfoData>>), (StatusCode, Json<ApiResponse<()>>)>
+{
+    // Build asset list
+    let assets: Vec<AssetApiData> = state
+        .pg_assets
+        .iter()
+        .map(|a| AssetApiData {
+            asset_id: a.asset_id,
+            asset: a.asset.clone(),
+            name: a.name.clone(),
+            decimals: a.decimals,
+            can_deposit: a.can_deposit(),
+            can_withdraw: a.can_withdraw(),
+            can_trade: a.can_trade(),
+        })
+        .collect();
+
+    // Build asset lookup map for symbols
+    let asset_map: std::collections::HashMap<i32, &crate::account::Asset> =
+        state.pg_assets.iter().map(|a| (a.asset_id, a)).collect();
+
+    // Build symbol list
+    let symbols: Vec<SymbolApiData> = state
+        .pg_symbols
+        .iter()
+        .map(|s| {
+            let base_asset = asset_map
+                .get(&s.base_asset_id)
+                .map(|a| a.asset.clone())
+                .unwrap_or_else(|| format!("UNKNOWN_{}", s.base_asset_id));
+            let quote_asset = asset_map
+                .get(&s.quote_asset_id)
+                .map(|a| a.asset.clone())
+                .unwrap_or_else(|| format!("UNKNOWN_{}", s.quote_asset_id));
+
+            SymbolApiData {
+                symbol_id: s.symbol_id,
+                symbol: s.symbol.clone(),
+                base_asset,
+                quote_asset,
+                price_decimals: s.price_decimals,
+                qty_decimals: s.qty_decimals,
+                is_tradable: s.is_tradable(),
+                is_visible: s.is_visible(),
+            }
+        })
+        .collect();
+
+    let exchange_info = ExchangeInfoData {
+        assets,
+        symbols,
+        server_time: now_ms(),
+    };
+
+    Ok((StatusCode::OK, Json(ApiResponse::success(exchange_info))))
+}
