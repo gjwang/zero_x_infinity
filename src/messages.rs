@@ -182,7 +182,7 @@ pub struct MEResult {
 }
 
 // ============================================================
-// ORDER EVENT (状态变更事件)
+// ORDER EVENT (State Change Events)
 // ============================================================
 
 /// InternalOrder event - order state changes
