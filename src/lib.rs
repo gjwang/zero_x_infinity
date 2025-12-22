@@ -52,6 +52,9 @@ pub mod websocket;
 // Database infrastructure (Phase 0x0A)
 pub mod db;
 
+// Exchange information (Phase 0x0A)
+pub mod exchange_info;
+
 // Account management (Phase 0x0A)
 pub mod account;
 
