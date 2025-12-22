@@ -37,12 +37,12 @@ log_info() {
 
 log_success() {
     echo -e "${GREEN}[PASS]${NC} $1"
-    ((TESTS_PASSED++))
+    ((TESTS_PASSED++)) || true
 }
 
 log_error() {
     echo -e "${RED}[FAIL]${NC} $1"
-    ((TESTS_FAILED++))
+    ((TESTS_FAILED++)) || true
     FAILED_TESTS+=("$1")
 }
 
@@ -51,7 +51,7 @@ log_warn() {
 }
 
 test_start() {
-    ((TESTS_TOTAL++))
+    ((TESTS_TOTAL++)) || true
     log_info "Test $TESTS_TOTAL: $1"
 }
 
@@ -113,7 +113,7 @@ fi
 
 test_start "Start Gateway in background"
 log_info "Starting Gateway on port 8080..."
-./target/release/zero_x_infinity gateway > /tmp/gateway.log 2>&1 &
+./target/release/zero_x_infinity --gateway --port 8080 > /tmp/gateway.log 2>&1 &
 GATEWAY_PID=$!
 
 # Wait for Gateway to start
@@ -139,7 +139,7 @@ done
 
 test_start "Test /api/v1/assets endpoint"
 ASSETS_RESPONSE=$(curl -s http://localhost:8080/api/v1/assets)
-if echo "$ASSETS_RESPONSE" | jq -e '.code == 200' > /dev/null 2>&1; then
+if echo "$ASSETS_RESPONSE" | jq -e '.code == 0' > /dev/null 2>&1; then
     ASSET_COUNT=$(echo "$ASSETS_RESPONSE" | jq '.data | length')
     log_success "Assets endpoint returned $ASSET_COUNT assets"
     
@@ -156,12 +156,12 @@ fi
 
 test_start "Test /api/v1/symbols endpoint"
 SYMBOLS_RESPONSE=$(curl -s http://localhost:8080/api/v1/symbols)
-if echo "$SYMBOLS_RESPONSE" | jq -e '.code == 200' > /dev/null 2>&1; then
+if echo "$SYMBOLS_RESPONSE" | jq -e '.code == 0' > /dev/null 2>&1; then
     SYMBOL_COUNT=$(echo "$SYMBOLS_RESPONSE" | jq '.data | length')
     log_success "Symbols endpoint returned $SYMBOL_COUNT symbols"
     
     # Verify symbol structure
-    if echo "$SYMBOLS_RESPONSE" | jq -e '.data[0] | has("symbol_id", "symbol", "base_asset_id")' > /dev/null 2>&1; then
+    if echo "$SYMBOLS_RESPONSE" | jq -e '.data[0] | has("symbol_id", "symbol", "base_asset")' > /dev/null 2>&1; then
         log_success "Symbol structure is correct"
     else
         log_error "Symbol structure is incorrect"
