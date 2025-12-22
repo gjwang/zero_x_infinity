@@ -27,7 +27,8 @@ CREATE TABLE IF NOT EXISTS users (
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS assets (
     asset_id SERIAL PRIMARY KEY,
-    asset VARCHAR(16) UNIQUE NOT NULL,   -- 资产代码: BTC, USDT, ETH
+    asset VARCHAR(16) UNIQUE NOT NULL
+        CONSTRAINT chk_asset_uppercase CHECK (asset = UPPER(asset)),  -- 强制大写
     name VARCHAR(64) NOT NULL,           -- 全称: Bitcoin, Tether USD
     decimals SMALLINT NOT NULL,          -- 精度: 8 for BTC, 6 for USDT
     status SMALLINT NOT NULL DEFAULT 1,  -- 0=disabled, 1=active
@@ -46,7 +47,8 @@ CREATE TABLE IF NOT EXISTS assets (
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS symbols (
     symbol_id SERIAL PRIMARY KEY,
-    symbol VARCHAR(32) UNIQUE NOT NULL,  -- 交易对: BTC_USDT
+    symbol VARCHAR(32) UNIQUE NOT NULL
+        CONSTRAINT chk_symbol_uppercase CHECK (symbol = UPPER(symbol)),  -- 强制大写
     base_asset_id INT NOT NULL REFERENCES assets(asset_id),
     quote_asset_id INT NOT NULL REFERENCES assets(asset_id),
     price_decimals SMALLINT NOT NULL,    -- 价格精度
