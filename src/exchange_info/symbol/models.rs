@@ -128,7 +128,10 @@ mod tests {
 
         assert!(symbol.is_tradable());
         assert!(symbol.is_visible());
-        assert_eq!(symbol.symbol_flags & flags::ALLOW_MARKET, flags::ALLOW_MARKET);
+        assert_eq!(
+            symbol.symbol_flags & flags::ALLOW_MARKET,
+            flags::ALLOW_MARKET
+        );
     }
 
     #[test]

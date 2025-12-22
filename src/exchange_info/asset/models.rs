@@ -118,7 +118,10 @@ mod tests {
         assert!(asset.can_deposit());
         assert!(asset.can_withdraw());
         assert!(asset.can_trade());
-        assert_eq!(asset.asset_flags & flags::IS_STABLE_COIN, flags::IS_STABLE_COIN);
+        assert_eq!(
+            asset.asset_flags & flags::IS_STABLE_COIN,
+            flags::IS_STABLE_COIN
+        );
     }
 
     #[test]
