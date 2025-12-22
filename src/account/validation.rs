@@ -323,6 +323,11 @@ mod tests {
         assert!(SymbolName::new("ETH_BTC").is_ok());
         assert!(SymbolName::new("USDT_USD").is_ok());
         assert!(SymbolName::new("A_B").is_ok()); // minimum length
+
+        // Symbols starting with numbers (allowed)
+        assert!(SymbolName::new("1000SHIB_USDT").is_ok());
+        assert!(SymbolName::new("1INCH_USDT").is_ok());
+        assert!(SymbolName::new("2KEY_BTC").is_ok());
     }
 
     #[test]
