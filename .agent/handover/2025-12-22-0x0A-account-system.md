@@ -18,62 +18,42 @@
 
 ---
 
-## 2. 数据库表结构
+## 2. 文档结构
 
-### users
-| 列 | 类型 | 说明 |
-|---|---|---|
-| user_id | BIGSERIAL | 主键 |
-| username | VARCHAR(64) | 唯一用户名 |
-| user_flags | INT | 权限位 (0x01=login, 0x02=trade, 0x04=withdraw) |
-
-### assets  
-| 列 | 类型 | 说明 |
-|---|---|---|
-| asset_id | SERIAL | 主键 |
-| asset | VARCHAR(16) | 资产代码 (BTC, USDT) |
-| asset_flags | INT | 权限位 (0x01=deposit, 0x02=withdraw, 0x04=trade) |
-
-### symbols
-| 列 | 类型 | 说明 |
-|---|---|---|
-| symbol_id | SERIAL | 主键 |
-| symbol | VARCHAR(32) | 交易对 (BTC_USDT) |
-| symbol_flags | INT | 权限位 (0x01=tradable, 0x02=visible) |
-
----
-
-## 3. 待开发者完成
-
-- [ ] 在 `src/lib.rs` 添加 `pub mod account;`
-- [ ] Gateway 启动时加载 assets/symbols 到内存
-- [ ] 配置文件添加 postgres URL
-- [ ] 编写单元测试
-
----
-
-## 4. 验收标准
-
-```bash
-# 1. 启动服务
-docker-compose up -d
-
-# 2. 编译
-cargo build
-
-# 3. 测试
-cargo test
-
-# 4. 验证 Gateway 加载配置
-curl http://localhost:8080/api/v1/symbols
+```
+docs/src/
+├── 0x0A-part-ii-introduction.md  # Part II 导读 (主章节)
+├── 0x0A-a-id-specification.md    # ID 规范
+└── 0x0A-b-auth.md                # 安全鉴权
 ```
 
 ---
 
-## 5. 相关文档
+## 3. 数据库表
 
-- `docs/src/Part-II-Introduction.md` - Part II 导读
-- `docs/src/0x0A-auth.md` - 账户鉴权设计
-- `docs/src/0x0A-a-id-specification.md` - ID 规范
-- `docs/NAMING_CONVENTION.md` - 命名规范
-- `docs/CHECKLIST_ARCHITECTURE_DESIGN.md` - 架构检查清单
+| 表 | 关键字段 | flags 位 |
+|---|---|---|
+| users | user_id, username, user_flags | 0x01=login, 0x02=trade, 0x04=withdraw |
+| assets | asset_id, asset, asset_flags | 0x01=deposit, 0x02=withdraw, 0x04=trade |
+| symbols | symbol_id, symbol, symbol_flags | 0x01=tradable, 0x02=visible |
+
+---
+
+## 4. 待开发者完成
+
+- [ ] `src/lib.rs` 添加 `pub mod account;`
+- [ ] Gateway 启动时加载 assets/symbols
+- [ ] 配置文件添加 `postgres_url`
+- [ ] 可选: `/api/v1/assets` 端点
+- [ ] 可选: `/api/v1/symbols` 端点
+
+---
+
+## 5. 验收命令
+
+```bash
+docker-compose up -d
+cargo build
+cargo test
+curl http://localhost:8080/api/v1/symbols
+```
