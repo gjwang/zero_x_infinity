@@ -397,9 +397,15 @@ let app = Router::new()
 ```
 ApiKey 查询优化:
 1. 内存缓存 (LRU, TTL=5min)
-2. 缓存 key: api_key
+2. 缓存 key: api_key 转 u64 (高效比较)
 3. 缓存 value: {user_id, key_type, key_data, permissions, status}
+
+API Key u64 转换:
+  api_key = "AK_" + hex(16)    # 64-bit 正好对应 u64
+  cache_key = parse_hex_to_u64(api_key[3..])  # 跳过 "AK_" 前缀
 ```
+
+> **约束**: API Key 生成时必须确保 HEX 值 ≤ u64::MAX (18446744073709551615)
 
 ### 7.2 性能目标
 
