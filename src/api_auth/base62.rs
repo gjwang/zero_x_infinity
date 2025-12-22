@@ -10,7 +10,7 @@ const ALPHABET: &[u8; 62] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmn
 ///
 /// # Example
 /// ```
-/// use zero_x_infinity::auth::base62;
+/// use zero_x_infinity::api_auth::base62;
 /// let encoded = base62::encode(&[0x01, 0x02, 0x03]);
 /// assert!(!encoded.is_empty());
 /// ```

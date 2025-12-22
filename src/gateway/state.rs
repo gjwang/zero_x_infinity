@@ -12,7 +12,7 @@ use crate::websocket::ConnectionManager;
 use crate::account::{Asset, Database, Symbol};
 
 // Phase 0x0A-b: Authentication
-use crate::auth::AuthState;
+use crate::api_auth::AuthState;
 
 /// Gateway application state (shared)
 #[derive(Clone)]

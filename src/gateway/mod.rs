@@ -27,7 +27,7 @@ use state::AppState;
 use crate::account::{Asset, Database, Symbol};
 
 // Phase 0x0A-b: Authentication
-use crate::auth::{
+use crate::api_auth::{
     ApiKeyRepository, AuthError, AuthState, AuthenticatedUser, TsStore, extract_auth_header,
     parse_authorization, validate_ts_nonce, verify_signature,
 };
@@ -38,7 +38,7 @@ async fn gateway_auth_middleware(
     mut request: Request<Body>,
     next: Next,
 ) -> Result<Response, AuthError> {
-    use crate::auth::AuthErrorCode;
+    use crate::api_auth::AuthErrorCode;
 
     // Step 1: Extract Authorization header
     let auth_header = extract_auth_header(request.headers())?;

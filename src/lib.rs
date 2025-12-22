@@ -59,7 +59,7 @@ pub mod exchange_info;
 pub mod account;
 
 // API Authentication (Phase 0x0A-b)
-pub mod auth;
+pub mod api_auth;
 
 // Convenient re-exports at crate root
 pub use balance::Balance;
