@@ -170,10 +170,10 @@ pub async fn run_server(
     ));
 
     // ==========================================================================
-    // Public Routes (无需鉴权)
+    // Public Routes (no auth required)
     // ==========================================================================
     let public_routes = Router::new()
-        // 行情数据
+        // Market data
         .route("/exchange_info", get(handlers::get_exchange_info))
         .route("/assets", get(handlers::get_assets))
         .route("/symbols", get(handlers::get_symbols))
@@ -181,21 +181,21 @@ pub async fn run_server(
         .route("/klines", get(handlers::get_klines));
 
     // ==========================================================================
-    // Private Routes (需要签名鉴权)
+    // Private Routes (auth required)
     // ==========================================================================
     let private_routes = Router::new()
-        // 账户查询
+        // Account queries
         .route("/orders", get(handlers::get_orders))
         .route("/order/{order_id}", get(handlers::get_order))
         .route("/trades", get(handlers::get_trades))
         .route("/balances", get(handlers::get_balances))
-        // 交易操作
+        // Trading operations
         .route("/order", post(handlers::create_order))
         .route("/cancel", post(handlers::cancel_order))
         // Apply auth middleware
         .layer(from_fn_with_state(state.clone(), gateway_auth_middleware));
 
-    // 创建完整路由
+    // Build complete router
     let app = Router::new()
         // WebSocket endpoint
         .route("/ws", get(ws_handler))
@@ -206,7 +206,7 @@ pub async fn run_server(
         .nest("/api/v1/private", private_routes)
         .with_state(state);
 
-    // 绑定地址
+    // Bind address
     let addr = format!("0.0.0.0:{}", port);
     let listener = TcpListener::bind(&addr).await.unwrap();
 
@@ -215,6 +215,6 @@ pub async fn run_server(
     println!("📂 Public API:  /api/v1/public/*");
     println!("🔒 Private API: /api/v1/private/* (auth pending)");
 
-    // 启动服务器
+    // Start server
     axum::serve(listener, app).await.unwrap();
 }
