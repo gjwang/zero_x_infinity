@@ -47,6 +47,10 @@ This is a pilgrimage from `Hello World` to `Microsecond Latency`.
 | 0x09-d | [K-Line Aggregation](./docs/src/0x09-d-kline-aggregation.md) | K线聚合 |
 | 0x09-e | [Order Book Depth](./docs/src/0x09-e-orderbook-depth.md) | 盘口深度 |
 | 0x09-f | [Full Integration Test](./docs/src/0x09-f-integration-test.md) | 全功能集成与回归验收 |
+| **Part II** | **产品化阶段 (Productization)** | |
+| 0x0A | [Part II Introduction](./docs/src/0x0A-part-ii-introduction.md) | 产品化路线图 |
+| 0x0A-a | [Account System](./docs/src/0x0A-a-account-system.md) | PostgreSQL 账户管理 |
+| 0x0A-b | [API Auth](./docs/src/0x0A-b-auth.md) | 安全鉴权 (进行中) |
 
 ---
 
