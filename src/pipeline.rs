@@ -381,9 +381,9 @@ pub const EVENT_QUEUE_CAPACITY: usize = 65536;
 /// Extended queues for multi-threaded pipeline
 ///
 /// Architecture from 0x08-a Trading Pipeline Design:
-/// - ME → me_result_queue → Settlement (持久化)
-/// - ME → balance_update_queue → UBSCore (余额更新)
-/// - UBSCore → balance_event_queue → Settlement (余额事件持久化)
+/// - ME → me_result_queue → Settlement (persistence)
+/// - ME → balance_update_queue → UBSCore (balance update)
+/// - UBSCore → balance_event_queue → Settlement (balance event persistence)
 pub struct MultiThreadQueues {
     /// Order actions from Ingestion → UBSCore (Pre-Trade)
     ///

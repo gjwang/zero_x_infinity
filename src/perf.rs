@@ -270,7 +270,7 @@ impl PerfMetrics {
         let total_orders = self.place_count + self.cancel_count;
 
         let mut s = String::new();
-        s.push_str("| 服务 (Service) | 模块 / 关键 Span | 任务总耗时 | 耗时占比 | 单笔延迟 (Latency) | 理论吞吐上限 (Throughput) |\n");
+        s.push_str("| Service | Module / Key Span | Total Time | Ratio | Latency | Throughput |\n");
         s.push_str("| :--- | :--- | :--- | :--- | :--- | :--- |\n");
 
         let mut add_row = |service: &str, module: &str, ns: u64, count: u64| {

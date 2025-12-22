@@ -6,6 +6,8 @@ inject_orders.py - Inject orders from CSV through Gateway HTTP API
 PURPOSE:
     Read orders from fixtures CSV and submit them through Gateway HTTP API.
     This enables end-to-end testing where data flows through Gateway to TDengine.
+    
+    Uses Ed25519 signature authentication via lib/auth.py.
 
 USAGE:
     # Inject 100K orders
@@ -21,12 +23,17 @@ USAGE:
 import argparse
 import csv
 import json
+import os
 import socket
 import subprocess
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
+
+# Add scripts directory to path for lib imports
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, SCRIPT_DIR)
 
 try:
     import requests
@@ -39,8 +46,16 @@ except ImportError:
     USE_REQUESTS = False
     print("⚠️  requests library not found, using urllib (slower)")
 
+# Import Ed25519 auth from shared library
+try:
+    from lib.api_auth import ApiClient, TEST_API_KEY, TEST_PRIVATE_KEY_HEX
+    USE_AUTH = True
+except ImportError:
+    print("⚠️  lib/auth.py not found, falling back to X-User-ID (legacy mode)")
+    USE_AUTH = False
+
 # Configuration
-GATEWAY_URL = "http://localhost:8080"
+GATEWAY_URL = os.environ.get("GATEWAY_URL", "http://localhost:8080")
 SYMBOL_MAP = {1: "BTC_USDT", 2: "ETH_USDT"}  # Map symbol_id to symbol name
 
 # Stats
@@ -53,6 +68,20 @@ stats_lock = Lock()
 
 # Global HTTP session for connection reuse (Keep-Alive)
 _session = None
+
+# Global ApiClient for Ed25519 auth
+_api_client = None
+
+def get_api_client():
+    """Get or create ApiClient for authenticated requests."""
+    global _api_client
+    if _api_client is None and USE_AUTH:
+        _api_client = ApiClient(
+            api_key=TEST_API_KEY,
+            private_key_hex=TEST_PRIVATE_KEY_HEX,
+            base_url=GATEWAY_URL
+        )
+    return _api_client
 
 def get_session():
     """Get or create HTTP session with connection pooling."""
@@ -79,13 +108,16 @@ def safe_sleep(seconds: float) -> bool:
         print(f"  ⚠️  Interrupted during retry sleep")
         return False
 
-def submit_order(order_data: dict) -> bool:
+def submit_order(order_data: dict) -> tuple:
     """
-    Submit a single order through Gateway API.
+    Submit a single order through Gateway API with Ed25519 authentication.
     
     Handles two CSV formats:
     - 100K: order_id,user_id,side,price,qty
     - 1.3M: order_id,user_id,action,side,price,qty
+    
+    Returns:
+        (success: bool, error: str or None)
     """
     # Detect cancel vs place
     action = order_data.get("action", "place").lower()
@@ -94,23 +126,22 @@ def submit_order(order_data: dict) -> bool:
     user_id = order_data.get("user_id", "0")
     
     if is_cancel:
-        # Cancel order - use the order_id from CSV
-        # Note: This assumes Gateway's order_id matches CSV order_id (sequential injection)
-        url = f"{GATEWAY_URL}/api/v1/cancel_order"
+        # Cancel order - use /api/v1/private/cancel
+        path = f"/api/v1/private/cancel?user_id={user_id}"
         payload = {
             "order_id": int(order_data.get("order_id", 0)),
-            "symbol": "BTC_USDT",  # Default symbol
+            "symbol": "BTC_USDT",
         }
     else:
-        # Place order
-        url = f"{GATEWAY_URL}/api/v1/create_order"
+        # Place order - use /api/v1/private/order
+        path = f"/api/v1/private/order?user_id={user_id}"
         
         # Parse side: 'buy'/'sell' or 'BUY'/'SELL'
         side_raw = order_data.get("side", "buy").lower()
         side = "BUY" if side_raw == "buy" else "SELL"
         
         payload = {
-            "symbol": "BTC_USDT",  # All test data uses BTC_USDT
+            "symbol": "BTC_USDT",
             "side": side,
             "order_type": "LIMIT",
             "price": order_data.get("price", "0"),
@@ -119,52 +150,51 @@ def submit_order(order_data: dict) -> bool:
     
     max_retries = 50
     max_delay = 5.0    # Cap delay at 5 seconds
-    retry_delay = 1 # 1000ms initial, doubles each retry (capped at max_delay)
-    
-    # Errors that are safe to retry (network/transient issues)
-    RETRYABLE_ERRORS = (
-        socket.timeout,         # Timeout
-        ConnectionRefusedError, # Gateway not ready
-        ConnectionResetError,   # Connection dropped
-        BrokenPipeError,        # Pipe issues
-        TimeoutError,           # General timeout
-        OSError,                # Other OS-level network errors
-    )
+    retry_delay = 1.0  # 1000ms initial, doubles each retry (capped at max_delay)
     
     for attempt in range(max_retries + 1):
         try:
-            headers = {
-                'Content-Type': 'application/json',
-                'X-User-ID': str(user_id)
-            }
-            
-            if USE_REQUESTS:
-                # Use requests with session for Keep-Alive
+            if USE_AUTH:
+                # Use Ed25519 authenticated request + X-User-ID header
+                client = get_api_client()
+                extra_headers = {'X-User-ID': str(user_id)}
+                response = client.post(path, payload, headers=extra_headers)
+            elif USE_REQUESTS:
+                # Legacy: Use X-User-ID header
+                url = f"{GATEWAY_URL}{path}"
+                headers = {
+                    'Content-Type': 'application/json',
+                    'X-User-ID': str(user_id)
+                }
                 session = get_session()
                 response = session.post(url, json=payload, headers=headers, timeout=30)
-                
-                if response.status_code == 503 and attempt < max_retries:
-                    print(f"  ⏳ Retry {attempt+1}/{max_retries}: HTTP 503 (backpressure)")
-                    if not safe_sleep(retry_delay):
-                        return False, "Interrupted during retry"
-                    retry_delay = min(retry_delay * 2, max_delay)
-                    continue
-                
-                if response.status_code >= 400:
-                    return False, f"HTTP {response.status_code}: {response.text[:200]}"
-                
-                result = response.json()
-                return result.get('code') == 0, None
             else:
-                # Fallback to urllib
+                # Fallback to urllib (legacy X-User-ID)
+                url = f"{GATEWAY_URL}{path}"
                 data = json.dumps(payload).encode('utf-8')
                 req = urllib.request.Request(url, data=data)
                 req.add_header('Content-Type', 'application/json')
                 req.add_header('X-User-ID', str(user_id))
-                
-                with urllib.request.urlopen(req, timeout=30) as response:
-                    result = json.loads(response.read().decode())
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    result = json.loads(resp.read().decode())
                     return result.get('code') == 0, None
+            
+            if response.status_code == 503 and attempt < max_retries:
+                print(f"  ⏳ Retry {attempt+1}/{max_retries}: HTTP 503 (backpressure)")
+                if not safe_sleep(retry_delay):
+                    return False, "Interrupted during retry"
+                retry_delay = min(retry_delay * 2, max_delay)
+                continue
+            
+            # Auth failure - don't retry
+            if response.status_code == 401:
+                return False, f"HTTP 401: Auth failed - {response.text[:100]}"
+            
+            if response.status_code >= 400:
+                return False, f"HTTP {response.status_code}: {response.text[:200]}"
+            
+            result = response.json()
+            return result.get('code') == 0, None
                 
         except Exception as e:
             # Handle request exceptions - check if retryable

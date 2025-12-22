@@ -59,6 +59,7 @@ pub async fn insert_trade(taos: &Taos, trade: &Trade, symbol_id: u32) -> Result<
 ///
 /// This is used by WsService when processing PushEvent::Trade,
 /// where each event represents one party's view of the trade.
+#[allow(clippy::too_many_arguments)]
 pub async fn insert_trade_record(
     taos: &Taos,
     trade_id: u64,

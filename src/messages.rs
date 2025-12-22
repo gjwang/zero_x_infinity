@@ -182,7 +182,7 @@ pub struct MEResult {
 }
 
 // ============================================================
-// ORDER EVENT (状态变更事件)
+// ORDER EVENT (State Change Events)
 // ============================================================
 
 /// InternalOrder event - order state changes
@@ -525,6 +525,7 @@ pub struct BalanceEvent {
     pub ingested_at_ns: u64,
 }
 
+#[allow(clippy::too_many_arguments)]
 impl BalanceEvent {
     /// Create a new BalanceEvent
     pub fn new(

@@ -674,7 +674,7 @@ mod tests {
         // BTC: decimals=8, display_decimals=6
         assert_eq!(format_qty_internal(100000000, 8, 6), "1.000000");
         assert_eq!(format_qty_internal(50000000, 8, 6), "0.500000");
-        assert_eq!(format_qty_internal(123456789, 8, 6), "1.234568"); // 四舍五入
+        assert_eq!(format_qty_internal(123456789, 8, 6), "1.234568"); // rounding
 
         // ETH: decimals=8, display_decimals=4
         assert_eq!(format_qty_internal(100000000, 8, 4), "1.0000");
@@ -686,22 +686,22 @@ mod tests {
 
     #[test]
     fn test_format_qty_boundary_cases() {
-        // 零值
+        // Zero value
         assert_eq!(format_qty_internal(0, 8, 6), "0.000000");
         assert_eq!(format_qty_internal(0, 8, 4), "0.0000");
 
-        // 最小值（1 unit）
-        assert_eq!(format_qty_internal(1, 8, 6), "0.000000"); // 小于 display_decimals，显示为 0
+        // Minimum value (1 unit)
+        assert_eq!(format_qty_internal(1, 8, 6), "0.000000"); // less than display_decimals, shows as 0
         assert_eq!(format_qty_internal(1, 8, 8), "0.00000001");
 
-        // 大数值
+        // Large value
         assert_eq!(format_qty_internal(1000000000000, 8, 6), "10000.000000");
-        assert_eq!(format_qty_internal(u64::MAX, 8, 6), "184467440737.095520"); // u64::MAX / 10^8 (浮点精度)
+        assert_eq!(format_qty_internal(u64::MAX, 8, 6), "184467440737.095520"); // u64::MAX / 10^8 (float precision)
     }
 
     #[test]
     fn test_format_qty_precision_edge_cases() {
-        // display_decimals < decimals（常见情况）
+        // display_decimals < decimals (common case)
         assert_eq!(format_qty_internal(123456789, 8, 6), "1.234568");
         assert_eq!(format_qty_internal(123456789, 8, 4), "1.2346");
         assert_eq!(format_qty_internal(123456789, 8, 2), "1.23");
@@ -709,14 +709,14 @@ mod tests {
         // display_decimals == decimals
         assert_eq!(format_qty_internal(123456789, 8, 8), "1.23456789");
 
-        // display_decimals > decimals（不常见，但应该正确处理）
+        // display_decimals > decimals (uncommon, but should handle correctly)
         assert_eq!(format_qty_internal(12345, 4, 6), "1.234500");
         assert_eq!(format_qty_internal(12345, 4, 8), "1.23450000");
     }
 
     #[test]
     fn test_format_qty_rounding() {
-        // 测试四舍五入
+        // Test rounding
         assert_eq!(format_qty_internal(123456789, 8, 6), "1.234568"); // .789 -> .68
         assert_eq!(format_qty_internal(123454999, 8, 6), "1.234550"); // .4999 -> .50
         assert_eq!(format_qty_internal(123455000, 8, 6), "1.234550"); // .5000 -> .50
@@ -725,33 +725,33 @@ mod tests {
 
     #[test]
     fn test_format_qty_different_decimals() {
-        // decimals=6 (如某些代币)
+        // decimals=6 (like some tokens)
         assert_eq!(format_qty_internal(1000000, 6, 4), "1.0000");
         assert_eq!(format_qty_internal(500000, 6, 4), "0.5000");
 
-        // decimals=18 (如 ETH 链上)
+        // decimals=18 (like ETH on-chain)
         assert_eq!(format_qty_internal(1000000000000000000, 18, 6), "1.000000");
         assert_eq!(format_qty_internal(500000000000000000, 18, 6), "0.500000");
 
-        // decimals=2 (如某些稳定币)
+        // decimals=2 (like some stablecoins)
         assert_eq!(format_qty_internal(100, 2, 2), "1.00");
         assert_eq!(format_qty_internal(50, 2, 2), "0.50");
     }
 
     #[test]
     fn test_format_qty_real_world_scenarios() {
-        // BTC 交易场景
+        // BTC trading scenario
         // 0.1 BTC = 10000000 (decimals=8)
         assert_eq!(format_qty_internal(10000000, 8, 6), "0.100000");
 
         // 0.00123456 BTC
         assert_eq!(format_qty_internal(123456, 8, 6), "0.001235");
 
-        // ETH 交易场景
+        // ETH trading scenario
         // 1.5 ETH = 150000000 (decimals=8)
         assert_eq!(format_qty_internal(150000000, 8, 4), "1.5000");
 
-        // USDT 交易场景
+        // USDT trading scenario
         // 1000 USDT = 100000000000 (decimals=8)
         assert_eq!(format_qty_internal(100000000000, 8, 4), "1000.0000");
     }
@@ -762,20 +762,20 @@ mod tests {
         assert_eq!(format_price_internal(3000000, 2), "30000.00");
         assert_eq!(format_price_internal(2990000, 2), "29900.00");
 
-        // 小数价格
+        // Decimal price
         assert_eq!(format_price_internal(12345, 2), "123.45");
         assert_eq!(format_price_internal(100, 2), "1.00");
     }
 
     #[test]
     fn test_format_price_boundary_cases() {
-        // 零值
+        // Zero value
         assert_eq!(format_price_internal(0, 2), "0.00");
 
-        // 最小值
+        // Minimum value
         assert_eq!(format_price_internal(1, 2), "0.01");
 
-        // 大数值
+        // Large value
         assert_eq!(format_price_internal(10000000, 2), "100000.00");
     }
 }
