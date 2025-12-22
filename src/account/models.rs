@@ -61,19 +61,19 @@ pub struct User {
     pub username: String,
     pub email: Option<String>,
     pub status: UserStatus,
-    pub flags: i32,
+    pub user_flags: i32,
     pub created_at: DateTime<Utc>,
 }
 
 impl User {
     pub fn can_login(&self) -> bool {
-        self.flags & user_flags::CAN_LOGIN != 0
+        self.user_flags & user_flags::CAN_LOGIN != 0
     }
     pub fn can_trade(&self) -> bool {
-        self.flags & user_flags::CAN_TRADE != 0
+        self.user_flags & user_flags::CAN_TRADE != 0
     }
     pub fn can_withdraw(&self) -> bool {
-        self.flags & user_flags::CAN_WITHDRAW != 0
+        self.user_flags & user_flags::CAN_WITHDRAW != 0
     }
 }
 
@@ -85,18 +85,18 @@ pub struct Asset {
     pub name: String,
     pub decimals: i16,
     pub status: i16,
-    pub flags: i32,
+    pub asset_flags: i32,
 }
 
 impl Asset {
     pub fn can_deposit(&self) -> bool {
-        self.flags & asset_flags::CAN_DEPOSIT != 0
+        self.asset_flags & asset_flags::CAN_DEPOSIT != 0
     }
     pub fn can_withdraw(&self) -> bool {
-        self.flags & asset_flags::CAN_WITHDRAW != 0
+        self.asset_flags & asset_flags::CAN_WITHDRAW != 0
     }
     pub fn can_trade(&self) -> bool {
-        self.flags & asset_flags::CAN_TRADE != 0
+        self.asset_flags & asset_flags::CAN_TRADE != 0
     }
 }
 
@@ -111,14 +111,14 @@ pub struct Symbol {
     pub qty_decimals: i16,
     pub min_qty: i64,
     pub status: i16,
-    pub flags: i32,
+    pub symbol_flags: i32,
 }
 
 impl Symbol {
     pub fn is_tradable(&self) -> bool {
-        self.flags & symbol_flags::IS_TRADABLE != 0
+        self.symbol_flags & symbol_flags::IS_TRADABLE != 0
     }
     pub fn is_visible(&self) -> bool {
-        self.flags & symbol_flags::IS_VISIBLE != 0
+        self.symbol_flags & symbol_flags::IS_VISIBLE != 0
     }
 }
