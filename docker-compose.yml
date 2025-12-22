@@ -1,0 +1,38 @@
+version: "3.8"
+
+services:
+  # TDengine for time-series data (trades, klines, balances)
+  tdengine:
+    image: tdengine/tdengine:latest
+    container_name: tdengine
+    ports:
+      - "6030:6030"
+      - "6041:6041"
+    volumes:
+      - tdengine_data:/var/lib/taos
+    restart: unless-stopped
+
+  # PostgreSQL for account management (users, assets, symbols)
+  # Using latest for PG 19+ with AIO performance improvements
+  postgres:
+    image: postgres:latest
+    container_name: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: trading
+      POSTGRES_PASSWORD: trading123
+      POSTGRES_DB: trading
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U trading -d trading" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  tdengine_data:
+  postgres_data:
