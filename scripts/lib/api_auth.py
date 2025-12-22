@@ -6,7 +6,7 @@ Provides Ed25519 signature-based authentication for 0xInfinity API.
 Can be imported by other scripts for authenticated API calls.
 
 Usage:
-    from lib.auth import ApiClient, base62_encode
+    from lib.api_auth import ApiClient, base62_encode
     
     client = ApiClient(
         api_key="AK_D4735E3A265E16EE",

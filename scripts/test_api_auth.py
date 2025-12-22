@@ -24,7 +24,7 @@ except ImportError:
     sys.exit(1)
 
 # Import from shared auth library
-from lib.auth import (
+from lib.api_auth import (
     ApiClient,
     base62_encode,
     TEST_API_KEY,
