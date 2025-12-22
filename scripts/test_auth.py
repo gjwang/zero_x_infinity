@@ -4,95 +4,43 @@ API Authentication Test Script
 
 Tests Ed25519 signature-based authentication for the 0xInfinity API.
 Uses the test API key from fixtures/seed_data.sql.
+
+This script imports the reusable auth library from lib/auth.py.
 """
 
 import sys
+import os
 import time
-import requests
+
+# Add scripts directory to path for lib imports
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, SCRIPT_DIR)
 
 try:
+    import requests
     from nacl.signing import SigningKey
 except ImportError:
-    print("Error: PyNaCl not installed. Run: pip install pynacl requests")
+    print("Error: Missing dependencies. Run: pip install pynacl requests")
     sys.exit(1)
+
+# Import from shared auth library
+from lib.auth import (
+    ApiClient,
+    base62_encode,
+    TEST_API_KEY,
+    TEST_PRIVATE_KEY_HEX,
+    get_test_client,
+)
 
 # =============================================================================
 # Configuration
 # =============================================================================
 
-GATEWAY_URL = "http://localhost:8080"
-API_KEY = "AK_D4735E3A265E16EE"  # Test API Key from seed_data.sql
+GATEWAY_URL = os.environ.get("GATEWAY_URL", "http://localhost:8080")
 
-# Test private key (hex) - matches the public key in seed_data.sql
-# WARNING: This is a well-known test key - DO NOT USE IN PRODUCTION
-PRIVATE_KEY_HEX = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
-
-# =============================================================================
-# Base62 Encoding
-# =============================================================================
-
-ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-
-def base62_encode(data: bytes) -> str:
-    """Encode bytes to Base62 string."""
-    num = int.from_bytes(data, 'big')
-    if num == 0:
-        return ALPHABET[0]
-    result = []
-    while num:
-        num, rem = divmod(num, 62)
-        result.append(ALPHABET[rem])
-    return ''.join(reversed(result))
-
-# =============================================================================
-# Authentication
-# =============================================================================
-
-class ApiClient:
-    """API client with Ed25519 signature authentication."""
-    
-    def __init__(self, api_key: str, private_key_hex: str, base_url: str = GATEWAY_URL):
-        self.api_key = api_key
-        self.base_url = base_url
-        self.signing_key = SigningKey(bytes.fromhex(private_key_hex))
-        self.last_ts_nonce = 0
-    
-    def _get_ts_nonce(self) -> str:
-        """Generate monotonically increasing ts_nonce."""
-        now = int(time.time() * 1000)
-        ts_nonce = max(now, self.last_ts_nonce + 1)
-        self.last_ts_nonce = ts_nonce
-        return str(ts_nonce)
-    
-    def _sign_request(self, method: str, path: str, body: str = "") -> str:
-        """Sign a request and return Authorization header value."""
-        ts_nonce = self._get_ts_nonce()
-        payload = f"{self.api_key}{ts_nonce}{method}{path}{body}"
-        signature = self.signing_key.sign(payload.encode()).signature
-        sig_b62 = base62_encode(signature)
-        return f"ZXINF v1.{self.api_key}.{ts_nonce}.{sig_b62}"
-    
-    def get(self, path: str) -> requests.Response:
-        """Send authenticated GET request."""
-        auth = self._sign_request("GET", path)
-        return requests.get(
-            f"{self.base_url}{path}",
-            headers={"Authorization": auth}
-        )
-    
-    def post(self, path: str, json_body: dict = None) -> requests.Response:
-        """Send authenticated POST request.
-        
-        Note: Server currently ignores body in signature verification (body="").
-        This matches server-side middleware.rs line 85.
-        """
-        # Server uses empty body for signature verification
-        auth = self._sign_request("POST", path, "")
-        return requests.post(
-            f"{self.base_url}{path}",
-            headers={"Authorization": auth},
-            json=json_body
-        )
+# Use test credentials from lib
+API_KEY = TEST_API_KEY
+PRIVATE_KEY_HEX = TEST_PRIVATE_KEY_HEX
 
 # =============================================================================
 # Tests
@@ -126,7 +74,7 @@ def test_private_endpoint_no_auth():
 def test_private_endpoint_with_auth():
     """Test authenticated access to private endpoints."""
     print("\n[TEST] Private endpoint with auth...")
-    client = ApiClient(API_KEY, PRIVATE_KEY_HEX)
+    client = get_test_client(GATEWAY_URL)
     # Note: path must include query params as they are part of the signed payload
     resp = client.get("/api/v1/private/orders?user_id=1")
     
@@ -143,7 +91,7 @@ def test_replay_attack():
     """Test that replay attacks are rejected."""
     print("\n[TEST] Replay attack detection...")
     
-    client = ApiClient(API_KEY, PRIVATE_KEY_HEX)
+    client = ApiClient(API_KEY, PRIVATE_KEY_HEX, GATEWAY_URL)
     path = "/api/v1/private/orders?user_id=1"
     
     # First request - capture the auth header used
@@ -169,7 +117,7 @@ def test_invalid_signature():
     # Create a request with wrong private key
     wrong_key = "0" * 64  # Invalid key
     try:
-        client = ApiClient(API_KEY, wrong_key)
+        client = ApiClient(API_KEY, wrong_key, GATEWAY_URL)
         resp = client.get("/api/v1/private/orders")
         if resp.status_code == 401:
             print(f"  ✅ Invalid signature rejected (401)")
@@ -184,7 +132,7 @@ def test_invalid_signature():
 def test_post_request_signature():
     """Test POST request with signature (body included in payload)."""
     print("\n[TEST] POST request with signature...")
-    client = ApiClient(API_KEY, PRIVATE_KEY_HEX)
+    client = get_test_client(GATEWAY_URL)
     
     # POST /api/v1/private/order - creates an order (auth required)
     order_data = {
@@ -274,6 +222,7 @@ def main():
     print("=" * 60)
     print(f"Gateway URL: {GATEWAY_URL}")
     print(f"API Key: {API_KEY}")
+    print(f"Auth Library: lib/auth.py")
     
     results = []
     
@@ -304,4 +253,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-
