@@ -341,30 +341,51 @@ src/auth/
 
 ### 6.1 端点分类
 
-| 端点 | 鉴权 | 权限 |
+#### 6.1.1 公开接口 (Public) - 无需鉴权
+
+| 类别 | 端点 | 说明 |
 |------|------|------|
-| `GET /api/v1/exchange_info` | ❌ 公开 | - |
-| `GET /api/v1/depth` | ❌ 公开 | - |
-| `GET /api/v1/klines` | ❌ 公开 | - |
-| `GET /api/v1/orders` | ✅ 需要 | READ |
-| `POST /api/v1/order` | ✅ 需要 | TRADE |
-| `DELETE /api/v1/order` | ✅ 需要 | TRADE |
-| `GET /api/v1/balance` | ✅ 需要 | READ |
-| `POST /api/v1/withdraw` | ✅ 需要 | WITHDRAW |
+| **行情** | `GET /api/v1/public/exchange_info` | 交易对信息 |
+| **行情** | `GET /api/v1/public/depth` | 深度数据 |
+| **行情** | `GET /api/v1/public/klines` | K 线数据 |
+| **行情** | `GET /api/v1/public/ticker` | 最新价格 |
+
+#### 6.1.2 私有接口 (Private) - 需要签名鉴权
+
+| 类别 | 端点 | 权限 |
+|------|------|------|
+| **账户** | `GET /api/v1/private/account` | READ |
+| **账户** | `GET /api/v1/private/balance` | READ |
+| **交易** | `GET /api/v1/private/orders` | READ |
+| **交易** | `POST /api/v1/private/order` | TRADE |
+| **交易** | `DELETE /api/v1/private/order` | TRADE |
+| **资金** | `POST /api/v1/private/withdraw` | WITHDRAW |
+| **资金** | `POST /api/v1/private/transfer` | TRANSFER |
 
 ### 6.2 中间件应用
 
 ```rust
-// 公开路由
+// 公开路由 (无需鉴权)
 let public_routes = Router::new()
-    .route("/exchange_info", get(...))
-    .route("/depth", get(...));
+    .route("/exchange_info", get(exchange_info))
+    .route("/depth", get(depth))
+    .route("/klines", get(klines))
+    .route("/ticker", get(ticker));
 
-// 需要鉴权的路由
-let protected_routes = Router::new()
-    .route("/orders", get(...))
-    .route("/order", post(...))
+// 私有路由 (需要签名鉴权)
+let private_routes = Router::new()
+    .route("/account", get(account))
+    .route("/balance", get(balance))
+    .route("/orders", get(orders))
+    .route("/order", post(create_order).delete(cancel_order))
+    .route("/withdraw", post(withdraw))
+    .route("/transfer", post(transfer))
     .layer(from_fn(auth_middleware));
+
+// 组合路由
+let app = Router::new()
+    .nest("/api/v1/public", public_routes)
+    .nest("/api/v1/private", private_routes);
 ```
 
 ---
