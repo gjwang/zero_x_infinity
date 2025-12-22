@@ -18,7 +18,11 @@ use crate::persistence::TDengineClient;
 use crate::pipeline::OrderAction;
 use state::AppState;
 
+// Phase 0x0A: Account management types
+use crate::account::{Asset, Database, Symbol};
+
 /// 启动 HTTP Gateway 服务器
+#[allow(clippy::too_many_arguments)]
 pub async fn run_server(
     port: u16,
     order_queue: Arc<ArrayQueue<OrderAction>>,
@@ -27,6 +31,9 @@ pub async fn run_server(
     db_client: Option<Arc<TDengineClient>>,
     push_event_queue: Arc<ArrayQueue<crate::websocket::PushEvent>>,
     depth_service: Arc<DepthService>,
+    pg_db: Option<Arc<Database>>,
+    pg_assets: Arc<Vec<Asset>>,
+    pg_symbols: Arc<Vec<Symbol>>,
 ) {
     // 创建 WebSocket 连接管理器
     let ws_manager = Arc::new(ConnectionManager::new());
@@ -47,6 +54,9 @@ pub async fn run_server(
         db_client,
         ws_manager.clone(),
         depth_service,
+        pg_db,
+        pg_assets,
+        pg_symbols,
     ));
 
     // 创建路由
@@ -65,6 +75,9 @@ pub async fn run_server(
         .route("/api/v1/balances", get(handlers::get_balances))
         .route("/api/v1/klines", get(handlers::get_klines))
         .route("/api/v1/depth", get(handlers::get_depth))
+        // Phase 0x0A: Account management endpoints
+        .route("/api/v1/assets", get(handlers::get_assets))
+        .route("/api/v1/symbols", get(handlers::get_symbols))
         .with_state(state);
 
     // 绑定地址

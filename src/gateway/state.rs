@@ -8,6 +8,9 @@ use crate::pipeline::OrderAction;
 use crate::symbol_manager::SymbolManager;
 use crate::websocket::ConnectionManager;
 
+// Phase 0x0A: Account management types
+use crate::account::{Asset, Database, Symbol};
+
 /// Gateway 应用状态 (共享)
 #[derive(Clone)]
 pub struct AppState {
@@ -25,9 +28,16 @@ pub struct AppState {
     pub ws_manager: Arc<ConnectionManager>,
     /// DepthService (for market depth queries)
     pub depth_service: Arc<DepthService>,
+    /// PostgreSQL 数据库 (Phase 0x0A)
+    pub pg_db: Option<Arc<Database>>,
+    /// 缓存的资产列表 (Phase 0x0A)
+    pub pg_assets: Arc<Vec<Asset>>,
+    /// 缓存的交易对列表 (Phase 0x0A)
+    pub pg_symbols: Arc<Vec<Symbol>>,
 }
 
 impl AppState {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         order_queue: Arc<ArrayQueue<OrderAction>>,
         symbol_mgr: Arc<SymbolManager>,
@@ -35,6 +45,9 @@ impl AppState {
         db_client: Option<Arc<TDengineClient>>,
         ws_manager: Arc<ConnectionManager>,
         depth_service: Arc<DepthService>,
+        pg_db: Option<Arc<Database>>,
+        pg_assets: Arc<Vec<Asset>>,
+        pg_symbols: Arc<Vec<Symbol>>,
     ) -> Self {
         Self {
             order_queue,
@@ -44,6 +57,9 @@ impl AppState {
             db_client,
             ws_manager,
             depth_service,
+            pg_db,
+            pg_assets,
+            pg_symbols,
         }
     }
 
