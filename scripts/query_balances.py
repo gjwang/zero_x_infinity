@@ -17,7 +17,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPT_DIR)
 
 try:
-    from lib.auth import get_test_client
+    from lib.api_auth import get_test_client
 except ImportError:
     print("ERROR: lib/auth.py not found", file=sys.stderr)
     sys.exit(1)

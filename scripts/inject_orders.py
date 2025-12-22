@@ -48,7 +48,7 @@ except ImportError:
 
 # Import Ed25519 auth from shared library
 try:
-    from lib.auth import ApiClient, TEST_API_KEY, TEST_PRIVATE_KEY_HEX
+    from lib.api_auth import ApiClient, TEST_API_KEY, TEST_PRIVATE_KEY_HEX
     USE_AUTH = True
 except ImportError:
     print("⚠️  lib/auth.py not found, falling back to X-User-ID (legacy mode)")
