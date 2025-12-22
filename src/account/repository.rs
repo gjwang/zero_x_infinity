@@ -1,6 +1,7 @@
 //! Repository layer for database operations
 
 use super::models::{Asset, Symbol, User, UserStatus};
+use super::validation;
 use sqlx::{PgPool, Row};
 
 /// User repository for CRUD operations
@@ -96,13 +97,20 @@ impl AssetManager {
         Ok(row)
     }
 
-    /// Get asset by asset code (e.g., "BTC", "USDT")
+    /// Get asset by asset name (e.g., "BTC", "USDT")
+    ///
+    /// # Validation
+    /// Input must be uppercase and match format ^[A-Z0-9_]{1,16}$
     pub async fn get_by_asset(pool: &PgPool, asset: &str) -> Result<Option<Asset>, sqlx::Error> {
+        // Validate input using AssetName
+        let asset_name = validation::AssetName::new(asset)
+            .map_err(|e| sqlx::Error::Protocol(format!("Invalid asset name: {}", e)))?;
+
         let row: Option<Asset> = sqlx::query_as(
             r#"SELECT asset_id, asset, name, decimals, status, asset_flags 
                FROM assets WHERE asset = $1"#,
         )
-        .bind(asset)
+        .bind(asset_name.as_str())
         .fetch_optional(pool)
         .await?;
 
@@ -141,14 +149,21 @@ impl SymbolManager {
         Ok(row)
     }
 
-    /// Get symbol by symbol name
+    /// Get symbol by symbol name (e.g., "BTC_USDT")
+    ///
+    /// # Validation
+    /// Input must be uppercase and match format ^[A-Z0-9]+_[A-Z0-9]+$
     pub async fn get_by_symbol(pool: &PgPool, symbol: &str) -> Result<Option<Symbol>, sqlx::Error> {
+        // Validate input using SymbolName
+        let symbol_name = super::validation::SymbolName::new(symbol)
+            .map_err(|e| sqlx::Error::Protocol(format!("Invalid symbol name: {}", e)))?;
+
         let row: Option<Symbol> = sqlx::query_as(
-            r#"SELECT symbol_id, symbol, base_asset_id, quote_asset_id,
-                      price_decimals, qty_decimals, min_qty, status, symbol_flags
+            r#"SELECT symbol_id, symbol, base_asset_id, quote_asset_id, 
+                      price_decimals, qty_decimals, min_qty, status, symbol_flags 
                FROM symbols WHERE symbol = $1"#,
         )
-        .bind(symbol)
+        .bind(symbol_name.as_str())
         .fetch_optional(pool)
         .await?;
 
