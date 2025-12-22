@@ -410,7 +410,7 @@ mod tests {
         assert!(AssetName::new("1INCH").is_ok());
         assert!(AssetName::new("2KEY").is_ok());
         assert!(AssetName::new("1000SHIB").is_ok());
-        
+
         // Assets with numbers in middle/end
         assert!(AssetName::new("BTC2").is_ok());
         assert!(AssetName::new("ETH2").is_ok());
@@ -428,10 +428,10 @@ mod tests {
         // Exactly 1 char (minimum)
         assert!(AssetName::new("A").is_ok());
         assert!(AssetName::new("1").is_ok());
-        
+
         // Exactly 16 chars (maximum)
         assert!(AssetName::new("ABCDEFGHIJ123456").is_ok()); // 16 chars
-        
+
         // 17 chars (too long)
         assert!(AssetName::new("ABCDEFGHIJ1234567").is_err());
     }
@@ -454,10 +454,10 @@ mod tests {
     fn test_symbol_name_boundary_length() {
         // Exactly 3 chars (minimum)
         assert!(SymbolName::new("A_B").is_ok());
-        
+
         // Exactly 32 chars (maximum)
         assert!(SymbolName::new("VERYLONGBASE_VERYLONGQUOTE12").is_ok()); // 32 chars
-        
+
         // 33 chars (too long)
         assert!(SymbolName::new("VERYLONGBASENAME_VERYLONGQUOTE123").is_err());
     }
