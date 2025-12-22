@@ -203,7 +203,7 @@ log::info!(target: "AUTH", "api_key={} user_id={} ts_nonce={} success=true",
 CREATE TABLE api_keys_tb (
     key_id         SERIAL PRIMARY KEY,
     user_id        BIGINT NOT NULL REFERENCES users_tb(user_id),
-    api_key        VARCHAR(35) UNIQUE NOT NULL,  -- API Key 标识符 (ak_ + 32 hex = 128-bit)
+    api_key        VARCHAR(35) UNIQUE NOT NULL,  -- 预留扩展，应用层确保 AK_ + 16 hex
     key_type       SMALLINT NOT NULL DEFAULT 1,  -- 1=Ed25519, 2=HMAC-SHA256, 3=RSA
     key_data       BYTEA NOT NULL,               -- 公钥/secret_hash (取决于 key_type)
     label          VARCHAR(64),                  -- 用户自定义名称
@@ -534,7 +534,7 @@ curl -H "Authorization: ZXINF ${AUTH_TOKEN}" \
 | 密钥存储 | key_data (BYTEA) | 统一存储公钥/hash |
 | 时间戳精度 | 毫秒 | 与 Binance 兼容 |
 | 重放窗口 | 30秒 | 平衡安全与时钟偏差 |
-| Key 格式 | `ak_` 前缀 (128-bit) | 易于识别和日志过滤 |
+| Key 格式 | `AK_` 前缀 (64-bit) | 易于识别，u64 缓存高效 |
 
 ---
 
