@@ -71,4 +71,85 @@ mod tests {
         assert!(!asset.can_withdraw());
         assert!(asset.can_trade());
     }
+
+    #[test]
+    fn test_asset_flags_none() {
+        let asset = Asset {
+            asset_id: 3,
+            asset: "DISABLED".to_string(),
+            name: "Disabled Asset".to_string(),
+            decimals: 8,
+            status: 0,
+            asset_flags: 0, // No flags
+        };
+
+        assert!(!asset.can_deposit());
+        assert!(!asset.can_withdraw());
+        assert!(!asset.can_trade());
+    }
+
+    #[test]
+    fn test_asset_flags_default() {
+        let asset = Asset {
+            asset_id: 4,
+            asset: "ETH".to_string(),
+            name: "Ethereum".to_string(),
+            decimals: 18,
+            status: 1,
+            asset_flags: flags::DEFAULT,
+        };
+
+        assert!(asset.can_deposit());
+        assert!(asset.can_withdraw());
+        assert!(asset.can_trade());
+    }
+
+    #[test]
+    fn test_asset_flags_stable_coin() {
+        let asset = Asset {
+            asset_id: 5,
+            asset: "USDC".to_string(),
+            name: "USD Coin".to_string(),
+            decimals: 6,
+            status: 1,
+            asset_flags: flags::DEFAULT | flags::IS_STABLE_COIN,
+        };
+
+        assert!(asset.can_deposit());
+        assert!(asset.can_withdraw());
+        assert!(asset.can_trade());
+        assert_eq!(asset.asset_flags & flags::IS_STABLE_COIN, flags::IS_STABLE_COIN);
+    }
+
+    #[test]
+    fn test_asset_flags_deposit_only() {
+        let asset = Asset {
+            asset_id: 6,
+            asset: "LOCKED".to_string(),
+            name: "Locked Asset".to_string(),
+            decimals: 8,
+            status: 1,
+            asset_flags: flags::CAN_DEPOSIT, // Only deposit
+        };
+
+        assert!(asset.can_deposit());
+        assert!(!asset.can_withdraw());
+        assert!(!asset.can_trade());
+    }
+
+    #[test]
+    fn test_asset_flags_trade_only() {
+        let asset = Asset {
+            asset_id: 7,
+            asset: "INTERNAL".to_string(),
+            name: "Internal Token".to_string(),
+            decimals: 8,
+            status: 1,
+            asset_flags: flags::CAN_TRADE, // Only trade
+        };
+
+        assert!(!asset.can_deposit());
+        assert!(!asset.can_withdraw());
+        assert!(asset.can_trade());
+    }
 }

@@ -41,7 +41,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_symbol_flags() {
+    fn test_symbol_flags_all_enabled() {
         let symbol = Symbol {
             symbol_id: 1,
             symbol: "BTC_USDT".to_string(),
@@ -51,10 +51,103 @@ mod tests {
             qty_decimals: 6,
             min_qty: 1000,
             status: 1,
-            symbol_flags: flags::IS_TRADABLE | flags::IS_VISIBLE,
+            symbol_flags: flags::DEFAULT,
         };
 
         assert!(symbol.is_tradable());
         assert!(symbol.is_visible());
+    }
+
+    #[test]
+    fn test_symbol_flags_partial() {
+        let symbol = Symbol {
+            symbol_id: 2,
+            symbol: "ETH_BTC".to_string(),
+            base_asset_id: 3,
+            quote_asset_id: 1,
+            price_decimals: 6,
+            qty_decimals: 4,
+            min_qty: 100,
+            status: 1,
+            symbol_flags: flags::IS_TRADABLE, // Tradable but not visible
+        };
+
+        assert!(symbol.is_tradable());
+        assert!(!symbol.is_visible());
+    }
+
+    #[test]
+    fn test_symbol_flags_none() {
+        let symbol = Symbol {
+            symbol_id: 3,
+            symbol: "DISABLED_PAIR".to_string(),
+            base_asset_id: 1,
+            quote_asset_id: 2,
+            price_decimals: 2,
+            qty_decimals: 6,
+            min_qty: 1000,
+            status: 0,
+            symbol_flags: 0, // No flags
+        };
+
+        assert!(!symbol.is_tradable());
+        assert!(!symbol.is_visible());
+    }
+
+    #[test]
+    fn test_symbol_flags_visible_only() {
+        let symbol = Symbol {
+            symbol_id: 4,
+            symbol: "COMING_SOON".to_string(),
+            base_asset_id: 1,
+            quote_asset_id: 2,
+            price_decimals: 2,
+            qty_decimals: 6,
+            min_qty: 1000,
+            status: 1,
+            symbol_flags: flags::IS_VISIBLE, // Visible but not tradable
+        };
+
+        assert!(!symbol.is_tradable());
+        assert!(symbol.is_visible());
+    }
+
+    #[test]
+    fn test_symbol_flags_market_orders() {
+        let symbol = Symbol {
+            symbol_id: 5,
+            symbol: "BTC_USD".to_string(),
+            base_asset_id: 1,
+            quote_asset_id: 4,
+            price_decimals: 2,
+            qty_decimals: 8,
+            min_qty: 1,
+            status: 1,
+            symbol_flags: flags::IS_TRADABLE | flags::IS_VISIBLE | flags::ALLOW_MARKET,
+        };
+
+        assert!(symbol.is_tradable());
+        assert!(symbol.is_visible());
+        assert_eq!(symbol.symbol_flags & flags::ALLOW_MARKET, flags::ALLOW_MARKET);
+    }
+
+    #[test]
+    fn test_symbol_flags_limit_orders_only() {
+        let symbol = Symbol {
+            symbol_id: 6,
+            symbol: "ALT_USDT".to_string(),
+            base_asset_id: 5,
+            quote_asset_id: 2,
+            price_decimals: 4,
+            qty_decimals: 2,
+            min_qty: 100,
+            status: 1,
+            symbol_flags: flags::IS_TRADABLE | flags::IS_VISIBLE | flags::ALLOW_LIMIT,
+        };
+
+        assert!(symbol.is_tradable());
+        assert!(symbol.is_visible());
+        assert_eq!(symbol.symbol_flags & flags::ALLOW_LIMIT, flags::ALLOW_LIMIT);
+        assert_eq!(symbol.symbol_flags & flags::ALLOW_MARKET, 0);
     }
 }

@@ -60,7 +60,7 @@ impl AssetName {
     ///
     /// # Examples
     /// ```
-    /// use zero_x_infinity::account::validation::AssetName;
+    /// use zero_x_infinity::exchange_info::validation::AssetName;
     ///
     /// let btc = AssetName::new("BTC").unwrap();
     /// assert_eq!(btc.as_str(), "BTC");
@@ -153,7 +153,7 @@ impl SymbolName {
     ///
     /// # Examples
     /// ```
-    /// use zero_x_infinity::account::validation::SymbolName;
+    /// use zero_x_infinity::exchange_info::validation::SymbolName;
     ///
     /// let symbol = SymbolName::new("BTC_USDT").unwrap();
     /// assert_eq!(symbol.as_str(), "BTC_USDT");
@@ -236,7 +236,7 @@ impl SymbolName {
     ///
     /// # Examples
     /// ```
-    /// use zero_x_infinity::account::validation::SymbolName;
+    /// use zero_x_infinity::exchange_info::validation::SymbolName;
     ///
     /// let symbol = SymbolName::new("BTC_USDT").unwrap();
     /// let (base, quote) = symbol.split_base_quote();
