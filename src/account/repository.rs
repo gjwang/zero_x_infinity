@@ -11,7 +11,8 @@ impl UserRepository {
     pub async fn get_by_id(pool: &PgPool, user_id: i64) -> Result<Option<User>, sqlx::Error> {
         let row = sqlx::query_as!(
             UserRow,
-            r#"SELECT user_id, username, email, status, created_at FROM users WHERE user_id = $1"#,
+            r#"SELECT user_id, username, email, status, flags, created_at 
+               FROM users WHERE user_id = $1"#,
             user_id
         )
         .fetch_optional(pool)
@@ -24,7 +25,8 @@ impl UserRepository {
     pub async fn get_by_username(pool: &PgPool, username: &str) -> Result<Option<User>, sqlx::Error> {
         let row = sqlx::query_as!(
             UserRow,
-            r#"SELECT user_id, username, email, status, created_at FROM users WHERE username = $1"#,
+            r#"SELECT user_id, username, email, status, flags, created_at 
+               FROM users WHERE username = $1"#,
             username
         )
         .fetch_optional(pool)
@@ -54,6 +56,7 @@ struct UserRow {
     username: String,
     email: Option<String>,
     status: i16,
+    flags: i32,
     created_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -64,6 +67,7 @@ impl From<UserRow> for User {
             username: row.username,
             email: row.email,
             status: UserStatus::from(row.status),
+            flags: row.flags,
             created_at: row.created_at,
         }
     }
@@ -77,7 +81,8 @@ impl AssetManager {
     pub async fn load_all(pool: &PgPool) -> Result<Vec<Asset>, sqlx::Error> {
         let rows = sqlx::query_as!(
             Asset,
-            r#"SELECT asset_id, asset, name, decimals, status FROM assets WHERE status = 1"#
+            r#"SELECT asset_id, asset, name, decimals, status, flags 
+               FROM assets WHERE status = 1"#
         )
         .fetch_all(pool)
         .await?;
@@ -89,8 +94,23 @@ impl AssetManager {
     pub async fn get_by_id(pool: &PgPool, asset_id: i32) -> Result<Option<Asset>, sqlx::Error> {
         let row = sqlx::query_as!(
             Asset,
-            r#"SELECT asset_id, asset, name, decimals, status FROM assets WHERE asset_id = $1"#,
+            r#"SELECT asset_id, asset, name, decimals, status, flags 
+               FROM assets WHERE asset_id = $1"#,
             asset_id
+        )
+        .fetch_optional(pool)
+        .await?;
+        
+        Ok(row)
+    }
+    
+    /// Get asset by code
+    pub async fn get_by_code(pool: &PgPool, code: &str) -> Result<Option<Asset>, sqlx::Error> {
+        let row = sqlx::query_as!(
+            Asset,
+            r#"SELECT asset_id, asset, name, decimals, status, flags 
+               FROM assets WHERE asset = $1"#,
+            code
         )
         .fetch_optional(pool)
         .await?;
@@ -108,7 +128,7 @@ impl SymbolManager {
         let rows = sqlx::query_as!(
             Symbol,
             r#"SELECT symbol_id, symbol, base_asset_id, quote_asset_id, 
-                      price_decimals, qty_decimals, min_qty, status 
+                      price_decimals, qty_decimals, min_qty, status, flags 
                FROM symbols WHERE status = 1"#
         )
         .fetch_all(pool)
@@ -122,7 +142,7 @@ impl SymbolManager {
         let row = sqlx::query_as!(
             Symbol,
             r#"SELECT symbol_id, symbol, base_asset_id, quote_asset_id,
-                      price_decimals, qty_decimals, min_qty, status
+                      price_decimals, qty_decimals, min_qty, status, flags
                FROM symbols WHERE symbol_id = $1"#,
             symbol_id
         )
@@ -137,7 +157,7 @@ impl SymbolManager {
         let row = sqlx::query_as!(
             Symbol,
             r#"SELECT symbol_id, symbol, base_asset_id, quote_asset_id,
-                      price_decimals, qty_decimals, min_qty, status
+                      price_decimals, qty_decimals, min_qty, status, flags
                FROM symbols WHERE symbol = $1"#,
             symbol
         )
