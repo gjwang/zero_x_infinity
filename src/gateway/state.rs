@@ -14,28 +14,28 @@ use crate::account::{Asset, Database, Symbol};
 // Phase 0x0A-b: Authentication
 use crate::auth::AuthState;
 
-/// Gateway 应用状态 (共享)
+/// Gateway application state (shared)
 #[derive(Clone)]
 pub struct AppState {
-    /// 订单队列 (发送到 Trading Core)
+    /// Order queue (sends to Trading Core)
     pub order_queue: Arc<ArrayQueue<OrderAction>>,
-    /// Symbol Manager (只读)
+    /// Symbol Manager (read-only)
     pub symbol_mgr: Arc<SymbolManager>,
-    /// 活跃交易对 ID
+    /// Active trading pair ID
     pub active_symbol_id: u32,
-    /// 订单 ID 生成器
+    /// Order ID generator
     order_id_gen: Arc<AtomicU64>,
-    /// TDengine 客户端 (可选，用于查询)
+    /// TDengine client (optional, for queries)
     pub db_client: Option<Arc<TDengineClient>>,
-    /// WebSocket 连接管理器
+    /// WebSocket connection manager
     pub ws_manager: Arc<ConnectionManager>,
     /// DepthService (for market depth queries)
     pub depth_service: Arc<DepthService>,
-    /// PostgreSQL 数据库 (Phase 0x0A)
+    /// PostgreSQL database (Phase 0x0A)
     pub pg_db: Option<Arc<Database>>,
-    /// 缓存的资产列表 (Phase 0x0A)
+    /// Cached asset list (Phase 0x0A)
     pub pg_assets: Arc<Vec<Asset>>,
-    /// 缓存的交易对列表 (Phase 0x0A)
+    /// Cached symbol list (Phase 0x0A)
     pub pg_symbols: Arc<Vec<Symbol>>,
     /// Authentication state (Phase 0x0A-b)
     pub auth_state: Arc<AuthState>,
@@ -70,7 +70,7 @@ impl AppState {
         }
     }
 
-    /// 生成下一个订单 ID
+    /// Generate next order ID
     pub fn next_order_id(&self) -> u64 {
         self.order_id_gen.fetch_add(1, Ordering::SeqCst)
     }

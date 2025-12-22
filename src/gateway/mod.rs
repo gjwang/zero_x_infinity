@@ -124,7 +124,7 @@ async fn gateway_auth_middleware(
     Ok(next.run(request).await)
 }
 
-/// 启动 HTTP Gateway 服务器
+/// Start HTTP Gateway server
 #[allow(clippy::too_many_arguments)]
 pub async fn run_server(
     port: u16,
@@ -138,10 +138,10 @@ pub async fn run_server(
     pg_assets: Arc<Vec<Asset>>,
     pg_symbols: Arc<Vec<Symbol>>,
 ) {
-    // 创建 WebSocket 连接管理器
+    // Create WebSocket connection manager
     let ws_manager = Arc::new(ConnectionManager::new());
 
-    // 启动 WebSocket 推送服务
+    // Start WebSocket push service
     let ws_service =
         crate::websocket::WsService::new(ws_manager.clone(), push_event_queue, symbol_mgr.clone());
     tokio::spawn(async move {
@@ -149,13 +149,13 @@ pub async fn run_server(
     });
     println!("📡 WebSocket push service started");
 
-    // 创建 Auth 状态 (Phase 0x0A-b)
+    // Create Auth state (Phase 0x0A-b)
     let auth_state = Arc::new(AuthState {
         ts_store: Arc::new(TsStore::new()),
         time_window_ms: 30_000, // 30 seconds
     });
 
-    // 创建共享状态
+    // Create shared state
     let state = Arc::new(AppState::new(
         order_queue,
         symbol_mgr,
