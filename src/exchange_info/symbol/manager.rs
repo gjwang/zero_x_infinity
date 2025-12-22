@@ -13,7 +13,7 @@ impl SymbolManager {
         let rows: Vec<Symbol> = sqlx::query_as(
             r#"SELECT symbol_id, symbol, base_asset_id, quote_asset_id,
                       price_decimals, qty_decimals, min_qty, status, symbol_flags
-               FROM symbols WHERE status = 1"#,
+               FROM symbols_tb WHERE status = 1"#,
         )
         .fetch_all(pool)
         .await?;
@@ -26,7 +26,7 @@ impl SymbolManager {
         let row: Option<Symbol> = sqlx::query_as(
             r#"SELECT symbol_id, symbol, base_asset_id, quote_asset_id,
                       price_decimals, qty_decimals, min_qty, status, symbol_flags
-               FROM symbols WHERE symbol_id = $1"#,
+               FROM symbols_tb WHERE symbol_id = $1"#,
         )
         .bind(symbol_id)
         .fetch_optional(pool)
@@ -47,7 +47,7 @@ impl SymbolManager {
         let row: Option<Symbol> = sqlx::query_as(
             r#"SELECT symbol_id, symbol, base_asset_id, quote_asset_id, 
                       price_decimals, qty_decimals, min_qty, status, symbol_flags 
-               FROM symbols WHERE symbol = $1"#,
+               FROM symbols_tb WHERE symbol = $1"#,
         )
         .bind(symbol_name.as_str())
         .fetch_optional(pool)
