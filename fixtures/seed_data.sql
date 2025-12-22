@@ -31,10 +31,29 @@ WHERE b.asset = 'BTC' AND q.asset = 'USDT'
 ON CONFLICT (symbol) DO NOTHING;
 
 -- ============================================================================
+-- API Keys for Testing
+-- ============================================================================
+-- Test API Key for user_id=1 (system)
+-- Private key (hex, for client testing): 9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60
+-- This is a well-known test key - DO NOT USE IN PRODUCTION
+INSERT INTO api_keys_tb (user_id, api_key, key_type, key_data, label, permissions, status) 
+VALUES (
+    1, 
+    'AK_D4735E3A265E16EE',  -- Test API Key
+    1,  -- Ed25519
+    E'\\xd75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a',  -- Public key (32 bytes)
+    'Test Key',
+    15,  -- Full permissions (READ | TRADE | WITHDRAW | TRANSFER)
+    1   -- Active
+) ON CONFLICT (api_key) DO NOTHING;
+
+-- ============================================================================
 -- Verification Query (optional for debugging)
 -- ============================================================================
 -- SELECT 'Assets:' as type, COUNT(*) as count FROM assets_tb
 -- UNION ALL
 -- SELECT 'Symbols:', COUNT(*) FROM symbols_tb
 -- UNION ALL
--- SELECT 'Users:', COUNT(*) FROM users_tb;
+-- SELECT 'Users:', COUNT(*) FROM users_tb
+-- UNION ALL
+-- SELECT 'API Keys:', COUNT(*) FROM api_keys_tb;
