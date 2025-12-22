@@ -40,7 +40,7 @@ fi
 pass "TDengine is running"
 
 # Check Gateway
-if ! curl -sf "$BASE_URL/api/v1/klines?interval=1m" > /dev/null 2>&1; then
+if ! curl -sf "$BASE_URL/api/v1/health" > /dev/null 2>&1; then
     warn "Gateway not running, starting..."
     cd "$PROJECT_DIR"
     
@@ -55,15 +55,17 @@ if ! curl -sf "$BASE_URL/api/v1/klines?interval=1m" > /dev/null 2>&1; then
     GATEWAY_PID=$!
     echo "   Waiting for Gateway to be ready (30s)..."
     
-    # Wait for Gateway with timeout
+    # Wait for Gateway with timeout - use /health endpoint for basic readiness
     for i in {1..30}; do
-        if curl -sf "$BASE_URL/api/v1/klines?interval=1m" > /dev/null 2>&1; then
+        if curl -sf "$BASE_URL/api/v1/health" > /dev/null 2>&1; then
             break
         fi
         sleep 1
     done
     
-    if ! curl -sf "$BASE_URL/api/v1/klines?interval=1m" > /dev/null 2>&1; then
+    if ! curl -sf "$BASE_URL/api/v1/health" > /dev/null 2>&1; then
+        echo "Gateway log:"
+        cat /tmp/gateway.log || true
         fail "Gateway failed to start. Check /tmp/gateway.log"
     fi
 fi

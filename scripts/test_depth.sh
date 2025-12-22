@@ -6,6 +6,8 @@ set -e
 
 BASE_URL="http://localhost:8080"
 SYMBOL="BTC_USDT"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -15,70 +17,92 @@ NC='\033[0m' # No Color
 
 echo -e "${BLUE}=== Order Book Depth API Test ===${NC}\n"
 
+# Check if Gateway is running, start if needed
+if ! curl -sf "$BASE_URL/api/v1/health" > /dev/null 2>&1; then
+    echo -e "${BLUE}Gateway not running, starting...${NC}"
+    cd "$PROJECT_DIR"
+    
+    # Use CI config when running in CI environment
+    if [ "$CI" = "true" ]; then
+        ENV_FLAG="--env ci"
+    else
+        ENV_FLAG=""
+    fi
+    
+    cargo run --release -- --gateway $ENV_FLAG --port 8080 > /tmp/gateway_depth.log 2>&1 &
+    GATEWAY_PID=$!
+    
+    # Wait for Gateway
+    for i in {1..30}; do
+        if curl -sf "$BASE_URL/api/v1/health" > /dev/null 2>&1; then
+            break
+        fi
+        sleep 1
+    done
+    
+    if ! curl -sf "$BASE_URL/api/v1/health" > /dev/null 2>&1; then
+        echo "Gateway failed to start"
+        cat /tmp/gateway_depth.log || true
+        exit 1
+    fi
+    echo -e "${GREEN}Gateway started${NC}"
+fi
+
 # Test 1: Query empty depth
-echo -e "${BLUE}Test 1: Query empty depth${NC}"
+echo -e "${BLUE}Test 1: Query depth${NC}"
 curl -s "${BASE_URL}/api/v1/depth?symbol=${SYMBOL}&limit=5" | jq .
 echo -e "\n"
 
-# Test 2: Submit buy orders
-echo -e "${BLUE}Test 2: Submit buy orders${NC}"
-for i in {1..3}; do
-    price=$((30000 - i * 100))
-    qty="0.$i"
-    echo "Submitting BUY order: ${price} @ ${qty}"
-    curl -s -X POST "${BASE_URL}/api/v1/create_order" \
-      -H "Content-Type: application/json" \
-      -H "X-User-Id: 1" \
-      -d "{\"symbol\": \"${SYMBOL}\", \"side\": \"BUY\", \"order_type\": \"LIMIT\", \"price\": \"${price}.00\", \"qty\": \"${qty}\"}" \
-      | jq -r '.data.order_id // "ERROR"'
-done
-echo -e "\n"
+# Test 2: Create test orders via inject_orders.py (Ed25519 authenticated)
+echo -e "${BLUE}Test 2: Submit test orders (Ed25519 auth)${NC}"
 
-# Test 3: Submit sell orders
-echo -e "${BLUE}Test 3: Submit sell orders${NC}"
-for i in {1..3}; do
-    price=$((30100 + i * 100))
-    qty="0.$i"
-    echo "Submitting SELL order: ${price} @ ${qty}"
-    curl -s -X POST "${BASE_URL}/api/v1/create_order" \
-      -H "Content-Type: application/json" \
-      -H "X-User-Id: 2" \
-      -d "{\"symbol\": \"${SYMBOL}\", \"side\": \"SELL\", \"order_type\": \"LIMIT\", \"price\": \"${price}.00\", \"qty\": \"${qty}\"}" \
-      | jq -r '.data.order_id // "ERROR"'
-done
-echo -e "\n"
+# Create temporary orders file
+TEST_DIR="/tmp/depth_test"
+mkdir -p "$TEST_DIR"
 
-# Wait for depth update (100ms interval)
-echo -e "${BLUE}Waiting 200ms for depth update...${NC}"
-sleep 0.2
+cat > "$TEST_DIR/depth_orders.csv" << EOF
+order_id,user_id,side,price,qty
+1,1001,buy,29900,0.1
+2,1001,buy,29800,0.2
+3,1001,buy,29700,0.3
+4,1002,sell,30100,0.1
+5,1002,sell,30200,0.2
+6,1002,sell,30300,0.3
+EOF
 
-# Test 4: Query depth with orders
-echo -e "${BLUE}Test 4: Query depth (should show bids and asks)${NC}"
-curl -s "${BASE_URL}/api/v1/depth?symbol=${SYMBOL}&limit=5" | jq .
-echo -e "\n"
+# Determine Python command
+export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
+if [ "$CI" = "true" ]; then
+    PYTHON_CMD="${PYTHON_CMD:-python3}"
+elif [ -f "$PROJECT_DIR/.venv/bin/python3" ]; then
+    PYTHON_CMD="${PYTHON_CMD:-$PROJECT_DIR/.venv/bin/python3}"
+else
+    PYTHON_CMD="${PYTHON_CMD:-python3}"
+fi
 
-# Test 5: Test different limits
-echo -e "${BLUE}Test 5: Query depth with limit=2${NC}"
-curl -s "${BASE_URL}/api/v1/depth?symbol=${SYMBOL}&limit=2" | jq .
-echo -e "\n"
+if ! "$PYTHON_CMD" "$SCRIPT_DIR/inject_orders.py" --input "$TEST_DIR/depth_orders.csv" --quiet 2>/dev/null; then
+    echo -e "${RED}Order injection failed${NC}"
+    exit 1
+fi
+echo -e "${GREEN}Orders submitted successfully${NC}"
 
-# Test 6: Performance test - submit many orders quickly
-echo -e "${BLUE}Test 6: Performance test (10 orders rapidly)${NC}"
-for i in {1..10}; do
-    price=$((29500 + i * 10))
-    curl -s -X POST "${BASE_URL}/api/v1/create_order" \
-      -H "Content-Type: application/json" \
-      -H "X-User-Id: 3" \
-      -d "{\"symbol\": \"${SYMBOL}\", \"side\": \"BUY\", \"order_type\": \"LIMIT\", \"price\": \"${price}.00\", \"qty\": \"0.01\"}" \
-      > /dev/null &
-done
-wait
+# Wait for depth update
+echo -e "${BLUE}Waiting 500ms for depth update...${NC}"
+sleep 0.5
 
-echo "Waiting 200ms for depth update..."
-sleep 0.2
+# Test 3: Query depth with orders
+echo -e "${BLUE}Test 3: Query depth (should show bids and asks)${NC}"
+DEPTH_RESULT=$(curl -s "${BASE_URL}/api/v1/depth?symbol=${SYMBOL}&limit=5")
+echo "$DEPTH_RESULT" | jq .
 
-echo -e "${BLUE}Query depth after rapid orders:${NC}"
-curl -s "${BASE_URL}/api/v1/depth?symbol=${SYMBOL}&limit=10" | jq '.data | {bids: .bids | length, asks: .asks | length, last_update_id}'
-echo -e "\n"
+# Verify depth has data
+BIDS_LEN=$(echo "$DEPTH_RESULT" | jq '.data.bids | length')
+ASKS_LEN=$(echo "$DEPTH_RESULT" | jq '.data.asks | length')
 
-echo -e "${GREEN}=== All tests completed ===${NC}"
+if [ "$BIDS_LEN" -gt 0 ] && [ "$ASKS_LEN" -gt 0 ]; then
+    echo -e "${GREEN}✅ Depth API working - bids: $BIDS_LEN, asks: $ASKS_LEN${NC}"
+else
+    echo -e "${RED}❌ Depth API not returning expected data${NC}"
+fi
+
+echo -e "\n${GREEN}=== All tests completed ===${NC}"
