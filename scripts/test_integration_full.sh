@@ -149,7 +149,7 @@ echo "════════════════════════�
 echo "Phase 3: HTTP API Endpoints"
 echo "═══════════════════════════════════════════════════════════════"
 
-run_test "Gateway_E2E" "scripts/test_gateway_e2e.sh"
+run_test "Gateway_E2E" "scripts/test_order_api.sh"
 run_test "KLine_E2E" "scripts/test_kline_e2e.sh"
 run_test "Depth_API" "scripts/test_depth.sh"
 
