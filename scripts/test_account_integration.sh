@@ -1,16 +1,22 @@
 #!/bin/bash
-# Integration test script for Phase 0x0A Account System
-# Tests Gateway endpoints for assets and symbols
+
+# ============================================================================
+# Phase 0x0A Account Integration Test Script
+# ============================================================================
+# This script tests the PostgreSQL integration and Gateway API endpoints
+# Features:
+# - Idempotent: Can be run multiple times safely
+# - Detailed error reporting
+# - Test result summary
+# ============================================================================
 
 set -e  # Exit on error
 
-echo "=== Phase 0x0A Integration Test ==="
-echo ""
-
-# Colors
-GREEN='\033[0;32m'
+# Colors for output
 RED='\033[0;31m'
+GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Test counters
@@ -115,35 +121,101 @@ for i in {1..10}; do
         log_error "Gateway failed to start within 10 seconds"
         log_info "Gateway log:"
         cat /tmp/gateway.log
+        kill $GATEWAY_PID 2>/dev/null || true
+        exit 1
+    fi
+    sleep 1
+done
+
+# ============================================================================
+# API Endpoint Tests
+# ============================================================================
+
+test_start "Test /api/v1/assets endpoint"
+ASSETS_RESPONSE=$(curl -s http://localhost:8080/api/v1/assets)
+if echo "$ASSETS_RESPONSE" | jq -e '.code == 200' > /dev/null 2>&1; then
+    ASSET_COUNT=$(echo "$ASSETS_RESPONSE" | jq '.data | length')
+    log_success "Assets endpoint returned $ASSET_COUNT assets"
+    
+    # Verify asset structure
+    if echo "$ASSETS_RESPONSE" | jq -e '.data[0] | has("asset_id", "asset", "name")' > /dev/null 2>&1; then
+        log_success "Asset structure is correct"
+    else
+        log_error "Asset structure is incorrect"
+    fi
 else
-    echo -e "${RED}❌ Symbols endpoint failed${NC}"
-    kill $GATEWAY_PID 2>/dev/null || true
-    exit 1
+    log_error "Assets endpoint failed"
+    log_info "Response: $ASSETS_RESPONSE"
 fi
 
-# Verify BTC_USDT exists
-if echo "$SYMBOLS_RESPONSE" | jq -e '.data | map(.symbol) | contains(["BTC_USDT"])' > /dev/null 2>&1; then
-    echo -e "${GREEN}✅ Found expected symbol: BTC_USDT${NC}"
+test_start "Test /api/v1/symbols endpoint"
+SYMBOLS_RESPONSE=$(curl -s http://localhost:8080/api/v1/symbols)
+if echo "$SYMBOLS_RESPONSE" | jq -e '.code == 200' > /dev/null 2>&1; then
+    SYMBOL_COUNT=$(echo "$SYMBOLS_RESPONSE" | jq '.data | length')
+    log_success "Symbols endpoint returned $SYMBOL_COUNT symbols"
+    
+    # Verify symbol structure
+    if echo "$SYMBOLS_RESPONSE" | jq -e '.data[0] | has("symbol_id", "symbol", "base_asset_id")' > /dev/null 2>&1; then
+        log_success "Symbol structure is correct"
+    else
+        log_error "Symbol structure is incorrect"
+    fi
 else
-    echo -e "${RED}❌ Missing expected symbol${NC}"
-    kill $GATEWAY_PID 2>/dev/null || true
-    exit 1
+    log_error "Symbols endpoint failed"
+    log_info "Response: $SYMBOLS_RESPONSE"
 fi
 
-# Step 6: Cleanup
-echo -e "${YELLOW}[6/6]${NC} Cleaning up..."
+# ============================================================================
+# Idempotency Test
+# ============================================================================
+
+test_start "Test endpoint idempotency (multiple requests)"
+ASSETS_RESPONSE_2=$(curl -s http://localhost:8080/api/v1/assets)
+if [ "$ASSETS_RESPONSE" = "$ASSETS_RESPONSE_2" ]; then
+    log_success "Assets endpoint is idempotent"
+else
+    log_error "Assets endpoint returned different results"
+fi
+
+SYMBOLS_RESPONSE_2=$(curl -s http://localhost:8080/api/v1/symbols)
+if [ "$SYMBOLS_RESPONSE" = "$SYMBOLS_RESPONSE_2" ]; then
+    log_success "Symbols endpoint is idempotent"
+else
+    log_error "Symbols endpoint returned different results"
+fi
+
+# ============================================================================
+# Cleanup
+# ============================================================================
+
+log_info "Stopping Gateway (PID: $GATEWAY_PID)..."
 kill $GATEWAY_PID 2>/dev/null || true
 wait $GATEWAY_PID 2>/dev/null || true
-echo -e "${GREEN}✅ Gateway stopped${NC}"
+log_success "Gateway stopped"
 
-# Summary
+# ============================================================================
+# Test Summary
+# ============================================================================
+
 echo ""
-echo "=== Integration Test Summary ==="
-echo -e "${GREEN}✅ All tests passed!${NC}"
-echo ""
-echo "Tested endpoints:"
-echo "  - GET /api/v1/assets"
-echo "  - GET /api/v1/symbols"
-echo ""
-echo "To stop PostgreSQL:"
-echo "  docker-compose down"
+log_info "========================================="
+log_info "Test Summary"
+log_info "========================================="
+echo -e "Total Tests:  ${BLUE}$TESTS_TOTAL${NC}"
+echo -e "Passed:       ${GREEN}$TESTS_PASSED${NC}"
+echo -e "Failed:       ${RED}$TESTS_FAILED${NC}"
+
+if [ $TESTS_FAILED -gt 0 ]; then
+    echo ""
+    log_error "Failed Tests:"
+    for test in "${FAILED_TESTS[@]}"; do
+        echo -e "  ${RED}✗${NC} $test"
+    done
+    echo ""
+    log_error "Integration test FAILED"
+    exit 1
+else
+    echo ""
+    log_success "All tests PASSED! ✓"
+    exit 0
+fi
