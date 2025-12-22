@@ -243,7 +243,9 @@ impl UBSCore {
     /// # Operations for each party:
     /// - Buyer: spend_frozen(quote), deposit(base)
     /// - Seller: spend_frozen(base), deposit(quote)
+    ///
     /// Apply an order action (Place or Cancel).
+    #[allow(clippy::too_many_arguments)]
     pub fn apply_order_action(
         &mut self,
         action: OrderAction,

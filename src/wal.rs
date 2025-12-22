@@ -40,6 +40,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// - side: u8 (1 byte)
 /// - order_type: u8 (1 byte)
 /// - checksum: u32 (4 bytes)
+///
 /// Total: 54 bytes per entry
 ///
 /// Currently using CSV for readability during development.

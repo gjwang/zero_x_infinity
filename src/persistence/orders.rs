@@ -265,6 +265,7 @@ pub async fn update_order_status(
 }
 
 /// Insert order event for audit trail
+#[allow(clippy::too_many_arguments)]
 pub async fn insert_order_event(
     taos: &Taos,
     symbol_id: u32,

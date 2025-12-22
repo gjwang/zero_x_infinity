@@ -195,34 +195,15 @@ pub async fn run_server(
         // Apply auth middleware
         .layer(from_fn_with_state(state.clone(), gateway_auth_middleware));
 
-    // ==========================================================================
-    // Legacy Routes (保持向后兼容)
-    // ==========================================================================
-    // These routes are deprecated but kept for backward compatibility
-    let legacy_routes = Router::new()
-        .route("/create_order", post(handlers::create_order))
-        .route("/cancel_order", post(handlers::cancel_order))
-        .route("/order/{order_id}", get(handlers::get_order))
-        .route("/orders", get(handlers::get_orders))
-        .route("/trades", get(handlers::get_trades))
-        .route("/balances", get(handlers::get_balances))
-        .route("/klines", get(handlers::get_klines))
-        .route("/depth", get(handlers::get_depth))
-        .route("/assets", get(handlers::get_assets))
-        .route("/symbols", get(handlers::get_symbols))
-        .route("/exchange_info", get(handlers::get_exchange_info));
-
     // 创建完整路由
     let app = Router::new()
         // WebSocket endpoint
         .route("/ws", get(ws_handler))
         // Health check
         .route("/api/v1/health", get(handlers::health_check))
-        // New structured routes
+        // API Routes
         .nest("/api/v1/public", public_routes)
         .nest("/api/v1/private", private_routes)
-        // Legacy routes (deprecated, will be removed in future)
-        .nest("/api/v1", legacy_routes)
         .with_state(state);
 
     // 绑定地址

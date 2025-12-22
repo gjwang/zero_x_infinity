@@ -3,13 +3,7 @@
 //! Provides request authentication using Ed25519 signatures.
 //! Implements the 9-step verification flow defined in the API Auth spec.
 
-use axum::{
-    body::Body,
-    extract::State,
-    http::{Request, StatusCode},
-    middleware::Next,
-    response::{IntoResponse, Response},
-};
+use axum::{body::Body, extract::State, http::Request, middleware::Next, response::Response};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
