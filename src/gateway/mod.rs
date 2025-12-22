@@ -4,6 +4,7 @@ pub mod types;
 
 use axum::{
     Router,
+    middleware::from_fn_with_state,
     routing::{get, post},
 };
 use std::sync::Arc;
@@ -20,6 +21,9 @@ use state::AppState;
 
 // Phase 0x0A: Account management types
 use crate::account::{Asset, Database, Symbol};
+
+// Phase 0x0A-b: Authentication
+use crate::auth::{AuthState, TsStore};
 
 /// 启动 HTTP Gateway 服务器
 #[allow(clippy::too_many_arguments)]
@@ -46,6 +50,12 @@ pub async fn run_server(
     });
     println!("📡 WebSocket push service started");
 
+    // 创建 Auth 状态 (Phase 0x0A-b)
+    let auth_state = Arc::new(AuthState {
+        ts_store: Arc::new(TsStore::new()),
+        time_window_ms: 30_000, // 30 seconds
+    });
+
     // 创建共享状态
     let state = Arc::new(AppState::new(
         order_queue,
@@ -54,31 +64,68 @@ pub async fn run_server(
         db_client,
         ws_manager.clone(),
         depth_service,
-        pg_db,
+        pg_db.clone(),
         pg_assets,
         pg_symbols,
+        auth_state,
     ));
 
-    // 创建路由
+    // ==========================================================================
+    // Public Routes (无需鉴权)
+    // ==========================================================================
+    let public_routes = Router::new()
+        // 行情数据
+        .route("/exchange_info", get(handlers::get_exchange_info))
+        .route("/assets", get(handlers::get_assets))
+        .route("/symbols", get(handlers::get_symbols))
+        .route("/depth", get(handlers::get_depth))
+        .route("/klines", get(handlers::get_klines));
+
+    // ==========================================================================
+    // Private Routes (需要签名鉴权)
+    // ==========================================================================
+    // Note: Auth middleware will be added in Phase 2 once fully tested
+    // For now, these routes are accessible but will require auth soon
+    let private_routes = Router::new()
+        // 账户查询
+        .route("/orders", get(handlers::get_orders))
+        .route("/order/{order_id}", get(handlers::get_order))
+        .route("/trades", get(handlers::get_trades))
+        .route("/balances", get(handlers::get_balances))
+        // 交易操作
+        .route("/order", post(handlers::create_order))
+        .route("/cancel", post(handlers::cancel_order));
+    // TODO: Apply auth middleware layer
+    // .layer(from_fn_with_state(state.clone(), auth_middleware));
+
+    // ==========================================================================
+    // Legacy Routes (保持向后兼容)
+    // ==========================================================================
+    // These routes are deprecated but kept for backward compatibility
+    let legacy_routes = Router::new()
+        .route("/create_order", post(handlers::create_order))
+        .route("/cancel_order", post(handlers::cancel_order))
+        .route("/order/{order_id}", get(handlers::get_order))
+        .route("/orders", get(handlers::get_orders))
+        .route("/trades", get(handlers::get_trades))
+        .route("/balances", get(handlers::get_balances))
+        .route("/klines", get(handlers::get_klines))
+        .route("/depth", get(handlers::get_depth))
+        .route("/assets", get(handlers::get_assets))
+        .route("/symbols", get(handlers::get_symbols))
+        .route("/exchange_info", get(handlers::get_exchange_info));
+
+    // 创建完整路由
     let app = Router::new()
         // WebSocket endpoint
         .route("/ws", get(ws_handler))
-        // Health check (no internal details exposed)
+        // Health check
         .route("/api/v1/health", get(handlers::health_check))
-        // Write endpoints
-        .route("/api/v1/create_order", post(handlers::create_order))
-        .route("/api/v1/cancel_order", post(handlers::cancel_order))
-        // Query endpoints
-        .route("/api/v1/order/{order_id}", get(handlers::get_order))
-        .route("/api/v1/orders", get(handlers::get_orders))
-        .route("/api/v1/trades", get(handlers::get_trades))
-        .route("/api/v1/balances", get(handlers::get_balances))
-        .route("/api/v1/klines", get(handlers::get_klines))
-        .route("/api/v1/depth", get(handlers::get_depth))
-        // Phase 0x0A: Account management endpoints
-        .route("/api/v1/assets", get(handlers::get_assets))
-        .route("/api/v1/symbols", get(handlers::get_symbols))
-        .route("/api/v1/exchange_info", get(handlers::get_exchange_info))
+        // New structured routes
+        .nest("/api/v1/public", public_routes)
+        .nest("/api/v1/private", private_routes)
+        // Legacy routes (deprecated, will be removed in future)
+        .nest("/api/v1", legacy_routes)
         .with_state(state);
 
     // 绑定地址
@@ -87,6 +134,8 @@ pub async fn run_server(
 
     println!("🚀 Gateway listening on http://{}", addr);
     println!("📡 WebSocket endpoint: ws://{}/ws", addr);
+    println!("📂 Public API:  /api/v1/public/*");
+    println!("🔒 Private API: /api/v1/private/* (auth pending)");
 
     // 启动服务器
     axum::serve(listener, app).await.unwrap();
