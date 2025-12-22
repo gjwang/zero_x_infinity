@@ -17,7 +17,7 @@ use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 ///
 /// # Example
 /// ```ignore
-/// use zero_x_infinity::auth::signature;
+/// use zero_x_infinity::api_auth::signature;
 /// let valid = signature::verify_ed25519(&pub_key, b"message", &sig);
 /// ```
 pub fn verify_ed25519(public_key: &[u8], message: &[u8], signature: &[u8]) -> bool {
