@@ -15,12 +15,12 @@
 
 ### Files Created
 ```
-src/auth/
+src/api_auth/
 ├── mod.rs, base62.rs, signature.rs, error.rs
 ├── ts_store.rs, models.rs, middleware.rs, repository.rs
 migrations/002_create_api_keys.sql
 fixtures/seed_data.sql (test API key)
-scripts/test_auth.py
+scripts/test_api_auth.py
 ```
 
 
@@ -311,7 +311,7 @@ HMAC-SHA256:
 ### 5.1 模块结构
 
 ```
-src/auth/
+src/api_auth/
 ├── mod.rs              # 模块导出
 ├── api_key.rs          # ApiKey 模型 + Repository
 ├── signature.rs        # Ed25519 签名验证 (待扩展: HMAC/RSA)
@@ -452,12 +452,12 @@ API Key u64 转换:
 
 | # | 任务 | 输出文件 | 验收标准 |
 |---|------|----------|----------|
-| 2.1 | ApiKey 模型 | `src/auth/api_key.rs` | 涵盖所有字段 |
-| 2.2 | ApiKey Repository | `src/auth/repository.rs` | CRUD + 缓存 |
-| 2.3 | Base62 编解码 | `src/auth/base62.rs` | 编解码正确 |
-| 2.4 | Ed25519 签名验证 | `src/auth/signature.rs` | 验证通过/失败 |
-| 2.5 | ts_store (原子 CAS) | `src/auth/ts_store.rs` | 单调递增检查 |
-| 2.6 | 鉴权中间件 | `src/auth/middleware.rs` | 9步验证流程 |
+| 2.1 | ApiKey 模型 | `src/api_auth/api_key.rs` | 涵盖所有字段 |
+| 2.2 | ApiKey Repository | `src/api_auth/repository.rs` | CRUD + 缓存 |
+| 2.3 | Base62 编解码 | `src/api_auth/base62.rs` | 编解码正确 |
+| 2.4 | Ed25519 签名验证 | `src/api_auth/signature.rs` | 验证通过/失败 |
+| 2.5 | ts_store (原子 CAS) | `src/api_auth/ts_store.rs` | 单调递增检查 |
+| 2.6 | 鉴权中间件 | `src/api_auth/middleware.rs` | 9步验证流程 |
 
 #### Phase 3: 路由集成
 
@@ -470,8 +470,8 @@ API Key u64 转换:
 
 | # | 任务 | 输出文件 | 验收标准 |
 |---|------|----------|----------|
-| 4.1 | 单元测试 | `src/auth/tests.rs` | 覆盖主要场景 |
-| 4.2 | 集成测试脚本 | `scripts/test_auth.py` | 签名生成 + 请求 |
+| 4.1 | 单元测试 | `src/api_auth/tests.rs` | 覆盖主要场景 |
+| 4.2 | 集成测试脚本 | `scripts/test_api_auth.py` | 签名生成 + 请求 |
 | 4.3 | 失败场景测试 | 同上 | 错误码覆盖 |
 
 ### 8.2 关键数据结构
@@ -717,7 +717,7 @@ curl -H "Authorization: ZXINF ${AUTH_TOKEN}" \
 | 删除 Legacy Routes (`/api/v1/*`) | ✅ 完成 |
 | 路由重构为 `public/private` | ✅ 完成 |
 | 中文注释替换为英文 | ✅ 6 个文件 |
-| 创建可复用认证库 `lib/auth.py` | ✅ 完成 |
+| 创建可复用认证库 `lib/api_auth.py` | ✅ 完成 |
 | 更新 `inject_orders.py` 支持 Ed25519 | ✅ 完成 |
 | 删除过时测试脚本 | ✅ 2 个文件 |
 | Clippy 0 warnings | ✅ 通过 |
@@ -727,10 +727,10 @@ curl -H "Authorization: ZXINF ${AUTH_TOKEN}" \
 | Test Suite | Cases | Result |
 |------------|-------|--------|
 | `cargo test --lib` | 188 | ✅ All passed |
-| `test_auth.py` | 8 | ✅ All passed |
+| `test_api_auth.py` | 8 | ✅ All passed |
 | `inject_orders.py --limit 10` | 10 | ✅ 335 ops/s |
 
-### 13.3 test_auth.py 覆盖
+### 13.3 test_api_auth.py 覆盖
 
 - ✅ Public Endpoint (no auth)
 - ✅ Private Endpoint (no auth → 401)
@@ -744,7 +744,7 @@ curl -H "Authorization: ZXINF ${AUTH_TOKEN}" \
 ### 13.4 新增文件
 
 ```
-scripts/lib/auth.py       # 可复用 Ed25519 认证库
+scripts/lib/api_auth.py       # 可复用 Ed25519 认证库
   - ApiClient 类 (GET/POST/DELETE)
   - base62_encode/decode
   - TEST_API_KEY, TEST_PRIVATE_KEY_HEX
@@ -757,7 +757,7 @@ scripts/lib/auth.py       # 可复用 Ed25519 认证库
 7d3a394 chore: remove obsolete Gateway test scripts
 df77e03 feat(scripts): extract reusable auth library and update inject_orders
 1d7f821 test(auth): add 3 additional auth test cases
-94a0074 fix(test): update test_auth.py to use new public route path
+94a0074 fix(test): update test_api_auth.py to use new public route path
 f575307 refactor: replace all Chinese comments with English
 fcc4600 docs: consolidate coding standards (English-only rule)
 3c928f4 chore: remove legacy routes and fix all clippy warnings
