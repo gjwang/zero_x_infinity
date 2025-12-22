@@ -3,20 +3,14 @@
 //! Provides request authentication using Ed25519 signatures.
 //! Implements the 9-step verification flow defined in the API Auth spec.
 
-use axum::{
-    body::Body,
-    extract::State,
-    http::{HeaderMap, Method, Request},
-    middleware::Next,
-    response::Response,
-};
+use axum::http::HeaderMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::{
     base62,
     error::{AuthError, AuthErrorCode},
-    models::{ApiKeyRecord, AuthenticatedUser},
+    models::ApiKeyRecord,
     signature::verify_ed25519,
     ts_store::TsStore,
 };

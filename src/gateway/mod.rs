@@ -4,7 +4,6 @@ pub mod types;
 
 use axum::{
     Router,
-    middleware::from_fn_with_state,
     routing::{get, post},
 };
 use std::sync::Arc;
