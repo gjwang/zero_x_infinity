@@ -135,6 +135,7 @@ USDTUSDC  → USDT + USDC? 或 USD + TUSDC?
 - 新币种不断出现
 
 #### ❌ 问题 2: `BTC/USDT` 格式（斜杠分隔）
+#### ❌ 问题 3: `BTC-USDT` 格式（连字符分隔）
 
 **问题**：在浏览器和编辑器中体验差
 
@@ -144,6 +145,7 @@ USDTUSDC  → USDT + USDC? 或 USD + TUSDC?
 
 // 双击选择
 BTC/USDT  // ❌ 只会选中 "BTC" 或 "USDT"，不会选中整体
+BTC-USDT // ❌ 只会选中 "BTC" 或 "USDT"，不会选中整体
 ```
 
 **其他问题**：
