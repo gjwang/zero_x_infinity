@@ -50,7 +50,7 @@ This is a pilgrimage from `Hello World` to `Microsecond Latency`.
 | **Part II** | **产品化阶段 (Productization)** | |
 | 0x0A | [Part II Introduction](./docs/src/0x0A-part-ii-introduction.md) | 产品化路线图 |
 | 0x0A-a | [Account System](./docs/src/0x0A-a-account-system.md) | PostgreSQL 账户管理 |
-| 0x0A-b | [API Auth](./docs/src/0x0A-b-auth.md) | 安全鉴权 (进行中) |
+| 0x0A-b | [API Auth](./docs/src/0x0A-b-api-auth.md) | 安全鉴权 (进行中) |
 
 ---
 

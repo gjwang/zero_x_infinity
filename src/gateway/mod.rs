@@ -4,6 +4,11 @@ pub mod types;
 
 use axum::{
     Router,
+    body::Body,
+    extract::State,
+    http::Request,
+    middleware::{Next, from_fn_with_state},
+    response::Response,
     routing::{get, post},
 };
 use std::sync::Arc;
@@ -21,7 +26,105 @@ use state::AppState;
 // Phase 0x0A: Account management types
 use crate::account::{Asset, Database, Symbol};
 
-/// 启动 HTTP Gateway 服务器
+// Phase 0x0A-b: Authentication
+use crate::api_auth::{
+    ApiKeyRepository, AuthError, AuthState, AuthenticatedUser, TsStore, extract_auth_header,
+    parse_authorization, validate_ts_nonce, verify_signature,
+};
+
+/// Axum middleware for API authentication in Gateway.
+async fn gateway_auth_middleware(
+    State(state): State<Arc<AppState>>,
+    mut request: Request<Body>,
+    next: Next,
+) -> Result<Response, AuthError> {
+    use crate::api_auth::AuthErrorCode;
+
+    // Step 1: Extract Authorization header
+    let auth_header = extract_auth_header(request.headers())?;
+
+    // Step 2: Parse header components
+    let (_version, api_key, ts_nonce_str, signature) = parse_authorization(auth_header)?;
+    let ts_nonce: i64 = ts_nonce_str
+        .parse()
+        .map_err(|_| AuthError::from_code(AuthErrorCode::TsNonceRejected))?;
+
+    // Step 3: Get API Key from database
+    let db = state
+        .pg_db
+        .as_ref()
+        .ok_or_else(|| AuthError::new(AuthErrorCode::InternalError, "Database not configured"))?;
+    let repo = ApiKeyRepository::new(db.clone());
+    let api_key_record = repo
+        .get_active_by_key(api_key)
+        .await
+        .map_err(|e| AuthError::new(AuthErrorCode::InternalError, format!("DB error: {}", e)))?
+        .ok_or_else(|| AuthError::from_code(AuthErrorCode::InvalidApiKey))?;
+
+    // Step 4: Check API Key status
+    if api_key_record.status != 1 {
+        return Err(AuthError::from_code(AuthErrorCode::ApiKeyDisabled));
+    }
+
+    // Step 5: Validate ts_nonce (time window + monotonic)
+    validate_ts_nonce(
+        &state.auth_state.ts_store,
+        api_key,
+        ts_nonce,
+        state.auth_state.time_window_ms,
+    )?;
+
+    // Step 6: Build signature payload
+    let method = request.method().as_str();
+    // Use OriginalUri to get the full path + query before route matching strips nested prefixes
+    let original_uri = request
+        .extensions()
+        .get::<axum::extract::OriginalUri>()
+        .map(|uri| {
+            uri.0
+                .path_and_query()
+                .map(|pq| pq.as_str())
+                .unwrap_or(uri.0.path())
+        })
+        .unwrap_or_else(|| {
+            request
+                .uri()
+                .path_and_query()
+                .map(|pq| pq.as_str())
+                .unwrap_or(request.uri().path())
+        });
+    let body = "";
+
+    // Debug: log signature verification payload
+    eprintln!(
+        "[DEBUG] Auth payload: api_key={}, ts_nonce={}, method={}, uri={}",
+        api_key, ts_nonce_str, method, original_uri
+    );
+
+    // Step 7: Verify signature
+    verify_signature(
+        &api_key_record,
+        api_key,
+        ts_nonce_str,
+        method,
+        original_uri,
+        body,
+        signature,
+    )?;
+
+    // Step 8: Create authenticated user and inject
+    let auth_user = AuthenticatedUser {
+        user_id: api_key_record.user_id,
+        api_key: api_key_record.api_key.clone(),
+        permissions: api_key_record.permissions,
+    };
+    request.extensions_mut().insert(auth_user);
+
+    // Step 9: Continue to handler
+    Ok(next.run(request).await)
+}
+
+/// Start HTTP Gateway server
 #[allow(clippy::too_many_arguments)]
 pub async fn run_server(
     port: u16,
@@ -35,10 +138,10 @@ pub async fn run_server(
     pg_assets: Arc<Vec<Asset>>,
     pg_symbols: Arc<Vec<Symbol>>,
 ) {
-    // 创建 WebSocket 连接管理器
+    // Create WebSocket connection manager
     let ws_manager = Arc::new(ConnectionManager::new());
 
-    // 启动 WebSocket 推送服务
+    // Start WebSocket push service
     let ws_service =
         crate::websocket::WsService::new(ws_manager.clone(), push_event_queue, symbol_mgr.clone());
     tokio::spawn(async move {
@@ -46,7 +149,13 @@ pub async fn run_server(
     });
     println!("📡 WebSocket push service started");
 
-    // 创建共享状态
+    // Create Auth state (Phase 0x0A-b)
+    let auth_state = Arc::new(AuthState {
+        ts_store: Arc::new(TsStore::new()),
+        time_window_ms: 30_000, // 30 seconds
+    });
+
+    // Create shared state
     let state = Arc::new(AppState::new(
         order_queue,
         symbol_mgr,
@@ -54,40 +163,71 @@ pub async fn run_server(
         db_client,
         ws_manager.clone(),
         depth_service,
-        pg_db,
+        pg_db.clone(),
         pg_assets,
         pg_symbols,
+        auth_state,
     ));
 
-    // 创建路由
+    // ==========================================================================
+    // Public Routes (no auth required)
+    // ==========================================================================
+    let public_routes = Router::new()
+        // Market data
+        .route("/exchange_info", get(handlers::get_exchange_info))
+        .route("/assets", get(handlers::get_assets))
+        .route("/symbols", get(handlers::get_symbols))
+        .route("/depth", get(handlers::get_depth))
+        .route("/klines", get(handlers::get_klines));
+
+    // ==========================================================================
+    // Private Routes (auth required)
+    // ==========================================================================
+    let private_routes = Router::new()
+        // Account queries
+        .route("/orders", get(handlers::get_orders))
+        .route("/order/{order_id}", get(handlers::get_order))
+        .route("/trades", get(handlers::get_trades))
+        .route("/balances", get(handlers::get_balances))
+        // Trading operations
+        .route("/order", post(handlers::create_order))
+        .route("/cancel", post(handlers::cancel_order))
+        // Apply auth middleware
+        .layer(from_fn_with_state(state.clone(), gateway_auth_middleware));
+
+    // Build complete router
     let app = Router::new()
         // WebSocket endpoint
         .route("/ws", get(ws_handler))
-        // Health check (no internal details exposed)
+        // Health check
         .route("/api/v1/health", get(handlers::health_check))
-        // Write endpoints
-        .route("/api/v1/create_order", post(handlers::create_order))
-        .route("/api/v1/cancel_order", post(handlers::cancel_order))
-        // Query endpoints
-        .route("/api/v1/order/{order_id}", get(handlers::get_order))
-        .route("/api/v1/orders", get(handlers::get_orders))
-        .route("/api/v1/trades", get(handlers::get_trades))
-        .route("/api/v1/balances", get(handlers::get_balances))
-        .route("/api/v1/klines", get(handlers::get_klines))
-        .route("/api/v1/depth", get(handlers::get_depth))
-        // Phase 0x0A: Account management endpoints
-        .route("/api/v1/assets", get(handlers::get_assets))
-        .route("/api/v1/symbols", get(handlers::get_symbols))
-        .route("/api/v1/exchange_info", get(handlers::get_exchange_info))
+        // API Routes
+        .nest("/api/v1/public", public_routes)
+        .nest("/api/v1/private", private_routes)
         .with_state(state);
 
-    // 绑定地址
+    // Bind address
     let addr = format!("0.0.0.0:{}", port);
-    let listener = TcpListener::bind(&addr).await.unwrap();
+    let listener = match TcpListener::bind(&addr).await {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("❌ FATAL: Failed to bind to {}: {}", addr, e);
+            eprintln!(
+                "   Hint: Port {} may already be in use. Check with: lsof -i :{}",
+                port, port
+            );
+            std::process::exit(1);
+        }
+    };
 
     println!("🚀 Gateway listening on http://{}", addr);
     println!("📡 WebSocket endpoint: ws://{}/ws", addr);
+    println!("📂 Public API:  /api/v1/public/*");
+    println!("🔒 Private API: /api/v1/private/* (auth pending)");
 
-    // 启动服务器
-    axum::serve(listener, app).await.unwrap();
+    // Start server
+    if let Err(e) = axum::serve(listener, app).await {
+        eprintln!("❌ FATAL: Server error: {}", e);
+        std::process::exit(1);
+    }
 }

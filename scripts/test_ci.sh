@@ -342,7 +342,7 @@ main() {
     echo "Phase 4: HTTP API Endpoints"
     echo "═══════════════════════════════════════════════════════════════"
     
-    run_test "Gateway_E2E" "scripts/test_gateway_e2e.sh" 180
+    run_test "Gateway_E2E" "scripts/test_order_api.sh" 180
     run_test "KLine_E2E" "scripts/test_kline_e2e.sh" 180
     run_test "Depth_API" "scripts/test_depth.sh" 120
     

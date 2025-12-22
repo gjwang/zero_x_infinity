@@ -160,7 +160,7 @@ scripts/
 ├── test_integration_full.sh     # 主测试脚本 [NEW]
 ├── compare_settlement.py        # Python3 对比脚本 [NEW]
 ├── test_pipeline_compare.sh     # 已有
-├── test_gateway_e2e.sh          # 已有
+├── test_order_api.sh          # 已有
 └── ...
 
 docs/src/
