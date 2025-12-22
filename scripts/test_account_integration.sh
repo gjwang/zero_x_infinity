@@ -13,102 +13,108 @@ RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Configuration
-GATEWAY_PORT=8080
-GATEWAY_URL="http://localhost:${GATEWAY_PORT}"
-WAIT_TIME=5
+# Test counters
+TESTS_TOTAL=0
+TESTS_PASSED=0
+TESTS_FAILED=0
 
-# Step 1: Start PostgreSQL
-echo -e "${YELLOW}[1/6]${NC} Starting PostgreSQL..."
-docker-compose up -d postgres
-sleep 3
+# Test result tracking
+declare -a FAILED_TESTS
 
-# Check PostgreSQL is ready
-echo "Waiting for PostgreSQL to be ready..."
-for i in {1..10}; do
-    if docker exec postgres pg_isready -U trading > /dev/null 2>&1; then
-        echo -e "${GREEN}✅ PostgreSQL is ready${NC}"
-        break
-    fi
-    if [ $i -eq 10 ]; then
-        echo -e "${RED}❌ PostgreSQL failed to start${NC}"
-        exit 1
-    fi
-    sleep 1
-done
+# ============================================================================
+# Helper Functions
+# ============================================================================
 
-# Step 2: Build the project
-echo -e "${YELLOW}[2/6]${NC} Building project..."
-cargo build --release
-if [ $? -ne 0 ]; then
-    echo -e "${RED}❌ Build failed${NC}"
-    exit 1
-fi
-echo -e "${GREEN}✅ Build successful${NC}"
+log_info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
 
-# Step 3: Start Gateway in background
-echo -e "${YELLOW}[3/6]${NC} Starting Gateway..."
-cargo run --release -- --gateway --env dev > /tmp/gateway.log 2>&1 &
-GATEWAY_PID=$!
-echo "Gateway PID: $GATEWAY_PID"
+log_success() {
+    echo -e "${GREEN}[PASS]${NC} $1"
+    ((TESTS_PASSED++))
+}
 
-# Wait for Gateway to start
-echo "Waiting for Gateway to start..."
-sleep $WAIT_TIME
+log_error() {
+    echo -e "${RED}[FAIL]${NC} $1"
+    ((TESTS_FAILED++))
+    FAILED_TESTS+=("$1")
+}
+
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
+
+test_start() {
+    ((TESTS_TOTAL++))
+    log_info "Test $TESTS_TOTAL: $1"
+}
+
+# ============================================================================
+# Pre-flight Checks
+# ============================================================================
+
+log_info "========================================="
+log_info "Phase 0x0A Integration Test"
+log_info "========================================="
+echo ""
 
 # Check if Gateway is running
-if ! kill -0 $GATEWAY_PID 2>/dev/null; then
-    echo -e "${RED}❌ Gateway failed to start${NC}"
-    cat /tmp/gateway.log
+test_start "Check if Gateway is already running"
+if lsof -Pi :8080 -sTCP:LISTEN -t >/dev/null 2>&1; then
+    log_warn "Gateway already running on port 8080"
+    log_info "Attempting to stop existing Gateway..."
+    pkill -f "zero_x_infinity" || true
+    sleep 2
+    
+    if lsof -Pi :8080 -sTCP:LISTEN -t >/dev/null 2>&1; then
+        log_error "Failed to stop existing Gateway"
+        exit 1
+    fi
+    log_success "Existing Gateway stopped"
+else
+    log_success "Port 8080 is available"
+fi
+
+# Check PostgreSQL connection
+test_start "Check PostgreSQL connection"
+if docker exec postgres psql -U trading -d trading -c "SELECT 1" >/dev/null 2>&1; then
+    log_success "PostgreSQL is accessible"
+else
+    log_error "PostgreSQL is not accessible"
+    log_info "Please ensure PostgreSQL Docker container is running:"
+    log_info "  docker ps | grep postgres"
     exit 1
 fi
 
-# Check health endpoint
+# ============================================================================
+# Build and Start Gateway
+# ============================================================================
+
+test_start "Build Gateway"
+log_info "Running: cargo build --release"
+if cargo build --release 2>&1 | tail -5; then
+    log_success "Gateway built successfully"
+else
+    log_error "Gateway build failed"
+    exit 1
+fi
+
+test_start "Start Gateway in background"
+log_info "Starting Gateway on port 8080..."
+./target/release/zero_x_infinity gateway > /tmp/gateway.log 2>&1 &
+GATEWAY_PID=$!
+
+# Wait for Gateway to start
+log_info "Waiting for Gateway to start (PID: $GATEWAY_PID)..."
 for i in {1..10}; do
-    if curl -s "${GATEWAY_URL}/api/v1/health" > /dev/null 2>&1; then
-        echo -e "${GREEN}✅ Gateway is ready${NC}"
+    if curl -s http://localhost:8080/health > /dev/null 2>&1; then
+        log_success "Gateway started successfully"
         break
     fi
     if [ $i -eq 10 ]; then
-        echo -e "${RED}❌ Gateway health check failed${NC}"
-        kill $GATEWAY_PID 2>/dev/null || true
+        log_error "Gateway failed to start within 10 seconds"
+        log_info "Gateway log:"
         cat /tmp/gateway.log
-        exit 1
-    fi
-    sleep 1
-done
-
-# Step 4: Test /api/v1/assets endpoint
-echo -e "${YELLOW}[4/6]${NC} Testing /api/v1/assets endpoint..."
-ASSETS_RESPONSE=$(curl -s "${GATEWAY_URL}/api/v1/assets")
-echo "Response: $ASSETS_RESPONSE"
-
-# Check if response contains expected data
-if echo "$ASSETS_RESPONSE" | jq -e '.code == 0' > /dev/null 2>&1; then
-    echo -e "${GREEN}✅ Assets endpoint returned success${NC}"
-else
-    echo -e "${RED}❌ Assets endpoint failed${NC}"
-    kill $GATEWAY_PID 2>/dev/null || true
-    exit 1
-fi
-
-# Verify BTC, USDT, ETH exist
-if echo "$ASSETS_RESPONSE" | jq -e '.data | map(.asset) | contains(["BTC", "USDT", "ETH"])' > /dev/null 2>&1; then
-    echo -e "${GREEN}✅ Found expected assets: BTC, USDT, ETH${NC}"
-else
-    echo -e "${RED}❌ Missing expected assets${NC}"
-    kill $GATEWAY_PID 2>/dev/null || true
-    exit 1
-fi
-
-# Step 5: Test /api/v1/symbols endpoint
-echo -e "${YELLOW}[5/6]${NC} Testing /api/v1/symbols endpoint..."
-SYMBOLS_RESPONSE=$(curl -s "${GATEWAY_URL}/api/v1/symbols")
-echo "Response: $SYMBOLS_RESPONSE"
-
-# Check if response contains expected data
-if echo "$SYMBOLS_RESPONSE" | jq -e '.code == 0' > /dev/null 2>&1; then
-    echo -e "${GREEN}✅ Symbols endpoint returned success${NC}"
 else
     echo -e "${RED}❌ Symbols endpoint failed${NC}"
     kill $GATEWAY_PID 2>/dev/null || true
