@@ -27,6 +27,8 @@ pub enum AuthErrorCode {
     PermissionDenied = 4007,
     /// 4008: API Key is disabled
     ApiKeyDisabled = 4008,
+    /// 4009: Internal server error
+    InternalError = 4009,
 }
 
 impl AuthErrorCode {
@@ -46,6 +48,7 @@ impl AuthErrorCode {
             Self::InvalidSignature => "INVALID_SIGNATURE",
             Self::PermissionDenied => "PERMISSION_DENIED",
             Self::ApiKeyDisabled => "API_KEY_DISABLED",
+            Self::InternalError => "INTERNAL_ERROR",
         }
     }
 
@@ -53,6 +56,7 @@ impl AuthErrorCode {
     pub fn http_status(self) -> StatusCode {
         match self {
             Self::PermissionDenied => StatusCode::FORBIDDEN,
+            Self::InternalError => StatusCode::INTERNAL_SERVER_ERROR,
             _ => StatusCode::UNAUTHORIZED,
         }
     }
@@ -85,6 +89,7 @@ impl AuthError {
             AuthErrorCode::InvalidSignature => "Signature verification failed",
             AuthErrorCode::PermissionDenied => "Insufficient permissions for this operation",
             AuthErrorCode::ApiKeyDisabled => "API Key is disabled",
+            AuthErrorCode::InternalError => "Internal server error",
         };
         Self::new(code, message)
     }

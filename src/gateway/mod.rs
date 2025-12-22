@@ -4,6 +4,11 @@ pub mod types;
 
 use axum::{
     Router,
+    body::Body,
+    extract::State,
+    http::Request,
+    middleware::{Next, from_fn_with_state},
+    response::Response,
     routing::{get, post},
 };
 use std::sync::Arc;
@@ -22,7 +27,102 @@ use state::AppState;
 use crate::account::{Asset, Database, Symbol};
 
 // Phase 0x0A-b: Authentication
-use crate::auth::{AuthState, TsStore};
+use crate::auth::{
+    ApiKeyRepository, AuthError, AuthState, AuthenticatedUser, TsStore, extract_auth_header,
+    parse_authorization, validate_ts_nonce, verify_signature,
+};
+
+/// Axum middleware for API authentication in Gateway.
+async fn gateway_auth_middleware(
+    State(state): State<Arc<AppState>>,
+    mut request: Request<Body>,
+    next: Next,
+) -> Result<Response, AuthError> {
+    use crate::auth::AuthErrorCode;
+
+    // Step 1: Extract Authorization header
+    let auth_header = extract_auth_header(request.headers())?;
+
+    // Step 2: Parse header components
+    let (_version, api_key, ts_nonce_str, signature) = parse_authorization(auth_header)?;
+    let ts_nonce: i64 = ts_nonce_str
+        .parse()
+        .map_err(|_| AuthError::from_code(AuthErrorCode::TsNonceRejected))?;
+
+    // Step 3: Get API Key from database
+    let db = state
+        .pg_db
+        .as_ref()
+        .ok_or_else(|| AuthError::new(AuthErrorCode::InternalError, "Database not configured"))?;
+    let repo = ApiKeyRepository::new(db.clone());
+    let api_key_record = repo
+        .get_active_by_key(api_key)
+        .await
+        .map_err(|e| AuthError::new(AuthErrorCode::InternalError, format!("DB error: {}", e)))?
+        .ok_or_else(|| AuthError::from_code(AuthErrorCode::InvalidApiKey))?;
+
+    // Step 4: Check API Key status
+    if api_key_record.status != 1 {
+        return Err(AuthError::from_code(AuthErrorCode::ApiKeyDisabled));
+    }
+
+    // Step 5: Validate ts_nonce (time window + monotonic)
+    validate_ts_nonce(
+        &state.auth_state.ts_store,
+        api_key,
+        ts_nonce,
+        state.auth_state.time_window_ms,
+    )?;
+
+    // Step 6: Build signature payload
+    let method = request.method().as_str();
+    // Use OriginalUri to get the full path + query before route matching strips nested prefixes
+    let original_uri = request
+        .extensions()
+        .get::<axum::extract::OriginalUri>()
+        .map(|uri| {
+            uri.0
+                .path_and_query()
+                .map(|pq| pq.as_str())
+                .unwrap_or(uri.0.path())
+        })
+        .unwrap_or_else(|| {
+            request
+                .uri()
+                .path_and_query()
+                .map(|pq| pq.as_str())
+                .unwrap_or(request.uri().path())
+        });
+    let body = "";
+
+    // Debug: log signature verification payload
+    eprintln!(
+        "[DEBUG] Auth payload: api_key={}, ts_nonce={}, method={}, uri={}",
+        api_key, ts_nonce_str, method, original_uri
+    );
+
+    // Step 7: Verify signature
+    verify_signature(
+        &api_key_record,
+        api_key,
+        ts_nonce_str,
+        method,
+        original_uri,
+        body,
+        signature,
+    )?;
+
+    // Step 8: Create authenticated user and inject
+    let auth_user = AuthenticatedUser {
+        user_id: api_key_record.user_id,
+        api_key: api_key_record.api_key.clone(),
+        permissions: api_key_record.permissions,
+    };
+    request.extensions_mut().insert(auth_user);
+
+    // Step 9: Continue to handler
+    Ok(next.run(request).await)
+}
 
 /// 启动 HTTP Gateway 服务器
 #[allow(clippy::too_many_arguments)]
@@ -83,8 +183,6 @@ pub async fn run_server(
     // ==========================================================================
     // Private Routes (需要签名鉴权)
     // ==========================================================================
-    // Note: Auth middleware will be added in Phase 2 once fully tested
-    // For now, these routes are accessible but will require auth soon
     let private_routes = Router::new()
         // 账户查询
         .route("/orders", get(handlers::get_orders))
@@ -93,9 +191,9 @@ pub async fn run_server(
         .route("/balances", get(handlers::get_balances))
         // 交易操作
         .route("/order", post(handlers::create_order))
-        .route("/cancel", post(handlers::cancel_order));
-    // TODO: Apply auth middleware layer
-    // .layer(from_fn_with_state(state.clone(), auth_middleware));
+        .route("/cancel", post(handlers::cancel_order))
+        // Apply auth middleware
+        .layer(from_fn_with_state(state.clone(), gateway_auth_middleware));
 
     // ==========================================================================
     // Legacy Routes (保持向后兼容)

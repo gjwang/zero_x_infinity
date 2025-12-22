@@ -3,17 +3,26 @@
 //! Provides request authentication using Ed25519 signatures.
 //! Implements the 9-step verification flow defined in the API Auth spec.
 
-use axum::http::HeaderMap;
+use axum::{
+    body::Body,
+    extract::State,
+    http::{Request, StatusCode},
+    middleware::Next,
+    response::{IntoResponse, Response},
+};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::{
     base62,
     error::{AuthError, AuthErrorCode},
-    models::ApiKeyRecord,
+    models::{ApiKeyRecord, AuthenticatedUser},
+    repository::ApiKeyRepository,
     signature::verify_ed25519,
     ts_store::TsStore,
 };
+use crate::account::Database;
+use axum::http::HeaderMap;
 
 /// Authentication state shared across requests.
 #[derive(Clone)]
@@ -31,6 +40,79 @@ impl Default for AuthState {
             time_window_ms: 30_000, // 30 seconds
         }
     }
+}
+
+/// Axum middleware for API authentication.
+///
+/// Verifies Ed25519 signatures and injects AuthenticatedUser into request extensions.
+/// Must be applied to private routes.
+pub async fn auth_middleware(
+    State(db): State<Option<Arc<Database>>>,
+    State(auth_state): State<Arc<AuthState>>,
+    mut request: Request<Body>,
+    next: Next,
+) -> Result<Response, AuthError> {
+    // Step 1: Extract Authorization header
+    let auth_header = extract_auth_header(request.headers())?;
+
+    // Step 2: Parse header components
+    let (_version, api_key, ts_nonce_str, signature) = parse_authorization(auth_header)?;
+    let ts_nonce: i64 = ts_nonce_str
+        .parse()
+        .map_err(|_| AuthError::from_code(AuthErrorCode::TsNonceRejected))?;
+
+    // Step 3: Get API Key from database
+    let db =
+        db.ok_or_else(|| AuthError::new(AuthErrorCode::InternalError, "Database not configured"))?;
+    let repo = ApiKeyRepository::new(db);
+    let api_key_record = repo
+        .get_active_by_key(api_key)
+        .await
+        .map_err(|e| AuthError::new(AuthErrorCode::InternalError, format!("DB error: {}", e)))?
+        .ok_or_else(|| AuthError::from_code(AuthErrorCode::InvalidApiKey))?;
+
+    // Step 4: Check API Key status
+    if api_key_record.status != 1 {
+        return Err(AuthError::from_code(AuthErrorCode::ApiKeyDisabled));
+    }
+
+    // Step 5: Validate ts_nonce (time window + monotonic)
+    validate_ts_nonce(
+        &auth_state.ts_store,
+        api_key,
+        ts_nonce,
+        auth_state.time_window_ms,
+    )?;
+
+    // Step 6: Build signature payload
+    let method = request.method().as_str();
+    let path = request.uri().path();
+    // For simplicity, we don't include body in signature for GET requests
+    let body = "";
+
+    // Step 7: Verify signature
+    verify_signature(
+        &api_key_record,
+        api_key,
+        ts_nonce_str,
+        method,
+        path,
+        body,
+        signature,
+    )?;
+
+    // Step 8: Create authenticated user
+    let auth_user = AuthenticatedUser {
+        user_id: api_key_record.user_id,
+        api_key: api_key_record.api_key.clone(),
+        permissions: api_key_record.permissions,
+    };
+
+    // Step 9: Inject into request extensions
+    request.extensions_mut().insert(auth_user);
+
+    // Continue to handler
+    Ok(next.run(request).await)
 }
 
 /// Parse and validate the Authorization header.
@@ -278,5 +360,48 @@ mod tests {
             "invalid!base62!",
         );
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_verify_signature_with_python_base62() {
+        // End-to-end test with Python-generated signature
+        // Public key hex: d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a
+        let public_key_hex = "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a";
+        let public_key: Vec<u8> = (0..public_key_hex.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&public_key_hex[i..i + 2], 16).unwrap())
+            .collect();
+
+        let record = ApiKeyRecord {
+            key_id: 1,
+            user_id: 1,
+            api_key: "AK_D4735E3A265E16EE".to_string(),
+            key_type: 1,
+            key_data: public_key,
+            label: None,
+            permissions: 15,
+            status: 1,
+            last_ts_nonce: 0,
+        };
+
+        // Python-generated Base62 signature for payload:
+        // "AK_D4735E3A265E16EE1766416500000GET/api/v1/private/orders"
+        let sig_b62 = "UZAz7j7ovYo2zMKWFM5uUPAL8rDXnUo76zvbngKSflSuZojB7khpMtUQnI96dn1VmpUQ46U8lowve9Z9oGOTS4";
+
+        let result = verify_signature(
+            &record,
+            "AK_D4735E3A265E16EE",
+            "1766416500000",
+            "GET",
+            "/api/v1/private/orders",
+            "",
+            sig_b62,
+        );
+
+        assert!(
+            result.is_ok(),
+            "Python signature should verify: {:?}",
+            result.err()
+        );
     }
 }

@@ -22,7 +22,10 @@ pub mod ts_store;
 // Re-export for convenience
 pub use base62::{decode as base62_decode, encode as base62_encode};
 pub use error::{AuthError, AuthErrorCode};
-pub use middleware::{AuthState, parse_authorization, validate_ts_nonce, verify_signature};
+pub use middleware::{
+    AuthState, auth_middleware, extract_auth_header, parse_authorization, validate_ts_nonce,
+    verify_signature,
+};
 pub use models::{ApiKeyRecord, AuthenticatedUser, KeyType, has_permission, permissions};
 pub use repository::ApiKeyRepository;
 pub use signature::verify_ed25519;
