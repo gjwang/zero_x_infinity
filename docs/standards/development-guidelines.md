@@ -306,7 +306,50 @@ pub fn connect(url: &str) -> Database {
 
 ---
 
-## 6. 示例：完整的开发流程
+## 6. 新功能开发检查清单 (New Feature Checklist)
+
+每次开发新功能时，**必须同时完成**以下所有项目：
+
+### 6.1 代码层面
+
+- [ ] 功能代码实现完成
+- [ ] 单元测试编写完成 (`cargo test`)
+- [ ] 相关模块的 `mod.rs` 导出更新
+- [ ] 错误处理完善，无 `unwrap()` 裸调用
+
+### 6.2 测试层面
+
+- [ ] 创建/更新集成测试脚本 (`scripts/test_*.sh`)
+- [ ] 更新 `scripts/test_ci.sh` 添加新测试 Phase
+- [ ] 测试脚本可独立运行且幂等
+
+### 6.3 CI/CD 层面
+
+- [ ] 检查 CI workflow 是否有必要的服务依赖 (PostgreSQL, TDengine)
+- [ ] 确认 `integration-tests.yml` 包含新功能测试
+- [ ] 本地运行 `./scripts/test_ci.sh --quick` 验证
+
+### 6.4 文档层面
+
+- [ ] 更新 `docs/src/*.md` 相关章节
+- [ ] 更新 `docs/src/SUMMARY.md` 目录结构
+- [ ] 运行 `mdbook build` 验证文档构建
+
+### 6.5 提交前最终检查
+
+```bash
+# ✅ 必须全部通过才能提交
+cargo check
+cargo test
+cargo clippy -- -D warnings
+cargo fmt --check
+mdbook build docs
+./scripts/test_ci.sh --quick
+```
+
+---
+
+## 7. 示例：完整的开发流程
 
 ### 场景：添加新的 API 端点
 
@@ -381,7 +424,7 @@ Closes #456"
 
 ---
 
-## 7. 常见问题（FAQ）
+## 8. 常见问题（FAQ）
 
 ### Q: 什么时候需要创建新的测试脚本？
 
@@ -405,7 +448,7 @@ cargo test || exit 1
 
 ---
 
-## 8. 参考资源
+## 9. 参考资源
 
 - [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/)
 - [Conventional Commits](https://www.conventionalcommits.org/)
