@@ -1,54 +1,87 @@
 -- 001_init_schema.sql
 -- Initial schema for account management
 
--- Users table
+-- ============================================================================
+-- Users Table
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS users (
     user_id BIGSERIAL PRIMARY KEY,
     username VARCHAR(64) UNIQUE NOT NULL,
     email VARCHAR(128),
-    status SMALLINT NOT NULL DEFAULT 1,  -- 1=active, 0=disabled
+    status SMALLINT NOT NULL DEFAULT 1,  -- 0=disabled, 1=active
+    flags INT NOT NULL DEFAULT 15,       -- 权限位标志 (see below)
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+-- flags 位定义:
+--   0x01 = can_login
+--   0x02 = can_trade  
+--   0x04 = can_withdraw
+--   0x08 = can_api_access
+--   0x10 = is_vip
+--   0x20 = is_kyc_verified
+-- 默认 15 (0x0F) = login + trade + withdraw + api
 
--- Assets table (BTC, USDT, ETH, etc.)
+-- ============================================================================
+-- Assets Table (BTC, USDT, ETH, etc.)
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS assets (
     asset_id SERIAL PRIMARY KEY,
     asset VARCHAR(16) UNIQUE NOT NULL,   -- 资产代码: BTC, USDT, ETH
-    name VARCHAR(64) NOT NULL,           -- e.g., "Bitcoin", "Tether"
-    decimals SMALLINT NOT NULL,          -- e.g., 8 for BTC, 6 for USDT
-    status SMALLINT NOT NULL DEFAULT 1,
+    name VARCHAR(64) NOT NULL,           -- 全称: Bitcoin, Tether USD
+    decimals SMALLINT NOT NULL,          -- 精度: 8 for BTC, 6 for USDT
+    status SMALLINT NOT NULL DEFAULT 1,  -- 0=disabled, 1=active
+    flags INT NOT NULL DEFAULT 7,        -- 权限位标志 (see below)
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+-- flags 位定义:
+--   0x01 = can_deposit
+--   0x02 = can_withdraw
+--   0x04 = can_trade
+--   0x08 = is_stable_coin
+-- 默认 7 (0x07) = deposit + withdraw + trade
 
--- Symbols table (trading pairs)
+-- ============================================================================
+-- Symbols Table (Trading Pairs)
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS symbols (
     symbol_id SERIAL PRIMARY KEY,
     symbol VARCHAR(32) UNIQUE NOT NULL,  -- 交易对: BTC_USDT
     base_asset_id INT NOT NULL REFERENCES assets(asset_id),
     quote_asset_id INT NOT NULL REFERENCES assets(asset_id),
-    price_decimals SMALLINT NOT NULL,    -- price precision
-    qty_decimals SMALLINT NOT NULL,      -- qty precision
-    min_qty BIGINT NOT NULL DEFAULT 0,   -- minimum order qty (scaled)
-    status SMALLINT NOT NULL DEFAULT 1,
+    price_decimals SMALLINT NOT NULL,    -- 价格精度
+    qty_decimals SMALLINT NOT NULL,      -- 数量精度
+    min_qty BIGINT NOT NULL DEFAULT 0,   -- 最小下单量 (scaled)
+    status SMALLINT NOT NULL DEFAULT 1,  -- 0=offline, 1=online, 2=maintenance
+    flags INT NOT NULL DEFAULT 15,       -- 权限位标志 (see below)
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+-- flags 位定义:
+--   0x01 = is_tradable
+--   0x02 = is_visible
+--   0x04 = allow_market_order
+--   0x08 = allow_limit_order
+-- 默认 15 (0x0F) = 全部功能
 
--- Seed initial assets
-INSERT INTO assets (asset, name, decimals) VALUES
-    ('BTC', 'Bitcoin', 8),
-    ('USDT', 'Tether USD', 6),
-    ('ETH', 'Ethereum', 8)
+-- ============================================================================
+-- Seed Data
+-- ============================================================================
+
+-- Initial assets
+INSERT INTO assets (asset, name, decimals, flags) VALUES
+    ('BTC', 'Bitcoin', 8, 7),
+    ('USDT', 'Tether USD', 6, 15),  -- 0x0F: stable coin
+    ('ETH', 'Ethereum', 8, 7)
 ON CONFLICT (asset) DO NOTHING;
 
--- Seed initial trading pair
-INSERT INTO symbols (symbol, base_asset_id, quote_asset_id, price_decimals, qty_decimals, min_qty)
-SELECT 'BTC_USDT', b.asset_id, q.asset_id, 2, 8, 100000  -- min 0.001 BTC
+-- Initial trading pair
+INSERT INTO symbols (symbol, base_asset_id, quote_asset_id, price_decimals, qty_decimals, min_qty, flags)
+SELECT 'BTC_USDT', b.asset_id, q.asset_id, 2, 8, 100000, 15
 FROM assets b, assets q 
 WHERE b.asset = 'BTC' AND q.asset = 'USDT'
 ON CONFLICT (symbol) DO NOTHING;
 
--- Seed system user (for fees)
-INSERT INTO users (user_id, username, email, status) VALUES
-    (1, 'system', 'system@zero-x-infinity.io', 1)
+-- System user (for fees)
+INSERT INTO users (user_id, username, email, status, flags) VALUES
+    (1, 'system', 'system@zero-x-infinity.io', 1, 15)
 ON CONFLICT (user_id) DO NOTHING;
