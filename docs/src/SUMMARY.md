@@ -17,18 +17,19 @@
 
 ## 🚀 第二阶段：产品化与业务闭环 (Productization)
 
-- [0x10 安全体系: API Key 与 鉴权 (Security & Auth)](./0x10-auth.md)
-- [0x11 经济模型: 手续费与系统盈亏 (Fee System)](./0x11-fee-system.md)
-- [0x12 鲁棒性: 快照、优雅停机与恢复 (Snapshot & Recovery)](./0x12-snapshot-recovery.md)
-- [0x13 管理接口: 资产充提与后台管理 (Admin APIs)](./0x13-admin-apis.md)
+- [0x0A 账户体系: 安全鉴权 (Account & Auth)](./0x0A-auth.md)
+    - [0x0A-a ID 规范与账户结构](./0x0A-a-id-specification.md)
+- [0x0B 资金体系: 充提与划转 (Funding & Transfer)](./0x0B-funding.md)
+- [0x0C 经济模型: 手续费 (Fee System)](./0x0C-fee-system.md)
+- [0x0D 鲁棒性: 快照与恢复 (Snapshot & Recovery)](./0x0D-snapshot-recovery.md)
 
 ---
 
 ## ⚡ 第三阶段：极致单点性能优化 (Extreme Optimization)
 
-- [0x20 Zero-Copy 反序列化优化 (Zero-Copy)](./0x20-zero-copy.md)
-- [0x21 缓存友好性与 CPU 亲和性 (Cache & Affinity)](./0x21-cpu-affinity.md)
-- [0x22 SIMD 矢量化撮合加速 (SIMD Acceleration)](./0x22-simd-matching.md)
+- [0x10 Zero-Copy 反序列化优化](./0x10-zero-copy.md)
+- [0x11 缓存友好性与 CPU 亲和性](./0x11-cpu-affinity.md)
+- [0x12 SIMD 矢量化撮合加速](./0x12-simd-matching.md)
 
 ---
 
