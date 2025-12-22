@@ -1,74 +1,320 @@
-# 0x0A-a: ID 规范与账户结构设计
+# 0x0A-a: ID 规范 (Identity Specification)
 
-> **📅 状态**: 设计中
-> **核心目标**: 定义系统中所有关键 ID 的生成规则和账户的基础数据结构。
-
----
-
-## 1. ID 生成规则
-
-### 1.1 User ID (`u64`)
-- **语义**: 全局唯一的用户标识符。
-- **生成策略**: DB自增序列
-- **初始值**: `1001` (保留 1-1000 给系统账户)。
-
-### 1.2 Asset ID (`u32`)
-- **语义**: 资产标识符（如 BTC=1, USDT=2）。
-- **生成策略**: 顺序分配，从 `1` 开始。
-- **目的**: 保持 O(1) 数组索引性能。
-
-### 1.3 Symbol ID (`u32`)
-- **语义**: 交易对标识符（如 BTC_USDT=1）。
-- **生成策略**: 顺序分配，从 `1` 开始。
-- **目的**: 保持 O(1) 数组索引性能。
-
-### 1.4 Account ID (`u64`)
-- **语义**: 用户的子账户标识（区分 Funding 与 Spot）。
-- **生成策略**: 复合 ID，高位用户，低位类型。
-  ```
-  Account ID = (user_id << 8) | account_type
-  ```
-  - `account_type = 0x01` -> Funding
-  - `account_type = 0x02` -> Spot
-
-### 1.5 Order ID / Trade ID (`u64`)
-- **语义**: 撮合引擎内的订单/成交唯一标识。
-- **生成策略**: 全局原子递增。自定义Snowflake ID生成器。
+本文档定义系统中所有标识符（ID）的命名和格式规范。
 
 ---
 
-## 2. 核心数据结构
+## 1. 核心原则
 
-### 2.1 `AccountType` 枚举
+| 原则 | 说明 |
+|------|------|
+| **唯一性** | 每个 ID 在其作用域内必须唯一 |
+| **可读性** | ID 应具有业务含义，便于理解 |
+| **大小写规范** | Asset/Symbol 代码必须全大写 |
+| **不可变性** | ID 一旦创建不应修改 |
+
+---
+
+## 2. Asset ID 规范
+
+### 2.1 格式要求
+
+**规则**：
+- ✅ **必须全大写**
+- ✅ 仅包含：大写字母（A-Z）、数字（0-9）、下划线（_）
+- ✅ 长度：1-16 字符
+- ✅ 正则表达式：`^[A-Z0-9_]{1,16}$`
+
+> **⚠️ 实际长度限制**：  
+> 由于 Symbol 格式为 `BASE_QUOTE`（最大 32 字符），实际使用中：
+> - 如果 Asset 用作 BASE，最大长度 = 32 - 1 (下划线) - QUOTE 长度
+> - 如果 Asset 用作 QUOTE，最大长度 = 32 - 1 (下划线) - BASE 长度
+> - 示例：如果 BASE 是 16 字符，QUOTE 最多只能 15 字符
+
+### 2.2 示例
+
+✅ **正确**：
+```
+BTC
+USDT
+ETH
+USDC
+BTC2
+STABLE_COIN
+```
+
+❌ **错误**：
+```
+btc          # 小写
+Btc          # 混合大小写
+BTC-USD      # 包含连字符
+BTC!         # 包含特殊字符
+B            # 单字符（允许）
+VERYLONGASSETCODE  # 太长（> 16）
+```
+
+### 2.3 验证规则
+
+**数据库层**：
+```sql
+ALTER TABLE assets_tb 
+ADD CONSTRAINT asset_code_uppercase_check 
+CHECK (asset = UPPER(asset) AND asset ~ '^[A-Z0-9_]{1,16}$');
+```
+
+**应用层**：
 ```rust
-#[repr(u8)]
-pub enum AccountType {
-    Funding = 0x01,
-    Spot    = 0x02,
+// 严格验证，不转换
+AssetCode::validate("BTC")  // ✅ Ok
+AssetCode::validate("btc")  // ❌ Error: must be uppercase
+```
+
+**API 层**：
+```json
+// 请求
+POST /api/v1/assets
+{
+  "asset": "btc",  // ❌ 错误
+  "name": "Bitcoin"
+}
+
+// 响应
+{
+  "code": 400,
+  "msg": "Asset code must be uppercase. Got 'btc', expected 'BTC'",
+  "data": null
 }
 ```
 
-### 2.2 `Account` 结构体 (概念)
+---
+
+## 3. Symbol Name 规范
+
+### 3.1 格式要求
+
+**规则**：
+- ✅ **必须全大写**
+- ✅ **必须使用下划线分隔** `BASE_QUOTE` 格式
+- ✅ 仅包含：大写字母（A-Z）、数字（0-9）、下划线（_）
+- ✅ 长度：3-33 字符
+- ✅ 正则表达式：`^[A-Z0-9]+_[A-Z0-9]+$`（至少包含一个下划线）
+
+### 3.2 示例
+
+✅ **正确**：
+```
+BTC_USDT
+ETH_BTC
+USDT_USD
+BNB_BUSD
+ETH2_USDT
+```
+
+❌ **错误**：
+```
+btc_usdt     # 小写
+BTC-USDT     # 使用连字符（非法）
+Btc_Usdt     # 混合大小写
+BTCUSDT      # 缺少下划线分隔符（非法！）
+BTC__USDT    # 双下划线（非法）
+_BTCUSDT     # 开头下划线（非法）
+BTCUSDT_     # 结尾下划线（非法）
+BT           # 太短（< 3）
+```
+
+### 3.3 验证规则
+
+**数据库层**：
+```sql
+ALTER TABLE symbols_tb 
+ADD CONSTRAINT symbol_name_format_check 
+CHECK (
+    symbol = UPPER(symbol) AND 
+    symbol ~ '^[A-Z0-9]+_[A-Z0-9]+$' AND
+    symbol NOT LIKE '%__%' AND
+    symbol NOT LIKE '\_%' AND
+    symbol NOT LIKE '%\_'
+);
+```
+
+**应用层**：
 ```rust
-pub struct Account {
-    pub account_id: u64,      // 复合 ID
-    pub user_id: u64,
-    pub account_type: AccountType,
-    pub balances: HashMap<AssetId, Balance>,
-    pub created_at: u64,
-    pub status: AccountStatus,
+// 严格验证
+SymbolName::validate("BTC_USDT")  // ✅ Ok
+SymbolName::validate("BTCUSDT")   // ❌ Error: missing underscore separator
+SymbolName::validate("BTC-USDT")  // ❌ Error: invalid character '-'
+```
+
+---
+
+## 4. User ID 规范
+
+### 4.1 格式要求
+
+**类型**：`BIGINT` (64-bit signed integer)
+
+**范围**：
+- 最小值：`1001`（保留 1-1000 用于系统账户）
+- 最大值：`9223372036854775807` (2^63 - 1)
+
+### 4.2 生成策略
+
+**推荐**：使用数据库自增序列
+```sql
+CREATE SEQUENCE user_id_seq START WITH 1001;
+```
+
+**禁止**：
+- ❌ 使用连续整数（安全风险）
+- ❌ 暴露用户总数信息
+
+---
+
+## 5. 验证实施
+
+### 5.1 四层验证
+
+```
+┌─────────────────────────────────────┐
+│  1. API 层：严格拒绝不规范输入      │
+│     - 返回 400 错误                 │
+│     - 提供明确错误信息              │
+└─────────────────────────────────────┘
+              ↓
+┌─────────────────────────────────────┐
+│  2. 应用层：验证函数                │
+│     - AssetCode::validate()         │
+│     - SymbolCode::validate()        │
+└─────────────────────────────────────┘
+              ↓
+┌─────────────────────────────────────┐
+│  3. Repository 层：内部检查         │
+│     - 确保传入数据已验证            │
+└─────────────────────────────────────┘
+              ↓
+┌─────────────────────────────────────┐
+│  4. 数据库层：CHECK 约束            │
+│     - 最后一道防线                  │
+│     - 保证数据完整性                │
+└─────────────────────────────────────┘
+```
+
+### 5.2 错误处理
+
+**原则**：
+- ✅ **不转换** - 不自动转大写
+- ✅ **严格拒绝** - 不符合规范立即报错
+- ✅ **清晰提示** - 告知用户正确格式
+
+**示例错误消息**：
+```
+Asset code must be uppercase and contain only A-Z, 0-9, underscore.
+Got: 'btc'
+Expected format: 'BTC'
+```
+
+---
+
+## 6. 测试要求
+
+### 6.1 单元测试
+
+```rust
+#[test]
+fn test_asset_code_uppercase_required() {
+    assert!(AssetCode::validate("BTC").is_ok());
+    assert!(AssetCode::validate("btc").is_err());
+    assert!(AssetCode::validate("Btc").is_err());
+}
+
+#[test]
+fn test_asset_code_invalid_chars() {
+    assert!(AssetCode::validate("BTC-USD").is_err());
+    assert!(AssetCode::validate("BTC!").is_err());
+}
+
+#[test]
+fn test_asset_code_length() {
+    assert!(AssetCode::validate("B").is_err());      // too short
+    assert!(AssetCode::validate("VERYLONGCODE").is_err()); // too long
+}
+```
+
+### 6.2 集成测试
+
+```rust
+#[tokio::test]
+async fn test_database_rejects_lowercase() {
+    let result = sqlx::query("INSERT INTO assets_tb (asset, name, decimals) VALUES ($1, $2, $3)")
+        .bind("btc")  // 小写
+        .bind("Bitcoin")
+        .bind(8i16)
+        .execute(pool)
+        .await;
+    
+    assert!(result.is_err(), "Database should reject lowercase");
 }
 ```
 
 ---
 
-## 3. 系统保留账户
+## 7. 迁移指南
 
-| Account ID | User ID | Type | 用途 |
-| :--- | :--- | :--- | :--- |
-| `0x0101` | `1` | Funding | 系统手续费收入账户 |
-| `0x0102` | `1` | Spot | 系统 Spot 账户 (可选) |
+### 7.1 现有数据清理
+
+```sql
+-- 检查不规范数据
+SELECT asset_id, asset 
+FROM assets_tb 
+WHERE asset != UPPER(asset);
+
+-- 清理（如果需要）
+UPDATE assets_tb 
+SET asset = UPPER(asset) 
+WHERE asset != UPPER(asset);
+```
+
+### 7.2 添加约束
+
+```sql
+-- 添加 CHECK 约束
+ALTER TABLE assets_tb 
+ADD CONSTRAINT asset_code_uppercase_check 
+CHECK (asset = UPPER(asset) AND asset ~ '^[A-Z0-9_]{1,16}$');
+
+ALTER TABLE symbols_tb 
+ADD CONSTRAINT symbol_code_uppercase_check 
+CHECK (symbol = UPPER(symbol) AND symbol ~ '^[A-Z0-9_]{3,32}$');
+```
 
 ---
 
-> 此设计待确认后，将同步更新至 `src/core_types.rs` 与 `src/account/mod.rs`。
+## 8. 常见问题
+
+### Q: 为什么不自动转大写？
+
+**A**: 严格验证有以下好处：
+1. **明确规范** - 强制用户遵守规则
+2. **避免歧义** - 不存在隐式转换
+3. **数据一致** - 100% 保证大写
+4. **调试友好** - 错误来源清晰
+
+### Q: 如果用户输入小写怎么办？
+
+**A**: API 返回 400 错误，明确告知正确格式：
+```json
+{
+  "code": 400,
+  "msg": "Asset code must be uppercase. Got 'btc', expected 'BTC'"
+}
+```
+
+### Q: 内部代码需要验证吗？
+
+**A**: 是的。所有层都应验证，确保数据完整性。
+
+---
+
+**最后更新**: 2025-12-22  
+**版本**: 1.1  
+**状态**: 强制执行
