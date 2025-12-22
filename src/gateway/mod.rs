@@ -78,6 +78,7 @@ pub async fn run_server(
         // Phase 0x0A: Account management endpoints
         .route("/api/v1/assets", get(handlers::get_assets))
         .route("/api/v1/symbols", get(handlers::get_symbols))
+        .route("/api/v1/exchange_info", get(handlers::get_exchange_info))
         .with_state(state);
 
     // 绑定地址
