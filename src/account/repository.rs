@@ -77,7 +77,7 @@ impl AssetManager {
     pub async fn load_all(pool: &PgPool) -> Result<Vec<Asset>, sqlx::Error> {
         let rows = sqlx::query_as!(
             Asset,
-            r#"SELECT asset_id, symbol, name, decimals, status FROM assets WHERE status = 1"#
+            r#"SELECT asset_id, asset, name, decimals, status FROM assets WHERE status = 1"#
         )
         .fetch_all(pool)
         .await?;
@@ -89,7 +89,7 @@ impl AssetManager {
     pub async fn get_by_id(pool: &PgPool, asset_id: i32) -> Result<Option<Asset>, sqlx::Error> {
         let row = sqlx::query_as!(
             Asset,
-            r#"SELECT asset_id, symbol, name, decimals, status FROM assets WHERE asset_id = $1"#,
+            r#"SELECT asset_id, asset, name, decimals, status FROM assets WHERE asset_id = $1"#,
             asset_id
         )
         .fetch_optional(pool)
@@ -107,7 +107,7 @@ impl SymbolManager {
     pub async fn load_all(pool: &PgPool) -> Result<Vec<Symbol>, sqlx::Error> {
         let rows = sqlx::query_as!(
             Symbol,
-            r#"SELECT symbol_id, name, base_asset_id, quote_asset_id, 
+            r#"SELECT symbol_id, symbol, base_asset_id, quote_asset_id, 
                       price_decimals, qty_decimals, min_qty, status 
                FROM symbols WHERE status = 1"#
         )
@@ -121,7 +121,7 @@ impl SymbolManager {
     pub async fn get_by_id(pool: &PgPool, symbol_id: i32) -> Result<Option<Symbol>, sqlx::Error> {
         let row = sqlx::query_as!(
             Symbol,
-            r#"SELECT symbol_id, name, base_asset_id, quote_asset_id,
+            r#"SELECT symbol_id, symbol, base_asset_id, quote_asset_id,
                       price_decimals, qty_decimals, min_qty, status
                FROM symbols WHERE symbol_id = $1"#,
             symbol_id
@@ -132,14 +132,14 @@ impl SymbolManager {
         Ok(row)
     }
     
-    /// Get symbol by name
-    pub async fn get_by_name(pool: &PgPool, name: &str) -> Result<Option<Symbol>, sqlx::Error> {
+    /// Get symbol by symbol name
+    pub async fn get_by_symbol(pool: &PgPool, symbol: &str) -> Result<Option<Symbol>, sqlx::Error> {
         let row = sqlx::query_as!(
             Symbol,
-            r#"SELECT symbol_id, name, base_asset_id, quote_asset_id,
+            r#"SELECT symbol_id, symbol, base_asset_id, quote_asset_id,
                       price_decimals, qty_decimals, min_qty, status
-               FROM symbols WHERE name = $1"#,
-            name
+               FROM symbols WHERE symbol = $1"#,
+            symbol
         )
         .fetch_optional(pool)
         .await?;
