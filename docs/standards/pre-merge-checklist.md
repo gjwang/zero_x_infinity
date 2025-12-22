@@ -34,7 +34,9 @@
 
 - [ ] **合并后** 创建 Git Tag: `git tag v{版本号}`
 - [ ] 推送 Tag: `git push origin --tags`
-- [ ] 删除已合并的 feature 分支 (可选)
+
+> [!CAUTION]
+> **⚠️ 严禁删除 feature 分支！分支是项目历史的重要组成部分，必须永久保留。**
 
 ---
 
@@ -55,6 +57,6 @@ git merge <feature-branch> --no-ff -m "Merge branch '<feature-branch>'"
 git tag v0.10-a-account-system
 git push origin main --tags
 
-# 5. 清理
-git branch -d <feature-branch>
+# 5. 完成
+echo "✅ Merge complete!"
 ```
