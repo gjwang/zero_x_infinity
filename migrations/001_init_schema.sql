@@ -1,6 +1,7 @@
 -- 001_init_schema.sql
 -- Initial schema for exchange_info_db
 -- Naming convention: tables use _tb suffix, database uses _db suffix
+-- NOTE: This file contains ONLY schema. Seed data is in fixtures/seed_data.sql
 
 -- ============================================================================
 -- Users Table
@@ -65,26 +66,3 @@ CREATE TABLE IF NOT EXISTS symbols_tb (
 --   0x04 = allow_market_order
 --   0x08 = allow_limit_order
 -- 默认 15 (0x0F) = 全部功能
-
--- ============================================================================
--- Seed Data
--- ============================================================================
-
--- Initial assets
-INSERT INTO assets_tb (asset, name, decimals, asset_flags) VALUES
-    ('BTC', 'Bitcoin', 8, 7),
-    ('USDT', 'Tether USD', 6, 15),
-    ('ETH', 'Ethereum', 8, 7)
-ON CONFLICT (asset) DO NOTHING;
-
--- Initial trading pair
-INSERT INTO symbols_tb (symbol, base_asset_id, quote_asset_id, price_decimals, qty_decimals, min_qty, symbol_flags)
-SELECT 'BTC_USDT', b.asset_id, q.asset_id, 2, 8, 100000, 15
-FROM assets_tb b, assets_tb q 
-WHERE b.asset = 'BTC' AND q.asset = 'USDT'
-ON CONFLICT (symbol) DO NOTHING;
-
--- System user (for fees)
-INSERT INTO users_tb (user_id, username, email, status, user_flags) VALUES
-    (1, 'system', 'system@zero-x-infinity.io', 1, 15)
-ON CONFLICT (user_id) DO NOTHING;

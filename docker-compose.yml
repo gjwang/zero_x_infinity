@@ -22,13 +22,13 @@ services:
     environment:
       POSTGRES_USER: trading
       POSTGRES_PASSWORD: trading123
-      POSTGRES_DB: trading
+      POSTGRES_DB: exchange_info_db
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d
     restart: unless-stopped
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U trading -d trading" ]
+      test: [ "CMD-SHELL", "pg_isready -U trading -d exchange_info_db" ]
       interval: 10s
       timeout: 5s
       retries: 5
