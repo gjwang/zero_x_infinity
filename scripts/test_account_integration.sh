@@ -69,8 +69,14 @@ test_start "Check if Gateway is already running"
 if lsof -Pi :8080 -sTCP:LISTEN -t >/dev/null 2>&1; then
     log_warn "Gateway already running on port 8080"
     log_info "Attempting to stop existing Gateway..."
-    pkill -f "zero_x_infinity" || true
-    sleep 2
+    
+    # IMPORTANT: Do NOT use `pkill -f "zero_x_infinity"` - it will kill IDE!
+    # Use pgrep with specific pattern + kill with PID instead
+    GW_PID=$(pgrep -f "target.*zero_x_infinity.*--gateway" | head -1)
+    if [ -n "$GW_PID" ]; then
+        kill "$GW_PID" 2>/dev/null || true
+        sleep 2
+    fi
     
     if lsof -Pi :8080 -sTCP:LISTEN -t >/dev/null 2>&1; then
         log_error "Failed to stop existing Gateway"
