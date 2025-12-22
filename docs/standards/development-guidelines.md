@@ -207,6 +207,7 @@ mod tests {
 - [ ] **代码质量**：`cargo clippy` 无警告
 - [ ] **格式规范**：`cargo fmt --check`
 - [ ] **文档构建**：`mdbook build` 成功（如有）
+- [ ] **CI/CD 通过**：GitHub Actions 验证
 
 #### 功能验证：
 
@@ -214,6 +215,33 @@ mod tests {
 - [ ] 边界条件处理正确
 - [ ] 错误处理符合预期
 - [ ] 性能满足要求（如有基准）
+
+### 3.4 CI/CD 配置
+
+必须确保 CI/CD 流水线正常工作：
+
+#### 现有 CI/CD 配置（`.github/workflows/`）：
+
+| 文件 | 用途 |
+|------|------|
+| `ci.yml` | 基础 CI（build, test, clippy, fmt） |
+| `integration-tests.yml` | 集成测试 |
+| `mdbook.yml` | 文档构建 |
+
+#### CI 触发条件：
+
+- Push 到 main/feature 分支
+- Pull Request 到 main 分支
+
+#### CI 验证：
+
+```bash
+# 本地模拟 CI 验证
+cargo build --release
+cargo test --lib
+cargo clippy -- -D warnings
+cargo fmt --check
+```
 
 ---
 
