@@ -11,6 +11,9 @@ use crate::websocket::ConnectionManager;
 // Phase 0x0A: Account management types
 use crate::account::{Asset, Database, Symbol};
 
+// Phase 0x0A-b: Authentication
+use crate::auth::AuthState;
+
 /// Gateway 应用状态 (共享)
 #[derive(Clone)]
 pub struct AppState {
@@ -34,6 +37,8 @@ pub struct AppState {
     pub pg_assets: Arc<Vec<Asset>>,
     /// 缓存的交易对列表 (Phase 0x0A)
     pub pg_symbols: Arc<Vec<Symbol>>,
+    /// Authentication state (Phase 0x0A-b)
+    pub auth_state: Arc<AuthState>,
 }
 
 impl AppState {
@@ -48,6 +53,7 @@ impl AppState {
         pg_db: Option<Arc<Database>>,
         pg_assets: Arc<Vec<Asset>>,
         pg_symbols: Arc<Vec<Symbol>>,
+        auth_state: Arc<AuthState>,
     ) -> Self {
         Self {
             order_queue,
@@ -60,6 +66,7 @@ impl AppState {
             pg_db,
             pg_assets,
             pg_symbols,
+            auth_state,
         }
     }
 
