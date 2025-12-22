@@ -249,7 +249,8 @@ EOF
     for log in "$LOG_DIR"/*.log; do
         local test_name=$(basename "$log" .log)
         if [ -f "$log" ]; then
-            if grep -q "PASS\|passed\|success" "$log" 2>/dev/null; then
+            # Check for success patterns (include cargo's "Finished" output)
+            if grep -qi "PASS\|passed\|success\|Finished.*release\|all tests completed" "$log" 2>/dev/null; then
                 echo "    <testcase name=\"$test_name\" classname=\"integration\" />" >> "$xml_file"
             elif grep -q "SKIP" "$log" 2>/dev/null; then
                 echo "    <testcase name=\"$test_name\" classname=\"integration\"><skipped/></testcase>" >> "$xml_file"
