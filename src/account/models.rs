@@ -1,6 +1,7 @@
 //! Data models for account management
 
 use chrono::{DateTime, Utc};
+use sqlx::FromRow;
 
 // ============================================================================
 // User Flags (bitmask)
@@ -78,7 +79,7 @@ impl User {
 }
 
 /// Asset definition (BTC, USDT, etc.)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, FromRow)]
 pub struct Asset {
     pub asset_id: i32,
     pub asset: String,
@@ -101,7 +102,7 @@ impl Asset {
 }
 
 /// Trading pair (symbol)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, FromRow)]
 pub struct Symbol {
     pub symbol_id: i32,
     pub symbol: String,
@@ -120,5 +121,103 @@ impl Symbol {
     }
     pub fn is_visible(&self) -> bool {
         self.symbol_flags & symbol_flags::IS_VISIBLE != 0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_asset_flags_all_enabled() {
+        let asset = Asset {
+            asset_id: 1,
+            asset: "BTC".to_string(),
+            name: "Bitcoin".to_string(),
+            decimals: 8,
+            status: 1,
+            asset_flags: asset_flags::CAN_DEPOSIT
+                | asset_flags::CAN_WITHDRAW
+                | asset_flags::CAN_TRADE,
+        };
+
+        assert!(asset.can_deposit());
+        assert!(asset.can_withdraw());
+        assert!(asset.can_trade());
+    }
+
+    #[test]
+    fn test_asset_flags_partial() {
+        let asset = Asset {
+            asset_id: 2,
+            asset: "USDT".to_string(),
+            name: "Tether".to_string(),
+            decimals: 6,
+            status: 1,
+            asset_flags: asset_flags::CAN_DEPOSIT | asset_flags::CAN_TRADE, // No withdraw
+        };
+
+        assert!(asset.can_deposit());
+        assert!(!asset.can_withdraw());
+        assert!(asset.can_trade());
+    }
+
+    #[test]
+    fn test_asset_flags_none() {
+        let asset = Asset {
+            asset_id: 3,
+            asset: "FROZEN".to_string(),
+            name: "Frozen Asset".to_string(),
+            decimals: 8,
+            status: 0,
+            asset_flags: 0,
+        };
+
+        assert!(!asset.can_deposit());
+        assert!(!asset.can_withdraw());
+        assert!(!asset.can_trade());
+    }
+
+    #[test]
+    fn test_symbol_flags_all_enabled() {
+        let symbol = Symbol {
+            symbol_id: 1,
+            symbol: "BTC_USDT".to_string(),
+            base_asset_id: 1,
+            quote_asset_id: 2,
+            price_decimals: 2,
+            qty_decimals: 8,
+            min_qty: 1000,
+            status: 1,
+            symbol_flags: symbol_flags::IS_TRADABLE | symbol_flags::IS_VISIBLE,
+        };
+
+        assert!(symbol.is_tradable());
+        assert!(symbol.is_visible());
+    }
+
+    #[test]
+    fn test_symbol_flags_not_tradable() {
+        let symbol = Symbol {
+            symbol_id: 2,
+            symbol: "ETH_USDT".to_string(),
+            base_asset_id: 3,
+            quote_asset_id: 2,
+            price_decimals: 2,
+            qty_decimals: 8,
+            min_qty: 1000,
+            status: 1,
+            symbol_flags: symbol_flags::IS_VISIBLE, // Visible but not tradable
+        };
+
+        assert!(!symbol.is_tradable());
+        assert!(symbol.is_visible());
+    }
+
+    #[test]
+    fn test_user_status_conversion() {
+        assert_eq!(UserStatus::from(1), UserStatus::Active);
+        assert_eq!(UserStatus::from(0), UserStatus::Disabled);
+        assert_eq!(UserStatus::from(99), UserStatus::Active); // Unknown -> Active (default)
     }
 }

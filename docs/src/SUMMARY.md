@@ -55,6 +55,7 @@
 
 # Reference
 
+- [开发规范 (Development Guidelines)](../standards/development-guidelines.md)
 - [API 规范 (API Conventions)](../standards/api-conventions.md)
 - [命名规范 (Naming Convention)](../standards/naming-convention.md)
 - [数据库选型: TDengine (Database Selection)](./database-selection-tdengine.md)
