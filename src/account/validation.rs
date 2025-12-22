@@ -195,20 +195,27 @@ impl SymbolName {
             });
         }
 
-        // Check underscore separator
+        // Check underscore separator - must have exactly one
         let underscore_count = name.chars().filter(|&c| c == '_').count();
         if underscore_count == 0 {
             return Err(ValidationError::MissingUnderscoreSeparator {
                 got: name.to_string(),
             });
         }
-
-        // Check no double underscore, leading/trailing underscore
-        if name.contains("__") || name.starts_with('_') || name.ends_with('_') {
+        if underscore_count > 1 {
             return Err(ValidationError::InvalidFormat {
                 field: "symbol",
                 value: name.to_string(),
-                expected: "single underscore separator, no leading/trailing underscore",
+                expected: "exactly one underscore separator (BASE_QUOTE format)",
+            });
+        }
+
+        // Check no double underscore, leading/trailing underscore
+        if name.starts_with('_') || name.ends_with('_') {
+            return Err(ValidationError::InvalidFormat {
+                field: "symbol",
+                value: name.to_string(),
+                expected: "no leading/trailing underscore",
             });
         }
 
@@ -391,5 +398,124 @@ mod tests {
         let symbol = SymbolName::new("BTC_USDT").unwrap();
         assert_eq!(symbol.as_str(), "BTC_USDT");
         assert_eq!(symbol.to_string(), "BTC_USDT");
+    }
+
+    // ========================================================================
+    // Additional Edge Case Tests
+    // ========================================================================
+
+    #[test]
+    fn test_asset_name_numbers_allowed() {
+        // Assets starting with numbers
+        assert!(AssetName::new("1INCH").is_ok());
+        assert!(AssetName::new("2KEY").is_ok());
+        assert!(AssetName::new("1000SHIB").is_ok());
+        
+        // Assets with numbers in middle/end
+        assert!(AssetName::new("BTC2").is_ok());
+        assert!(AssetName::new("ETH2").is_ok());
+    }
+
+    #[test]
+    fn test_asset_name_underscore_allowed() {
+        assert!(AssetName::new("STABLE_COIN").is_ok());
+        assert!(AssetName::new("WRAPPED_BTC").is_ok());
+        assert!(AssetName::new("A_B_C").is_ok());
+    }
+
+    #[test]
+    fn test_asset_name_boundary_length() {
+        // Exactly 1 char (minimum)
+        assert!(AssetName::new("A").is_ok());
+        assert!(AssetName::new("1").is_ok());
+        
+        // Exactly 16 chars (maximum)
+        assert!(AssetName::new("ABCDEFGHIJ123456").is_ok()); // 16 chars
+        
+        // 17 chars (too long)
+        assert!(AssetName::new("ABCDEFGHIJ1234567").is_err());
+    }
+
+    #[test]
+    fn test_asset_name_trim_whitespace() {
+        // Leading/trailing whitespace should be trimmed
+        let asset = AssetName::new("  BTC  ").unwrap();
+        assert_eq!(asset.as_str(), "BTC");
+    }
+
+    #[test]
+    fn test_symbol_name_multiple_underscores_rejected() {
+        // Multiple underscores are not allowed
+        assert!(SymbolName::new("BTC_USDT_EUR").is_err());
+        assert!(SymbolName::new("A_B_C").is_err());
+    }
+
+    #[test]
+    fn test_symbol_name_boundary_length() {
+        // Exactly 3 chars (minimum)
+        assert!(SymbolName::new("A_B").is_ok());
+        
+        // Exactly 32 chars (maximum)
+        assert!(SymbolName::new("VERYLONGBASE_VERYLONGQUOTE12").is_ok()); // 32 chars
+        
+        // 33 chars (too long)
+        assert!(SymbolName::new("VERYLONGBASENAME_VERYLONGQUOTE123").is_err());
+    }
+
+    #[test]
+    fn test_symbol_name_split_with_numbers() {
+        let symbol = SymbolName::new("1000SHIB_USDT").unwrap();
+        let (base, quote) = symbol.split_base_quote();
+        assert_eq!(base, "1000SHIB");
+        assert_eq!(quote, "USDT");
+    }
+
+    #[test]
+    fn test_symbol_name_trim_whitespace() {
+        // Leading/trailing whitespace should be trimmed
+        let symbol = SymbolName::new("  BTC_USDT  ").unwrap();
+        assert_eq!(symbol.as_str(), "BTC_USDT");
+    }
+
+    #[test]
+    fn test_asset_name_into_string() {
+        let asset = AssetName::new("BTC").unwrap();
+        let s: String = asset.into_string();
+        assert_eq!(s, "BTC");
+    }
+
+    #[test]
+    fn test_symbol_name_into_string() {
+        let symbol = SymbolName::new("BTC_USDT").unwrap();
+        let s: String = symbol.into_string();
+        assert_eq!(s, "BTC_USDT");
+    }
+
+    #[test]
+    fn test_asset_name_as_ref() {
+        let asset = AssetName::new("BTC").unwrap();
+        let s: &str = asset.as_ref();
+        assert_eq!(s, "BTC");
+    }
+
+    #[test]
+    fn test_symbol_name_as_ref() {
+        let symbol = SymbolName::new("BTC_USDT").unwrap();
+        let s: &str = symbol.as_ref();
+        assert_eq!(s, "BTC_USDT");
+    }
+
+    #[test]
+    fn test_asset_name_clone() {
+        let asset1 = AssetName::new("BTC").unwrap();
+        let asset2 = asset1.clone();
+        assert_eq!(asset1, asset2);
+    }
+
+    #[test]
+    fn test_symbol_name_clone() {
+        let symbol1 = SymbolName::new("BTC_USDT").unwrap();
+        let symbol2 = symbol1.clone();
+        assert_eq!(symbol1, symbol2);
     }
 }

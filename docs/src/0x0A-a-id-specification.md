@@ -55,21 +55,23 @@ VERYLONGASSETCODE  # 太长（> 16）
 
 ### 2.3 验证规则
 
-**数据库层**：
+**数据库层**（基本约束）：
 ```sql
+-- 仅强制大写，复杂格式验证在应用层
 ALTER TABLE assets_tb 
-ADD CONSTRAINT asset_code_uppercase_check 
-CHECK (asset = UPPER(asset) AND asset ~ '^[A-Z0-9_]{1,16}$');
+ADD CONSTRAINT asset_uppercase_check 
+CHECK (asset = UPPER(asset));
 ```
 
-**应用层**：
+**应用层**（完整验证）：
 ```rust
-// 严格验证，不转换
-AssetCode::validate("BTC")  // ✅ Ok
-AssetCode::validate("btc")  // ❌ Error: must be uppercase
+// 严格验证：大写 + 格式 + 长度
+AssetName::new("BTC")  // ✅ Ok
+AssetName::new("btc")  // ❌ Error: must be uppercase
+AssetName::new("BTC-USD")  // ❌ Error: invalid character
 ```
 
-**API 层**：
+**API 层**（入口验证）：
 ```json
 // 请求
 POST /api/v1/assets
@@ -81,10 +83,15 @@ POST /api/v1/assets
 // 响应
 {
   "code": 400,
-  "msg": "Asset code must be uppercase. Got 'btc', expected 'BTC'",
+  "msg": "Asset name must be uppercase. Got 'btc', expected 'BTC'",
   "data": null
 }
 ```
+
+> **设计原则**：
+> - 数据库层：仅基本约束（大写），保持简单
+> - 应用层：完整验证（格式、长度、字符集），灵活可扩展
+> - API 层：入口验证，清晰错误提示
 
 ---
 
@@ -180,26 +187,26 @@ BTC_USDT_EUR # 多个下划线（非法！仅允许一个）
 
 ### 3.4 验证规则
 
-**数据库层**：
+**数据库层**（基本约束）：
 ```sql
+-- 仅强制大写，复杂格式验证在应用层
 ALTER TABLE symbols_tb 
-ADD CONSTRAINT symbol_name_format_check 
-CHECK (
-    symbol = UPPER(symbol) AND 
-    symbol ~ '^[A-Z0-9]+_[A-Z0-9]+$' AND
-    symbol NOT LIKE '%__%' AND
-    symbol NOT LIKE '\_%' AND
-    symbol NOT LIKE '%\_'
-);
+ADD CONSTRAINT symbol_uppercase_check 
+CHECK (symbol = UPPER(symbol));
 ```
 
-**应用层**：
+**应用层**（完整验证）：
 ```rust
-// 严格验证
-SymbolName::validate("BTC_USDT")  // ✅ Ok
-SymbolName::validate("BTCUSDT")   // ❌ Error: missing underscore separator
-SymbolName::validate("BTC-USDT")  // ❌ Error: invalid character '-'
+// 严格验证：大写 + 格式 + 长度 + 单个下划线
+SymbolName::new("BTC_USDT")  // ✅ Ok
+SymbolName::new("BTCUSDT")   // ❌ Error: missing underscore separator
+SymbolName::new("BTC-USDT")  // ❌ Error: invalid character '-'
+SymbolName::new("BTC_USDT_EUR") // ❌ Error: multiple underscores
 ```
+
+> **设计原则**：
+> - 数据库层：仅基本约束（大写），保持简单
+> - 应用层：完整验证（格式、长度、字符集），灵活可扩展
 
 ---
 
