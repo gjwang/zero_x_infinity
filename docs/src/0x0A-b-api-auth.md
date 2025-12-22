@@ -705,3 +705,60 @@ curl -H "Authorization: ZXINF ${AUTH_TOKEN}" \
 ---
 
 **设计审核通过，可开始实现。**
+
+---
+
+## 13. 实现更新 (2025-12-23)
+
+### 13.1 本次更新内容
+
+| 任务 | 状态 |
+|------|------|
+| 删除 Legacy Routes (`/api/v1/*`) | ✅ 完成 |
+| 路由重构为 `public/private` | ✅ 完成 |
+| 中文注释替换为英文 | ✅ 6 个文件 |
+| 创建可复用认证库 `lib/auth.py` | ✅ 完成 |
+| 更新 `inject_orders.py` 支持 Ed25519 | ✅ 完成 |
+| 删除过时测试脚本 | ✅ 2 个文件 |
+| Clippy 0 warnings | ✅ 通过 |
+
+### 13.2 测试结果
+
+| Test Suite | Cases | Result |
+|------------|-------|--------|
+| `cargo test --lib` | 188 | ✅ All passed |
+| `test_auth.py` | 8 | ✅ All passed |
+| `inject_orders.py --limit 10` | 10 | ✅ 335 ops/s |
+
+### 13.3 test_auth.py 覆盖
+
+- ✅ Public Endpoint (no auth)
+- ✅ Private Endpoint (no auth → 401)
+- ✅ Private Endpoint (with Ed25519 auth)
+- ✅ Replay Attack Detection (ts_nonce)
+- ✅ Invalid Signature Rejection
+- ✅ POST Request Signature
+- ✅ ts_nonce Time Window (30s)
+- ✅ Invalid API Key Rejection
+
+### 13.4 新增文件
+
+```
+scripts/lib/auth.py       # 可复用 Ed25519 认证库
+  - ApiClient 类 (GET/POST/DELETE)
+  - base62_encode/decode
+  - TEST_API_KEY, TEST_PRIVATE_KEY_HEX
+  - get_test_client() helper
+```
+
+### 13.5 Git 提交记录
+
+```
+7d3a394 chore: remove obsolete Gateway test scripts
+df77e03 feat(scripts): extract reusable auth library and update inject_orders
+1d7f821 test(auth): add 3 additional auth test cases
+94a0074 fix(test): update test_auth.py to use new public route path
+f575307 refactor: replace all Chinese comments with English
+fcc4600 docs: consolidate coding standards (English-only rule)
+3c928f4 chore: remove legacy routes and fix all clippy warnings
+```
