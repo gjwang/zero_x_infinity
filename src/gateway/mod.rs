@@ -208,7 +208,17 @@ pub async fn run_server(
 
     // Bind address
     let addr = format!("0.0.0.0:{}", port);
-    let listener = TcpListener::bind(&addr).await.unwrap();
+    let listener = match TcpListener::bind(&addr).await {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("❌ FATAL: Failed to bind to {}: {}", addr, e);
+            eprintln!(
+                "   Hint: Port {} may already be in use. Check with: lsof -i :{}",
+                port, port
+            );
+            std::process::exit(1);
+        }
+    };
 
     println!("🚀 Gateway listening on http://{}", addr);
     println!("📡 WebSocket endpoint: ws://{}/ws", addr);
@@ -216,5 +226,8 @@ pub async fn run_server(
     println!("🔒 Private API: /api/v1/private/* (auth pending)");
 
     // Start server
-    axum::serve(listener, app).await.unwrap();
+    if let Err(e) = axum::serve(listener, app).await {
+        eprintln!("❌ FATAL: Server error: {}", e);
+        std::process::exit(1);
+    }
 }
