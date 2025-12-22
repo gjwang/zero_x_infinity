@@ -97,7 +97,7 @@ class ApiClient:
 def test_public_endpoint():
     """Test that public endpoints work without auth."""
     print("\n[TEST] Public endpoint (no auth)...")
-    resp = requests.get(f"{GATEWAY_URL}/api/v1/exchange_info")
+    resp = requests.get(f"{GATEWAY_URL}/api/v1/public/exchange_info")
     if resp.status_code == 200:
         data = resp.json()
         print(f"  ✅ Status: {resp.status_code}")
