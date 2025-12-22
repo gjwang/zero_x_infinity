@@ -139,7 +139,15 @@ fi
 
 test_start "Start Gateway in background"
 log_info "Starting Gateway on port 8080..."
-./target/release/zero_x_infinity --gateway --port 8080 > /tmp/gateway.log 2>&1 &
+
+# Use CI config when running in CI environment
+if [ "$CI" = "true" ]; then
+    ENV_FLAG="--env ci"
+else
+    ENV_FLAG=""
+fi
+
+./target/release/zero_x_infinity --gateway $ENV_FLAG --port 8080 > /tmp/gateway.log 2>&1 &
 GATEWAY_PID=$!
 
 # Wait for Gateway to start

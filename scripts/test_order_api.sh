@@ -90,7 +90,15 @@ echo ""
 
 # Step 3: Start Gateway
 log_step "Starting Gateway server..."
-cargo run --release --quiet -- --gateway --port $GATEWAY_PORT --input "$TEST_DIR" > "$TEST_DIR/gateway.log" 2>&1 &
+
+# Use CI config when running in CI environment
+if [ "$CI" = "true" ]; then
+    ENV_FLAG="--env ci"
+else
+    ENV_FLAG=""
+fi
+
+cargo run --release --quiet -- --gateway $ENV_FLAG --port $GATEWAY_PORT --input "$TEST_DIR" > "$TEST_DIR/gateway.log" 2>&1 &
 GATEWAY_PID=$!
 
 log_info "Gateway PID: $GATEWAY_PID"

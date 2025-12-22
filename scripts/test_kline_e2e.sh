@@ -43,7 +43,15 @@ pass "TDengine is running"
 if ! curl -sf "$BASE_URL/api/v1/klines?interval=1m" > /dev/null 2>&1; then
     warn "Gateway not running, starting..."
     cd "$PROJECT_DIR"
-    cargo run --release -- --gateway --port 8080 > /tmp/gateway.log 2>&1 &
+    
+    # Use CI config when running in CI environment
+    if [ "$CI" = "true" ]; then
+        ENV_FLAG="--env ci"
+    else
+        ENV_FLAG=""
+    fi
+    
+    cargo run --release -- --gateway $ENV_FLAG --port 8080 > /tmp/gateway.log 2>&1 &
     GATEWAY_PID=$!
     echo "   Waiting for Gateway to be ready (30s)..."
     
