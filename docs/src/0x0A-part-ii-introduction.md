@@ -35,8 +35,9 @@
 
 ```
 0x0A ─── 账户体系与安全鉴权
-        ├── 0x0A-a: ID 规范与账户结构 (PostgreSQL)
-        └── 0x0A-b: API Key 鉴权中间件
+        ├── 0x0A-a: 账户体系 (exchange_info + DB 管理)
+        ├── 0x0A-b: ID 规范 (Asset/Symbol 命名)
+        └── 0x0A-c: 安全鉴权 (API Key 中间件)
 
 0x0B ─── 资金体系与划转
         ├── Funding/Spot 双账户结构
