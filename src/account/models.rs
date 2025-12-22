@@ -33,7 +33,7 @@ pub struct User {
 #[derive(Debug, Clone)]
 pub struct Asset {
     pub asset_id: i32,
-    pub symbol: String,
+    pub asset: String,      // 资产代码: BTC, USDT
     pub name: String,
     pub decimals: i16,
     pub status: i16,
@@ -43,7 +43,7 @@ pub struct Asset {
 #[derive(Debug, Clone)]
 pub struct Symbol {
     pub symbol_id: i32,
-    pub name: String,
+    pub symbol: String,     // 交易对: BTC_USDT
     pub base_asset_id: i32,
     pub quote_asset_id: i32,
     pub price_decimals: i16,
