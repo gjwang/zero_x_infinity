@@ -419,21 +419,70 @@ API Key u64 转换:
 
 ## 8. 实现计划
 
-### Phase 1: 核心功能
-- [ ] `api_keys_tb` migration
-- [ ] ApiKey 模型 + Repository
-- [ ] Ed25519 签名验证
-- [ ] Axum 鉴权中间件
+### 8.1 开发清单
 
-### Phase 2: 集成测试
-- [ ] 测试脚本 `scripts/test_auth.sh`
-- [ ] 签名生成 Python 工具
-- [ ] 集成到 `test_ci.sh`
+#### Phase 1: 数据库层
 
-### Phase 3: 文档完善
-- [ ] 更新本文档
-- [ ] 添加 SDK 示例 (curl, Python)
-- [ ] 更新 README
+| # | 任务 | 输出文件 | 验收标准 |
+|---|------|----------|----------|
+| 1.1 | 创建 migration | `migrations/xxx_create_api_keys.sql` | 表创建成功 |
+| 1.2 | 添加 `last_ts_nonce` 列 | 同上 | 用于持久化最后 ts_nonce |
+
+#### Phase 2: 核心模块
+
+| # | 任务 | 输出文件 | 验收标准 |
+|---|------|----------|----------|
+| 2.1 | ApiKey 模型 | `src/auth/api_key.rs` | 涵盖所有字段 |
+| 2.2 | ApiKey Repository | `src/auth/repository.rs` | CRUD + 缓存 |
+| 2.3 | Base62 编解码 | `src/auth/base62.rs` | 编解码正确 |
+| 2.4 | Ed25519 签名验证 | `src/auth/signature.rs` | 验证通过/失败 |
+| 2.5 | ts_store (原子 CAS) | `src/auth/ts_store.rs` | 单调递增检查 |
+| 2.6 | 鉴权中间件 | `src/auth/middleware.rs` | 9步验证流程 |
+
+#### Phase 3: 路由集成
+
+| # | 任务 | 输出文件 | 验收标准 |
+|---|------|----------|----------|
+| 3.1 | 拆分 public/private 路由 | `src/routes/mod.rs` | 路径正确 |
+| 3.2 | 应用鉴权中间件 | `src/main.rs` | private 路由受保护 |
+
+#### Phase 4: 测试验证
+
+| # | 任务 | 输出文件 | 验收标准 |
+|---|------|----------|----------|
+| 4.1 | 单元测试 | `src/auth/tests.rs` | 覆盖主要场景 |
+| 4.2 | 集成测试脚本 | `scripts/test_auth.py` | 签名生成 + 请求 |
+| 4.3 | 失败场景测试 | 同上 | 错误码覆盖 |
+
+### 8.2 关键数据结构
+
+```rust
+// API Key 记录
+pub struct ApiKeyRecord {
+    pub key_id: i32,
+    pub user_id: i64,
+    pub api_key: String,           // AK_ + 16 hex (19 chars)
+    pub key_type: i16,             // 1=Ed25519
+    pub key_data: Vec<u8>,         // 公钥 32 bytes
+    pub permissions: i32,
+    pub status: i16,
+}
+
+// ts_store 原子操作
+pub trait TsStore {
+    fn compare_and_swap_if_greater(&self, api_key: &str, ts: i64) -> bool;
+}
+```
+
+### 8.3 验证 Checklist
+
+- [ ] 请求格式: `Authorization: ZXINF v1.<api_key>.<ts_nonce>.<signature>`
+- [ ] api_key 格式: `AK_` + 16 HEX uppercase = 19 chars
+- [ ] ts_nonce: 单调递增 (ms 时间戳)
+- [ ] signature: Base62 编码 (~86 chars)
+- [ ] payload: `api_key + ts_nonce + method + path + body`
+- [ ] 公开路由: `/api/v1/public/*` 无鉴权
+- [ ] 私有路由: `/api/v1/private/*` 需签名
 
 ---
 
