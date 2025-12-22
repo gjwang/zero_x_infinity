@@ -484,6 +484,19 @@ pub trait TsStore {
 - [ ] 公开路由: `/api/v1/public/*` 无鉴权
 - [ ] 私有路由: `/api/v1/private/*` 需签名
 
+### 8.4 错误码定义
+
+| 错误码 | 名称 | 说明 | 客户端处理 |
+|--------|------|------|------------|
+| 4001 | InvalidFormat | Authorization header 格式错误 | 检查格式 |
+| 4002 | UnsupportedVersion | 不支持的协议版本 | 升级 SDK |
+| 4003 | InvalidApiKey | API Key 格式错误或不存在 | 检查 Key |
+| 4004 | TsNonceRejected | ts_nonce 必须单调递增 | **重试** |
+| 4005 | TsNonceTooFar | ts_nonce 超出时间窗口 | 检查时钟 |
+| 4006 | InvalidSignature | 签名验证失败 | 检查私钥 |
+| 4007 | PermissionDenied | 权限不足 | 检查权限 |
+| 4008 | ApiKeyDisabled | API Key 已禁用 | 联系支持 |
+
 ---
 
 ## 9. SDK 示例
@@ -664,8 +677,10 @@ curl -H "Authorization: ZXINF ${AUTH_TOKEN}" \
 |------|--------|------|
 | Rate Limiting | P2 | Gateway 层限流 |
 | 失败审计日志 | P2 | 记录验证失败尝试 |
-| API Key 缓存失效 | P2 | 禁用后实时通知 |
+| API Key 缓存失效 | P2 | 禁用后实时通知 (pub/sub) |
 | Redis ts_store | P2 | 多实例共享和持久化 |
+| Retry-After Header | P2 | ts_nonce 被拒绝时返回建议重试时间 |
+| Prometheus 监控 | P2 | `auth_requests_total`, `auth_latency_ms` |
 
 ---
 
