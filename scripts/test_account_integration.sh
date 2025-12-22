@@ -87,6 +87,16 @@ else
     log_success "Port 8080 is available"
 fi
 
+# Initialize database to clean state
+test_start "Initialize database to clean state"
+if python3 scripts/db/manage_db.py init >/dev/null 2>&1; then
+    log_success "Database initialized (reset + seed)"
+else
+    log_error "Failed to initialize database"
+    log_info "Make sure PostgreSQL is running and manage_db.py exists"
+    exit 1
+fi
+
 # Check PostgreSQL connection
 test_start "Check PostgreSQL connection"
 if docker exec postgres psql -U trading -d exchange_info_db -c "SELECT 1" >/dev/null 2>&1; then

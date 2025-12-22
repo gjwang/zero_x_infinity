@@ -71,7 +71,8 @@ impl UserRepository {
 mod tests {
     use super::*;
 
-    const TEST_DATABASE_URL: &str = "postgresql://trading:trading123@localhost:5432/trading";
+    const TEST_DATABASE_URL: &str =
+        "postgresql://trading:trading123@localhost:5432/exchange_info_db";
 
     #[tokio::test]
     #[ignore] // Requires PostgreSQL running

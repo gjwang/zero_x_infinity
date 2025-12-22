@@ -12,4 +12,4 @@ gateway:
   queue_size: 50000
 
 # PostgreSQL for account management (Phase 0x0A)
-postgres_url: "postgresql://trading:trading123@localhost:5432/trading"
+postgres_url: "postgresql://trading:trading123@localhost:5432/exchange_info_db"
