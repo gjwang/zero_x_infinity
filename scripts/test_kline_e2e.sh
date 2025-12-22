@@ -70,25 +70,33 @@ echo "   Initial K-Lines: $INITIAL"
 
 # Step 3: Create matching orders to generate a trade
 echo ""
-echo "Step 3: Creating matching orders..."
+echo "Step 3: Creating matching orders via Ed25519 authenticated API..."
 PRICE="37000.00"
 QTY="0.05"
 
-# Buy order
-BUY_RESP=$(curl -sf -X POST "$BASE_URL/api/v1/create_order" \
-  -H "Content-Type: application/json" \
-  -H "X-User-ID: 1001" \
-  -d "{\"symbol\":\"BTC_USDT\",\"side\":\"BUY\",\"order_type\":\"LIMIT\",\"price\":\"$PRICE\",\"qty\":\"$QTY\"}")
-BUY_ORDER_ID=$(echo "$BUY_RESP" | jq -r '.data.order_id')
-echo "   Buy order created: $BUY_ORDER_ID"
+# Create test orders CSV for inject_orders.py
+TEST_DIR="/tmp/kline_e2e_test"
+mkdir -p "$TEST_DIR"
+cat > "$TEST_DIR/kline_orders.csv" << EOF
+order_id,user_id,side,price,qty
+1001,1001,buy,$PRICE,$QTY
+1002,1002,sell,$PRICE,$QTY
+EOF
 
-# Sell order (matching)
-SELL_RESP=$(curl -sf -X POST "$BASE_URL/api/v1/create_order" \
-  -H "Content-Type: application/json" \
-  -H "X-User-ID: 1002" \
-  -d "{\"symbol\":\"BTC_USDT\",\"side\":\"SELL\",\"order_type\":\"LIMIT\",\"price\":\"$PRICE\",\"qty\":\"$QTY\"}")
-SELL_ORDER_ID=$(echo "$SELL_RESP" | jq -r '.data.order_id')
-echo "   Sell order created: $SELL_ORDER_ID"
+# Use Python for Ed25519 authenticated order submission
+export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
+if [ "$CI" = "true" ]; then
+    PYTHON_CMD="${PYTHON_CMD:-python3}"
+elif [ -f "$PROJECT_DIR/.venv/bin/python3" ]; then
+    PYTHON_CMD="${PYTHON_CMD:-$PROJECT_DIR/.venv/bin/python3}"
+else
+    PYTHON_CMD="${PYTHON_CMD:-python3}"
+fi
+
+if ! "$PYTHON_CMD" "$SCRIPT_DIR/inject_orders.py" --input "$TEST_DIR/kline_orders.csv" --quiet 2>/dev/null; then
+    fail "Order injection failed - check Ed25519 auth and pynacl installation"
+fi
+echo "   Orders submitted via Ed25519 auth"
 
 # Step 4: Wait for Stream to process
 echo ""

@@ -133,9 +133,16 @@ log_step "Submitting test orders via inject_orders.py (Ed25519 auth)..."
 
 # Use inject_orders.py with Ed25519 authentication
 # Set PYTHONPATH so lib/auth.py is found
-# Use venv python which has pynacl installed
 export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
-PYTHON_CMD="${PYTHON_CMD:-.venv/bin/python3.14}"
+
+# Detect Python: use system python3 in CI, venv otherwise
+if [ "$CI" = "true" ]; then
+    PYTHON_CMD="${PYTHON_CMD:-python3}"
+elif [ -f ".venv/bin/python3" ]; then
+    PYTHON_CMD="${PYTHON_CMD:-.venv/bin/python3}"
+else
+    PYTHON_CMD="${PYTHON_CMD:-python3}"
+fi
 if ! "$PYTHON_CMD" "$SCRIPT_DIR/inject_orders.py" --input "$TEST_DIR/test_orders.csv" --quiet; then
     log_error "Order injection failed"
     exit 1
@@ -154,8 +161,7 @@ echo ""
 log_step "Verifying balances via API..."
 
 # Query balances for test users using Ed25519 authenticated API
-export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
-PYTHON_CMD="${PYTHON_CMD:-.venv/bin/python3.14}"
+# PYTHON_CMD already set with CI detection above
 
 # Query User 1001 balances
 log_info "Querying balances for User 1001..."
