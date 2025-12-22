@@ -346,6 +346,19 @@ main() {
     run_test "KLine_E2E" "scripts/test_kline_e2e.sh" 180
     run_test "Depth_API" "scripts/test_depth.sh" 120
     
+    # ========== Phase 5: Account Integration ==========
+    echo ""
+    echo "═══════════════════════════════════════════════════════════════"
+    echo "Phase 5: Account Integration (PostgreSQL)"
+    echo "═══════════════════════════════════════════════════════════════"
+    
+    if docker ps 2>/dev/null | grep -q postgres; then
+        run_test "Account_Integration" "scripts/test_account_integration.sh" 120
+    else
+        log_test_start "Account_Integration"
+        log_test_skip "(PostgreSQL not running)"
+    fi
+    
     # ========== Summary ==========
     echo ""
     echo "═══════════════════════════════════════════════════════════════"

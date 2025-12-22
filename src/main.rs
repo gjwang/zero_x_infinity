@@ -211,6 +211,62 @@ fn main() {
                 None
             };
 
+        // Phase 0x0A: Initialize PostgreSQL for account management
+        let (pg_db, pg_assets, pg_symbols): (
+            Option<std::sync::Arc<zero_x_infinity::Database>>,
+            Vec<zero_x_infinity::Asset>,
+            Vec<zero_x_infinity::account::Symbol>,
+        ) = if let Some(ref postgres_url) = app_config.postgres_url {
+            println!("\n[Account] Connecting to PostgreSQL...");
+            shared_rt.block_on(async {
+                match zero_x_infinity::Database::connect(postgres_url).await {
+                    Ok(db) => {
+                        println!("✅ PostgreSQL connected");
+                        // Load assets
+                        let assets = match zero_x_infinity::AssetManager::load_all(db.pool()).await
+                        {
+                            Ok(a) => {
+                                println!("✅ Loaded {} assets", a.len());
+                                a
+                            }
+                            Err(e) => {
+                                eprintln!("⚠️ Failed to load assets: {}", e);
+                                Vec::new()
+                            }
+                        };
+                        // Load symbols
+                        let symbols = match zero_x_infinity::AccountSymbolManager::load_all(
+                            db.pool(),
+                        )
+                        .await
+                        {
+                            Ok(s) => {
+                                println!("✅ Loaded {} symbols", s.len());
+                                s
+                            }
+                            Err(e) => {
+                                eprintln!("⚠️ Failed to load symbols: {}", e);
+                                Vec::new()
+                            }
+                        };
+                        (Some(std::sync::Arc::new(db)), assets, symbols)
+                    }
+                    Err(e) => {
+                        eprintln!("❌ Failed to connect to PostgreSQL: {}", e);
+                        (None, Vec::new(), Vec::new())
+                    }
+                }
+            })
+        } else {
+            println!("\n[Account] PostgreSQL disabled (no postgres_url configured)");
+            (None, Vec::new(), Vec::new())
+        };
+
+        // Make assets and symbols available (for future API endpoints)
+        let _pg_assets = std::sync::Arc::new(pg_assets);
+        let _pg_symbols = std::sync::Arc::new(pg_symbols);
+        let _pg_db = pg_db;
+
         let db_client_for_gateway = db_client.clone();
         let db_client_for_pipeline = db_client.clone();
         let rt_handle_for_pipeline = Some(rt_handle.clone());
@@ -237,6 +293,9 @@ fn main() {
                     db_client_for_gateway,
                     queues_clone.push_event_queue.clone(),
                     depth_service,
+                    _pg_db.clone(),
+                    _pg_assets.clone(),
+                    _pg_symbols.clone(),
                 )
                 .await;
             });

@@ -326,7 +326,7 @@ mod tests {
         // qty = 1 * 10^8 = 100_000_000 (1 BTC in satoshi)
         // cost = 30_000_000_000 * 100_000_000 / 10^8 = 30_000_000_000 (30000 USDT)
         let price = 30000u64 * 10u64.pow(USDT_DECIMALS);
-        let qty = 1u64 * 10u64.pow(BTC_DECIMALS);
+        let qty = 10u64.pow(BTC_DECIMALS);
         let order = buy_order(price, qty);
 
         let cost = order.calculate_cost(QTY_UNIT);

@@ -49,6 +49,15 @@ pub mod user_account;
 pub mod wal;
 pub mod websocket;
 
+// Database infrastructure (Phase 0x0A)
+pub mod db;
+
+// Exchange information (Phase 0x0A)
+pub mod exchange_info;
+
+// Account management (Phase 0x0A)
+pub mod account;
+
 // Convenient re-exports at crate root
 pub use balance::Balance;
 pub use core_types::{AssetId, OrderId, SeqNum, TradeId, UserId};
@@ -63,6 +72,12 @@ pub use symbol_manager::{SymbolInfo, SymbolManager};
 pub use ubscore::UBSCore;
 pub use user_account::UserAccount;
 pub use wal::{WalConfig, WalWriter};
+
+// Account management re-exports (Phase 0x0A)
+pub use account::{
+    Asset, AssetManager, Database, Symbol, SymbolManager as AccountSymbolManager, User,
+    UserRepository,
+};
 
 // Pipeline re-exports
 pub use pipeline::{
