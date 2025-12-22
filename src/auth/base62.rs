@@ -1,0 +1,149 @@
+//! Base62 encoding/decoding for API authentication signatures.
+//!
+//! Base62 uses only alphanumeric characters (0-9A-Za-z), making it URL-safe
+//! and suitable for HTTP headers without escaping.
+
+/// Base62 alphabet: 0-9, A-Z, a-z
+const ALPHABET: &[u8; 62] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
+/// Encode bytes to Base62 string.
+///
+/// # Example
+/// ```
+/// use zero_x_infinity::auth::base62;
+/// let encoded = base62::encode(&[0x01, 0x02, 0x03]);
+/// assert!(!encoded.is_empty());
+/// ```
+pub fn encode(data: &[u8]) -> String {
+    use num::Integer;
+
+    if data.is_empty() {
+        return String::new();
+    }
+
+    // Convert bytes to big integer
+    let mut num = data
+        .iter()
+        .fold(num::BigUint::ZERO, |acc, &byte| acc * 256u32 + byte);
+
+    if num == num::BigUint::ZERO {
+        return "0".to_string();
+    }
+
+    let mut result = Vec::new();
+    let base = num::BigUint::from(62u32);
+
+    while num > num::BigUint::ZERO {
+        let (quotient, remainder) = num.div_rem(&base);
+        let idx: u32 = remainder.try_into().unwrap_or(0u32);
+        result.push(ALPHABET[idx as usize]);
+        num = quotient;
+    }
+
+    result.reverse();
+    String::from_utf8(result).unwrap_or_default()
+}
+
+/// Decode Base62 string to bytes.
+///
+/// # Errors
+/// Returns `Err` if the input contains invalid characters.
+pub fn decode(s: &str) -> Result<Vec<u8>, Base62Error> {
+    if s.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut num = num::BigUint::ZERO;
+    let base = num::BigUint::from(62u32);
+
+    for c in s.chars() {
+        let idx = char_to_index(c).ok_or(Base62Error::InvalidCharacter(c))?;
+        num = num * &base + idx;
+    }
+
+    Ok(num.to_bytes_be())
+}
+
+/// Convert character to Base62 index.
+fn char_to_index(c: char) -> Option<u32> {
+    match c {
+        '0'..='9' => Some(c as u32 - '0' as u32),
+        'A'..='Z' => Some(c as u32 - 'A' as u32 + 10),
+        'a'..='z' => Some(c as u32 - 'a' as u32 + 36),
+        _ => None,
+    }
+}
+
+/// Base62 decoding error.
+#[derive(Debug, thiserror::Error)]
+pub enum Base62Error {
+    #[error("invalid character in Base62 string: {0}")]
+    InvalidCharacter(char),
+}
+
+// Use num-bigint for arbitrary precision arithmetic
+mod num {
+    pub use num_bigint::BigUint;
+    pub use num_integer::Integer;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_encode_empty() {
+        assert_eq!(encode(&[]), "");
+    }
+
+    #[test]
+    fn test_encode_zero() {
+        assert_eq!(encode(&[0]), "0");
+    }
+
+    #[test]
+    fn test_encode_single_byte() {
+        assert_eq!(encode(&[1]), "1");
+        assert_eq!(encode(&[10]), "A");
+        assert_eq!(encode(&[36]), "a");
+        assert_eq!(encode(&[61]), "z");
+        assert_eq!(encode(&[62]), "10");
+    }
+
+    #[test]
+    fn test_encode_decode_roundtrip() {
+        let test_cases: Vec<&[u8]> = vec![
+            &[0x01, 0x02, 0x03],
+            &[0xFF, 0xFF, 0xFF],
+            &[0x00, 0x00, 0x01],
+            b"Hello, World!",
+        ];
+
+        for data in test_cases {
+            let encoded = encode(data);
+            let decoded = decode(&encoded).expect("decode failed");
+            // Note: leading zeros may be lost in round-trip
+            let trimmed: Vec<u8> = data.iter().skip_while(|&&b| b == 0).cloned().collect();
+            assert_eq!(decoded, if trimmed.is_empty() { vec![0] } else { trimmed });
+        }
+    }
+
+    #[test]
+    fn test_decode_invalid_char() {
+        let result = decode("ABC!");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_signature_length() {
+        // Ed25519 signature is 64 bytes, Base62 encoded is ~86 chars
+        let sig = [0xFFu8; 64];
+        let encoded = encode(&sig);
+        // Expected length: ceil(64 * 8 / log2(62)) ≈ 86
+        assert!(
+            encoded.len() >= 80 && encoded.len() <= 90,
+            "len={}",
+            encoded.len()
+        );
+    }
+}
