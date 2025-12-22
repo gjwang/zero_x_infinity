@@ -30,8 +30,9 @@
 ## 🚀 第二阶段：产品化与业务闭环 (Productization)
 
 - [0x0A 第二部分导读 (Part II Introduction)](./0x0A-part-ii-introduction.md)
-    - [0x0A-a ID 规范与账户结构](./0x0A-a-id-specification.md)
-    - [0x0A-b 安全鉴权 (Auth)](./0x0A-b-auth.md)
+    - [0x0A-a 账户体系 (Account System)](./0x0A-a-account-system.md)
+    - [0x0A-b ID 规范 (ID Specification)](./0x0A-b-id-specification.md)
+    - [0x0A-c 安全鉴权 (Auth)](./0x0A-c-auth.md)
 - [0x0B 资金体系: 充提与划转 (Funding & Transfer)](./0x0B-funding.md)
 - [0x0C 经济模型: 手续费 (Fee System)](./0x0C-fee-system.md)
 - [0x0D 鲁棒性: 快照与恢复 (Snapshot & Recovery)](./0x0D-snapshot-recovery.md)
