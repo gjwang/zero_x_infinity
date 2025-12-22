@@ -9,7 +9,7 @@
 # Database configuration
 export PG_CONTAINER="${PG_CONTAINER:-postgres}"
 export PG_USER="${PG_USER:-trading}"
-export PG_DB="${PG_DB:-trading}"
+export PG_DB="${PG_DB:-exchange_info_db}"
 
 # =============================================================================
 # Core Database Functions

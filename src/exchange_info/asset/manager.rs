@@ -12,7 +12,7 @@ impl AssetManager {
     pub async fn load_all(pool: &PgPool) -> Result<Vec<Asset>, sqlx::Error> {
         let rows: Vec<Asset> = sqlx::query_as(
             r#"SELECT asset_id, asset, name, decimals, status, asset_flags 
-               FROM assets WHERE status = 1"#,
+               FROM assets_tb WHERE status = 1"#,
         )
         .fetch_all(pool)
         .await?;
@@ -24,7 +24,7 @@ impl AssetManager {
     pub async fn get_by_id(pool: &PgPool, asset_id: i32) -> Result<Option<Asset>, sqlx::Error> {
         let row: Option<Asset> = sqlx::query_as(
             r#"SELECT asset_id, asset, name, decimals, status, asset_flags 
-               FROM assets WHERE asset_id = $1"#,
+               FROM assets_tb WHERE asset_id = $1"#,
         )
         .bind(asset_id)
         .fetch_optional(pool)
@@ -44,7 +44,7 @@ impl AssetManager {
 
         let row: Option<Asset> = sqlx::query_as(
             r#"SELECT asset_id, asset, name, decimals, status, asset_flags 
-               FROM assets WHERE asset = $1"#,
+               FROM assets_tb WHERE asset = $1"#,
         )
         .bind(asset_name.as_str())
         .fetch_optional(pool)

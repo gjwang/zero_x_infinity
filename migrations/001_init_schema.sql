@@ -1,10 +1,11 @@
 -- 001_init_schema.sql
--- Initial schema for account management
+-- Initial schema for exchange_info_db
+-- Naming convention: tables use _tb suffix, database uses _db suffix
 
 -- ============================================================================
 -- Users Table
 -- ============================================================================
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE IF NOT EXISTS users_tb (
     user_id BIGSERIAL PRIMARY KEY,
     username VARCHAR(64) UNIQUE NOT NULL,
     email VARCHAR(128),
@@ -25,7 +26,7 @@ CREATE TABLE IF NOT EXISTS users (
 -- ============================================================================
 -- Assets Table (BTC, USDT, ETH, etc.)
 -- ============================================================================
-CREATE TABLE IF NOT EXISTS assets (
+CREATE TABLE IF NOT EXISTS assets_tb (
     asset_id SERIAL PRIMARY KEY,
     asset VARCHAR(16) UNIQUE NOT NULL
         CONSTRAINT chk_asset_uppercase CHECK (asset = UPPER(asset)),  -- 强制大写
@@ -45,12 +46,12 @@ CREATE TABLE IF NOT EXISTS assets (
 -- ============================================================================
 -- Symbols Table (Trading Pairs)
 -- ============================================================================
-CREATE TABLE IF NOT EXISTS symbols (
+CREATE TABLE IF NOT EXISTS symbols_tb (
     symbol_id SERIAL PRIMARY KEY,
     symbol VARCHAR(32) UNIQUE NOT NULL
         CONSTRAINT chk_symbol_uppercase CHECK (symbol = UPPER(symbol)),  -- 强制大写
-    base_asset_id INT NOT NULL REFERENCES assets(asset_id),
-    quote_asset_id INT NOT NULL REFERENCES assets(asset_id),
+    base_asset_id INT NOT NULL REFERENCES assets_tb(asset_id),
+    quote_asset_id INT NOT NULL REFERENCES assets_tb(asset_id),
     price_decimals SMALLINT NOT NULL,    -- 价格精度
     qty_decimals SMALLINT NOT NULL,      -- 数量精度
     min_qty BIGINT NOT NULL DEFAULT 0,   -- 最小下单量 (scaled)
@@ -70,20 +71,20 @@ CREATE TABLE IF NOT EXISTS symbols (
 -- ============================================================================
 
 -- Initial assets
-INSERT INTO assets (asset, name, decimals, asset_flags) VALUES
+INSERT INTO assets_tb (asset, name, decimals, asset_flags) VALUES
     ('BTC', 'Bitcoin', 8, 7),
     ('USDT', 'Tether USD', 6, 15),
     ('ETH', 'Ethereum', 8, 7)
 ON CONFLICT (asset) DO NOTHING;
 
 -- Initial trading pair
-INSERT INTO symbols (symbol, base_asset_id, quote_asset_id, price_decimals, qty_decimals, min_qty, symbol_flags)
+INSERT INTO symbols_tb (symbol, base_asset_id, quote_asset_id, price_decimals, qty_decimals, min_qty, symbol_flags)
 SELECT 'BTC_USDT', b.asset_id, q.asset_id, 2, 8, 100000, 15
-FROM assets b, assets q 
+FROM assets_tb b, assets_tb q 
 WHERE b.asset = 'BTC' AND q.asset = 'USDT'
 ON CONFLICT (symbol) DO NOTHING;
 
 -- System user (for fees)
-INSERT INTO users (user_id, username, email, status, user_flags) VALUES
+INSERT INTO users_tb (user_id, username, email, status, user_flags) VALUES
     (1, 'system', 'system@zero-x-infinity.io', 1, 15)
 ON CONFLICT (user_id) DO NOTHING;

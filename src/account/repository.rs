@@ -11,7 +11,7 @@ impl UserRepository {
     pub async fn get_by_id(pool: &PgPool, user_id: i64) -> Result<Option<User>, sqlx::Error> {
         let row = sqlx::query(
             r#"SELECT user_id, username, email, status, user_flags, created_at 
-               FROM users WHERE user_id = $1"#,
+               FROM users_tb WHERE user_id = $1"#,
         )
         .bind(user_id)
         .fetch_optional(pool)
@@ -34,7 +34,7 @@ impl UserRepository {
     ) -> Result<Option<User>, sqlx::Error> {
         let row = sqlx::query(
             r#"SELECT user_id, username, email, status, user_flags, created_at 
-               FROM users WHERE username = $1"#,
+               FROM users_tb WHERE username = $1"#,
         )
         .bind(username)
         .fetch_optional(pool)

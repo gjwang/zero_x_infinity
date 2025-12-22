@@ -89,7 +89,7 @@ fi
 
 # Check PostgreSQL connection
 test_start "Check PostgreSQL connection"
-if docker exec postgres psql -U trading -d trading -c "SELECT 1" >/dev/null 2>&1; then
+if docker exec postgres psql -U trading -d exchange_info_db -c "SELECT 1" >/dev/null 2>&1; then
     log_success "PostgreSQL is accessible"
 else
     log_error "PostgreSQL is not accessible"
@@ -196,27 +196,27 @@ fi
 
 # First check if PostgreSQL tables exist
 test_start "Check if database tables exist for validation tests"
-if docker exec postgres psql -U trading -d trading -c "\d assets" >/dev/null 2>&1; then
+if docker exec postgres psql -U trading -d exchange_info_db -c "\d assets_tb" >/dev/null 2>&1; then
     log_success "Database tables exist - running validation tests"
     
     # Test lowercase asset rejection (if CHECK constraint exists)
     test_start "Test database constraint: lowercase asset rejected"
-    INSERT_RESULT=$(docker exec postgres psql -U trading -d trading -c \
-        "INSERT INTO assets (asset, name, decimals, status, asset_flags) VALUES ('btc_test', 'Test', 8, 0, 7)" 2>&1)
+    INSERT_RESULT=$(docker exec postgres psql -U trading -d exchange_info_db -c \
+        "INSERT INTO assets_tb (asset, name, decimals, status, asset_flags) VALUES ('btc_test', 'Test', 8, 0, 7)" 2>&1)
     if echo "$INSERT_RESULT" | grep -qi "check\|constraint\|uppercase\|violates"; then
         log_success "Lowercase asset correctly rejected by database"
     else
         # Cleanup if inserted
-        docker exec postgres psql -U trading -d trading -c "DELETE FROM assets WHERE asset = 'btc_test'" >/dev/null 2>&1 || true
+        docker exec postgres psql -U trading -d exchange_info_db -c "DELETE FROM assets_tb WHERE asset = 'btc_test'" >/dev/null 2>&1 || true
         log_warn "Database constraint may not be applied yet - lowercase accepted"
     fi
     
     # Test uppercase asset acceptance
     test_start "Test database constraint: uppercase asset accepted"
-    if docker exec postgres psql -U trading -d trading -c \
-        "INSERT INTO assets (asset, name, decimals, status, asset_flags) VALUES ('TEST_ASSET', 'Test Asset', 8, 1, 7)" >/dev/null 2>&1; then
+    if docker exec postgres psql -U trading -d exchange_info_db -c \
+        "INSERT INTO assets_tb (asset, name, decimals, status, asset_flags) VALUES ('TEST_ASSET', 'Test Asset', 8, 1, 7)" >/dev/null 2>&1; then
         log_success "Uppercase asset correctly accepted by database"
-        docker exec postgres psql -U trading -d trading -c "DELETE FROM assets WHERE asset = 'TEST_ASSET'" >/dev/null 2>&1 || true
+        docker exec postgres psql -U trading -d exchange_info_db -c "DELETE FROM assets_tb WHERE asset = 'TEST_ASSET'" >/dev/null 2>&1 || true
     else
         log_error "Uppercase asset insertion failed unexpectedly"
     fi

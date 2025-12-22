@@ -47,6 +47,28 @@ JOIN symbols_tb s ON s.base_asset_id = a.asset_id;
 
 ---
 
+## 2.5 数据库名称
+
+### 规则：数据库名使用 `_db` 后缀
+
+**目的**：
+- 明确标识这是一个数据库
+- 与表名、列名区分
+- 便于全局搜索
+
+### ❌ 错误示例
+```sql
+CREATE DATABASE trading;
+CREATE DATABASE exchange_info;
+```
+
+### ✅ 正确示例
+```sql
+CREATE DATABASE exchange_info_db;
+```
+
+---
+
 ## 3. 数据库字段
 
 ### 规则：跨表重复字段使用表名前缀

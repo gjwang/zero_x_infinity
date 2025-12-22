@@ -5,7 +5,7 @@ use sqlx::FromRow;
 // ============================================================================
 // Asset Flags (bitmask)
 // ============================================================================
-pub mod flags {
+pub mod asset_flags {
     pub const CAN_DEPOSIT: i32 = 0x01;
     pub const CAN_WITHDRAW: i32 = 0x02;
     pub const CAN_TRADE: i32 = 0x04;
@@ -26,13 +26,13 @@ pub struct Asset {
 
 impl Asset {
     pub fn can_deposit(&self) -> bool {
-        self.asset_flags & flags::CAN_DEPOSIT != 0
+        self.asset_flags & asset_flags::CAN_DEPOSIT != 0
     }
     pub fn can_withdraw(&self) -> bool {
-        self.asset_flags & flags::CAN_WITHDRAW != 0
+        self.asset_flags & asset_flags::CAN_WITHDRAW != 0
     }
     pub fn can_trade(&self) -> bool {
-        self.asset_flags & flags::CAN_TRADE != 0
+        self.asset_flags & asset_flags::CAN_TRADE != 0
     }
 }
 
@@ -48,7 +48,9 @@ mod tests {
             name: "Bitcoin".to_string(),
             decimals: 8,
             status: 1,
-            asset_flags: flags::CAN_DEPOSIT | flags::CAN_WITHDRAW | flags::CAN_TRADE,
+            asset_flags: asset_flags::CAN_DEPOSIT
+                | asset_flags::CAN_WITHDRAW
+                | asset_flags::CAN_TRADE,
         };
 
         assert!(asset.can_deposit());
@@ -64,7 +66,7 @@ mod tests {
             name: "Tether".to_string(),
             decimals: 6,
             status: 1,
-            asset_flags: flags::CAN_DEPOSIT | flags::CAN_TRADE, // No withdraw
+            asset_flags: asset_flags::CAN_DEPOSIT | asset_flags::CAN_TRADE, // No withdraw
         };
 
         assert!(asset.can_deposit());
@@ -96,7 +98,7 @@ mod tests {
             name: "Ethereum".to_string(),
             decimals: 18,
             status: 1,
-            asset_flags: flags::DEFAULT,
+            asset_flags: asset_flags::DEFAULT,
         };
 
         assert!(asset.can_deposit());
@@ -112,15 +114,15 @@ mod tests {
             name: "USD Coin".to_string(),
             decimals: 6,
             status: 1,
-            asset_flags: flags::DEFAULT | flags::IS_STABLE_COIN,
+            asset_flags: asset_flags::DEFAULT | asset_flags::IS_STABLE_COIN,
         };
 
         assert!(asset.can_deposit());
         assert!(asset.can_withdraw());
         assert!(asset.can_trade());
         assert_eq!(
-            asset.asset_flags & flags::IS_STABLE_COIN,
-            flags::IS_STABLE_COIN
+            asset.asset_flags & asset_flags::IS_STABLE_COIN,
+            asset_flags::IS_STABLE_COIN
         );
     }
 
@@ -132,7 +134,7 @@ mod tests {
             name: "Locked Asset".to_string(),
             decimals: 8,
             status: 1,
-            asset_flags: flags::CAN_DEPOSIT, // Only deposit
+            asset_flags: asset_flags::CAN_DEPOSIT, // Only deposit
         };
 
         assert!(asset.can_deposit());
@@ -148,7 +150,7 @@ mod tests {
             name: "Internal Token".to_string(),
             decimals: 8,
             status: 1,
-            asset_flags: flags::CAN_TRADE, // Only trade
+            asset_flags: asset_flags::CAN_TRADE, // Only trade
         };
 
         assert!(!asset.can_deposit());

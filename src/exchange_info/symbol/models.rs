@@ -5,7 +5,7 @@ use sqlx::FromRow;
 // ============================================================================
 // Symbol Flags (bitmask)
 // ============================================================================
-pub mod flags {
+pub mod symbol_flags {
     pub const IS_TRADABLE: i32 = 0x01;
     pub const IS_VISIBLE: i32 = 0x02;
     pub const ALLOW_MARKET: i32 = 0x04;
@@ -29,10 +29,10 @@ pub struct Symbol {
 
 impl Symbol {
     pub fn is_tradable(&self) -> bool {
-        self.symbol_flags & flags::IS_TRADABLE != 0
+        self.symbol_flags & symbol_flags::IS_TRADABLE != 0
     }
     pub fn is_visible(&self) -> bool {
-        self.symbol_flags & flags::IS_VISIBLE != 0
+        self.symbol_flags & symbol_flags::IS_VISIBLE != 0
     }
 }
 
@@ -51,7 +51,7 @@ mod tests {
             qty_decimals: 6,
             min_qty: 1000,
             status: 1,
-            symbol_flags: flags::DEFAULT,
+            symbol_flags: symbol_flags::DEFAULT,
         };
 
         assert!(symbol.is_tradable());
@@ -69,7 +69,7 @@ mod tests {
             qty_decimals: 4,
             min_qty: 100,
             status: 1,
-            symbol_flags: flags::IS_TRADABLE, // Tradable but not visible
+            symbol_flags: symbol_flags::IS_TRADABLE, // Tradable but not visible
         };
 
         assert!(symbol.is_tradable());
@@ -105,7 +105,7 @@ mod tests {
             qty_decimals: 6,
             min_qty: 1000,
             status: 1,
-            symbol_flags: flags::IS_VISIBLE, // Visible but not tradable
+            symbol_flags: symbol_flags::IS_VISIBLE, // Visible but not tradable
         };
 
         assert!(!symbol.is_tradable());
@@ -123,14 +123,16 @@ mod tests {
             qty_decimals: 8,
             min_qty: 1,
             status: 1,
-            symbol_flags: flags::IS_TRADABLE | flags::IS_VISIBLE | flags::ALLOW_MARKET,
+            symbol_flags: symbol_flags::IS_TRADABLE
+                | symbol_flags::IS_VISIBLE
+                | symbol_flags::ALLOW_MARKET,
         };
 
         assert!(symbol.is_tradable());
         assert!(symbol.is_visible());
         assert_eq!(
-            symbol.symbol_flags & flags::ALLOW_MARKET,
-            flags::ALLOW_MARKET
+            symbol.symbol_flags & symbol_flags::ALLOW_MARKET,
+            symbol_flags::ALLOW_MARKET
         );
     }
 
@@ -145,12 +147,17 @@ mod tests {
             qty_decimals: 2,
             min_qty: 100,
             status: 1,
-            symbol_flags: flags::IS_TRADABLE | flags::IS_VISIBLE | flags::ALLOW_LIMIT,
+            symbol_flags: symbol_flags::IS_TRADABLE
+                | symbol_flags::IS_VISIBLE
+                | symbol_flags::ALLOW_LIMIT,
         };
 
         assert!(symbol.is_tradable());
         assert!(symbol.is_visible());
-        assert_eq!(symbol.symbol_flags & flags::ALLOW_LIMIT, flags::ALLOW_LIMIT);
-        assert_eq!(symbol.symbol_flags & flags::ALLOW_MARKET, 0);
+        assert_eq!(
+            symbol.symbol_flags & symbol_flags::ALLOW_LIMIT,
+            symbol_flags::ALLOW_LIMIT
+        );
+        assert_eq!(symbol.symbol_flags & symbol_flags::ALLOW_MARKET, 0);
     }
 }
