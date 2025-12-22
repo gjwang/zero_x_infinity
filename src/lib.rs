@@ -49,6 +49,9 @@ pub mod user_account;
 pub mod wal;
 pub mod websocket;
 
+// Database infrastructure (Phase 0x0A)
+pub mod db;
+
 // Account management (Phase 0x0A)
 pub mod account;
 
