@@ -13,6 +13,9 @@ pub struct AppConfig {
     pub gateway: GatewayConfig,
     #[serde(default)]
     pub persistence: PersistenceConfig,
+    /// PostgreSQL connection URL for account management (Phase 0x0A)
+    #[serde(default)]
+    pub postgres_url: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

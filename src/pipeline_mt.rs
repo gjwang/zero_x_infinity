@@ -239,8 +239,7 @@ pub fn run_pipeline_multi_thread(
 #[cfg(test)]
 mod tests {
     #[test]
-    fn test_placeholder() {
-        // Placeholder for future tests
-        assert!(true);
+    fn test_multi_thread_pipeline_placeholder() {
+        // TODO: Add multi-thread pipeline tests
     }
 }

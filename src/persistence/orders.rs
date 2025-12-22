@@ -434,11 +434,11 @@ mod tests {
         // Drop tables first to simulate missing tables
         let _ = client
             .taos()
-            .exec(&format!("DROP TABLE IF EXISTS orders_{}", test_symbol_id))
+            .exec(format!("DROP TABLE IF EXISTS orders_{}", test_symbol_id))
             .await;
         let _ = client
             .taos()
-            .exec(&format!("DROP TABLE IF EXISTS trades_{}", test_symbol_id))
+            .exec(format!("DROP TABLE IF EXISTS trades_{}", test_symbol_id))
             .await;
 
         // Create test order using constructor

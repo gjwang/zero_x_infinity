@@ -14,3 +14,6 @@ gateway:
 persistence:
   enabled: true  # TDengine is running
   tdengine_dsn: "taos+ws://root:taosdata@localhost:6041"
+
+# PostgreSQL for account management (Phase 0x0A)
+postgres_url: "postgresql://trading:trading123@localhost:5433/exchange_info_db"

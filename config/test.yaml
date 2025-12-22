@@ -10,3 +10,6 @@ gateway:
   host: "127.0.0.1"
   port: 8081
   queue_size: 1000
+
+# PostgreSQL for account management (Phase 0x0A)
+postgres_url: "postgresql://trading:trading123@localhost:5432/exchange_info_db"
