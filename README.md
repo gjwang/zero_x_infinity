@@ -39,13 +39,13 @@ graph TD
     Client[Client] -->|HTTP/WS| Gateway
     Gateway -->|RingBuffer| Ingestion
     subgraph "Trading Core (Single Thread)"
-        Ingestion -->|SeqOrder| UBSCore[UBSCore (Risk/Balance)]
-        UBSCore -->|LockedOrder| ME[Matching Engine]
+        Ingestion -->|SeqOrder| UBSCore["UBSCore (Risk/Balance)"]
+        UBSCore -->|LockedOrder| ME["Matching Engine"]
         ME -->|Trade/OrderUpdate| Settlement
     end
     Settlement -->|Async| Persistence[TDengine]
-    Settlement -->|Async| MktData[Market Data (K-Line)]
-    Settlement -->|Async| WS[WebSocket Push]
+    Settlement -->|Async| MktData["Market Data (K-Line)"]
+    Settlement -->|Async| WS["WebSocket Push"]
 ```
 
 ## ✨ Core Features
@@ -199,12 +199,12 @@ graph TD
     Client[客户端] -->|HTTP/WS| Gateway
     Gateway -->|RingBuffer| Ingestion
     subgraph "核心交易线程 (Single Thread)"
-        Ingestion -->|SeqOrder| UBSCore[UBSCore (风控/余额)]
+        Ingestion -->|SeqOrder| UBSCore["UBSCore (风控/余额)"]
         UBSCore -->|LockedOrder| ME[撮合引擎]
         ME -->|Trade/OrderUpdate| Settlement
     end
     Settlement -->|异步| Persistence[TDengine]
-    Settlement -->|异步| MktData[行情数据 (K-Line)]
+    Settlement -->|异步| MktData["行情数据 (K-Line)"]
     Settlement -->|异步| WS[WebSocket 推送]
 ```
 
