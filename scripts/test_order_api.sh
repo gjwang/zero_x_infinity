@@ -224,3 +224,4 @@ echo ""
 echo -e "${GREEN}✅ Gateway E2E Test PASSED${NC}"
 echo ""
 
+exit 0

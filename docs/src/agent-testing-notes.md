@@ -62,29 +62,4 @@ pkill "^zero_x_infinity$"
 
 ---
 
-## 其他注意事项
-
-### TDengine 数据库名称
-
-本项目使用 `trading` 作为数据库名，不是 `exchange`。
-
-```bash
-# 正确
-docker exec tdengine taos -s "USE trading; ..."
-
-# 错误
-docker exec tdengine taos -s "USE exchange; ..."
-```
-
-### P1 已知问题 (已修复)
-
-在 Phase 0x09-f 中，已解决了以下关键持久化问题：
-1. **Orders 持久化** - `SettlementService` 已实现订单状态同步。
-2. **Balances 持久化** - 已实现。
-3. **Pipeline MT 写入 TDengine** - 已实现海量流水的高效写入。
-
-详见：`docs/src/0x09-f-integration-test.md`
-
----
-
-*最后更新：2025-12-20*
+*最后更新：2025-12-23*
