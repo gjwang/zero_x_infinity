@@ -73,19 +73,21 @@ CREATE TABLE IF NOT EXISTS balances_tb (
     UNIQUE (user_id, asset_id, account_type)
 );
 
--- Create test balance: 1000 USDT in Funding for user 1001
+-- CLEAN SLATE: Delete ALL balances for test user
+DELETE FROM balances_tb WHERE user_id = 1001;
+
+-- Create ONLY Funding balance: 1000 USDT (scaled by 10^6 = 1000000000)
 INSERT INTO balances_tb (user_id, asset_id, account_type, available, frozen, status)
-VALUES (1001, 2, 2, 1000000000, 0, 1)
-ON CONFLICT (user_id, asset_id, account_type) DO UPDATE SET available = 1000000000;
+VALUES (1001, 2, 2, 1000000000, 0, 1);
 
 -- Clear old transfer records for clean test
-DELETE FROM fsm_transfers_tb WHERE user_id = 1001;
 DELETE FROM transfer_operations_tb WHERE req_id IN (
     SELECT req_id FROM fsm_transfers_tb WHERE user_id = 1001
 );
+DELETE FROM fsm_transfers_tb WHERE user_id = 1001;
 EOF
 
-echo "  ✓ Test data initialized (1000 USDT in Funding for user 1001)"
+echo "  ✓ Test data initialized (1000 USDT in Funding only for user 1001)"
 
 # =============================================================================
 # Step 3: Start Gateway (always restart to load updated asset_flags)
@@ -120,9 +122,9 @@ for i in {1..15}; do
 done
 
 # =============================================================================
-# Step 4: Run Transfer Tests
+# Step 4: Run Transfer Tests with Balance Verification
 # =============================================================================
-echo -e "${YELLOW}[4/6] Running transfer tests...${NC}"
+echo -e "${YELLOW}[4/6] Running transfer tests with balance verification...${NC}"
 
 export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
 
@@ -130,33 +132,85 @@ TEST_RESULT=$(python3 << 'PYTHON_EOF'
 import sys
 sys.path.append('scripts/lib')
 from api_auth import get_test_client
+import json
 
 USER_ID = 1001
 client = get_test_client(user_id=USER_ID)
+headers = {'X-User-ID': str(USER_ID)}
 
 tests_passed = 0
 tests_failed = 0
 
-# Test 1: Funding -> Spot
+def get_balances():
+    """Get all balances using /balances/all API"""
+    resp = client.get('/api/v1/private/balances/all', headers=headers)
+    if resp.status_code != 200:
+        return {}
+    balances = {}
+    for b in resp.json()['data']:
+        key = f"{b['asset']}:{b['account_type']}"
+        balances[key] = float(b['available'])
+    return balances
+
+def print_balances(label, balances):
+    """Print formatted balances"""
+    for key, val in sorted(balances.items()):
+        print(f"    {key}: {val:.2f}")
+
+# Step 1: Get initial balances
+print("  [BEFORE] Getting initial balances...")
+before = get_balances()
+print_balances("Before", before)
+print()
+
+# Step 2: Transfer Funding -> Spot (50 USDT)
+print("  [TRANSFER 1] Funding → Spot (50 USDT)...")
 resp = client.post('/api/v1/private/transfer', 
     json_body={'from': 'funding', 'to': 'spot', 'asset': 'USDT', 'amount': '50'},
-    headers={'X-User-ID': str(USER_ID)})
+    headers=headers)
 if resp.status_code == 200 and resp.json()['data']['status'] == 'COMMITTED':
-    print("  ✓ TEST 1: Funding → Spot (50 USDT) - COMMITTED")
+    print("    ✓ COMMITTED")
     tests_passed += 1
 else:
-    print(f"  ✗ TEST 1: Funding → Spot - FAILED ({resp.status_code})")
+    print(f"    ✗ FAILED ({resp.status_code}: {resp.text[:50]})")
     tests_failed += 1
 
-# Test 2: Spot -> Funding  
+# Step 3: Transfer Spot -> Funding (25 USDT)
+print("  [TRANSFER 2] Spot → Funding (25 USDT)...")
 resp = client.post('/api/v1/private/transfer',
     json_body={'from': 'spot', 'to': 'funding', 'asset': 'USDT', 'amount': '25'},
-    headers={'X-User-ID': str(USER_ID)})
+    headers=headers)
 if resp.status_code == 200 and resp.json()['data']['status'] == 'COMMITTED':
-    print("  ✓ TEST 2: Spot → Funding (25 USDT) - COMMITTED")
+    print("    ✓ COMMITTED")
     tests_passed += 1
 else:
-    print(f"  ✗ TEST 2: Spot → Funding - FAILED ({resp.status_code})")
+    print(f"    ✗ FAILED ({resp.status_code}: {resp.text[:50]})")
+    tests_failed += 1
+print()
+
+# Step 4: Get final balances (Funding only - Spot lives in UBSCore RAM)
+print("  [AFTER] Getting final Funding balance...")
+after = get_balances()
+print_balances("After", after)
+print()
+
+# Step 5: Verify Funding balance changes
+# NOTE: Spot balance is in UBSCore RAM, not PostgreSQL, so we only verify Funding
+print("  [VERIFY] Checking Funding balance changes...")
+print("    (Note: Spot balance is in UBSCore RAM, not PostgreSQL)")
+
+expected_funding_change = -50 + 25  # -50 (to Spot), +25 (from Spot) = -25 USDT
+
+funding_before = before.get('USDT:funding', 1000)  # Initial: 1000 USDT
+funding_after = after.get('USDT:funding', 0)
+funding_change = funding_after - funding_before
+
+# Check funding change
+if abs(funding_change - expected_funding_change) < 0.01:
+    print(f"    ✓ Funding: {funding_before:.2f} → {funding_after:.2f} (Δ{funding_change:+.2f})")
+    tests_passed += 1
+else:
+    print(f"    ✗ Funding: Expected Δ{expected_funding_change:+.2f}, got Δ{funding_change:+.2f}")
     tests_failed += 1
 
 # Summary
@@ -168,9 +222,9 @@ PYTHON_EOF
 echo "$TEST_RESULT"
 
 # =============================================================================
-# Step 5: Verify Database State
+# Step 5: Show Final Database State (optional, for debugging)
 # =============================================================================
-echo -e "${YELLOW}[5/6] Verifying database state...${NC}"
+echo -e "${YELLOW}[5/6] Final database state...${NC}"
 
 PGPASSWORD=trading123 psql -h localhost -p 5433 -U trading -d exchange_info_db -t << 'EOF'
 SELECT 
