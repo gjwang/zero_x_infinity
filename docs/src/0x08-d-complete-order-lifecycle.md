@@ -1,4 +1,150 @@
-# 0x08-d 完整订单生命周期与撤单优化
+# 0x08-d Complete Order Lifecycle & Cancel Optimization
+
+<h3>
+  <a href="#-english">🇺🇸 English</a>
+  &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
+  <a href="#-chinese">🇨🇳 中文</a>
+</h3>
+
+<div id="-english"></div>
+
+## 🇺🇸 English
+
+> **📦 Code Changes**: [View Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.8-c-complete-event-flow...v0.8-d-complete-order-lifecycle)
+
+> **Core Objective**: Implement full order lifecycle management (including Cancel and Refund), design a dual-track testing framework, and analyze performance bottlenecks.
+
+---
+
+## 1. Feature Implementation Overview
+
+In this chapter, we completed the following core features to equip the trading engine with full order processing capabilities:
+
+### 1.1 Order Events & State Management
+
+Implemented complete `OrderEvent` enum and CSV logging.
+
+**OrderStatus (src/models.rs)**:
+Follows Binance-style Screaming Snake Case.
+```rust
+pub enum OrderStatus {
+    NEW,              // Booked
+    PARTIALLY_FILLED, 
+    FILLED,           
+    CANCELED,         // User Cancelled
+    REJECTED,         // Risk Check Failed
+    EXPIRED,          // System Expired
+}
+```
+
+**OrderEvent (src/messages.rs)**:
+Used for Event Sourcing and Audit Logs.
+
+| Event Type | Trigger | Fund Operation |
+|------------|---------|----------------|
+| `Accepted` | Passed risk check | `Lock` |
+| `Rejected` | Insufficient balance/Bad params | None |
+| `Filled` | Fully filled | `Settle` |
+| `PartialFilled` | Partially filled | `Settle` |
+| `Cancelled` | User cancel | `Unlock` (Refund remaining) |
+| `Expired` | System expired | `Unlock` |
+
+**CSV Log Format (output/t2_order_events.csv)**:
+```csv
+event_type,order_id,user_id,seq_id,filled_qty,remaining_qty,price,reason
+accepted,1,100,101,,,,
+rejected,3,102,103,,,,insufficient_balance
+partial_filled,1,100,,5000,1000,,
+filled,1,100,,0,,85000,
+cancelled,5,100,,,2000,,
+```
+
+### 1.2 Cancel Workflow
+
+1.  **Parsing**: `scripts/csv_io.rs` supports `action=cancel`.
+2.  **Removal**: `MatchingEngine` calls `OrderBook::remove_order_by_id`.
+3.  **Unlock**: `UBSCore` generates `Unlock` event to refund frozen funds.
+4.  **Logging**: Record `Cancelled` event.
+
+---
+
+## 2. Dual-Track Testing Framework
+
+To guarantee baseline stability while adding new features:
+
+### 2.1 Regression Baseline
+*   **Dataset**: `fixtures/orders.csv` (100k orders, Place only).
+*   **Script**: `scripts/test_e2e.sh`
+*   **Goal**: Ensure no performance regression for legacy flows.
+
+### 2.2 Feature Testing
+*   **Dataset**: `fixtures/test_with_cancel/orders.csv` (1M orders, 30% Cancel).
+*   **Script**: `scripts/test_cancel.sh`
+*   **Goal**: Verify lifecycle closure (Lock = Settle + Unlock).
+
+---
+
+## 3. Major Performance Issue
+
+When scaling Cancel tests from 1,000 to **1,000,000** orders, we hit a severe performance wall.
+
+### 3.1 Symptoms
+*   **Baseline (100k Place)**: ~3 seconds.
+*   **Cancel Test (1M Place+Cancel)**: **> 7 minutes (430s)**.
+*   **Bottleneck**: `Matching Engine` consumes 98% CPU.
+
+### 3.2 Root Cause Analysis
+
+The culprit is `OrderBook::remove_order_by_id`:
+
+```rust
+// src/orderbook.rs
+pub fn remove_order_by_id(&mut self, order_id: u64) -> Option<InternalOrder> {
+    // Scan ALL price levels -> Scan ALL orders in level
+    for (key, orders) in self.bids.iter_mut() {
+        if let Some(pos) = orders.iter().position(|o| o.order_id == order_id) {
+            // ...
+        }
+    }
+    // Scan asks...
+}
+```
+
+*   **Complexity**: **O(N)**.
+*   **Worst Case**: With 500k orders piled up in the book, executing 300k cancels means **150 billion comparisons**.
+
+### 3.3 Solution (Next Step)
+Introduce **Order Index**:
+*   **Structure**: `HashMap<OrderId, (Price, Side)>`.
+*   **Complexity**: Reduces Cancel from O(N) to **O(1)**.
+
+---
+
+## 4. Verification Scripts
+
+1.  `verify_balance_events.py`:
+    *   Added `Check 8`: Verify Frozen Balance history consistency.
+    *   Verify `Unlock` events correctly release funds.
+
+2.  `verify_order_events.py`:
+    *   Verify every `Accepted` order has a final state.
+    *   Verify `Cancelled` orders correspond to existing `Accepted` orders.
+
+---
+
+## 5. Summary
+
+We implemented full order lifecycle management and established a rigorous testing framework. Crucially, mass stress testing exposed a **Big O algorithm defect** in the cancel logic, setting the stage for the next optimization iteration.
+
+<br>
+<div align="right"><a href="#-english">↑ Back to Top</a></div>
+<br>
+
+---
+
+<div id="-chinese"></div>
+
+## 🇨🇳 中文
 
 > **📦 代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.8-c-complete-event-flow...v0.8-d-complete-order-lifecycle)
 
