@@ -194,12 +194,13 @@ pub struct BalanceInfo {
     pub frozen: String,
 }
 
-/// Format decimal with proper precision
-fn format_decimal(d: Decimal, decimals: u32) -> String {
-    let scale = d.scale();
-    if scale < decimals {
-        format!("{:.prec$}", d, prec = decimals as usize)
-    } else {
-        d.to_string()
-    }
+/// Format decimal: convert from stored scaled value to human-readable
+/// e.g., stored=1000000000, decimals=6 -> "1000.000000" USDT
+fn format_decimal(stored: Decimal, decimals: u32) -> String {
+    // Divide by 10^decimals to get human-readable value
+    let divisor = Decimal::from(10u64.pow(decimals));
+    let human_value = stored / divisor;
+
+    // Format with proper precision
+    format!("{:.prec$}", human_value, prec = decimals as usize)
 }

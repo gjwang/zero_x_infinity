@@ -218,7 +218,10 @@ impl TransferDb {
         };
 
         let amount: rust_decimal::Decimal = row.get("amount");
-        let amount_u64 = amount.to_string().parse::<u64>().unwrap_or(0);
+        // Use trunc() to drop decimal places, then convert to i64/u64
+        // DB stores amount like 50000000.00000000, we need 50000000
+        use rust_decimal::prelude::ToPrimitive;
+        let amount_u64 = amount.trunc().to_i64().unwrap_or(0) as u64;
 
         let created_at: chrono::DateTime<chrono::Utc> = row.get("created_at");
         let updated_at: chrono::DateTime<chrono::Utc> = row.get("updated_at");
