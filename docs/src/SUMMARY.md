@@ -47,7 +47,7 @@
 
 ---
 
-- [Performance Report (Latest)](./perf-report.md)
+- [Performance Report (Latest) | 性能报告](./perf-report.md)
 - [Performance History](./perf-history/README.md)
     - [2025-12-18-0x08h](./perf-history/2025-12-18-0x08h.md)
     - [2025-12-16-0x07b](./perf-history/2025-12-16-0x07b.md)
@@ -60,4 +60,4 @@
 - [API 规范 (API Conventions)](../standards/api-conventions.md)
 - [ID 规范 (ID Specification)](../standards/id-specification.md)
 - [命名规范 (Naming Convention)](../standards/naming-convention.md)
-- [数据库选型: TDengine (Database Selection)](./database-selection-tdengine.md)
+- [Database Selection: TDengine | 数据库选型: TDengine](./database-selection-tdengine.md)
