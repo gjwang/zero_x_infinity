@@ -1,4 +1,157 @@
-# 数据库选型分析: TDengine vs 其他方案
+# Database Selection: TDengine vs Others
+
+<h3>
+  <a href="#-english">🇺🇸 English</a>
+  &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
+  <a href="#-chinese">🇨🇳 中文</a>
+</h3>
+
+<div id="-english"></div>
+
+## 🇺🇸 English
+
+> **Scenario**: Settlement Persistence - Storing orders, trades, and balances.
+
+---
+
+## 📊 Comparison
+
+### Candidates
+
+| Database | Type | Use Case |
+|----------|------|----------|
+| **TDengine** | Time-Series | IoT, Financial Data, High-Frequency Write |
+| PostgreSQL | Relational | General OLTP |
+| TimescaleDB | PG Extension | Time-Series (PG based) |
+| ClickHouse | Columnar | OLAP, Analytics |
+
+---
+
+## 🎯 Why TDengine?
+
+### 1. Performance (Based on TSBS)
+
+| Metric | TDengine vs TimescaleDB | TDengine vs PostgreSQL |
+|--------|-------------------------|------------------------|
+| **Write Speed** | 1.5-6.7x Faster | 10x+ Faster |
+| **Query Speed** | 1.2-24.6x Faster | 10x+ Faster |
+| **Storage** | 1/12 - 1/27 Space | Huge Saving |
+
+### 2. Matching Exchange Requirements
+
+| Requirement | TDengine Solution |
+|-------------|-------------------|
+| **High Frequency Write** | Million/sec write capacity |
+| **Timestamp Index** | Native time-series design |
+| **High Cardinality** | High data points, Super Tables |
+| **Real-time Stream** | Built-in Stream Computing |
+| **Data Subscription** | Kafka-like real-time push |
+| **Auto Partitioning** | Auto-sharding by time |
+
+### 3. Simplified Architecture
+
+```
+TDengine Solution:
+┌─────────────────────────────────────────────┐
+│                  TDengine                    │
+│      Persistence + Stream + Subscription     │
+55 └─────────────────────────────────────────────┘
+```
+
+**Fewer Components = Lower Ops Complexity + Lower Latency**
+
+### 4. Rust Ecosystem
+
+*   ✅ Official Rust Client `taos`
+*   ✅ Async (tokio)
+*   ✅ Connection Pool (r2d2)
+*   ✅ WebSocket (Cloud friendly)
+
+---
+
+## ❌ Why Not Others?
+
+### PostgreSQL
+*   ❌ Poor time-series performance.
+*   ❌ High-frequency write bottleneck.
+*   ❌ Large storage consumption.
+
+### TimescaleDB
+*   ⚠️ Slower than TDengine.
+*   ⚠️ Much larger storage footprint.
+
+### ClickHouse
+*   ✅ Fast analytics.
+*   ❌ Real-time row-by-row write is weak (prefers batch).
+*   ❌ High Ops complexity.
+
+---
+
+## 📋 Data Model
+
+### TDengine Super Table
+
+```sql
+-- Orders Super Table
+CREATE STABLE orders (
+    ts TIMESTAMP,           -- PK
+    order_id BIGINT,
+    user_id BIGINT,
+    side TINYINT,
+    order_type TINYINT,
+    price BIGINT,
+    qty BIGINT,
+    filled_qty BIGINT,
+    status TINYINT
+) TAGS (
+    symbol_id INT           -- Partition Tag
+);
+
+-- Trades
+CREATE STABLE trades (...) TAGS (symbol_id INT);
+
+-- Balances
+CREATE STABLE balances (...) TAGS (user_id BIGINT, asset_id INT);
+```
+
+### Advantages
+
+*   ✅ Auto-partition by TAG.
+*   ✅ Auto-aggregation query.
+*   ✅ Unified Schema.
+
+---
+
+## 🏗️ Architecture Integration
+
+```
+Gateway -> Order Queue -> Trading Core -> Events -> TDengine
+```
+
+---
+
+## ✅ Final Recommendation
+
+**Primary Storage**: TDengine
+*   Orders, Trades, Balances History.
+*   High performance write/read.
+
+## 📊 Expected Performance
+
+*   Write Latency: < 1ms
+*   Query Latency: < 5ms
+*   Storage Compression: 10:1
+*   Supported TPS: 100,000+
+
+<br>
+<div align="right"><a href="#-english">↑ Back to Top</a></div>
+<br>
+
+---
+
+<div id="-chinese"></div>
+
+## 🇨🇳 中文
 
 > **场景**: 交易所 Settlement Persistence - 存储订单、成交、余额
 
@@ -42,12 +195,6 @@
 ### 3. 简化架构
 
 ```
-传统方案:
-┌─────────────┬────────────────┐
-│ PostgreSQL  │     Kafka      │
-│  (持久化)   │   (消息队列)    │
-└─────────────┴────────────────┘
-
 TDengine 方案:
 ┌─────────────────────────────────────────────┐
 │                  TDengine                    │
@@ -58,12 +205,6 @@ TDengine 方案:
 **减少组件 = 减少运维复杂度 + 减少延迟**
 
 ### 4. Rust 生态支持
-
-```toml
-# Cargo.toml
-[dependencies]
-taos = { version = "0.12", features = ["ws", "ws-rustls"] }
-```
 
 - ✅ 官方 Rust 客户端 `taos`
 - ✅ 异步支持 (tokio 兼容)
@@ -77,14 +218,12 @@ taos = { version = "0.12", features = ["ws", "ws-rustls"] }
 ### PostgreSQL
 - ❌ 通用数据库，时序性能差
 - ❌ 高频写入会成为瓶颈
-- ❌ 需要额外优化 (分区表、索引调优)
 - ❌ 存储空间消耗大
 
 ### TimescaleDB
 - ⚠️ 基于 PostgreSQL，继承其限制
 - ⚠️ 比 TDengine 慢 1.5-6.7x
 - ⚠️ 存储空间是 TDengine 的 12-27x
-- ✅ 如果已有 PostgreSQL 生态可考虑
 
 ### ClickHouse
 - ✅ 分析查询极快
@@ -100,70 +239,16 @@ taos = { version = "0.12", features = ["ws", "ws-rustls"] }
 
 ```sql
 -- 订单表 (Super Table)
-CREATE STABLE orders (
-    ts TIMESTAMP,           -- 订单时间戳 (主键)
-    order_id BIGINT,
-    user_id BIGINT,
-    side TINYINT,           -- 0=BUY, 1=SELL
-    order_type TINYINT,     -- 0=LIMIT, 1=MARKET
-    price BIGINT,           -- 价格 (整数表示)
-    qty BIGINT,             -- 数量 (整数表示)
-    filled_qty BIGINT,
-    status TINYINT          -- 0=NEW, 1=FILLED, 2=CANCELED
-) TAGS (
-    symbol_id INT           -- 交易对 ID
-);
+CREATE STABLE orders (...) TAGS (symbol_id INT);
 
 -- 成交表 (Super Table)
-CREATE STABLE trades (
-    ts TIMESTAMP,           -- 成交时间戳
-    trade_id BIGINT,
-    order_id BIGINT,
-    user_id BIGINT,
-    side TINYINT,
-    price BIGINT,
-    qty BIGINT,
-    fee BIGINT
-) TAGS (
-    symbol_id INT
-);
+CREATE STABLE trades (...) TAGS (symbol_id INT);
 
 -- 余额快照表 (Super Table)  
-CREATE STABLE balances (
-    ts TIMESTAMP,           -- 快照时间
-    avail BIGINT,           -- 可用余额
-    frozen BIGINT,          -- 冻结余额
-    version BIGINT          -- 版本号
-) TAGS (
-    user_id BIGINT,
-    asset_id INT
-);
-
--- 查询示例
--- 查询用户最新余额
-SELECT LAST_ROW(avail, frozen, version) FROM balances 
-WHERE user_id = 1001 AND asset_id = 1;
-
--- 查询用户订单历史
-SELECT * FROM orders WHERE user_id = 1001 
-ORDER BY ts DESC LIMIT 100;
-
--- 查询成交历史
-SELECT * FROM trades WHERE user_id = 1001
-AND ts >= NOW() - INTERVAL 1 DAY;
+CREATE STABLE balances (...) TAGS (user_id BIGINT, asset_id INT);
 ```
 
 ### Super Table 优势
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                Super Table: orders                       │
-│  (统一 schema，自动按 symbol_id 分表)                    │
-├─────────────────┬─────────────────┬────────────────────┤
-│ orders_BTC_USDT │ orders_ETH_USDT │ orders_ETH_BTC ... │
-│   (子表 1)      │    (子表 2)     │     (子表 N)       │
-└─────────────────┴─────────────────┴────────────────────┘
-```
 
 - ✅ 自动按 TAG 分表
 - ✅ 查询时自动聚合
@@ -174,32 +259,7 @@ AND ts >= NOW() - INTERVAL 1 DAY;
 ## 🏗️ 架构集成方案
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                         Gateway (HTTP)                            │
-└────────────────────────────────┬─────────────────────────────────┘
-                                 │
-                    ┌────────────▼────────────┐
-                    │      Order Queue        │
-                    │   (Ring Buffer)         │
-                    └────────────┬────────────┘
-                                 │
-┌────────────────────────────────▼────────────────────────────────┐
-│                      Trading Core                                │
-│   Ingestion → UBSCore → ME → Settlement                          │
-└────────────────────────────────┬────────────────────────────────┘
-                                 │
-              ┌──────────────────┼──────────────────┐
-              │                  │                  │
-    ┌─────────▼──────┐  ┌───────▼───────┐  ┌──────▼──────┐
-    │  Order Events  │  │ Trade Events  │  │Balance Events│
-    └─────────┬──────┘  └───────┬───────┘  └──────┬──────┘
-              │                 │                  │
-              └─────────────────┼──────────────────┘
-                                │
-                    ┌───────────▼───────────┐
-                    │      TDengine         │
-                    │  orders | trades | bal │
-                    └───────────────────────┘
+Gateway -> Order Queue -> Trading Core -> Events -> TDengine
 ```
 
 ---
@@ -213,18 +273,7 @@ AND ts >= NOW() - INTERVAL 1 DAY;
 
 ## 📊 预期性能
 
-| 指标 | 预期值 |
-|------|--------|
-| 写入延迟 | < 1ms |
-| 查询延迟 (最新余额) | < 5ms |
-| 历史查询 (100条) | < 10ms |
-| 存储压缩率 | 10:1 |
-| 支持 TPS | 100,000+ |
-
----
-
-## 🔗 参考资料
-
-- [TDengine 官网](https://tdengine.com/)
-- [TDengine Rust Client (taos)](https://github.com/taosdata/taos-connector-rust)
-- [TDengine vs TimescaleDB Benchmark](https://tdengine.com/tdengine-vs-timescaledb/)
+*   写入延迟: < 1ms
+*   查询延迟: < 5ms
+*   存储压缩率: 10:1
+*   支持 TPS: 100,000+
