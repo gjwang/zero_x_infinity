@@ -1,12 +1,327 @@
-# 0x06 强制余额管理 (Enforced Balance)
+# 0x06 Enforced Balance Management
+
+<h3>
+  <a href="#-english">🇺🇸 English</a>
+  &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
+  <a href="#-chinese">🇨🇳 中文</a>
+</h3>
+
+<div id="-english"></div>
+
+## 🇺🇸 English
+
+> **📦 Code Changes**: [View Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.5-user-balance...v0.6-enforced-balance)
+
+In the previous chapter, we implemented balance management. However, in financial systems, fund operations are the **most critical** part and must be foolproof. This chapter upgrades balance management to a **Type-System Enforced** version.
+
+### 1. Why "Enforced"?
+
+The previous implementation had flaws:
+
+```rust
+// ❌ Problem 1: Public fields, easily modified unintentionally
+pub struct Balance {
+    pub avail: u64,   // Dev might assign directly, bypassing logic
+    pub frozen: u64,
+}
+
+// ❌ Problem 2: Returns bool, unclear error
+fn freeze(&mut self, amount: u64) -> bool {
+    // Failed? Why? Don't know.
+}
+
+// ❌ Problem 3: No Audit Trail
+// Balance changed, but no versioning for tracing.
+```
+
+These issues can lead to:
+*   **Developers accidentally bypassing checks**: In complex logic, one might modify fields directly.
+*   **Hard to debug**: "Operation failed" doesn't tell you why.
+*   **Audit difficulty**: No change tracking makes it hard to pinpoint when a bug occurred.
+
+> **Note**: This is not to prevent malicious attacks (it's an internal system), but to **prevent developer errors**. Just like Rust's ownership system—we use types to reduce the chance of shooting ourselves in the foot.
+
+### 2. Enforced Balance Design
+
+The new version enforces safety via **Rust Type System**:
+
+```rust
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct Balance {
+    avail: u64,      // ← Private! Only accessible via methods
+    frozen: u64,     // ← Private!
+    version: u64,    // ← Private! Auto-increment on change
+}
+```
+
+#### Core Principles
+
+| Principle | Implementation |
+|-----------|----------------|
+| **Encapsulation** | All fields private, read-only getters provided |
+| **Explicit Error** | All mutations return `Result<(), &'static str>` |
+| **Audit Trail** | `version` auto-increments on every mutation |
+| **Overflow Protection** | Use `checked_add/sub`, overflow returns Error |
+
+#### Method Renaming
+
+| Old (v0.5) | New (v0.6) | Meaning |
+|------------|------------|---------|
+| `freeze()` | `lock()` | More accurate: lock funds for order |
+| `unfreeze()` | `unlock()` | Unlock (when cancelling) |
+| `consume_frozen()` | `spend_frozen()` | Spend frozen funds (after match) |
+| `receive()` | `deposit()` | Unified deposit semantics |
+
+### 3. Balance API Details
+
+#### Safe Getters
+
+```rust
+impl Balance {
+    /// Get Available (Read-only)
+    pub const fn avail(&self) -> u64 { self.avail }
+    
+    /// Get Frozen (Read-only)
+    pub const fn frozen(&self) -> u64 { self.frozen }
+    
+    /// Get Total (avail + frozen)
+    /// Returns None on overflow (data corruption)
+    pub const fn total(&self) -> Option<u64> {
+        self.avail.checked_add(self.frozen)
+    }
+    
+    /// Get Version (Read-only)
+    pub const fn version(&self) -> u64 { self.version }
+}
+```
+
+> **Why `const fn`?** Compiler guarantees state is never modified, providing strongest safety.
+
+#### Validated Mutations
+
+Every mutation method:
+1.  Validates preconditions
+2.  Uses checked arithmetic
+3.  Returns `Result`
+4.  Auto-increments `version`
+
+```rust
+/// Deposit: Increase Available
+pub fn deposit(&mut self, amount: u64) -> Result<(), &'static str> {
+    self.avail = self.avail.checked_add(amount)
+        .ok_or("Deposit overflow")?;  // ← Return Error on Overflow
+    self.version = self.version.wrapping_add(1);  // ← Auto Increment
+    Ok(())
+}
+
+/// Lock: Avail → Frozen
+pub fn lock(&mut self, amount: u64) -> Result<(), &'static str> {
+    if self.avail < amount {
+        return Err("Insufficient funds to lock");  // ← Explicit Error
+    }
+    self.avail = self.avail.checked_sub(amount)
+        .ok_or("Lock avail underflow")?;
+    self.frozen = self.frozen.checked_add(amount)
+        .ok_or("Lock frozen overflow")?;
+    self.version = self.version.wrapping_add(1);
+    Ok(())
+}
+
+/// Unlock: Frozen → Avail
+pub fn unlock(&mut self, amount: u64) -> Result<(), &'static str> {
+    if self.frozen < amount {
+        return Err("Insufficient frozen funds");
+    }
+    self.frozen = self.frozen.checked_sub(amount)
+        .ok_or("Unlock frozen underflow")?;
+    self.avail = self.avail.checked_add(amount)
+        .ok_or("Unlock avail overflow")?;
+    self.version = self.version.wrapping_add(1);
+    Ok(())
+}
+
+/// Spend Frozen: Funds leave account after match
+pub fn spend_frozen(&mut self, amount: u64) -> Result<(), &'static str> {
+    if self.frozen < amount {
+        return Err("Insufficient frozen funds");
+    }
+    self.frozen = self.frozen.checked_sub(amount)
+        .ok_or("Spend frozen underflow")?;
+    self.version = self.version.wrapping_add(1);
+    Ok(())
+}
+```
+
+### 4. UserAccount Refactoring
+
+`UserAccount` is also refactored:
+
+#### Data Structure Change
+
+```rust
+// Old: FxHashMap
+pub struct UserAccount {
+    pub user_id: u64,
+    balances: FxHashMap<u32, Balance>,
+}
+
+// New: O(1) Direct Array Indexing
+pub struct UserAccount {
+    user_id: UserId,      // Private
+    assets: Vec<Balance>, // Private, asset_id as index
+}
+```
+
+> **O(1) Direct Array Indexing**
+>
+> ```rust
+> // deposit() auto-creates slot
+> pub fn deposit(&mut self, asset_id: AssetId, amount: u64) -> Result<(), &'static str> {
+>     let idx = asset_id as usize;
+>     if idx >= self.assets.len() {
+>         self.assets.resize(idx + 1, Balance::default());
+>     }
+>     self.assets[idx].deposit(amount)
+> }
+>
+> // get_balance_mut() returns Result
+> pub fn get_balance_mut(&mut self, asset_id: AssetId) -> Result<&mut Balance, &'static str> {
+>     self.assets.get_mut(asset_id as usize).ok_or("Asset not found")
+> }
+> ```
+
+> 🚀 **Why `Vec<Balance>` is Highest Performance?**
+>
+> **1. Cache-Friendly**
+> `Vec<Balance>` is contiguous in memory. Loading one Balance loads neighbors into CPU cache line.
+>
+> **2. `get_balance()` is High Frequency**
+> Each order triggers 5-10 balance checks. O(1) + Cache Friendly is critical for millions of TPS.
+
+#### Settlement Methods
+
+New methods dedicated to handling all settlement logic for buyer/seller in one go:
+
+```rust
+/// Buyer Settlement: Spend Quote, Gain Base, Refund unused Quote
+pub fn settle_as_buyer(
+    &mut self,
+    quote_asset_id: AssetId,
+    base_asset_id: AssetId,
+    spend_quote: u64,   // Consumed USDT
+    gain_base: u64,     // Gained BTC
+    refund_quote: u64,  // Refunded USDT
+) -> Result<(), &'static str> {
+    // 1. Spend Quote (Frozen)
+    self.get_balance_mut(quote_asset_id).spend_frozen(spend_quote)?;
+    
+    // 2. Gain Base (Available)
+    self.get_balance_mut(base_asset_id).deposit(gain_base)?;
+    
+    // 3. Refund (Frozen → Available)
+    if refund_quote > 0 {
+        self.get_balance_mut(quote_asset_id).unlock(refund_quote)?;
+    }
+    Ok(())
+}
+```
+
+### 5. Execution Results
+
+```text
+=== 0xInfinity: Stage 6 (Enforced Balance) ===
+Symbol: BTC_USDT | Price: 2 decimals, Qty: 8 decimals
+Cost formula: price * qty / 100000000
+
+[0] Initial deposits...
+    Alice: 100.00000000 BTC, 10000.00 USDT
+    Bob:   5.00000000 BTC, 200000.00 USDT
+
+[1] Alice places sell orders...
+    Order 1: Sell 10.00000000 BTC @ $100.00 -> New
+    Order 2: Sell 5.00000000 BTC @ $101.00 -> New
+    Alice balance: avail=85.00000000 BTC, frozen=15.00000000 BTC
+
+[2] Bob places buy order (taker)...
+    Order 3: Buy 12.00000000 BTC @ $101.00 (cost: 1212.00 USDT)
+    Trades:
+      - Trade #1: 10.00000000 BTC @ $100.00
+      - Trade #2: 2.00000000 BTC @ $101.00
+    Order status: Filled
+
+[3] Final balances:
+    Alice: 85.00000000 BTC (frozen: 3.00000000), 11202.00 USDT
+    Bob:   17.00000000 BTC, 198798.00 USDT (frozen: 0.00)
+
+    Book: Best Bid=None, Best Ask=Some("101.00")
+
+=== End of Simulation ===
+```
+
+Results are consistent with the previous chapter, but now all operations are protected by the Type System!
+
+### 6. Unit Tests
+
+We added 8 new tests for `enforced_balance`. Total 16 tests passing.
+
+```bash
+test enrolled_balance::tests::test_deposit ... ok
+test enrolled_balance::tests::test_deposit_overflow ... ok
+test enrolled_balance::tests::test_lock_unlock ... ok
+...
+test result: ok. 16 passed; 0 failed
+```
+
+### 7. Error Handling Example
+
+With the new API, `Result` must be handled:
+
+```rust
+// ❌ Compile Error: Unhandled Result
+balance.deposit(100);
+
+// ✅ Correct: Propagate
+balance.deposit(100)?;
+
+// ✅ Correct: Unwrap (Only if sure)
+balance.deposit(100).unwrap();
+
+// ✅ Correct: Match
+match balance.lock(1000) {
+    Ok(()) => println!("Locked successfully"),
+    Err(e) => println!("Failed to lock: {}", e),
+}
+```
+
+### Summary
+
+This chapter accomplished:
+
+1.  ✅ **Encapsulation**: Private fields prevent accidental modification.
+2.  ✅ **Result Return**: All mutations return explicit errors.
+3.  ✅ **Versioning**: Auto-increment `version` for audit.
+4.  ✅ **Checked Arithmetic**: Prevents overflow.
+5.  ✅ **Renaming**: `lock/unlock/spend_frozen` are clearer.
+6.  ✅ **Settlement Helper**: `settle_as_buyer/seller`.
+7.  ✅ **Asset ID**: Constraint for future O(1) array optimization.
+
+Now our balance management is **Type-Safe**—the compiler prevents most balance-related bugs!
+
+<br>
+<div align="right"><a href="#-english">↑ Back to Top</a></div>
+<br>
+
+---
+
+<div id="-chinese"></div>
+
+## 🇨🇳 中文
 
 > **📦 代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.5-user-balance...v0.6-enforced-balance)
 
 在上一章中，我们实现了用户账户的余额管理。但在金融系统中，资金操作是**最核心、最关键**的操作，必须确保万无一失。本章我们将余额管理升级为**类型系统强制**的安全版本。
 
----
-
-## 1. 为什么需要"强制"版本？
+### 1. 为什么需要"强制"版本？
 
 上一章的实现存在几个隐患：
 
@@ -34,9 +349,7 @@ fn freeze(&mut self, amount: u64) -> bool {
 > **注意**：这不是防止恶意攻击（这是内部系统），而是**防止开发者无意挖坑**。
 > 就像 Rust 的所有权系统一样——我们用类型系统来减少挖坑的机会。
 
----
-
-## 2. 强制余额设计 (Enforced Balance)
+### 2. 强制余额设计 (Enforced Balance)
 
 新版本通过 **Rust 类型系统** 强制安全：
 
@@ -49,7 +362,7 @@ pub struct Balance {
 }
 ```
 
-### 核心原则
+#### 核心原则
 
 | 原则 | 实现方式 |
 |------|---------|
@@ -58,7 +371,7 @@ pub struct Balance {
 | **审计追踪** | `version` 在每次变更时自动递增 |
 | **溢出保护** | 使用 `checked_add/sub`，溢出返回错误 |
 
-### 方法命名变更
+#### 方法命名变更
 
 | 旧版 (v0.5) | 新版 (v0.6) | 说明 |
 |-------------|-------------|------|
@@ -67,11 +380,9 @@ pub struct Balance {
 | `consume_frozen()` | `spend_frozen()` | 消费冻结资金（成交后） |
 | `receive()` | `deposit()` | 统一为存款语义 |
 
----
+### 3. Balance API 详解
 
-## 3. Balance API 详解
-
-### 只读方法 (Safe Getters)
+#### 只读方法 (Safe Getters)
 
 ```rust
 impl Balance {
@@ -94,7 +405,7 @@ impl Balance {
 
 > **为什么用 `const fn`？** 编译器保证永远不会修改状态，提供最强的安全保证。
 
-### 变更方法 (Validated Mutations)
+#### 变更方法 (Validated Mutations)
 
 每个变更方法都：
 1. 验证前置条件
@@ -149,13 +460,11 @@ pub fn spend_frozen(&mut self, amount: u64) -> Result<(), &'static str> {
 }
 ```
 
----
-
-## 4. UserAccount 重构
+### 4. UserAccount 重构
 
 新版 `UserAccount` 也进行了重构：
 
-### 数据结构变更
+#### 数据结构变更
 
 ```rust
 // 旧版：使用 FxHashMap
@@ -189,24 +498,6 @@ pub struct UserAccount {
 > }
 > ```
 
-> ⚠️ **Asset ID 分配约束**
->
-> | 约束 | 说明 |
-> |------|------|
-> | **不可变** | 一旦分配，永远不能改变 |
-> | **小值** | 必须是小整数（用作数组下标） |
-> | **连续** | 按顺序分配（1,2,3... 或 0,1,2...） |
-
-> 📊 **性能对比**
->
-> | 方法 | 查找 | 内存 | 缓存 |
-> |------|------|------|------|
-> | HashMap | O(1)* | 有开销 | 差 |
-> | Vec + 线性查找 | O(n) | 紧凑 | 好 |
-> | **直接索引** | **O(1)** | 紧凑 | **最佳** |
->
-> *HashMap 的 O(1) 有隐藏的常数开销（哈希计算、桶查找）
-
 > 🚀 **为什么 `Vec<Balance>` 直接索引是最高效选择？**
 >
 > **1. 极佳的缓存友好性 (Cache-Friendly)**
@@ -214,18 +505,6 @@ pub struct UserAccount {
 > `Vec<Balance>` 是连续内存布局，相邻资产的 Balance 在内存中也相邻。
 > 当 CPU 读取一个 Balance 时，整个缓存行（通常 64 字节）会被加载，
 > 相邻的 Balance 数据也一并进入 L1/L2 缓存，后续访问几乎零延迟。
->
-> ```text
-> 内存布局:
-> ┌──────────┬──────────┬──────────┬──────────┐
-> │Balance[0]│Balance[1]│Balance[2]│Balance[3]│ ← 连续内存，缓存友好
-> └──────────┴──────────┴──────────┴──────────┘
->
-> HashMap 内存布局:
-> ┌─────┐     ┌─────┐         ┌─────┐
-> │ B0  │ ... │ B2  │ ....... │ B1  │  ← 分散内存，缓存不友好
-> └─────┘     └─────┘         └─────┘
-> ```
 >
 > **2. `get_balance()` 是高频调用函数**
 >
@@ -239,7 +518,7 @@ pub struct UserAccount {
 > 在高频交易场景（每秒万笔订单），这意味着每秒 5-10 万次调用。
 > **O(1) + 缓存友好** 对性能至关重要。
 
-### 结算方法
+#### 结算方法
 
 新增专门的结算方法，一次性处理买方或卖方的所有结算：
 
@@ -265,33 +544,9 @@ pub fn settle_as_buyer(
     }
     Ok(())
 }
-
-/// 卖方结算：消费 Base，获得 Quote
-pub fn settle_as_seller(
-    &mut self,
-    base_asset_id: AssetId,
-    quote_asset_id: AssetId,
-    spend_base: u64,    // 消费的 BTC
-    gain_quote: u64,    // 获得的 USDT
-    refund_base: u64,   // 退款的 BTC
-) -> Result<(), &'static str> {
-    // 1. 消费 Base (Frozen)
-    self.get_balance_mut(base_asset_id).spend_frozen(spend_base)?;
-    
-    // 2. 获得 Quote (Available)
-    self.get_balance_mut(quote_asset_id).deposit(gain_quote)?;
-    
-    // 3. 退款 (Frozen → Available)
-    if refund_base > 0 {
-        self.get_balance_mut(base_asset_id).unlock(refund_base)?;
-    }
-    Ok(())
-}
 ```
 
----
-
-## 5. 运行结果
+### 5. 运行结果
 
 ```text
 === 0xInfinity: Stage 6 (Enforced Balance) ===
@@ -325,39 +580,17 @@ Cost formula: price * qty / 100000000
 
 结果与前一章一致，但现在所有余额操作都通过类型系统保护！
 
----
-
-## 6. 单元测试
+### 6. 单元测试
 
 新增 8 个 `enforced_balance` 测试：
 
 ```bash
 $ cargo test
 
-running 16 tests
-test enforced_balance::tests::test_deposit ... ok
-test enforced_balance::tests::test_deposit_overflow ... ok
-test enforced_balance::tests::test_lock_unlock ... ok
-test enforced_balance::tests::test_spend_frozen ... ok
-test enforced_balance::tests::test_total ... ok
-test enforced_balance::tests::test_version_increments ... ok
-test enforced_balance::tests::test_withdraw ... ok
-test enforced_balance::tests::test_withdraw_insufficient ... ok
-test engine::tests::test_add_resting_order ... ok
-test engine::tests::test_cancel_order ... ok
-test engine::tests::test_fifo_at_same_price ... ok
-test engine::tests::test_full_match ... ok
-test engine::tests::test_multiple_trades_single_order ... ok
-test engine::tests::test_partial_match ... ok
-test engine::tests::test_price_priority ... ok
-test engine::tests::test_spread ... ok
-
 test result: ok. 16 passed; 0 failed
 ```
 
----
-
-## 7. 错误处理示例
+### 7. 错误处理示例
 
 使用新 API 时，必须处理 `Result`：
 
@@ -371,9 +604,6 @@ balance.deposit(100)?;  // 使用 ? 传播错误
 // ✅ 正确：使用 unwrap（仅在确定不会失败时）
 balance.deposit(100).unwrap();
 
-// ✅ 正确：使用 expect 添加上下文
-balance.deposit(100).expect("Initial deposit should not overflow");
-
 // ✅ 正确：匹配处理
 match balance.lock(1000) {
     Ok(()) => println!("Locked successfully"),
@@ -381,9 +611,7 @@ match balance.lock(1000) {
 }
 ```
 
----
-
-## Summary
+### Summary
 
 本章完成了以下工作：
 
@@ -397,4 +625,3 @@ match balance.lock(1000) {
 8. ✅ **16 个测试通过**：包括 8 个新的 enforced_balance 测试
 
 现在我们的余额管理是**类型安全**的——编译器本身就能防止大部分余额操作错误！
-
