@@ -131,18 +131,27 @@ fi
 # Build and Start Gateway
 # ============================================================================
 
-test_start "Prepare Gateway binary"
-if [ -f "./target/release/zero_x_infinity" ]; then
-    log_success "Using pre-built binary"
-else
-    log_info "No pre-built binary found, building from source..."
-    if cargo build --release 2>&1 | tail -5; then
-        log_success "Gateway built successfully"
-    else
-        log_error "Gateway build failed"
-        exit 1
-    fi
-fi
+# ============================================================================
+# Prepare Test Data
+# ============================================================================
+
+test_start "Prepare test data"
+TEST_DIR="test_account"
+mkdir -p "$TEST_DIR"
+
+# Copy essential config files
+cp fixtures/assets_config.csv "$TEST_DIR/"
+cp fixtures/symbols_config.csv "$TEST_DIR/"
+
+# Create minimal balances_init.csv (only 1 user) to avoid slow TDengine table creation
+# The default fixtures/balances_init.csv has 2000 users, which is too slow for CI
+cat > "$TEST_DIR/balances_init.csv" << EOF
+user_id,asset_id,avail,frozen,version
+1001,1,1000000000,0,0
+1001,2,1000000000000,0,0
+EOF
+
+log_success "Test data prepared in $TEST_DIR/"
 
 test_start "Start Gateway in background"
 log_info "Starting Gateway on port 8080..."
@@ -154,7 +163,7 @@ else
     ENV_FLAG=""
 fi
 
-./target/release/zero_x_infinity --gateway $ENV_FLAG --port 8080 > /tmp/gateway.log 2>&1 &
+./target/release/zero_x_infinity --gateway $ENV_FLAG --port 8080 --input "$TEST_DIR" > /tmp/gateway.log 2>&1 &
 GATEWAY_PID=$!
 
 # Wait for Gateway to start - increased for CI stability
