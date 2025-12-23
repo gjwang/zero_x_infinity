@@ -346,15 +346,11 @@ pub async fn create_transfer_fsm(
         (status, ApiResponse::error(code, msg))
     })?;
 
-    // 8. Get initial state
-    let state = coordinator
-        .get_state(req_id)
-        .await
-        .map_err(|e| {
-            let (status, code, msg) = map_error(&e);
-            (status, ApiResponse::error(code, msg))
-        })?
-        .unwrap_or(TransferState::Init);
+    // 8. Execute transfer (run FSM to completion)
+    let state = coordinator.execute(req_id).await.map_err(|e| {
+        let (status, code, msg) = map_error(&e);
+        (status, ApiResponse::error(code, msg))
+    })?;
 
     // 9. Build response
     let now = std::time::SystemTime::now()
