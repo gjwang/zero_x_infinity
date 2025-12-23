@@ -1,4 +1,407 @@
-# 0x07-a 测试框架 - 正确性验证 (Testing Framework - Correctness)
+# 0x07-a Testing Framework - Correctness
+
+<h3>
+  <a href="#-english">🇺🇸 English</a>
+  &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
+  <a href="#-chinese">🇨🇳 中文</a>
+</h3>
+
+<div id="-english"></div>
+
+## 🇺🇸 English
+
+> **📦 Code Changes**: [View Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.6-enforced-balance...v0.7-a-testing-framework)
+
+> **Core Objective**: To establish a verifiable, repeatable, and traceable testing infrastructure for the matching engine.
+
+This chapter is not just about "how to test", but importantly about understanding "why designed this way"—these design decisions stem directly from real-world exchange requirements.
+
+### 1. Why a Testing Framework?
+
+#### 1.1 The Uniqueness of Matching Engines
+
+A matching engine is not a generic CRUD app. A single bug can lead to:
+
+*   **Fund Errors**: Users' funds disappearing or inflating.
+*   **Order Loss**: Orders executed but not recorded.
+*   **Inconsistent States**: Contradictions between balances, orders, and ledgers.
+
+Therefore, we need:
+
+1.  **Deterministic Testing**: Same input must yield same output.
+2.  **Complete Audit**: Every penny movement must be traceable.
+3.  **Fast Verification**: Quickly confirm correctness after every code change.
+
+#### 1.2 Golden File Testing Pattern
+
+We adopt the **Golden File Pattern**:
+
+```
+fixtures/         # Input (Fixed)
+    ├── orders.csv
+    └── balances_init.csv
+
+baseline/         # Golden Baseline (Result of first correct run, committed to git)
+    ├── t1_balances_deposited.csv
+    ├── t2_balances_final.csv
+    ├── t2_ledger.csv
+    └── t2_orderbook.csv
+
+output/           # Current Run Result (gitignored)
+    └── ...
+```
+
+**Why this pattern?**
+
+1.  **Determinism**: Fixed seeds ensure identical random sequences.
+2.  **Version Control**: Baselines are committed; any change triggers a git diff.
+3.  **Fast Feedback**: Just `diff baseline/ output/`.
+4.  **Auditable**: Baseline is the "contract"; deviations require explanation.
+
+### 2. Precision Design: decimals vs display_decimals
+
+#### 2.1 Why Two Precisions?
+
+This is the most error-prone area in exchanges. Consider this real case:
+
+```
+User sees:      Buy 0.01 BTC @ $85,000.00
+Internal store: qty=1000000 (satoshi), price=85000000000 (micro-cents)
+```
+
+If we confuse these layers:
+*   User enters `0.01`, system treats as `0.01 satoshi` (= 0.00000001 BTC).
+*   Or user account shows 100 BTC, but actually has 0.000001 BTC.
+
+**Solution: Clearly distinguish two layers.**
+
+#### 2.2 Precision Layers
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Layer 1: Client (display_decimals)                          │
+│   - Numbers seen by users                                   │
+│   - Can be adjusted based on business needs                 │
+│   - E.g.: BTC displays 6 decimals (0.000001 BTC)            │
+└─────────────────────────────────────────────────────────────┘
+                              ↓
+                    Auto Convert (× 10^decimals)
+                              ↓
+┌─────────────────────────────────────────────────────────────┐
+│ Layer 2: Internal (decimals)                                │
+│   - Precision for internal storage and calculation          │
+│   - NEVER change once set                                   │
+│   - E.g.: BTC stored with 8 decimals (satoshi)              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### 2.3 Configuration Design
+
+**assets_config.csv** (Asset Precision Config):
+```csv
+asset_id,asset,decimals,display_decimals
+1,BTC,8,6     # Min unit 0.000001 BTC ≈ $0.085
+2,USDT,6,4    # Min unit 0.0001 USDT
+3,ETH,8,4     # Min unit 0.0001 ETH ≈ $0.40
+```
+
+| Field | Mutability | Explanation |
+|-------|------------|-------------|
+| `decimals` | ⚠️ **Never Change** | Defines min unit; changing breaks all existing data. |
+| `display_decimals` | ✅ Dynamic | Client-side precision for **Quantity (qty)**. |
+
+**symbols_config.csv** (Trading Pair Config):
+```csv
+symbol_id,symbol,base_asset_id,quote_asset_id,price_decimal,price_display_decimal
+0,BTC_USDT,1,2,6,2    # Price min unit $0.01
+1,ETH_USDT,3,2,6,2
+```
+
+**Key Design: Precision Source**
+
+| Order Field | Precision Source | Config File |
+|-------------|------------------|-------------|
+| `qty` | `base_asset.display_decimals` | assets_config.csv |
+| `price` | `symbol.price_display_decimal` | symbols_config.csv |
+
+> ⚠️ Note: **Price precision comes from Symbol config, NOT Quote Asset!**
+> This is because the same quote asset (e.g., USDT) may have different price precisions in different pairs.
+
+**Why `decimals` cannot change?**
+
+Suppose BTC decimals change from 8 to 6:
+*   Original balance 100,000,000 (= 1 BTC with 8 decimals).
+*   New interpretation 100,000,000 / 10^6 = 100 BTC.
+*   User gains 99 BTC out of thin air!
+
+**Why `display_decimals` can change?**
+
+This is just the display layer:
+*   Original display: 0.12345678 BTC.
+*   New display (6 decimals): 0.123456 BTC.
+*   Internal storage remains 12,345,678 satoshis.
+
+### 3. Balance Format: Row vs Column
+
+#### 3.1 Problem: Storing Multi-Asset Balances
+
+**Option A: Columnar (One column per asset)**
+```csv
+user_id,btc_avail,btc_frozen,usdt_avail,usdt_frozen
+1,10000000000,0,10000000000000,0
+```
+
+**Option B: Row-based (One row per asset)**
+```csv
+user_id,asset_id,avail,frozen,version
+1,1,10000000000,0,0
+1,2,10000000000000,0,0
+```
+
+#### 3.2 Why Row-based?
+
+| Dimension | Columnar | Row-based |
+|-----------|----------|-----------|
+| Extensibility | ❌ Alter table to add asset | ✅ Just add a row |
+| Sparse Data | ❌ Many nulls/zeros | ✅ Store only non-zero assets |
+| DB Compat | ❌ Non-standard | ✅ Standard normalization |
+| Genericity | ❌ Asset names hardcoded | ✅ `asset_id` is generic |
+
+**Real Scenario**: An exchange supports 500+ assets, but users avg 3-5 holdings. Row-based design saves 99% storage space.
+
+### 4. Timeline Snapshot Design
+
+#### 4.1 Why Multiple Snapshots?
+
+Matching is a multi-stage process:
+
+```
+T0: Initial State (fixtures/balances_init.csv)
+    ↓ deposit()
+T1: Deposit Done (baseline/t1_balances_deposited.csv)
+    ↓ execute orders
+T2: Trading Done (baseline/t2_balances_final.csv)
+```
+
+**Errors can occur at any stage**:
+*   T0→T1: Is deposit logic correct?
+*   T1→T2: Is trade settlement correct?
+
+Snapshots pinpoint issues:
+```bash
+# Verify Deposit
+diff balances_init.csv t1_balances_deposited.csv
+
+# Verify Settlement
+diff t1_balances_deposited.csv t2_balances_final.csv
+```
+
+#### 4.2 Naming Convention
+
+```
+t1_balances_deposited.csv   # t1 stage, balances type, deposited state
+t2_balances_final.csv       # t2 stage, balances type, final state
+t2_ledger.csv               # t2 stage, ledger type
+t2_orderbook.csv            # t2 stage, orderbook type
+```
+
+**Principle**: `{Time}_{Type}_{State}.csv`
+
+Benefits:
+1.  Natural sort order by time.
+2.  Clear content identification.
+3.  Avoids ambiguity.
+
+### 5. Settlement Ledger Design
+
+#### 5.1 Why Ledger?
+
+`t2_ledger.csv` is the system's **Audit Log**. Every penny movement is recorded here.
+
+**Without Ledger**:
+*   User complaint: "Where did my money go?"
+*   Support: "Your balance is X."
+*   Unanswerable: "When did it change? Why?"
+
+**With Ledger**:
+```csv
+trade_id,user_id,asset_id,op,delta,balance_after
+1,96,2,debit,849700700,9999150299300
+1,96,1,credit,1000000,10001000000
+```
+
+Traceability:
+*   Trade #1 caused User #96's USDT to decrease by 849,700,700.
+*   Simultaneously BTC increased by 1,000,000.
+*   What is the balance after change.
+
+#### 5.2 Why `delta + after` instead of `before + after`?
+
+**Option A: before + after**
+```csv
+delta,balance_before,balance_after
+849700700,10000000000,9999150299300
+```
+
+**Option B: delta + after**
+```csv
+delta,balance_after
+849700700,9999150299300
+```
+
+**Why B?**
+1.  **Less Redundancy**: `before = after - delta`.
+2.  **Usefulness**: We mostly verify "Is the final state correct?".
+3.  **Clarity**: Delta directly explains the change.
+
+### 6. ME Orderbook Snapshot
+
+#### 6.1 Why Orderbook Snapshot?
+
+After trading, the Orderbook still holds **unfilled orders**. These orders:
+*   Reside in RAM.
+*   Are lost if system restarts.
+
+`t2_orderbook.csv` is a **Full Snapshot of ME State**:
+
+```csv
+order_id,user_id,side,order_type,price,qty,filled_qty,status
+6,907,sell,limit,85330350000,2000000,0,New
+```
+
+**Uses**:
+1.  **Recovery**: Revert Orderbook state after restart.
+2.  **Verification**: Compare against theoretical expectations.
+3.  **Debugging**: Check stuck orders.
+
+#### 6.2 Why Record All Fields?
+
+The goal is **Full Recovery**. Rebuilding `Order` struct requires:
+
+```rust
+struct Order {
+    id, user_id, price, qty, filled_qty, side, order_type, status
+}
+```
+
+Missing any field prevents recovery.
+
+### 7. Test Script Design
+
+#### 7.1 Modular Scripts
+
+```
+scripts/
+├── test_01_generate.sh     # Step 1: Generate Data
+├── test_02_baseline.sh     # Step 2: Generate Baseline
+├── test_03_verify.sh       # Step 3: Run & Verify
+└── test_e2e.sh             # Combo: Full E2E Flow
+```
+
+**Why Modular?**
+1.  **Isolated Debugging**: Run only relevant steps.
+2.  **Flexible Composition**: CI can verify without regenerating.
+3.  **Readability**: One script, one job.
+
+#### 7.2 Usage
+
+```bash
+# Daily Test (Use existing baseline)
+./scripts/test_e2e.sh
+
+# Regenerate Baseline & Test
+./scripts/test_e2e.sh --regenerate
+```
+
+### 8. CLI Design: `--baseline` Switch
+
+#### 8.1 Why Switch?
+
+Default behavior:
+*   Output to `output/`
+*   Never overwrite baseline
+
+Update baseline:
+*   Add `--baseline` arg
+*   Output to `baseline/`
+
+**Why not auto-overwrite?**
+1.  **Safety**: Prevent accidental baseline corruption.
+2.  **Intent**: Updating baseline is a conscious decision.
+3.  **Git Friendly**: Changes trigger diff.
+
+#### 8.2 Implementation
+
+```rust
+fn get_output_dir() -> &'static str {
+    let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--baseline") {
+        "baseline"
+    } else {
+        "output"
+    }
+}
+```
+
+### 9. Execution Example
+
+#### 9.1 Full Flow
+
+```bash
+# 1. Generate Data
+python3 scripts/generate_orders.py --orders 100000 --seed 42
+
+# 2. Generate Baseline (First run or update)
+cargo run --release -- --baseline
+
+# 3. Daily Test
+./scripts/test_e2e.sh
+```
+
+#### 9.2 Verification Output
+
+```
+╔════════════════════════════════════════════════════════════╗
+║     0xInfinity Testing Framework - E2E Test                ║
+╚════════════════════════════════════════════════════════════╝
+
+  t1_balances_deposited.csv: ✅ MATCH
+  t2_balances_final.csv: ✅ MATCH
+  t2_ledger.csv: ✅ MATCH
+  t2_orderbook.csv: ✅ MATCH
+
+✅ All tests passed!
+```
+
+### 10. Summary
+
+This chapter established a complete testing infrastructure:
+
+| Design Point | Problem Solved | Solution |
+|--------------|----------------|----------|
+| Precision Confusion | User vs Internal precision | decimals + display_decimals |
+| Asset Extension | Support N assets | Row-based balance format |
+| Traceability | Where failed? | Timeline Snapshots (T0→T1→T2) |
+| Fund Audit | Where funds go? | Settlement Ledger |
+| State Recovery | Restart recovery | Orderbook Snapshot |
+| Regression | Breaking changes? | Golden File Pattern |
+| Efficiency | Fast feedback | Modular scripts |
+
+**Core Philosophy**:
+
+> Testing is not an afterthought, but part of the design. A good testing framework gives you confidence when changing code.
+
+Next section (0x07-b) will add performance benchmarks on top of this.
+
+<br>
+<div align="right"><a href="#-english">↑ Back to Top</a></div>
+<br>
+
+---
+
+<div id="-chinese"></div>
+
+## 🇨🇳 中文
 
 > **📦 代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.6-enforced-balance...v0.7-a-testing-framework)
 
@@ -6,11 +409,9 @@
 
 本章不仅是"如何测试"，更重要的是理解"为什么这样设计"——这些设计决策直接源于真实交易所的需求。
 
----
+### 1. 为什么需要测试框架？
 
-## 1. 为什么需要测试框架？
-
-### 1.1 撮合引擎的特殊性
+#### 1.1 撮合引擎的特殊性
 
 撮合引擎不是普通的 CRUD 应用。一个 bug：
 
@@ -24,7 +425,7 @@
 2. **完整审计**：每一分钱的变动都可追溯
 3. **快速验证**：每次修改代码后能快速确认没有破坏正确性
 
-### 1.2 Golden File 测试模式
+#### 1.2 Golden File 测试模式
 
 我们采用 **Golden File 模式**：
 
@@ -50,11 +451,9 @@ output/           # 当前运行结果（gitignored）
 3. **快速反馈**：只需 `diff baseline/ output/`
 4. **可审计**：baseline 是"合约"，任何偏离都需要解释
 
----
+### 2. 精度设计：decimals vs display_decimals
 
-## 2. 精度设计：decimals vs display_decimals
-
-### 2.1 为什么需要两种精度？
+#### 2.1 为什么需要两种精度？
 
 这是交易所最容易出错的地方。看这个真实案例：
 
@@ -70,7 +469,7 @@ output/           # 当前运行结果（gitignored）
 
 **解决方案：明确区分两层精度**
 
-### 2.2 精度层次
+#### 2.2 精度层次
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -90,7 +489,7 @@ output/           # 当前运行结果（gitignored）
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 2.3 配置文件设计
+#### 2.3 配置文件设计
 
 **assets_config.csv**（资产精度配置）：
 ```csv
@@ -136,11 +535,9 @@ symbol_id,symbol,base_asset_id,quote_asset_id,price_decimal,price_display_decima
 - 调整后显示 0.123456 BTC（6位）
 - 内部存储仍然是 12345678 satoshi
 
----
+### 3. 余额格式设计：行式 vs 列式
 
-## 3. 余额格式设计：行式 vs 列式
-
-### 3.1 问题：如何存储多资产余额？
+#### 3.1 问题：如何存储多资产余额？
 
 **Option A：列式（每个资产一列）**
 ```csv
@@ -155,7 +552,7 @@ user_id,asset_id,avail,frozen,version
 1,2,10000000000000,0,0
 ```
 
-### 3.2 为什么选择行式？
+#### 3.2 为什么选择行式？
 
 | 对比维度 | 列式 | 行式 |
 |----------|------|------|
@@ -166,11 +563,9 @@ user_id,asset_id,avail,frozen,version
 
 **真实场景**：交易所支持 500+ 种资产，但用户平均只持有 3-5 种。行式设计节省 99% 的存储空间。
 
----
+### 4. 时间线快照设计
 
-## 4. 时间线快照设计
-
-### 4.1 为什么需要多个快照？
+#### 4.1 为什么需要多个快照？
 
 撮合过程不是单一操作，而是多阶段流程：
 
@@ -197,7 +592,7 @@ diff balances_init.csv t1_balances_deposited.csv
 diff t1_balances_deposited.csv t2_balances_final.csv
 ```
 
-### 4.2 文件命名设计
+#### 4.2 文件命名设计
 
 ```
 t1_balances_deposited.csv   # t1 阶段，balances 类型，deposited 状态
@@ -213,11 +608,9 @@ t2_orderbook.csv            # t2 阶段，orderbook 类型
 2. 一眼看出数据是什么
 3. 避免文件名歧义
 
----
+### 5. Settlement Ledger 设计
 
-## 5. Settlement Ledger 设计
-
-### 5.1 为什么需要 Ledger？
+#### 5.1 为什么需要 Ledger？
 
 `t2_ledger.csv` 是整个系统的**审计日志**。每一分钱的变动都记录在这里。
 
@@ -240,7 +633,7 @@ trade_id,user_id,asset_id,op,delta,balance_after
 - 同时 BTC 增加 1000000
 - 变化后余额是多少
 
-### 5.2 为什么用 delta + after，而不是 before + after？
+#### 5.2 为什么用 delta + after，而不是 before + after？
 
 **Option A：before + after**
 ```csv
@@ -260,11 +653,9 @@ delta,balance_after
 2. **after 更有用**：通常我们想验证的是"最终状态对不对"
 3. **delta 直接说明变化**：不需要心算 before - after
 
----
+### 6. ME Orderbook 快照
 
-## 6. ME Orderbook 快照
-
-### 6.1 为什么需要 Orderbook 快照？
+#### 6.1 为什么需要 Orderbook 快照？
 
 交易完成后，Orderbook 里仍然有**未成交的挂单**。这些订单：
 
@@ -284,7 +675,7 @@ order_id,user_id,side,order_type,price,qty,filled_qty,status
 2. **正确性验证**：与理论预期对比
 3. **调试**：哪些订单还在挂着？
 
-### 6.2 为什么记录所有字段？
+#### 6.2 为什么记录所有字段？
 
 快照目的是**完整恢复**。恢复时需要重建 `Order` 结构体：
 
@@ -303,11 +694,9 @@ struct Order {
 
 缺少任何字段都无法恢复。
 
----
+### 7. 测试脚本设计
 
-## 7. 测试脚本设计
-
-### 7.1 模块化脚本
+#### 7.1 模块化脚本
 
 ```
 scripts/
@@ -323,7 +712,7 @@ scripts/
 2. **灵活组合**：CI 可以只运行 verify，不重新生成数据
 3. **可读性**：每个脚本做一件事
 
-### 7.2 使用方式
+#### 7.2 使用方式
 
 ```bash
 # 日常测试（使用现有 baseline）
@@ -331,16 +720,11 @@ scripts/
 
 # 重新生成基准并测试
 ./scripts/test_e2e.sh --regenerate
-
-# 单独运行
-./scripts/test_01_generate.sh 1000000 42  # 自定义参数
 ```
 
----
+### 8. 命令行设计：--baseline 开关
 
-## 8. 命令行设计：--baseline 开关
-
-### 8.1 为什么需要开关？
+#### 8.1 为什么需要开关？
 
 默认行为：
 - 输出到 `output/`
@@ -355,8 +739,7 @@ scripts/
 1. **安全**：防止意外覆盖基准
 2. **意图明确**：更新基准是有意识的决定
 3. **Git 友好**：baseline 变化会触发 git diff
-
-### 8.2 代码实现
+4. **代码实现**：
 
 ```rust
 fn get_output_dir() -> &'static str {
@@ -369,11 +752,9 @@ fn get_output_dir() -> &'static str {
 }
 ```
 
----
+### 9. 运行示例
 
-## 9. 运行示例
-
-### 9.1 完整流程
+#### 9.1 完整流程
 
 ```bash
 # 1. 生成测试数据
@@ -386,7 +767,7 @@ cargo run --release -- --baseline
 ./scripts/test_e2e.sh
 ```
 
-### 9.2 验证输出
+#### 9.2 验证输出
 
 ```
 ╔════════════════════════════════════════════════════════════╗
@@ -401,9 +782,7 @@ cargo run --release -- --baseline
 ✅ All tests passed!
 ```
 
----
-
-## 10. Summary
+### 10. Summary
 
 本章建立了完整的测试基础设施：
 
