@@ -30,7 +30,7 @@
 ## 🚀 第二阶段：产品化与业务闭环 (Productization)
 
 - [Part II: Productization | 第二部分：产品化](./0x0A-part-ii-introduction.md)
-    - [0x0A-a 账户体系 (Account System)](./0x0A-a-account-system.md)
+    - [0x0A-a Account System | 账户体系](./0x0A-a-account-system.md)
     - [0x0A-b 安全鉴权 (Auth)](./0x0A-b-api-auth.md)
 - [0x0B 资金体系: 充提与划转 (Funding & Transfer)](./0x0B-funding.md)
 - [0x0C 经济模型: 手续费 (Fee System)](./0x0C-fee-system.md)
