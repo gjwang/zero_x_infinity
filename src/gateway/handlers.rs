@@ -702,6 +702,49 @@ pub async fn get_balances(
     }
 }
 
+/// Get all user balances (all account types: Spot, Funding)
+///
+/// GET /api/v1/private/balances/all
+/// Returns balances from PostgreSQL (real source of truth)
+pub async fn get_all_balances(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<
+    (
+        StatusCode,
+        Json<ApiResponse<Vec<crate::funding::service::BalanceInfo>>>,
+    ),
+    (StatusCode, Json<ApiResponse<()>>),
+> {
+    // Extract user_id from headers
+    let user_id = extract_user_id(&headers)?;
+
+    // Check if PostgreSQL is available
+    let pg_db = state.pg_db.as_ref().ok_or_else(|| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ApiResponse::<()>::error(
+                error_codes::SERVICE_UNAVAILABLE,
+                "Account database not available",
+            )),
+        )
+    })?;
+
+    // Query all balances
+    match crate::funding::service::TransferService::get_all_balances(pg_db.pool(), user_id as i64)
+        .await
+    {
+        Ok(balances) => Ok((StatusCode::OK, Json(ApiResponse::success(balances)))),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error(
+                error_codes::SERVICE_UNAVAILABLE,
+                format!("Query failed: {}", e),
+            )),
+        )),
+    }
+}
+
 /// Get K-Line data
 ///
 /// GET /api/v1/klines?interval=1m&limit=100

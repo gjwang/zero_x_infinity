@@ -238,6 +238,7 @@ pub async fn run_server(
         .route("/order/{order_id}", get(handlers::get_order))
         .route("/trades", get(handlers::get_trades))
         .route("/balances", get(handlers::get_balances))
+        .route("/balances/all", get(handlers::get_all_balances))
         // Trading operations
         .route("/order", post(handlers::create_order))
         .route("/cancel", post(handlers::cancel_order))
