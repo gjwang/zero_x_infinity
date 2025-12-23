@@ -127,4 +127,32 @@ services:
 
 ---
 
+## 环境一致性 (Environment Parity)
+
+### 1. 二进制新鲜度陷阱 (Stale Binary Trap)
+
+#### 问题描述
+本地开发时，代码修改通常在 `src/` 中。但集成测试（如 `test_account_integration.sh`）通常为了运行效率使用 `release` 版本的二进制文件（`./target/release/zero_x_infinity`）。
+如果本地只进行了常规开发（`cargo build` 或 IDE 自动保存），而没有执行 `cargo build --release`，测试脚本会启动**旧版本**的二进制文件。
+
+**后果**：
+- 测试在本地“莫名其妙”通过，但在 CI 中（因为是 fresh build）却失败了。
+- 本以为修复了路径问题，但本地测试其实一直在跑根本没改过路径的老代码。
+
+#### 解决方案
+- **自动化校验**：测试脚本已增加时间戳检查逻辑。如果 `src/` 源码比 `release` 二进制更新，脚本会发出**橙色警告**。
+- **强制重构后构建**：凡是涉及 API 路由、配置文件结构、数据库 Schema 的修改，**必须**执行 `cargo build --release` 后再运行本地集成测试。
+
+### 2. 数据库“污染”与状态不一致
+
+#### 问题描述
+- **本地环境**：数据库通常是持久化的（Docker Volume），可能积累了上次测试的脏数据或手动修改的记录。
+- **CI 环境**：每次都是全新的 `init.sh` 状态。
+
+#### 解决方案
+- 本地跑测试前，始终观察脚本输出的 `Initialize database (reset + seed)` 步骤是否成功。
+- 在怀疑数据问题时，使用 `docker exec -it postgres psql -U trading -d exchange_info_db` 手动核查，或强制执行 `python3 scripts/db/manage_db.py init`。
+
+---
+
 *最后更新：2025-12-23*
