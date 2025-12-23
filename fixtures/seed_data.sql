@@ -83,14 +83,15 @@ VALUES (
 -- Balances for Testing
 -- ============================================================================
 -- User 1001: Buyer (Needs USDT)
-INSERT INTO balances_tb (user_id, asset_id, available, frozen, version)
-VALUES (1001, 2, 1000000.00000000, 0.00000000, 1)
-ON CONFLICT (user_id, asset_id) DO NOTHING;
+-- User 1001: Buyer (Needs USDT)
+INSERT INTO balances_tb (user_id, asset_id, available, frozen, version, account_type)
+VALUES (1001, 2, 1000000.00000000, 0.00000000, 1, 1) -- Spot
+ON CONFLICT (user_id, asset_id, account_type) DO NOTHING;
 
 -- User 1002: Seller (Needs BTC)
-INSERT INTO balances_tb (user_id, asset_id, available, frozen, version)
-VALUES (1002, 1, 100.00000000, 0.00000000, 1)
-ON CONFLICT (user_id, asset_id) DO NOTHING;
+INSERT INTO balances_tb (user_id, asset_id, available, frozen, version, account_type)
+VALUES (1002, 1, 100.00000000, 0.00000000, 1, 1) -- Spot
+ON CONFLICT (user_id, asset_id, account_type) DO NOTHING;
 
 -- ============================================================================
 -- Verification Query (optional for debugging)
