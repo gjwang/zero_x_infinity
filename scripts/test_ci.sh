@@ -228,6 +228,16 @@ check_dependencies() {
     else
         echo -e "${YELLOW}NOT RUNNING${NC} (TDengine tests will be skipped)"
     fi
+
+    # CI Debug: Check binary dependencies
+    if [ "$CI" = "true" ] && [ -f "$PROJECT_DIR/target/release/zero_x_infinity" ]; then
+        echo "    [DEBUG] Checking binary dynamic links..."
+        if command -v ldd &>/dev/null; then
+            ldd "$PROJECT_DIR/target/release/zero_x_infinity" | awk '{print "    " $0}'
+        else
+            echo "    [DEBUG] ldd not found"
+        fi
+    fi
     
     # TDengine container
     echo -n "[DEP] TDengine... "
