@@ -32,6 +32,13 @@ use crate::api_auth::{
     parse_authorization, validate_ts_nonce, verify_signature,
 };
 
+// Phase 0x0B-a: Internal Transfer FSM
+use crate::transfer::{
+    adapters::{FundingAdapter, TradingAdapter},
+    coordinator::TransferCoordinator,
+    db::TransferDb,
+};
+
 /// Axum middleware for API authentication in Gateway.
 async fn gateway_auth_middleware(
     State(state): State<Arc<AppState>>,
@@ -155,8 +162,33 @@ pub async fn run_server(
         time_window_ms: 30_000, // 30 seconds
     });
 
+    // ==========================================================================
+    // Phase 0x0B-a: Initialize Internal Transfer FSM
+    // ==========================================================================
+    let transfer_coordinator = if let Some(ref db) = pg_db {
+        // Create TransferDb using same connection pool as account DB
+        let transfer_db = Arc::new(TransferDb::new(db.pool().clone()));
+
+        // Create adapters - both use placeholder mode for now
+        // TODO: Connect TradingAdapter to real UBSCore via TransferChannel
+        let funding_adapter = Arc::new(FundingAdapter::new(db.pool().clone()));
+        let trading_adapter = Arc::new(TradingAdapter::new());
+
+        // Create coordinator
+        let coordinator = Arc::new(TransferCoordinator::new(
+            transfer_db,
+            funding_adapter,
+            trading_adapter,
+        ));
+        println!("🔄 Transfer FSM coordinator initialized");
+        Some(coordinator)
+    } else {
+        println!("⚠️  Transfer FSM disabled (no PostgreSQL connection)");
+        None
+    };
+
     // Create shared state
-    let state = Arc::new(AppState::new(
+    let mut state = AppState::new(
         order_queue,
         symbol_mgr,
         active_symbol_id,
@@ -167,7 +199,14 @@ pub async fn run_server(
         pg_assets,
         pg_symbols,
         auth_state,
-    ));
+    );
+
+    // Wire TransferCoordinator to state
+    if let Some(coordinator) = transfer_coordinator {
+        state = state.with_transfer_coordinator(coordinator);
+    }
+
+    let state = Arc::new(state);
 
     // ==========================================================================
     // Public Routes (no auth required)

@@ -6,6 +6,10 @@
 pub mod funding;
 pub mod trading;
 
+// Re-export adapters for convenient access
+pub use funding::FundingAdapter;
+pub use trading::TradingAdapter;
+
 use async_trait::async_trait;
 
 use super::types::{OpResult, RequestId};
