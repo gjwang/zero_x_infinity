@@ -251,6 +251,8 @@ pub async fn cancel_order(
 /// Create internal transfer endpoint
 ///
 /// POST /api/v1/private/transfer
+///
+/// Uses FSM-based transfer when coordinator is available, otherwise falls back to legacy.
 pub async fn create_transfer(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -266,7 +268,13 @@ pub async fn create_transfer(
     let user_id = extract_user_id(&headers)?;
     tracing::info!("[TRACE] Transfer Request: From User {}", user_id);
 
-    // 2. Check DB availability
+    // 2. Check if FSM coordinator is available
+    if let Some(ref coordinator) = state.transfer_coordinator {
+        // Use new FSM-based transfer
+        return create_transfer_fsm_handler(state.clone(), coordinator, user_id, req).await;
+    }
+
+    // 3. Fallback to legacy transfer service
     let db = state.pg_db.as_ref().ok_or_else(|| {
         (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -277,19 +285,132 @@ pub async fn create_transfer(
         )
     })?;
 
-    // 3. Execute Transfer
     match crate::funding::service::TransferService::execute(db, user_id as i64, req).await {
         Ok(resp) => Ok((StatusCode::OK, Json(ApiResponse::success(resp)))),
         Err(e) => {
             tracing::error!("Transfer failed: {:?}", e);
             Err((
-                StatusCode::BAD_REQUEST, // Or map specific errors
+                StatusCode::BAD_REQUEST,
                 Json(ApiResponse::<()>::error(
-                    error_codes::INVALID_PARAMETER, // Generic for now
+                    error_codes::INVALID_PARAMETER,
                     e.to_string(),
                 )),
             ))
         }
+    }
+}
+
+/// FSM-based transfer handler (internal)
+async fn create_transfer_fsm_handler(
+    state: Arc<AppState>,
+    coordinator: &std::sync::Arc<crate::transfer::TransferCoordinator>,
+    user_id: u64,
+    req: crate::funding::transfer::TransferRequest,
+) -> Result<
+    (
+        StatusCode,
+        Json<ApiResponse<crate::funding::transfer::TransferResponse>>,
+    ),
+    (StatusCode, Json<ApiResponse<()>>),
+> {
+    // Convert legacy request to FSM request
+    let fsm_req = crate::transfer::TransferApiRequest {
+        from: req.from.clone(),
+        to: req.to.clone(),
+        asset: req.asset.clone(),
+        amount: req.amount.clone(),
+        cid: None, // Legacy API doesn't have cid
+    };
+
+    // Lookup asset to get decimals
+    let asset = state
+        .pg_assets
+        .iter()
+        .find(|a| a.asset.to_lowercase() == req.asset.to_lowercase())
+        .ok_or_else(|| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<()>::error(
+                    error_codes::INVALID_PARAMETER,
+                    format!("Asset not found: {}", req.asset),
+                )),
+            )
+        })?;
+
+    // Call FSM transfer
+    match crate::transfer::create_transfer_fsm(
+        coordinator,
+        user_id,
+        fsm_req,
+        asset.asset_id as u32,
+        asset.decimals as u32,
+    )
+    .await
+    {
+        Ok(fsm_resp) => {
+            // Convert FSM response to legacy response
+            let legacy_resp = crate::funding::transfer::TransferResponse {
+                transfer_id: fsm_resp.req_id,
+                status: fsm_resp.status,
+                from: fsm_resp.from,
+                to: fsm_resp.to,
+                asset: fsm_resp.asset,
+                amount: fsm_resp.amount,
+                timestamp: fsm_resp.timestamp,
+            };
+            Ok((StatusCode::OK, Json(ApiResponse::success(legacy_resp))))
+        }
+        Err((status, err_resp)) => Err((
+            status,
+            Json(ApiResponse::<()>::error(
+                err_resp.code,
+                err_resp.msg.unwrap_or_default(),
+            )),
+        )),
+    }
+}
+
+/// Get transfer status endpoint
+///
+/// GET /api/v1/private/transfer/:req_id
+pub async fn get_transfer(
+    State(state): State<Arc<AppState>>,
+    Path(req_id): Path<u64>,
+) -> Result<
+    (
+        StatusCode,
+        Json<ApiResponse<crate::transfer::TransferApiResponse>>,
+    ),
+    (StatusCode, Json<ApiResponse<()>>),
+> {
+    // Check if FSM coordinator is available
+    let coordinator = state.transfer_coordinator.as_ref().ok_or_else(|| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ApiResponse::<()>::error(
+                error_codes::SERVICE_UNAVAILABLE,
+                "Transfer service not available (FSM not enabled)",
+            )),
+        )
+    })?;
+
+    // Get decimals from first asset (default 8) - in production, would lookup from transfer record
+    let decimals = state
+        .pg_assets
+        .first()
+        .map(|a| a.decimals as u32)
+        .unwrap_or(8);
+
+    // Query transfer status
+    match crate::transfer::get_transfer_status(coordinator, req_id, decimals).await {
+        Ok(resp) => Ok((StatusCode::OK, Json(ApiResponse::success(resp)))),
+        Err((status, err_resp)) => Err((
+            status,
+            Json(ApiResponse::<()>::error(
+                err_resp.code,
+                err_resp.msg.unwrap_or_default(),
+            )),
+        )),
     }
 }
 

@@ -192,7 +192,9 @@ pub async fn run_server(
         // Trading operations
         .route("/order", post(handlers::create_order))
         .route("/cancel", post(handlers::cancel_order))
+        // Internal transfers (Phase 0x0B-a)
         .route("/transfer", post(handlers::create_transfer))
+        .route("/transfer/{req_id}", get(handlers::get_transfer))
         // Apply auth middleware
         .layer(from_fn_with_state(state.clone(), gateway_auth_middleware));
 
