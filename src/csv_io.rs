@@ -359,6 +359,8 @@ pub fn dump_orderbook_snapshot(book: &OrderBook, path: &str) {
         let type_str = match order.order_type {
             OrderType::Limit => "limit",
             OrderType::Market => "market",
+            OrderType::Deposit => "deposit",
+            OrderType::Withdraw => "withdraw",
         };
         writeln!(
             file,
