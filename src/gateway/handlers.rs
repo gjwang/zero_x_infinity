@@ -322,7 +322,7 @@ async fn create_transfer_fsm_handler(
         cid: None, // Legacy API doesn't have cid
     };
 
-    // Lookup asset to get decimals
+    // Lookup asset and create validation info
     let asset = state
         .pg_assets
         .iter()
@@ -337,16 +337,11 @@ async fn create_transfer_fsm_handler(
             )
         })?;
 
-    // Call FSM transfer
-    match crate::transfer::create_transfer_fsm(
-        coordinator,
-        user_id,
-        fsm_req,
-        asset.asset_id as u32,
-        asset.decimals as u32,
-    )
-    .await
-    {
+    // Create AssetValidationInfo for security checks
+    let asset_info = crate::transfer::AssetValidationInfo::from_asset(asset);
+
+    // Call FSM transfer with full asset validation
+    match crate::transfer::create_transfer_fsm(coordinator, user_id, fsm_req, asset_info).await {
         Ok(fsm_resp) => {
             // Convert FSM response to legacy response
             let legacy_resp = crate::funding::transfer::TransferResponse {

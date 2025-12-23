@@ -37,7 +37,10 @@ pub mod worker;
 mod integration_tests;
 
 // Re-exports for convenience
-pub use api::{TransferApiRequest, TransferApiResponse, create_transfer_fsm, get_transfer_status};
+pub use api::{
+    AssetValidationInfo, TransferApiRequest, TransferApiResponse, create_transfer_fsm,
+    get_transfer_status,
+};
 pub use coordinator::TransferCoordinator;
 pub use error::TransferError;
 pub use state::TransferState;
