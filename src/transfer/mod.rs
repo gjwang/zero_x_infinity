@@ -26,6 +26,7 @@
 
 pub mod adapters;
 pub mod api;
+pub mod channel;
 pub mod coordinator;
 pub mod db;
 pub mod error;

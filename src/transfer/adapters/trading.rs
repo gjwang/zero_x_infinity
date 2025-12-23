@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex};
 use tracing::{debug, warn};
 
 use super::ServiceAdapter;
+use crate::transfer::channel::{TransferOp, TransferResponse, TransferSender};
 use crate::transfer::types::{OpResult, RequestId};
 
 /// Trading account adapter
@@ -29,17 +30,30 @@ pub struct TradingAdapter {
     /// In production, this is rebuilt from WAL on startup
     processed: Arc<Mutex<HashSet<RequestId>>>,
 
-    /// Simulated balances for testing
-    /// In production, this would be the UBSCore connection
+    /// Optional channel to UBSCore (None for tests, Some for production)
+    channel: Option<TransferSender>,
+
+    /// Simulated balances for testing (only used when channel is None)
     #[cfg(test)]
     test_balances: Arc<Mutex<std::collections::HashMap<(u64, u32), u64>>>,
 }
 
 impl TradingAdapter {
-    /// Create a new TradingAdapter
+    /// Create a new TradingAdapter (test mode - no UBSCore connection)
     pub fn new() -> Self {
         Self {
             processed: Arc::new(Mutex::new(HashSet::new())),
+            channel: None,
+            #[cfg(test)]
+            test_balances: Arc::new(Mutex::new(std::collections::HashMap::new())),
+        }
+    }
+
+    /// Create adapter connected to UBSCore via channel (production mode)
+    pub fn with_channel(channel: TransferSender) -> Self {
+        Self {
+            processed: Arc::new(Mutex::new(HashSet::new())),
+            channel: Some(channel),
             #[cfg(test)]
             test_balances: Arc::new(Mutex::new(std::collections::HashMap::new())),
         }
@@ -49,9 +63,15 @@ impl TradingAdapter {
     pub fn with_processed(processed: HashSet<RequestId>) -> Self {
         Self {
             processed: Arc::new(Mutex::new(processed)),
+            channel: None,
             #[cfg(test)]
             test_balances: Arc::new(Mutex::new(std::collections::HashMap::new())),
         }
+    }
+
+    /// Check if connected to UBSCore
+    pub fn is_connected(&self) -> bool {
+        self.channel.is_some()
     }
 
     /// Check if a request was already processed
@@ -116,9 +136,29 @@ impl ServiceAdapter for TradingAdapter {
             return OpResult::Success;
         }
 
-        // TODO: In production, send Withdraw order to UBSCore via pipeline
-        // For now, we simulate with in-memory balance check
+        // Production mode: Use channel to UBSCore
+        if let Some(ref channel) = self.channel {
+            match channel
+                .send_request(req_id, TransferOp::Withdraw, user_id, asset_id, amount)
+                .await
+            {
+                Ok(TransferResponse::Success { .. }) => {
+                    self.mark_processed(req_id);
+                    debug!(req_id = req_id, "Trading withdraw successful via channel");
+                    return OpResult::Success;
+                }
+                Ok(TransferResponse::Failed(e)) => {
+                    debug!(req_id = req_id, error = %e, "Trading withdraw failed via channel");
+                    return OpResult::Failed(e);
+                }
+                Err(e) => {
+                    warn!(req_id = req_id, error = %e, "Trading channel error");
+                    return OpResult::Pending;
+                }
+            }
+        }
 
+        // Test mode: Use simulated balances
         #[cfg(test)]
         {
             let mut balances = self.test_balances.lock().unwrap();
@@ -140,13 +180,11 @@ impl ServiceAdapter for TradingAdapter {
 
         #[cfg(not(test))]
         {
-            // Production: Send to UBSCore via pipeline
-            // This is a placeholder - actual implementation will use the order queue
+            // No channel configured - warn and assume success for testing
             warn!(
                 req_id = req_id,
-                "Trading adapter not connected to UBSCore pipeline"
+                "Trading adapter not connected to UBSCore (no channel)"
             );
-            // For now, assume success to allow FSM to proceed
         }
 
         self.mark_processed(req_id);
@@ -175,8 +213,29 @@ impl ServiceAdapter for TradingAdapter {
             return OpResult::Success;
         }
 
-        // TODO: In production, send Deposit order to UBSCore via pipeline
+        // Production mode: Use channel to UBSCore
+        if let Some(ref channel) = self.channel {
+            match channel
+                .send_request(req_id, TransferOp::Deposit, user_id, asset_id, amount)
+                .await
+            {
+                Ok(TransferResponse::Success { .. }) => {
+                    self.mark_processed(req_id);
+                    debug!(req_id = req_id, "Trading deposit successful via channel");
+                    return OpResult::Success;
+                }
+                Ok(TransferResponse::Failed(e)) => {
+                    debug!(req_id = req_id, error = %e, "Trading deposit failed via channel");
+                    return OpResult::Failed(e);
+                }
+                Err(e) => {
+                    warn!(req_id = req_id, error = %e, "Trading channel error");
+                    return OpResult::Pending;
+                }
+            }
+        }
 
+        // Test mode: Use simulated balances
         #[cfg(test)]
         {
             let mut balances = self.test_balances.lock().unwrap();
@@ -187,10 +246,10 @@ impl ServiceAdapter for TradingAdapter {
 
         #[cfg(not(test))]
         {
-            // Production: Send to UBSCore via pipeline
+            // No channel configured - warn and assume success
             warn!(
                 req_id = req_id,
-                "Trading adapter not connected to UBSCore pipeline"
+                "Trading adapter not connected to UBSCore (no channel)"
             );
         }
 
