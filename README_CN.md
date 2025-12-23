@@ -1,7 +1,7 @@
 <div align="center">
 
 # ⚔️ 0xInfinity
-### The Hardest Core HFT Tutorial in Rust
+### 从零打造微秒级高频交易引擎 (实战教程)
 
 > **"From Hello World to Microsecond Latency."**
 
@@ -10,58 +10,60 @@
 [![Rust](https://img.shields.io/badge/language-Rust-orange)]()
 [![mdBook](https://img.shields.io/badge/docs-mdBook-blue)](https://gjwang.github.io/zero_x_infinity/)
 
-[🇨🇳 中文文档](README_CN.md)
+[🇺🇸 English](README.md)
 
 </div>
 
 ---
 
-## ⚡ Why 0xInfinity?
+## ⚡ 为什么选择 0xInfinity?
 
-**This is not another "Toy Matching Engine" tutorial.**
+**这不是另一个 "玩具级撮合引擎" 教程。**
 
-We are building a **production-grade** crypto trading engine that handles **1.3M orders/sec** (P99 < 200µs) on a single core. This project documents the entire journey from a naive `Vec<Order>` implementation to a professional LMAX Disruptor-style Ring Buffer architecture.
+我们正在构建一个**生产级**的加密货币交易引擎，在单核上可处理 **130万订单/秒** (P99 < 200µs)。本项目记录了从最朴素的 `Vec<Order>` 实现到专业的 LMAX Disruptor 风格 Ring Buffer 架构的完整演进过程。
 
-### 🔥 Hardcore Tech Stack
-*   **Zero GC**: Pure Rust implementation with zero garbage collection pauses.
-*   **Lock-free**: High-performance Ring Buffer (`crossbeam-queue`) for inter-thread communication.
-*   **Determinism**: Event Sourcing architecture ensures 100% reproduceability.
-*   **Safety**: Ed25519 Authentication & Type-safe Asset handling.
-*   **Persistence**: TDengine (Time-Series Database) for high-speed audit logging.
-
-## 🏗️ Architecture
-
-```mermaid
-graph TD
-    Client[Client] -->|HTTP/WS| Gateway
-    Gateway -->|RingBuffer| Ingestion
-    subgraph "Trading Core (Single Thread)"
-        Ingestion -->|SeqOrder| UBSCore[UBSCore (Risk/Balance)]
-        UBSCore -->|LockedOrder| ME[Matching Engine]
-        ME -->|Trade/OrderUpdate| Settlement
-    end
-    Settlement -->|Async| Persistence[TDengine]
-    Settlement -->|Async| MktData[Market Data (K-Line)]
-    Settlement -->|Async| WS[WebSocket Push]
-```
-
-## ✨ Core Features
-
-*   **Order Management**: Limit, Market, Cancel, Maker/Taker logic.
-*   **Risk Control**: Pre-trade balance check, exact fund locking.
-*   **Market Data**: Real-time Depth (Orderbook), K-Line (followers Binance format), Ticker.
-*   **Interfaces**: REST API, WebSocket Stream (Pub/Sub).
-*   **Replay**: Full determinism allows replaying from genesis for exactly-once state recovery.
+### 🔥 硬核技术栈
+*   **零 GC (Zero GC)**: 纯 Rust 实现，无垃圾回收暂停。
+*   **无锁并发 (Lock-free)**: 基于高性能 Ring Buffer (`crossbeam-queue`) 的线程间通信。
+*   **确定性 (Determinism)**: 事件溯源架构，确保 100% 可重现性。
+*   **安全性 (Safety)**: Ed25519 非对称鉴权 & 类型安全的资产处理。
+*   **持久化 (Persistence)**: 集成 TDengine 时序数据库，实现极速审计日志。
 
 ---
 
-## 🚀 The Journey
+## 🏗️ 架构概览
 
-**📖 [Read the Book Online →](https://gjwang.github.io/zero_x_infinity/)**
+```mermaid
+graph TD
+    Client[客户端] -->|HTTP/WS| Gateway
+    Gateway -->|RingBuffer| Ingestion
+    subgraph "核心交易线程 (Single Thread)"
+        Ingestion -->|SeqOrder| UBSCore[UBSCore (风控/余额)]
+        UBSCore -->|LockedOrder| ME[撮合引擎]
+        ME -->|Trade/OrderUpdate| Settlement
+    end
+    Settlement -->|异步| Persistence[TDengine]
+    Settlement -->|异步| MktData[行情数据 (K-Line)]
+    Settlement -->|异步| WS[WebSocket 推送]
+```
 
-### Chapters
+## ✨ 核心特性
 
-| Stage | Title | Description |
+*   **订单管理**: 限价单、市价单、撤单、Maker/Taker 逻辑。
+*   **风控系统**: 交易前余额检查、精确资金锁定。
+*   **行情数据**: 实时深度 (Orderbook)、K线 (Binance 格式)、Ticker。
+*   **接口支持**: REST API、WebSocket流 (Pub/Sub)。
+*   **回放机制**: 全确定性设计，允许从创世状态重放以实现精确的状态恢复。
+
+---
+
+## 🚀 学习之旅
+
+**📖 [在线阅读完整教程 →](https://gjwang.github.io/zero_x_infinity/)**
+
+### 章节索引
+
+| 阶段 | 标题 | 描述 |
 |-------|-------|-------------|
 | 0x01 | [Genesis](./docs/src/0x01-genesis.md) | 基础订单簿引擎 |
 | 0x02 | [The Curse of Float](./docs/src/0x02-the-curse-of-float.md) | 浮点数的诅咒 → u64 重构 |
@@ -95,26 +97,23 @@ graph TD
 ## 🏃 快速开始
 
 ```bash
-# Install git hooks
+# 安装 git hooks
 ./scripts/install-hooks.sh
 
-# Run Gateway mode (HTTP API + Trading Core)
+# 运行 Gateway 模式 (HTTP API + 交易核心)
 cargo run --release -- --gateway --port 8080
 
-# Run single-threaded pipeline (1.3M orders)
+# 运行单线程流水线 (吞吐量基准测试)
 cargo run --release -- --pipeline --input fixtures/test_with_cancel_highbal
 
-# Run multi-threaded pipeline
+# 运行多线程流水线
 cargo run --release -- --pipeline-mt --input fixtures/test_with_cancel_highbal
 
-# Compare both pipelines (ST vs MT)
+# 对比测试 (单线程 vs 多线程)
 ./scripts/test_pipeline_compare.sh highbal
 
-# Regression check (vs Golden Baseline)
+# 回归检查 (对比黄金基线)
 ./scripts/test_pipeline_compare.sh 100k
-
-# Generate new baseline (requires --force)
-./scripts/generate_baseline.sh 100k -f
 ```
 
 ---
@@ -131,15 +130,15 @@ cargo run --release -- --pipeline-mt --input fixtures/test_with_cancel_highbal
 
 ## 💾 结算持久化 (TDengine)
 
-### 启动 TDengine
+### 1. 启动 TDengine
 
 ```bash
 docker run -d --name tdengine -p 6030:6030 -p 6041:6041 tdengine/tdengine:latest
 ```
 
-### 启用持久化
+### 2. 启用持久化配置
 
-Edit `config/dev.yaml`:
+编辑 `config/dev.yaml`:
 
 ```yaml
 persistence:
@@ -147,42 +146,15 @@ persistence:
   tdengine_dsn: "taos+ws://root:taosdata@localhost:6041"
 ```
 
-### 启动持久化模式
+### 3. API 概览
 
-```bash
-cargo run --release -- --gateway --env dev
-```
-
-### 查询数据
-
-```bash
-# Connect to TDengine
-docker exec -it tdengine taos
-
-# Query orders
-USE trading;
-SELECT * FROM orders LIMIT 10;
-
-# Query trades
-SELECT * FROM trades LIMIT 10;
-
-# Query balances
-SELECT * FROM balances LIMIT 10;
-```
-
-### API 端点
-
-- `POST /api/v1/create_order` - 创建订单 ✅
-- `POST /api/v1/cancel_order` - 取消订单 ✅
-- `GET /api/v1/order/:order_id` - 查询订单 ✅
-- `GET /api/v1/orders?user_id=&limit=` - 查询订单列表 ✅
-- `GET /api/v1/trades?limit=` - 查询成交记录 ✅
-- `GET /api/v1/balances?user_id=&asset_id=` - 查询余额 ✅
-- `GET /api/v1/klines?interval=&limit=` - 查询 K 线 ✅
-- `GET /api/v1/depth?symbol=&limit=` - 查询盘口深度 ✅
-- `WS /ws?user_id=` - WebSocket 实时推送 ✅
+- `POST /api/v1/create_order` - 创建订单
+- `POST /api/v1/cancel_order` - 取消订单
+- `GET /api/v1/order/:order_id` - 查询订单
+- `GET /api/v1/klines?interval=&limit=` - 查询 K 线
+- `GET /api/v1/depth?symbol=&limit=` - 查询盘口深度
+- `WS /ws?user_id=` - WebSocket 实时推送
 
 ---
-
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
