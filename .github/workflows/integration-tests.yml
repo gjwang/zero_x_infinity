@@ -366,3 +366,19 @@ jobs:
 
       - name: Run Account Integration
         run: ./scripts/test_ci.sh --test-account
+        id: run-test
+        continue-on-error: true
+
+      - name: Dump Logs on Failure
+        if: steps.run-test.outcome == 'failure'
+        run: |
+          echo "=== Account Integration Log ==="
+          cat logs/Account_Integration.log || true
+          echo ""
+          echo "=== Gateway Output Log ==="
+          cat /tmp/gateway.log || true
+          exit 1
+
+      - name: Report Success
+        if: steps.run-test.outcome == 'success'
+        run: echo "✅ Account Integration passed"
