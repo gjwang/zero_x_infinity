@@ -108,7 +108,6 @@ order_id,user_id,side,price,qty
 1001,1001,buy,$PRICE,$QTY
 1002,1002,sell,$PRICE,$QTY
 EOF
-
 # Use Python for Ed25519 authenticated order submission
 export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
 if [ "$CI" = "true" ]; then
@@ -119,7 +118,19 @@ else
     PYTHON_CMD="${PYTHON_CMD:-python3}"
 fi
 
-if ! "$PYTHON_CMD" "$SCRIPT_DIR/inject_orders.py" --input "$TEST_DIR/kline_orders.csv" --quiet 2>/dev/null; then
+# Show debugging info in CI
+if [ "$CI" = "true" ]; then
+    echo "   DEBUG: PYTHON_CMD=$PYTHON_CMD"
+    echo "   DEBUG: PYTHONPATH=$PYTHONPATH"
+    echo "   DEBUG: Checking pynacl..."
+    "$PYTHON_CMD" -c "import nacl; print('   pynacl version:', nacl.__version__)" || echo "   WARN: pynacl not available"
+    echo "   DEBUG: Order file contents:"
+    cat "$TEST_DIR/kline_orders.csv"
+fi
+
+if ! "$PYTHON_CMD" "$SCRIPT_DIR/inject_orders.py" --input "$TEST_DIR/kline_orders.csv" --quiet; then
+    echo "   DEBUG: inject_orders.py failed, checking Gateway log:"
+    cat /tmp/gateway.log 2>/dev/null | tail -20 || true
     fail "Order injection failed - check Ed25519 auth and pynacl installation"
 fi
 echo "   Orders submitted via Ed25519 auth"

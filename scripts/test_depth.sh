@@ -95,8 +95,19 @@ else
     PYTHON_CMD="${PYTHON_CMD:-python3}"
 fi
 
-if ! "$PYTHON_CMD" "$SCRIPT_DIR/inject_orders.py" --input "$TEST_DIR/depth_orders.csv" --quiet 2>/dev/null; then
+# Show debugging info in CI
+if [ "$CI" = "true" ]; then
+    echo "   DEBUG: PYTHON_CMD=$PYTHON_CMD"
+    echo "   DEBUG: Checking pynacl..."
+    "$PYTHON_CMD" -c "import nacl; print('   pynacl version:', nacl.__version__)" || echo "   WARN: pynacl not available"
+fi
+
+if ! "$PYTHON_CMD" "$SCRIPT_DIR/inject_orders.py" --input "$TEST_DIR/depth_orders.csv" --quiet; then
     echo -e "${RED}Order injection failed${NC}"
+    if [ "$CI" = "true" ]; then
+        echo "   DEBUG: Gateway log:"
+        cat /tmp/gateway_depth.log 2>/dev/null | tail -20 || true
+    fi
     exit 1
 fi
 echo -e "${GREEN}Orders submitted successfully${NC}"
