@@ -1,4 +1,202 @@
-# 0x09-e Order Book Depth: 盘口深度
+# 0x09-e Order Book Depth
+
+<h3>
+  <a href="#-english">🇺🇸 English</a>
+  &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
+  <a href="#-chinese">🇨🇳 中文</a>
+</h3>
+
+<div id="-english"></div>
+
+## 🇺🇸 English
+
+> **📦 Code Changes**: [View Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.9-d-kline-aggregation...v0.9-e-orderbook-depth)
+
+> **Core Objective**: Implement Order Book Depth push, allowing users to view the current buy/sell order distribution in real-time.
+
+---
+
+## Background: Depth Data
+
+The Order Book Depth displays the current market's distribution of limit orders:
+
+```
+         Asks (Sells)                   
+  ┌─────────────────────┐              
+  │ 30100.00   0.3 BTC  │ ← Lowest Ask
+  │ 30050.00   0.5 BTC  │              
+  │ 30020.00   1.2 BTC  │              
+  ├─────────────────────┤              
+  │    Current: 30000   │              
+  ├─────────────────────┤              
+  │ 29980.00   0.8 BTC  │              
+  │ 29950.00   1.5 BTC  │              
+  │ 29900.00   2.0 BTC  │ ← Highest Bid
+  └─────────────────────┘              
+         Bids (Buys)                   
+```
+
+---
+
+## 1. Data Structure
+
+### 1.1 Depth Response Format
+
+```json
+{
+    "symbol": "BTC_USDT",
+    "bids": [
+        ["29980.00", "0.800000"],
+        ["29950.00", "1.500000"],
+        ["29900.00", "2.000000"]
+    ],
+    "asks": [
+        ["30020.00", "1.200000"],
+        ["30050.00", "0.500000"],
+        ["30100.00", "0.300000"]
+    ],
+    "last_update_id": 12345
+}
+```
+
+### 1.2 Binance Format Comparison
+
+| Field | Us | Binance |
+|-------|----|---------|
+| bids | `[["price", "qty"], ...]` | ✅ Match |
+| asks | `[["price", "qty"], ...]` | ✅ Match |
+| last_update_id | `12345` | ✅ Match |
+
+---
+
+## 2. API Design
+
+### 2.1 HTTP Endpoint
+
+`GET /api/v1/depth?symbol=BTC_USDT&limit=20`
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| symbol | String | Trading Pair |
+| limit | u32 | Depth levels (5, 10, 20, 50, 100) |
+
+### 2.2 WebSocket Push
+
+```json
+// Subscribe
+{"type": "subscribe", "channel": "depth", "symbol": "BTC_USDT"}
+
+// Push (Incremental)
+{
+    "type": "depth.update",
+    "symbol": "BTC_USDT",
+    "bids": [["29980.00", "0.800000"]],
+    "asks": [["30020.00", "0.000000"]],  // qty=0 means removal
+    "last_update_id": 12346
+}
+```
+
+---
+
+## 3. Architecture Design
+
+### 3.1 Comparison with K-Line
+
+| Data | Source | Latency | Method |
+|------|--------|---------|--------|
+| K-Line | Historical Trades | Minute-level | TDengine Stream |
+| **Depth** | Current Orders | **Ms-level** | In-Memory |
+
+Depth is too real-time for DB storage. We use **Ring Buffer + Independent Service**.
+
+### 3.2 Event-Driven Architecture
+
+Following the pattern: **Isolated service, Ring Buffer, Lock-Free**.
+
+```
+┌────────────┐                    ┌─────────────────────┐
+│     ME     │ ──(non-blocking)─► │ depth_event_queue   │
+│            │    drop if full    │ (capacity: 1024)    │
+1└────────────┘                   └──────────┬──────────┘
+                                             │
+                                             ▼
+                                  ┌─────────────────────┐
+                                  │   DepthService      │
+                                  │   (tokio async)     │
+                                  ├─────────────────────┤
+                                  │ ● HTTP Snapshot     │
+                                  │ ● WS Incremental    │
+                                  └─────────────────────┘
+```
+
+> [!IMPORTANT]
+> **Market Data Characteristic**: Freshness is key. Dropping a few events is acceptable if the consumer is slow, as eventual consistency is restored by snapshots.
+
+---
+
+## 4. Module Structure
+
+```
+src/
+├── gateway/
+│   ├── handlers.rs     # Add get_depth
+│   └── ...
+├── engine.rs           # Add get_depth() method
+└── websocket/
+    └── messages.rs     # Add DepthUpdate
+```
+
+---
+
+## 5. Implementation Plan
+
+*   [x] **Phase 1: HTTP API**: Add `OrderBook::get_depth()`, API endpoint.
+*   [ ] **Phase 2: WebSocket**: `depth.update` message, subscription Logic.
+
+---
+
+## 6. Verification
+
+### 6.1 E2E Test Scenarios
+
+Script: `scripts/test_depth.sh`
+
+1.  Query empty depth.
+2.  Submit Buy/Sell orders (creating depth).
+3.  Wait for update (200ms).
+4.  Query depth and verify bids/asks.
+5.  Performance test (100 orders rapid fire).
+
+Expected Result:
+*   Depth reflects order book state.
+*   Update latency ≤ 100ms.
+*   High frequency updates are batched/throttled correctly.
+
+---
+
+## Summary
+
+| Point | Implementation |
+|-------|----------------|
+| Structure | Compatible with Binance (Array format) |
+| API | `GET /api/v1/depth` |
+| WebSocket | `depth.update` (Future: Incremental) |
+| Architecture | Event-driven, Ring Buffer |
+
+**Core Concept**:
+> **Service Isolation**: ME pushes via DepthEvent. DepthService maintains state. Lock-free.
+
+Next Chapter: **0x09-f Integration Test**.
+
+<br>
+<div align="right"><a href="#-english">↑ Back to Top</a></div>
+<br>
+
+---
+
+<div id="-chinese"></div>
+
+## 🇨🇳 中文
 
 > **📦 代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.9-d-kline-aggregation...v0.9-e-orderbook-depth)
 
@@ -36,7 +234,7 @@
 {
     "symbol": "BTC_USDT",
     "bids": [
-        ["29980.00", "0.800000"],  // [price, qty]
+        ["29980.00", "0.800000"],
         ["29950.00", "1.500000"],
         ["29900.00", "2.000000"]
     ],
@@ -63,9 +261,7 @@
 
 ### 2.1 HTTP 端点
 
-```
-GET /api/v1/depth?symbol=BTC_USDT&limit=20
-```
+`GET /api/v1/depth?symbol=BTC_USDT&limit=20`
 
 | 参数 | 类型 | 描述 |
 |------|------|------|
@@ -74,22 +270,7 @@ GET /api/v1/depth?symbol=BTC_USDT&limit=20
 
 ### 2.2 WebSocket 推送
 
-```json
-// 订阅
-{"type": "subscribe", "channel": "depth", "symbol": "BTC_USDT"}
-
-// 推送 (增量更新)
-{
-    "type": "depth.update",
-    "symbol": "BTC_USDT",
-    "bids": [["29980.00", "0.800000"]],
-    "asks": [["30020.00", "0.000000"]],  // qty=0 表示删除
-    "last_update_id": 12346
-}
-```
-
-> [!NOTE]
-> 增量更新模式：`qty=0` 表示该价位已无挂单
+`depth.update` (增量更新)，`qty=0` 表示删除。
 
 ---
 
@@ -113,36 +294,9 @@ Depth 太实时，不适合存数据库——使用 **ring buffer + 独立服务
 │     ME     │ ──(non-blocking)─► │ depth_event_queue   │
 │            │    drop if full    │ (capacity: 1024)    │
 └────────────┘                    └──────────┬──────────┘
-                                             │
-                                             ▼
-                                  ┌─────────────────────┐
-                                  │   DepthService      │
-                                  │   (tokio async)     │
-                                  ├─────────────────────┤
-                                  │ ● HTTP 快照查询     │
-                                  │ ● WS 增量推送       │
-                                  └─────────────────────┘
 ```
 
-### 3.3 DepthEvent
-
-ME 在三个时机发送事件：
-
-```rust
-pub enum DepthEvent {
-    OrderRested { price: u64, qty: u64, side: Side },     // 挂单
-    TradeFilled { price: u64, qty: u64, side: Side },     // 成交 (maker 侧)
-    OrderCancelled { price: u64, qty: u64, side: Side },  // 取消
-}
-```
-
-**发送方式**（非阻塞）：
-```rust
-let _ = depth_event_queue.push(event);  // 满就丢，ME 不等待
-```
-
-> [!IMPORTANT]
-> **Market Data 特性**：最新数据最重要，丢几条事件不影响最终一致性。
+---
 
 ## 4. 模块结构
 
@@ -150,8 +304,7 @@ let _ = depth_event_queue.push(event);  // 满就丢，ME 不等待
 src/
 ├── gateway/
 │   ├── handlers.rs     # 添加 get_depth
-│   └── mod.rs          # 添加路由
-├── engine.rs           # 添加 get_depth() 方法
+├── engine.rs           # 添加 get_depth()
 └── websocket/
     └── messages.rs     # 添加 DepthUpdate
 ```
@@ -160,59 +313,18 @@ src/
 
 ## 5. 实现计划
 
-### Phase 1: HTTP API
-- [ ] OrderBook 添加 `get_depth(limit)` 方法
-- [ ] 添加 `GET /api/v1/depth` 端点
-- [ ] 格式化输出 (display_decimals)
-
-### Phase 2: WebSocket 推送 (可选)
-- [ ] depth.update 消息类型
-- [ ] 订阅机制
-- [ ] 增量更新触发
+- [x] **Phase 1: HTTP API**: 实现 `OrderBook::get_depth` 和 API。
+- [ ] **Phase 2: WebSocket**: 增量推送 (可选)。
 
 ---
 
 ## 6. 验证计划
 
-### 6.1 单元测试
-
-```rust
-#[test]
-fn test_get_depth() {
-    let mut book = OrderBook::new();
-    // 添加订单
-    book.add_order(...);
-    
-    let depth = book.get_depth(5);
-    assert_eq!(depth.bids.len(), 5);
-    assert_eq!(depth.asks.len(), 5);
-}
-```
-
-### 6.2 E2E 测试
-
-```bash
-# 1. 启动 Gateway
-cargo run --release -- --gateway --port 8080
-
-# 2. 提交订单创建盘口
-./scripts/test_depth.sh
-
-# 3. 查询盘口
-curl "http://localhost:8080/api/v1/depth?symbol=BTC_USDT&limit=5" | jq .
-
-# 预期响应
-{
-  "code": 0,
-  "msg": "ok",
-  "data": {
-    "symbol": "BTC_USDT",
-    "bids": [["30000.00", "0.100000"]],
-    "asks": [],
-    "last_update_id": 1
-  }
-}
-```
+运行 `scripts/test_depth.sh`:
+1.  查询空盘口
+2.  提交买卖单
+3.  验证盘口数据更新
+4.  性能验证 (100ms 更新频率)
 
 ---
 
@@ -226,162 +338,6 @@ curl "http://localhost:8080/api/v1/depth?symbol=BTC_USDT&limit=5" | jq .
 | 架构 | 事件驱动，Ring Buffer 通信 |
 
 **核心理念**：
-
 > **服务隔离**：ME 通过 DepthEvent 推送，DepthService 维护独立状态，lock-free。
 
-## 7. 测试验证
-
-### 7.1 自动化测试脚本
-
-我们提供了完整的测试脚本 `scripts/test_depth.sh`：
-
-```bash
-# 运行完整的深度 API 测试
-./scripts/test_depth.sh
-```
-
-**测试内容：**
-1. 查询空盘口
-2. 提交买单并验证
-3. 提交卖单并验证
-4. 测试不同的 limit 参数
-5. 性能测试（快速提交多个订单）
-
-### 7.2 手动测试步骤
-
-#### Step 1: 启动 Gateway
-
-```bash
-cargo run --release -- --gateway --port 8080
-```
-
-#### Step 2: 查询空盘口
-
-```bash
-curl "http://localhost:8080/api/v1/depth?symbol=BTC_USDT&limit=5" | jq .
-```
-
-**预期结果：**
-```json
-{
-  "code": 0,
-  "msg": "ok",
-  "data": {
-    "symbol": "BTC_USDT",
-    "bids": [],
-    "asks": [],
-    "last_update_id": 0
-  }
-}
-```
-
-#### Step 3: 提交测试订单
-
-**买单：**
-```bash
-curl -X POST "http://localhost:8080/api/v1/create_order" \
-  -H "Content-Type: application/json" \
-  -H "X-User-Id: 1" \
-  -d '{
-    "symbol": "BTC_USDT",
-    "side": "BUY",
-    "order_type": "LIMIT",
-    "price": "29900.00",
-    "qty": "0.1"
-  }' | jq .
-```
-
-**卖单：**
-```bash
-curl -X POST "http://localhost:8080/api/v1/create_order" \
-  -H "Content-Type: application/json" \
-  -H "X-User-Id: 2" \
-  -d '{
-    "symbol": "BTC_USDT",
-    "side": "SELL",
-    "order_type": "LIMIT",
-    "price": "30100.00",
-    "qty": "0.15"
-  }' | jq .
-```
-
-#### Step 4: 等待深度更新并查询
-
-```bash
-# 等待 200ms（深度更新间隔为 100ms）
-sleep 0.2
-
-# 查询更新后的盘口
-curl "http://localhost:8080/api/v1/depth?symbol=BTC_USDT&limit=5" | jq .
-```
-
-**预期结果：** 应该看到买单和卖单
-
-### 7.3 性能验证
-
-**测试场景：** 快速提交 100 个订单，验证深度更新频率
-
-```bash
-# 快速提交 100 个订单
-for i in {1..100}; do
-  price=$((29000 + i * 10))
-  curl -s -X POST "http://localhost:8080/api/v1/create_order" \
-    -H "Content-Type: application/json" \
-    -H "X-User-Id: 1" \
-    -d "{\"symbol\": \"BTC_USDT\", \"side\": \"BUY\", \"order_type\": \"LIMIT\", \"price\": \"${price}.00\", \"qty\": \"0.01\"}" \
-    > /dev/null &
-done
-wait && sleep 0.2
-
-# 查询深度
-curl "http://localhost:8080/api/v1/depth?symbol=BTC_USDT&limit=10" | jq .
-```
-
-**验证要点：**
-- ✅ 深度数据正确反映订单簿状态
-- ✅ 更新延迟 ≤ 100ms
-- ✅ 高频订单不会导致过多快照（每 100ms 最多 1 次）
-
----
-
-## 8. 总结
-
-**实现完成：**
-- ✅ DepthSnapshot 消息类型
-- ✅ 定时快照机制（100ms 间隔，dirty flag 优化）
-- ✅ DepthService 消费快照
-- ✅ GET /api/v1/depth API 端点
-- ✅ 完整的测试脚本和文档
-
-**架构特点：**
-- 简洁：快照方式，非侵入式
-- 高效：dirty flag + 定时更新（100ms）
-- 可靠：lock-free ring buffer 通信
-- 标准：符合行业惯例（Binance 等）
-
-**性能优化：**
-- 高频场景：从每笔订单 1 次快照 → 每秒最多 10 次
-- 低频场景：无变化时不发送（dirty flag）
-- ME 开销：最小化（仅设置 flag）
-
----
-
-## 9. 增量更新方案调研
-
-> **说明**：当前实现为快照模式（Snapshot），增量更新（Incremental Updates）作为未来优化方向。
-
-详细的增量更新方案调研和对比，请参考：
-
-📚 **[Order Book Depth 增量更新方案调研](./0x09-e-orderbook-depth-incremental-research.md)**
-
-**调研内容包括：**
-- Binance Snapshot + Delta 方案
-- Coinbase L2 Update 方案  
-- Kraken Checksum 验证方案
-- 性能对比和推荐方案
-- 实现路线图
-
-**核心结论：**
-- 推荐采用 Binance 方案（生态最大，容错性好）
-- 服务端实现成本低（~2μs diff）
-- 可渐进式实现（先快照，后增量）
+下一章 (0x09-f) 将进行集成测试。
