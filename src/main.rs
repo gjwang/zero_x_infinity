@@ -271,6 +271,12 @@ fn main() {
         let db_client_for_pipeline = db_client.clone();
         let rt_handle_for_pipeline = Some(rt_handle.clone());
 
+        // Phase 0x0B-a: Create transfer channel for TradingAdapter <-> UBSCore communication
+        // Sender goes to Gateway (TradingAdapter), Receiver goes to Pipeline (UBSCoreService)
+        let (transfer_sender, transfer_receiver) =
+            zero_x_infinity::transfer::channel::transfer_channel(1024);
+        println!("🔄 TransferChannel created (buffer=1024)");
+
         // Start HTTP Server in separate thread with tokio runtime
         let queues_clone = queues.clone();
         let symbol_mgr_clone = symbol_mgr.clone();
@@ -296,6 +302,7 @@ fn main() {
                     _pg_db.clone(),
                     _pg_assets.clone(),
                     _pg_symbols.clone(),
+                    Some(transfer_sender), // Connect TradingAdapter to UBSCore
                 )
                 .await;
             });
@@ -397,7 +404,7 @@ fn main() {
             queues,
             rt_handle_for_pipeline, // rt_handle for SettlementService TDengine
             db_client_for_pipeline, // db_client for SettlementService TDengine
-            None,                   // transfer_receiver: TODO: connect to Gateway
+            Some(transfer_receiver), // Connect UBSCore to receive internal transfer commands
         );
 
         // Wait for gateway thread
