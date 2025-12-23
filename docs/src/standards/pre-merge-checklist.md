@@ -6,10 +6,12 @@
 
 ## 1. 代码质量 ✓
 
-- [ ] `cargo check` 通过
-- [ ] `cargo test` 通过
-- [ ] `cargo clippy` 无 error
 - [ ] `cargo fmt --check` 通过
+- [ ] `cargo test` 通过
+- [ ] **Clippy（必须使用 CI 相同配置）**：
+  ```bash
+  cargo clippy -- -D warnings -A clippy::too_many_arguments -A clippy::collapsible_if -A clippy::unwrap_or_default -A clippy::doc_lazy_continuation -A clippy::manual_is_multiple_of -A clippy::implicit_saturating_sub -A clippy::redundant_pattern_matching -A clippy::derivable_impls
+  ```
 
 ## 2. 文档更新 ✓
 
