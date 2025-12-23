@@ -19,6 +19,7 @@
 - [ ] `docs/src/SUMMARY.md` 目录结构正确
 - [ ] `mdbook build` 构建成功
 - [ ] **README.md** 已添加新章节链接
+- [ ] **阅读 [agent-testing-notes.md](./agent-testing-notes.md)**（避免常见坑）
 
 ## 3. CI/CD ✓
 

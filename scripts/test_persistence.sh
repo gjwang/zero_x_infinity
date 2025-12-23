@@ -68,7 +68,11 @@ wait_for_service() {
 # Cleanup function
 cleanup() {
     print_info "Cleaning up..."
-    pkill -f "zero_x_infinity --gateway" 2>/dev/null || true
+    # IMPORTANT: Do NOT use `pkill -f "zero_x_infinity"` - it will kill IDE!
+    # Use the saved PID instead:
+    if [ -n "$GATEWAY_PID" ]; then
+        kill "$GATEWAY_PID" 2>/dev/null || true
+    fi
     sleep 1
 }
 

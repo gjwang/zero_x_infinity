@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="Integration Tests" tests="1" failures="1" skipped="0" time="4">
+  <testsuite name="Phase0x09" tests="1" failures="1" skipped="0" time="4">
+    <testcase name="Depth_API" classname="integration" />
+    <testcase name="Gateway_E2E" classname="integration"><failure message="Test failed">./scripts/test_ci.sh: line 149: timeout: command not found </failure></testcase>
+    <testcase name="KLine_E2E" classname="integration"><failure message="Test failed">   - OHLC: 85000000000.00 / 85050000000.00 / 85000000000.00 / 85050000000.00 [0;32m✅ Symbol is correct[0m  =================== 🎉 K-Line E2E Test Complete! </failure></testcase>
+    <testcase name="Persistence" classname="integration" />
+    <testcase name="balance_events" classname="integration"><failure message="Test failed">Issues found:   - Lock events (0) != Accepted orders (1300000)   - Settle events (0) != Trades * 4 (2670268)   - Lock events have unexpected source_types: set()   - Settle events have unexpected sourc</failure></testcase>
+    <testcase name="cargo_build" classname="integration" />
+    <testcase name="cargo_test" classname="integration" />
+    <testcase name="pipeline_1.3m" classname="integration" />
+    <testcase name="pipeline_100k" classname="integration" />
+  </testsuite>
+</testsuites>

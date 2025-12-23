@@ -315,8 +315,11 @@ EOF
 clean_env() {
     echo ""
     echo "   [CI] Cleaning environment..."
-    pkill -f "zero_x_infinity" || true
-    pkill -f "zero_x_infinity.*--gateway" || true
+    
+    # IMPORTANT: Do NOT use `pkill -f "zero_x_infinity"` - it matches command line args
+    # and will kill IDE's language_server which has project path in args!
+    # Use exact process name match instead:
+    pkill "^zero_x_infinity$" 2>/dev/null || true
     
     if [ "$CI" = "true" ] && [ -f "scripts/ci_clean.py" ]; then
          python3 scripts/ci_clean.py || echo "   [WARN] DB cleanup script failed"
