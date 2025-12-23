@@ -55,7 +55,7 @@ ON CONFLICT (user_id) DO NOTHING;
 INSERT INTO api_keys_tb (user_id, api_key, key_type, key_data, label, permissions, status)
 VALUES (
     1001,
-    'AK_USER1001_TEST01',
+    'AK_0000000000001001',
     1, -- Ed25519
     E'\\xd75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a', -- Reusing system key pair for simplicity
     'Test Key 1001',
@@ -71,13 +71,26 @@ ON CONFLICT (user_id) DO NOTHING;
 INSERT INTO api_keys_tb (user_id, api_key, key_type, key_data, label, permissions, status)
 VALUES (
     1002,
-    'AK_USER1002_TEST02',
+    'AK_0000000000001002',
     1, -- Ed25519
     E'\\xd75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a', -- Reusing system key pair for simplicity
     'Test Key 1002',
     15,
     1
 ) ON CONFLICT (api_key) DO NOTHING;
+
+-- ============================================================================
+-- Balances for Testing
+-- ============================================================================
+-- User 1001: Buyer (Needs USDT)
+INSERT INTO balances_tb (user_id, asset_id, available, frozen, version)
+VALUES (1001, 2, 1000000.00000000, 0.00000000, 1)
+ON CONFLICT (user_id, asset_id) DO NOTHING;
+
+-- User 1002: Seller (Needs BTC)
+INSERT INTO balances_tb (user_id, asset_id, available, frozen, version)
+VALUES (1002, 1, 100.00000000, 0.00000000, 1)
+ON CONFLICT (user_id, asset_id) DO NOTHING;
 
 -- ============================================================================
 -- Verification Query (optional for debugging)

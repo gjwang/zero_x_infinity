@@ -15,6 +15,16 @@ BLUE='\033[0;34m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
+# Cleanup function
+cleanup() {
+    if [ -n "$GATEWAY_PID" ]; then
+        echo ""
+        echo "Stopping Gateway (PID $GATEWAY_PID)..."
+        kill "$GATEWAY_PID" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT
+
 echo -e "${BLUE}=== Order Book Depth API Test ===${NC}\n"
 
 # Create test directory with initial balances
