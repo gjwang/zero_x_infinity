@@ -15,6 +15,30 @@ pub async fn init_schema(taos: &Taos) -> Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("{}: {}", "Failed to use database", e))?;
 
+    // IMPORTANT: Check database precision at startup
+    // Wrong precision causes "Timestamp data out of range" errors
+    match check_database_precision(taos).await {
+        Ok(precision) => {
+            if precision == "us" {
+                tracing::info!("✅ TDengine database precision: {} (correct)", precision);
+            } else {
+                tracing::error!(
+                    "❌ TDengine database precision is '{}', expected 'us'! \
+                     This will cause 'Timestamp data out of range' errors. \
+                     Solution: DROP DATABASE trading; then restart.",
+                    precision
+                );
+                return Err(anyhow::anyhow!(
+                    "Wrong database precision: '{}', expected 'us'",
+                    precision
+                ));
+            }
+        }
+        Err(e) => {
+            tracing::warn!("Could not check database precision: {}", e);
+        }
+    }
+
     // Create super tables
     taos.exec(CREATE_ORDERS_TABLE)
         .await
@@ -40,6 +64,52 @@ pub async fn init_schema(taos: &Taos) -> Result<()> {
     Ok(())
 }
 
+/// Check the precision of the trading database
+async fn check_database_precision(taos: &Taos) -> Result<String> {
+    // Use SHOW DATABASES and look for precision in output
+    // This is simpler than parsing schema tables
+    let result = taos
+        .query("SHOW CREATE DATABASE trading")
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to query database info: {}", e))?;
+
+    // Convert to string and look for PRECISION
+    let output = format!("{:?}", result);
+
+    if output.contains("PRECISION 'us'") || output.contains("precision 'us'") {
+        return Ok("us".to_string());
+    } else if output.contains("PRECISION 'ms'") || output.contains("precision 'ms'") {
+        return Ok("ms".to_string());
+    } else if output.contains("PRECISION 'ns'") || output.contains("precision 'ns'") {
+        return Ok("ns".to_string());
+    }
+
+    // Default precision is milliseconds if not specified
+    Ok("ms (default)".to_string())
+}
+
+// =============================================================================
+// TDengine Database Configuration
+// =============================================================================
+//
+// CRITICAL: PRECISION MUST BE 'us' (microseconds)
+//
+// Our code uses `SystemTime::now().as_micros()` to generate timestamps.
+// If the database is created with wrong precision (e.g., 'ms' or 'ns'),
+// you will get: "Timestamp data out of range" errors.
+//
+// Common scenarios that cause this:
+// 1. A stale database created with different precision still exists
+// 2. CI environment reuses TDengine container with old database
+//
+// Solution: ci_clean.py drops the database before each test run to ensure
+// fresh creation with correct precision.
+//
+// Timestamp range for 'us' precision:
+// - Min: 1970-01-01 00:00:00.000000
+// - Max: 2106-02-07 06:28:15.999999
+//
+// =============================================================================
 const CREATE_DATABASE: &str = r#"
 CREATE DATABASE IF NOT EXISTS trading 
     KEEP 365d 

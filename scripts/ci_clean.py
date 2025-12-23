@@ -44,30 +44,24 @@ def clean_tdengine():
         conn = connect("ws://localhost:6041")
         cur = conn.cursor()
         
-        # Create database if not exists just to be safe, though it should exist
-        cur.execute("CREATE DATABASE IF NOT EXISTS trading")
+        # Drop and recreate database with correct precision
+        # This ensures we have 'us' (microsecond) precision, not 'ms'
+        # Wrong precision causes "Timestamp data out of range" errors
+        print("   [Clean] TDengine: Dropping trading database...")
+        try:
+            cur.execute("DROP DATABASE IF EXISTS trading")
+        except Exception as e:
+            print(f"   [Warn] Failed to drop database: {e}")
         
-        # Delete data from tables
-        # Note: In TDengine, DELETE is supported for specific scenarios or we can drop/create
-        # For CI, DELETE FROM table is fine if it works, or we can use DROP TABLE
-        
-        print("   [Clean] TDengine: Clearing orders...")
-        try:
-            cur.execute("DELETE FROM trading.orders")
-        except Exception as e:
-             print(f"   [Warn] Failed to delete orders: {e}")
-
-        print("   [Clean] TDengine: Clearing trades...")
-        try:
-            cur.execute("DELETE FROM trading.trades")
-        except Exception as e:
-             print(f"   [Warn] Failed to delete trades: {e}")
-
-        print("   [Clean] TDengine: Clearing balances...")
-        try:
-            cur.execute("DELETE FROM trading.balances")
-        except Exception as e:
-             print(f"   [Warn] Failed to delete balances: {e}")
+        print("   [Clean] TDengine: Creating trading database with 'us' precision...")
+        cur.execute("""
+            CREATE DATABASE IF NOT EXISTS trading 
+                KEEP 365d 
+                DURATION 10d 
+                BUFFER 256 
+                WAL_LEVEL 2 
+                PRECISION 'us'
+        """)
              
         conn.close()
         print("   [Clean] TDengine: Done")
