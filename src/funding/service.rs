@@ -1,8 +1,10 @@
 use super::error::TransferError;
-use super::transfer::{Transfer, TransferRequest, TransferResponse};
+use super::transfer::Transfer;
+use super::transfer::{TransferRequest, TransferResponse};
 use super::types::AccountType;
 use crate::account::{AssetManager, Database};
 use rust_decimal::prelude::*;
+use sqlx::Row;
 use std::str::FromStr;
 
 pub struct TransferService;
@@ -60,20 +62,20 @@ impl TransferService {
         let mut tx = db.pool().begin().await?;
 
         // Lock Source Balance
-        // Fetch as Decimal
-        let from_balance_row = sqlx::query!(
-            r#"SELECT available as "available: Decimal", version FROM balances_tb 
+        let from_balance_row = sqlx::query(
+            "SELECT available, version FROM balances_tb 
              WHERE user_id = $1 AND asset_id = $2 AND account_type = $3 
-             FOR UPDATE"#,
-            user_id,
-            asset.asset_id,
-            from_account as i16
+             FOR UPDATE",
         )
+        .bind(user_id)
+        .bind(asset.asset_id)
+        .bind(from_account as i16)
         .fetch_optional(&mut *tx)
         .await?;
 
         let available = from_balance_row
-            .map(|r| r.available)
+            .as_ref()
+            .map(|r| r.get::<Decimal, _>("available"))
             .unwrap_or(Decimal::ZERO);
 
         if available < amount_decimal {
@@ -81,45 +83,42 @@ impl TransferService {
         }
 
         // Debit Source
-        sqlx::query!(
+        sqlx::query(
             "UPDATE balances_tb SET available = available - $1, version = version + 1
              WHERE user_id = $2 AND asset_id = $3 AND account_type = $4",
-            amount_decimal,
-            user_id,
-            asset.asset_id,
-            from_account as i16
         )
+        .bind(amount_decimal)
+        .bind(user_id)
+        .bind(asset.asset_id)
+        .bind(from_account as i16)
         .execute(&mut *tx)
         .await?;
 
         // Credit Target
-        // Use amount_decimal for balance update
-        sqlx::query!(
+        sqlx::query(
             "INSERT INTO balances_tb (user_id, asset_id, account_type, available, frozen, version)
              VALUES ($1, $2, $3, $4, 0, 1)
              ON CONFLICT (user_id, asset_id, account_type) 
              DO UPDATE SET available = balances_tb.available + EXCLUDED.available, version = balances_tb.version + 1",
-            user_id,
-            asset.asset_id,
-            to_account as i16,
-            amount_decimal
         )
+        .bind(user_id)
+        .bind(asset.asset_id)
+        .bind(to_account as i16)
+        .bind(amount_decimal)
         .execute(&mut *tx)
         .await?;
 
         // Record Transfer
-        // Use amount_scaled (i64) for transfers_tb
-        let transfer_rec = sqlx::query_as!(
-            Transfer,
+        let transfer_rec: Transfer = sqlx::query_as(
             "INSERT INTO transfers_tb (user_id, asset_id, from_account, to_account, amount)
              VALUES ($1, $2, $3, $4, $5)
              RETURNING transfer_id, user_id, asset_id, from_account, to_account, amount, created_at",
-            user_id,
-            asset.asset_id,
-            from_account as i16,
-            to_account as i16,
-            amount_scaled
         )
+        .bind(user_id)
+        .bind(asset.asset_id)
+        .bind(from_account as i16)
+        .bind(to_account as i16)
+        .bind(amount_scaled)
         .fetch_one(&mut *tx)
         .await?;
 
