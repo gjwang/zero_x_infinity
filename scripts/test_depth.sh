@@ -42,7 +42,12 @@ if ! curl -sf "$BASE_URL/api/v1/health" > /dev/null 2>&1; then
         ENV_FLAG=""
     fi
     
-    cargo run --release -- --gateway $ENV_FLAG --port 8080 --input "$TEST_DIR" > /tmp/gateway_depth.log 2>&1 &
+    # Use pre-built binary (faster than cargo run)
+    if [ -f "./target/release/zero_x_infinity" ]; then
+        ./target/release/zero_x_infinity --gateway $ENV_FLAG --port 8080 --input "$TEST_DIR" > /tmp/gateway_depth.log 2>&1 &
+    else
+        cargo run --release -- --gateway $ENV_FLAG --port 8080 --input "$TEST_DIR" > /tmp/gateway_depth.log 2>&1 &
+    fi
     GATEWAY_PID=$!
     
     # Wait for Gateway
