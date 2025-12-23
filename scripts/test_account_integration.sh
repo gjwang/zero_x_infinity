@@ -55,6 +55,47 @@ test_start() {
     log_info "Test $TESTS_TOTAL: $1"
 }
 
+# Helper to call API and verify response
+call_api() {
+    local method="$1"
+    local url="$2"
+    local name="$3"
+    
+    # Capture HTTP status code and response body
+    local response_file=$(mktemp)
+    local http_code=$(curl -s -X "$method" -w "%{http_code}" -o "$response_file" "$url")
+    local response_body=$(cat "$response_file")
+    rm -f "$response_file"
+    
+    if [ "$http_code" -ne 200 ]; then
+        log_error "$name failed with HTTP $http_code"
+        log_info "URL: $url"
+        log_info "Response: $response_body"
+        return 1
+    fi
+    
+    echo "$response_body"
+    return 0
+}
+
+# Cleanup on exit
+cleanup() {
+    local exit_code=$?
+    if [ $exit_code -ne 0 ]; then
+        echo ""
+        log_warn "Test suite failed with exit code $exit_code"
+        echo "=== Last 20 lines of Gateway Log (/tmp/gateway.log) ==="
+        tail -n 20 /tmp/gateway.log 2>/dev/null || echo "Log not found"
+        echo "========================================================"
+    fi
+    
+    # Kill gateway if it was started in this script
+    if [ -n "$GATEWAY_PID" ]; then
+        kill "$GATEWAY_PID" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT
+
 # ============================================================================
 # Pre-flight Checks
 # ============================================================================
@@ -191,8 +232,8 @@ fi
 # ============================================================================
 
 test_start "Test /api/v1/assets endpoint"
-ASSETS_RESPONSE=$(curl -s http://localhost:8080/api/v1/public/assets)
-if echo "$ASSETS_RESPONSE" | jq -e '.code == 0' > /dev/null 2>&1; then
+ASSETS_RESPONSE=$(call_api GET "http://localhost:8080/api/v1/public/assets" "Assets API")
+if [ $? -eq 0 ] && echo "$ASSETS_RESPONSE" | jq -e '.code == 0' > /dev/null 2>&1; then
     ASSET_COUNT=$(echo "$ASSETS_RESPONSE" | jq '.data | length')
     log_success "Assets endpoint returned $ASSET_COUNT assets"
     
@@ -203,13 +244,13 @@ if echo "$ASSETS_RESPONSE" | jq -e '.code == 0' > /dev/null 2>&1; then
         log_error "Asset structure is incorrect"
     fi
 else
-    log_error "Assets endpoint failed"
-    log_info "Response: $ASSETS_RESPONSE"
+    # Details already logged by call_api if it failed
+    [ $? -ne 0 ] || log_error "Assets API returned business error: $ASSETS_RESPONSE"
 fi
 
 test_start "Test /api/v1/symbols endpoint"
-SYMBOLS_RESPONSE=$(curl -s http://localhost:8080/api/v1/public/symbols)
-if echo "$SYMBOLS_RESPONSE" | jq -e '.code == 0' > /dev/null 2>&1; then
+SYMBOLS_RESPONSE=$(call_api GET "http://localhost:8080/api/v1/public/symbols" "Symbols API")
+if [ $? -eq 0 ] && echo "$SYMBOLS_RESPONSE" | jq -e '.code == 0' > /dev/null 2>&1; then
     SYMBOL_COUNT=$(echo "$SYMBOLS_RESPONSE" | jq '.data | length')
     log_success "Symbols endpoint returned $SYMBOL_COUNT symbols"
     
@@ -220,14 +261,13 @@ if echo "$SYMBOLS_RESPONSE" | jq -e '.code == 0' > /dev/null 2>&1; then
         log_error "Symbol structure is incorrect"
     fi
 else
-    log_error "Symbols endpoint failed"
-    log_info "Response: $SYMBOLS_RESPONSE"
+    [ $? -ne 0 ] || log_error "Symbols API returned business error: $SYMBOLS_RESPONSE"
 fi
 
 # Test /api/v1/exchange_info endpoint
 test_start "Test /api/v1/exchange_info endpoint"
-EXCHANGE_INFO_RESPONSE=$(curl -s http://localhost:8080/api/v1/public/exchange_info)
-if echo "$EXCHANGE_INFO_RESPONSE" | jq -e '.code == 0' > /dev/null 2>&1; then
+EXCHANGE_INFO_RESPONSE=$(call_api GET "http://localhost:8080/api/v1/public/exchange_info" "ExchangeInfo API")
+if [ $? -eq 0 ] && echo "$EXCHANGE_INFO_RESPONSE" | jq -e '.code == 0' > /dev/null 2>&1; then
     ASSET_COUNT=$(echo "$EXCHANGE_INFO_RESPONSE" | jq '.data.assets | length')
     SYMBOL_COUNT=$(echo "$EXCHANGE_INFO_RESPONSE" | jq '.data.symbols | length')
     SERVER_TIME=$(echo "$EXCHANGE_INFO_RESPONSE" | jq '.data.server_time')
@@ -240,8 +280,7 @@ if echo "$EXCHANGE_INFO_RESPONSE" | jq -e '.code == 0' > /dev/null 2>&1; then
         log_error "Exchange info structure is incorrect"
     fi
 else
-    log_error "Exchange info endpoint failed"
-    log_info "Response: $EXCHANGE_INFO_RESPONSE"
+    [ $? -ne 0 ] || log_error "ExchangeInfo API returned business error: $EXCHANGE_INFO_RESPONSE"
 fi
 
 # ============================================================================
@@ -303,13 +342,8 @@ else
 fi
 
 # ============================================================================
-# Cleanup
+# Cleanup (handled by trap)
 # ============================================================================
-
-log_info "Stopping Gateway (PID: $GATEWAY_PID)..."
-kill $GATEWAY_PID 2>/dev/null || true
-wait $GATEWAY_PID 2>/dev/null || true
-log_success "Gateway stopped"
 
 # ============================================================================
 # Test Summary
