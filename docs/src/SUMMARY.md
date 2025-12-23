@@ -17,7 +17,7 @@
     - [0x08-e Performance Profiling | 性能优化](./0x08-e-cancel-optimization.md)
     - [0x08-f Ring Buffer Pipeline | Pipeline 实现](./0x08-f-ring-buffer-pipeline.md)
     - [0x08-g Multi-Thread Pipeline | 多线程 Pipeline](./0x08-g-multi-thread-pipeline.md)
-    - [0x08-h 性能监控](./0x08-h-performance-monitoring.md)
+    - [0x08-h Performance Monitoring | 性能监控](./0x08-h-performance-monitoring.md)
 - [0x09 接入层集成与持久化校验](./0x09-a-gateway.md)
     - [0x09-b Settlement 持久化](./0x09-b-settlement-persistence.md)
     - [0x09-c WebSocket 推送](./0x09-c-websocket-push.md)
