@@ -2,7 +2,14 @@
 name = "zero_x_infinity"
 version = "0.1.0"
 edition = "2024"
-description = "Order book matching engine"
+description = "The Hardest Core HFT Exchange Engine in Rust. From Hello World to 1.3M TPS."
+repository = "https://github.com/gjwang/zero_x_infinity"
+homepage = "https://gjwang.github.io/zero_x_infinity/"
+documentation = "https://gjwang.github.io/zero_x_infinity/"
+license = "MIT"
+keywords = ["trading", "hft", "exchange", "matching-engine", "latency"]
+categories = ["finance", "algorithms", "concurrency"]
+readme = "README.md"
 
 [dependencies]
 rustc-hash = "2"
@@ -39,3 +46,7 @@ ed25519-dalek = { version = "2", features = ["rand_core"] }
 rand = "0.8"
 num-bigint = "0.4"
 num-integer = "0.1"
+
+[dev-dependencies]
+crossterm = "0.29.0"
+ratatui = "0.29.0"
