@@ -27,6 +27,17 @@
 
 set -o pipefail
 
+# macOS compatibility: provide fallback for timeout command
+if ! command -v timeout &>/dev/null; then
+    if command -v gtimeout &>/dev/null; then
+        # Use GNU timeout from coreutils if available
+        timeout() { gtimeout "$@"; }
+    else
+        # Fallback: just run without timeout
+        timeout() { shift; "$@"; }
+    fi
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 LOG_DIR="${CI_LOG_DIR:-/tmp/integration_tests}"
