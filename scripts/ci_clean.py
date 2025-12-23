@@ -44,16 +44,10 @@ def clean_tdengine():
         conn = connect("ws://localhost:6041")
         cur = conn.cursor()
         
-        # Drop and recreate database with correct precision
-        # This ensures we have 'us' (microsecond) precision, not 'ms'
+        # Create database with correct precision if not exists
+        # CRITICAL: Precision MUST be 'us' (microseconds)
         # Wrong precision causes "Timestamp data out of range" errors
-        print("   [Clean] TDengine: Dropping trading database...")
-        try:
-            cur.execute("DROP DATABASE IF EXISTS trading")
-        except Exception as e:
-            print(f"   [Warn] Failed to drop database: {e}")
-        
-        print("   [Clean] TDengine: Creating trading database with 'us' precision...")
+        print("   [Clean] TDengine: Ensuring database with 'us' precision...")
         cur.execute("""
             CREATE DATABASE IF NOT EXISTS trading 
                 KEEP 365d 
@@ -62,6 +56,17 @@ def clean_tdengine():
                 WAL_LEVEL 2 
                 PRECISION 'us'
         """)
+        
+        # Delete data from tables (keep table structure)
+        # Tables are created by Gateway's init_schema
+        print("   [Clean] TDengine: Clearing data...")
+        for table in ['orders', 'trades', 'balances', 'order_events', 'klines']:
+            try:
+                cur.execute(f"DELETE FROM trading.{table}")
+                print(f"   [Clean] Cleared {table}")
+            except Exception as e:
+                # Table doesn't exist yet - that's OK, Gateway will create it
+                pass
              
         conn.close()
         print("   [Clean] TDengine: Done")
