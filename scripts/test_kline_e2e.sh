@@ -24,6 +24,16 @@ pass() { echo -e "${GREEN}✅ $1${NC}"; }
 fail() { echo -e "${RED}❌ $1${NC}"; exit 1; }
 warn() { echo -e "${YELLOW}⚠️  $1${NC}"; }
 
+# Cleanup function
+cleanup() {
+    if [ -n "$GATEWAY_PID" ]; then
+        echo ""
+        echo "Stopping Gateway (PID $GATEWAY_PID)..."
+        kill "$GATEWAY_PID" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT
+
 # ============================================================
 # Step 0: Check and start prerequisite services
 # ============================================================
