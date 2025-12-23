@@ -8,7 +8,7 @@
 - [0x04 BTree OrderBook | 重构 OrderBook](./0x04-btree-orderbook.md)
 - [0x05 User Balance | 余额管理](./0x05-user-balance.md)
 - [0x06 Enforced Balance | 强制余额](./0x06-enforced-balance.md)
-- [0x07 测试框架与性能基线](./0x07-a-testing-framework.md)
+- [0x07 Testing Framework | 测试框架](./0x07-a-testing-framework.md)
     - [0x07-b 性能基线](./0x07-b-perf-baseline.md)
 - [0x08 交易流水线与多线程优化](./0x08-a-trading-pipeline-design.md)
     - [0x08-b UBScore 实现](./0x08-b-ubscore-implementation.md)
