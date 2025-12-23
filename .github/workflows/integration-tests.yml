@@ -132,7 +132,9 @@ jobs:
         run: pip install pandas taos-ws-py psycopg2-binary pynacl requests
       
       - name: Initialize DB
-        run: python3 scripts/db/manage_db.py init || echo "DB init skipped"
+        run: |
+          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/001_init_schema.sql || echo "Schema init failed"
+          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f fixtures/seed_data.sql || echo "Seed failed"
       
       - name: Download Binary
         uses: actions/download-artifact@v4
@@ -271,7 +273,9 @@ jobs:
         run: pip install pandas taos-ws-py psycopg2-binary pynacl requests
       
       - name: Initialize DB
-        run: python3 scripts/db/manage_db.py init || echo "DB init skipped"
+        run: |
+          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/001_init_schema.sql || echo "Schema init failed"
+          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f fixtures/seed_data.sql || echo "Seed failed"
 
       - name: Download Binary
         uses: actions/download-artifact@v4
