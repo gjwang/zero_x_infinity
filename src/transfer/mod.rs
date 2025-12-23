@@ -25,6 +25,7 @@
 //! 4. **Trading Cannot Rollback**: Once Trading withdraws, must retry target forever
 
 pub mod adapters;
+pub mod api;
 pub mod coordinator;
 pub mod db;
 pub mod error;
@@ -33,6 +34,7 @@ pub mod types;
 pub mod worker;
 
 // Re-exports for convenience
+pub use api::{TransferApiRequest, TransferApiResponse, create_transfer_fsm, get_transfer_status};
 pub use coordinator::TransferCoordinator;
 pub use error::TransferError;
 pub use state::TransferState;
