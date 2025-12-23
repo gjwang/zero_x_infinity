@@ -309,6 +309,22 @@ EOF
 }
 
 # ============================================================================
+# Environment Cleanup (for CI isolation)
+# ============================================================================
+
+clean_env() {
+    echo ""
+    echo "   [CI] Cleaning environment..."
+    pkill -f "zero_x_infinity" || true
+    pkill -f "zero_x_infinity.*--gateway" || true
+    
+    if [ "$CI" = "true" ] && [ -f "scripts/ci_clean.py" ]; then
+         python3 scripts/ci_clean.py || echo "   [WARN] DB cleanup script failed"
+    fi
+    sleep 2
+}
+
+# ============================================================================
 # Main Test Execution
 # ============================================================================
 
@@ -391,19 +407,6 @@ main() {
         echo "Phase 4: HTTP API Endpoints"
         echo "═══════════════════════════════════════════════════════════════"
         
-        # Helper to clean environment between tests
-        clean_env() {
-            echo ""
-            echo "   [CI] Cleaning environment..."
-            pkill -f "zero_x_infinity" || true
-            pkill -f "zero_x_infinity.*--gateway" || true
-            
-            if [ "$CI" = "true" ] && [ -f "scripts/ci_clean.py" ]; then
-                 python3 scripts/ci_clean.py || echo "   [WARN] DB cleanup script failed"
-            fi
-            sleep 2
-        }
-
         # Ensure clean start
         clean_env
 
