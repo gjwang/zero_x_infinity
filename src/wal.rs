@@ -301,6 +301,8 @@ impl WalReader {
         let order_type = match parts[8].trim() {
             "Limit" => OrderType::Limit,
             "Market" => OrderType::Market,
+            "Deposit" => OrderType::Deposit,
+            "Withdraw" => OrderType::Withdraw,
             _ => return None,
         };
 
