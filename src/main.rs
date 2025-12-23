@@ -105,6 +105,26 @@ fn get_port_override() -> Option<u16> {
 }
 
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+
+    // Check for --version or -V
+    if args.iter().any(|a| a == "--version" || a == "-V") {
+        println!(
+            "zero_x_infinity v{} (rev: {})",
+            env!("CARGO_PKG_VERSION"),
+            env!("GIT_HASH")
+        );
+        println!(
+            "Build Mode: {}",
+            if cfg!(debug_assertions) {
+                "Debug"
+            } else {
+                "Release"
+            }
+        );
+        return;
+    }
+
     let output_dir = get_output_dir();
     let input_dir = get_input_dir();
     let ubscore_mode = use_ubscore_mode();

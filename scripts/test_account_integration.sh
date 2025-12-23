@@ -172,6 +172,38 @@ fi
 # Build and Start Gateway
 # ============================================================================
 
+BINARY="./target/release/zero_x_infinity"
+
+# Check binary existence
+if [ ! -f "$BINARY" ]; then
+    log_error "Gateway binary not found: $BINARY"
+    log_info "Please run: cargo build --release"
+    exit 1
+fi
+
+# Print version info
+log_info "Binary Version: $($BINARY --version | tr '\n' ' ')"
+
+# Check binary freshness (only locally)
+if [ "$CI" != "true" ]; then
+    SRC_LAST_MOD=$(find src -type f -exec stat -f "%m" {} + | sort -nr | head -1)
+    BIN_LAST_MOD=$(stat -f "%m" "$BINARY")
+    
+    if [ "$SRC_LAST_MOD" -gt "$BIN_LAST_MOD" ]; then
+        echo ""
+        log_warn "⚠️  WARNING: Release binary is STALE!"
+        log_info "Source code was modified after the last release build."
+        log_info "Binary build time: $(date -r $BIN_LAST_MOD '+%Y-%m-%d %H:%M:%S')"
+        log_info "Source last mod:   $(date -r $SRC_LAST_MOD '+%Y-%m-%d %H:%M:%S')"
+        log_info "To avoid misleading results, please run: cargo build --release"
+        echo ""
+        # We don't exit here to allow quick iterations for non-core changes, 
+        # but the warning is prominent.
+    else
+        log_success "Binary is up-to-date (Build time: $(date -r $BIN_LAST_MOD '+%m-%d %H:%M'))"
+    fi
+fi
+
 # ============================================================================
 # Prepare Test Data
 # ============================================================================
