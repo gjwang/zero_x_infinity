@@ -62,7 +62,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        image: postgres:18
         ports:
           - 5432:5432
         env:
@@ -77,15 +77,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Apply All Migrations
-        run: |
-          for f in migrations/*.sql; do
-            echo "Applying $f..."
-            PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f "$f"
-          done
-      
-      - name: Seed Data
-        run: PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f fixtures/seed_data.sql 2>&1 | grep -v 'does not exist' || true
+      - name: Initialize Database
+        run: PG_PORT=5432 ./scripts/db/init.sh pg
       
       - name: Verify Tables Exist
         run: |
@@ -107,53 +100,10 @@ jobs:
           - 6030:6030
           - 6041:6041
     steps:
-      - name: Wait for TDengine
-        run: |
-          for i in {1..30}; do
-            curl -s http://localhost:6041/rest/login/root/taosdata && echo "✅ TDengine ready" && exit 0
-            echo "Waiting for TDengine... ($i/30)"
-            sleep 2
-          done
-          echo "❌ TDengine connection timeout"
-          exit 1
+      - uses: actions/checkout@v4
       
-      - name: Create Database with Correct Precision
-        run: |
-          # CRITICAL: Precision MUST be 'us' (microseconds)
-          # Code uses SystemTime::now().as_micros(), wrong precision causes
-          # "Timestamp data out of range" errors
-          curl -s -u root:taosdata -d "CREATE DATABASE IF NOT EXISTS trading KEEP 365d DURATION 10d BUFFER 256 WAL_LEVEL 2 PRECISION 'us'" \
-            http://localhost:6041/rest/sql
-          echo "✅ Database 'trading' created with 'us' precision"
-      
-      - name: Create Super Tables
-        run: |
-          # Create all super tables that Gateway's init_schema would create
-          # This ensures tables exist BEFORE any test runs
-          
-          curl -s -u root:taosdata -d "USE trading" http://localhost:6041/rest/sql
-          
-          # Orders table
-          curl -s -u root:taosdata -d "CREATE STABLE IF NOT EXISTS orders (ts TIMESTAMP, order_id BIGINT UNSIGNED, user_id BIGINT UNSIGNED, side TINYINT UNSIGNED, order_type TINYINT UNSIGNED, price BIGINT UNSIGNED, qty BIGINT UNSIGNED, filled_qty BIGINT UNSIGNED, status TINYINT UNSIGNED, cid NCHAR(64)) TAGS (symbol_id INT UNSIGNED)" \
-            http://localhost:6041/rest/sql
-          
-          # Trades table
-          curl -s -u root:taosdata -d "CREATE STABLE IF NOT EXISTS trades (ts TIMESTAMP, trade_id BIGINT UNSIGNED, order_id BIGINT UNSIGNED, user_id BIGINT UNSIGNED, side TINYINT UNSIGNED, price BIGINT UNSIGNED, qty BIGINT UNSIGNED, fee BIGINT UNSIGNED, role TINYINT UNSIGNED) TAGS (symbol_id INT UNSIGNED)" \
-            http://localhost:6041/rest/sql
-          
-          # Balances table
-          curl -s -u root:taosdata -d "CREATE STABLE IF NOT EXISTS balances (ts TIMESTAMP, avail BIGINT UNSIGNED, frozen BIGINT UNSIGNED, lock_version BIGINT UNSIGNED, settle_version BIGINT UNSIGNED) TAGS (user_id BIGINT UNSIGNED, asset_id INT UNSIGNED)" \
-            http://localhost:6041/rest/sql
-          
-          # K-Lines table
-          curl -s -u root:taosdata -d "CREATE STABLE IF NOT EXISTS klines (ts TIMESTAMP, open BIGINT UNSIGNED, high BIGINT UNSIGNED, low BIGINT UNSIGNED, close BIGINT UNSIGNED, volume BIGINT UNSIGNED, quote_volume DOUBLE, trade_count INT UNSIGNED) TAGS (symbol_id INT UNSIGNED, intv NCHAR(8))" \
-            http://localhost:6041/rest/sql
-          
-          # Order events table
-          curl -s -u root:taosdata -d "CREATE STABLE IF NOT EXISTS order_events (ts TIMESTAMP, order_id BIGINT UNSIGNED, event_type TINYINT UNSIGNED, prev_status TINYINT UNSIGNED, new_status TINYINT UNSIGNED, filled_qty BIGINT UNSIGNED, remaining_qty BIGINT UNSIGNED) TAGS (symbol_id INT UNSIGNED)" \
-            http://localhost:6041/rest/sql
-          
-          echo "✅ All super tables created"
+      - name: Initialize TDengine
+        run: ./scripts/db/init.sh td
       
       - name: Verify Schema
         run: |
@@ -220,7 +170,7 @@ jobs:
           - 6030:6030
           - 6041:6041
       postgres:
-        image: postgres:16
+        image: postgres:18
         ports:
           - 5432:5432
         env:
@@ -244,12 +194,7 @@ jobs:
         run: pip install pandas taos-ws-py psycopg2-binary pynacl requests
       
       - name: Initialize DB
-        run: |
-          for f in migrations/*.sql; do
-            echo "Applying $f..."
-            PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f "$f"
-          done
-          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f fixtures/seed_data.sql 2>&1 | grep -v 'does not exist' || true
+        run: PG_PORT=5432 ./scripts/db/init.sh pg
       
       - name: Download Binary
         uses: actions/download-artifact@v4
@@ -261,7 +206,7 @@ jobs:
         run: chmod +x target/release/zero_x_infinity
 
       - name: Initialize TDengine
-        run: ./scripts/init_tdengine_schema.sh
+        run: ./scripts/db/init.sh td
 
       - name: Run Gateway E2E
         run: ./scripts/test_ci.sh --test-gateway-e2e
@@ -277,7 +222,7 @@ jobs:
           - 6030:6030
           - 6041:6041
       postgres:
-        image: postgres:16
+        image: postgres:18
         ports:
           - 5432:5432
         env:
@@ -301,12 +246,7 @@ jobs:
         run: pip install pandas taos-ws-py psycopg2-binary pynacl requests
       
       - name: Initialize DB
-        run: |
-          for f in migrations/*.sql; do
-            echo "Applying $f..."
-            PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f "$f"
-          done
-          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f fixtures/seed_data.sql 2>&1 | grep -v 'does not exist' || true
+        run: PG_PORT=5432 ./scripts/db/init.sh pg
       
       - name: Download Binary
         uses: actions/download-artifact@v4
@@ -318,7 +258,7 @@ jobs:
         run: chmod +x target/release/zero_x_infinity
 
       - name: Initialize TDengine
-        run: ./scripts/init_tdengine_schema.sh
+        run: ./scripts/db/init.sh td
 
       - name: Run K-Line E2E
         run: ./scripts/test_ci.sh --test-kline
@@ -334,7 +274,7 @@ jobs:
           - 6030:6030
           - 6041:6041
       postgres:
-        image: postgres:16
+        image: postgres:18
         ports:
           - 5432:5432
         env:
@@ -358,12 +298,7 @@ jobs:
         run: pip install pandas taos-ws-py psycopg2-binary pynacl requests
       
       - name: Initialize DB
-        run: |
-          for f in migrations/*.sql; do
-            echo "Applying $f..."
-            PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f "$f"
-          done
-          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f fixtures/seed_data.sql 2>&1 | grep -v 'does not exist' || true
+        run: PG_PORT=5432 ./scripts/db/init.sh pg
       
       - name: Download Binary
         uses: actions/download-artifact@v4
@@ -375,7 +310,7 @@ jobs:
         run: chmod +x target/release/zero_x_infinity
 
       - name: Initialize TDengine
-        run: ./scripts/init_tdengine_schema.sh
+        run: ./scripts/db/init.sh td
 
       - name: Run Depth API
         run: ./scripts/test_ci.sh --test-depth
@@ -386,7 +321,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        image: postgres:18
         ports:
           - 5432:5432
         env:
@@ -410,12 +345,7 @@ jobs:
         run: pip install pandas taos-ws-py psycopg2-binary pynacl requests
       
       - name: Initialize DB
-        run: |
-          for f in migrations/*.sql; do
-            echo "Applying $f..."
-            PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f "$f"
-          done
-          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f fixtures/seed_data.sql 2>&1 | grep -v 'does not exist' || true
+        run: PG_PORT=5432 ./scripts/db/init.sh pg
 
       - name: Download Binary
         uses: actions/download-artifact@v4
