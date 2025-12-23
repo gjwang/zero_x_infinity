@@ -156,6 +156,7 @@ class ApiClient:
         return requests.get(
             f"{self.base_url}{path}",
             headers=headers,
+            timeout=kwargs.get("timeout", 10),
             **kwargs
         )
     
@@ -182,6 +183,7 @@ class ApiClient:
             f"{self.base_url}{path}",
             headers=headers,
             json=json_body,
+            timeout=kwargs.get("timeout", 10),
             **kwargs
         )
     
@@ -202,6 +204,7 @@ class ApiClient:
         return requests.delete(
             f"{self.base_url}{path}",
             headers=headers,
+            timeout=kwargs.get("timeout", 10),
             **kwargs
         )
 
