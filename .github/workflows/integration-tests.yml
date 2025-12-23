@@ -18,7 +18,9 @@ env:
   CI: true
 
 jobs:
-  # Build Job: Compiles and uploads binary
+  # ============================================================================
+  # Stage 1: Build
+  # ============================================================================
   build:
     name: Build & Cache
     runs-on: ubuntu-latest
@@ -51,7 +53,71 @@ jobs:
           path: target/release/zero_x_infinity
           retention-days: 1
 
-  # Phase 1: Unit & Pipeline Logic Tests
+  # ============================================================================
+  # Stage 2: Prerequisite Checks (each is a separate job for clear failure)
+  # ============================================================================
+  
+  check-postgres:
+    name: "✓ PostgreSQL Schema"
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_DB: exchange_info_db
+          POSTGRES_USER: trading
+          POSTGRES_PASSWORD: trading123
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Apply Schema 001
+        run: PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/001_init_schema.sql
+      
+      - name: Apply Schema 002
+        run: PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/002_create_api_keys.sql
+      
+      - name: Seed Data
+        run: PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f fixtures/seed_data.sql 2>&1 | grep -v 'does not exist' || true
+      
+      - name: Verify Tables Exist
+        run: |
+          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -c "\dt" | tee tables.txt
+          grep -q "users_tb" tables.txt || (echo "❌ users_tb missing" && exit 1)
+          grep -q "assets_tb" tables.txt || (echo "❌ assets_tb missing" && exit 1)
+          grep -q "symbols_tb" tables.txt || (echo "❌ symbols_tb missing" && exit 1)
+          grep -q "api_keys_tb" tables.txt || (echo "❌ api_keys_tb missing" && exit 1)
+          echo "✅ All required tables exist"
+
+  check-tdengine:
+    name: "✓ TDengine Connection"
+    runs-on: ubuntu-latest
+    services:
+      tdengine:
+        image: tdengine/tdengine:latest
+        ports:
+          - 6030:6030
+          - 6041:6041
+    steps:
+      - name: Wait for TDengine
+        run: |
+          for i in {1..30}; do
+            curl -s http://localhost:6041/rest/login/root/taosdata && echo "✅ TDengine ready" && exit 0
+            echo "Waiting for TDengine... ($i/30)"
+            sleep 2
+          done
+          echo "❌ TDengine connection timeout"
+          exit 1
+
+  # ============================================================================
+  # Stage 3: Unit Tests (no services needed)
+  # ============================================================================
   test-unit:
     name: Unit & Pipeline
     needs: build
@@ -62,7 +128,6 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
       
-      # Restore cargo cache for unit tests (needs dependencies)
       - name: Restore cargo cache
         uses: actions/cache@v4
         with:
@@ -80,9 +145,7 @@ jobs:
           python-version: '3.10'
       
       - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pandas taos-ws-py psycopg2-binary pynacl requests
+        run: pip install pandas taos-ws-py psycopg2-binary pynacl requests
       
       - name: Download Binary
         uses: actions/download-artifact@v4
@@ -96,10 +159,13 @@ jobs:
       - name: Run Unit Tests
         run: ./scripts/test_ci.sh --test-unit
 
-  # Phase 4: Gateway E2E
+  # ============================================================================
+  # Stage 4: Integration Tests (depends on build + prereq checks)
+  # ============================================================================
+  
   test-gateway:
     name: Gateway E2E
-    needs: build
+    needs: [build, check-postgres, check-tdengine]
     runs-on: ubuntu-latest
     services:
       tdengine:
@@ -133,9 +199,8 @@ jobs:
       
       - name: Initialize DB
         run: |
-          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/001_init_schema.sql || echo "Schema 001 failed"
-          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/002_create_api_keys.sql || echo "Schema 002 failed"
-          # Seed data - ignore errors for tables that don't exist in PG (e.g., balances_tb is in TDengine)
+          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/001_init_schema.sql
+          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/002_create_api_keys.sql
           PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f fixtures/seed_data.sql 2>&1 | grep -v 'does not exist' || true
       
       - name: Download Binary
@@ -150,10 +215,9 @@ jobs:
       - name: Run Gateway E2E
         run: ./scripts/test_ci.sh --test-gateway-e2e
 
-  # Phase 4: K-Line E2E
   test-kline:
     name: K-Line E2E
-    needs: build
+    needs: [build, check-postgres, check-tdengine]
     runs-on: ubuntu-latest
     services:
       tdengine:
@@ -185,6 +249,12 @@ jobs:
       - name: Install Python dependencies
         run: pip install pandas taos-ws-py psycopg2-binary pynacl requests
       
+      - name: Initialize DB
+        run: |
+          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/001_init_schema.sql
+          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/002_create_api_keys.sql
+          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f fixtures/seed_data.sql 2>&1 | grep -v 'does not exist' || true
+      
       - name: Download Binary
         uses: actions/download-artifact@v4
         with:
@@ -193,20 +263,13 @@ jobs:
       
       - name: Set Binary Executable
         run: chmod +x target/release/zero_x_infinity
-
-      - name: Initialize DB
-        run: |
-          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/001_init_schema.sql || echo "Schema 001 failed"
-          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/002_create_api_keys.sql || echo "Schema 002 failed"
-          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f fixtures/seed_data.sql 2>&1 | grep -v 'does not exist' || true
 
       - name: Run K-Line E2E
         run: ./scripts/test_ci.sh --test-kline
 
-  # Phase 4: Depth API
   test-depth:
     name: Depth API
-    needs: build
+    needs: [build, check-postgres, check-tdengine]
     runs-on: ubuntu-latest
     services:
       tdengine:
@@ -238,6 +301,12 @@ jobs:
       - name: Install Python dependencies
         run: pip install pandas taos-ws-py psycopg2-binary pynacl requests
       
+      - name: Initialize DB
+        run: |
+          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/001_init_schema.sql
+          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/002_create_api_keys.sql
+          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f fixtures/seed_data.sql 2>&1 | grep -v 'does not exist' || true
+      
       - name: Download Binary
         uses: actions/download-artifact@v4
         with:
@@ -247,19 +316,12 @@ jobs:
       - name: Set Binary Executable
         run: chmod +x target/release/zero_x_infinity
 
-      - name: Initialize DB
-        run: |
-          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/001_init_schema.sql || echo "Schema 001 failed"
-          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/002_create_api_keys.sql || echo "Schema 002 failed"
-          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f fixtures/seed_data.sql 2>&1 | grep -v 'does not exist' || true
-
       - name: Run Depth API
         run: ./scripts/test_ci.sh --test-depth
 
-  # Phase 5: Account Integration
   test-account:
     name: Account Integration
-    needs: build
+    needs: [build, check-postgres]
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -288,8 +350,8 @@ jobs:
       
       - name: Initialize DB
         run: |
-          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/001_init_schema.sql || echo "Schema 001 failed"
-          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/002_create_api_keys.sql || echo "Schema 002 failed"
+          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/001_init_schema.sql
+          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/002_create_api_keys.sql
           PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f fixtures/seed_data.sql 2>&1 | grep -v 'does not exist' || true
 
       - name: Download Binary
