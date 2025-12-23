@@ -14,7 +14,7 @@
     - [0x08-b UBScore Implementation | UBScore 实现](./0x08-b-ubscore-implementation.md)
     - [0x08-c Complete Event Flow | 完整事件流](./0x08-c-ring-buffer-pipeline.md)
     - [0x08-d Complete Order Lifecycle | 完整订单生命周期](./0x08-d-complete-order-lifecycle.md)
-    - [0x08-e Cancel 优化](./0x08-e-cancel-optimization.md)
+    - [0x08-e Performance Profiling | 性能优化](./0x08-e-cancel-optimization.md)
     - [0x08-f Ring Buffer 优化](./0x08-f-ring-buffer-pipeline.md)
     - [0x08-g 多线程 Pipeline](./0x08-g-multi-thread-pipeline.md)
     - [0x08-h 性能监控](./0x08-h-performance-monitoring.md)
