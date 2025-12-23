@@ -39,6 +39,19 @@ if ! docker ps | grep -q tdengine; then
 fi
 pass "TDengine is running"
 
+# Create test directory with initial balances BEFORE starting Gateway
+TEST_DIR="/tmp/kline_e2e_test"
+mkdir -p "$TEST_DIR"
+
+# Create initial balances for test users
+cat > "$TEST_DIR/balances_init.csv" << EOF
+user_id,asset_id,avail,frozen,version
+1001,1,1000000000000,0,0
+1001,2,1000000000000,0,0
+1002,1,1000000000000,0,0
+1002,2,1000000000000,0,0
+EOF
+
 # Check Gateway
 if ! curl -sf "$BASE_URL/api/v1/health" > /dev/null 2>&1; then
     warn "Gateway not running, starting..."
@@ -51,7 +64,7 @@ if ! curl -sf "$BASE_URL/api/v1/health" > /dev/null 2>&1; then
         ENV_FLAG=""
     fi
     
-    cargo run --release -- --gateway $ENV_FLAG --port 8080 > /tmp/gateway.log 2>&1 &
+    cargo run --release -- --gateway $ENV_FLAG --port 8080 --input "$TEST_DIR" > /tmp/gateway.log 2>&1 &
     GATEWAY_PID=$!
     echo "   Waiting for Gateway to be ready (30s)..."
     
@@ -84,9 +97,7 @@ echo "Step 3: Creating matching orders via Ed25519 authenticated API..."
 PRICE="37000.00"
 QTY="0.05"
 
-# Create test orders CSV for inject_orders.py
-TEST_DIR="/tmp/kline_e2e_test"
-mkdir -p "$TEST_DIR"
+# Create test orders CSV for inject_orders.py (TEST_DIR already created above)
 cat > "$TEST_DIR/kline_orders.csv" << EOF
 order_id,user_id,side,price,qty
 1001,1001,buy,$PRICE,$QTY
