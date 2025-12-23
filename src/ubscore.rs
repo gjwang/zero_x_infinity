@@ -448,6 +448,64 @@ impl UBSCore {
     }
 
     // ============================================================
+    // INTERNAL TRANSFER (Phase 0x0B-a)
+    // ============================================================
+
+    /// Withdraw funds for internal transfer (Spot -> Funding)
+    ///
+    /// Directly deducts from available balance (no freeze).
+    /// This is for internal transfers only, NOT for trading orders.
+    ///
+    /// # Returns
+    /// - `Ok(avail, frozen)` - New balance after withdrawal
+    /// - `Err("Account not found")` - User or asset doesn't exist
+    /// - `Err("Insufficient balance")` - Not enough available balance
+    pub fn withdraw_for_transfer(
+        &mut self,
+        user_id: UserId,
+        asset_id: AssetId,
+        amount: u64,
+    ) -> Result<(u64, u64), &'static str> {
+        let account = self.accounts.get_mut(&user_id).ok_or("Account not found")?;
+        let balance = account.get_balance_mut(asset_id)?;
+
+        // Check available balance
+        if balance.avail() < amount {
+            return Err("Insufficient balance");
+        }
+
+        // Directly withdraw from available (no freeze involved)
+        balance.withdraw(amount)?;
+
+        Ok((balance.avail(), balance.frozen()))
+    }
+
+    /// Deposit funds from internal transfer (Funding -> Spot)
+    ///
+    /// Credits the available balance directly.
+    /// Creates account/asset if not exists (lazy init).
+    ///
+    /// # Returns
+    /// - `Ok(avail, frozen)` - New balance after deposit
+    pub fn deposit_from_transfer(
+        &mut self,
+        user_id: UserId,
+        asset_id: AssetId,
+        amount: u64,
+    ) -> Result<(u64, u64), &'static str> {
+        // Lazy init: create account and asset if not exist
+        let account = self
+            .accounts
+            .entry(user_id)
+            .or_insert_with(|| UserAccount::new(user_id));
+
+        account.deposit(asset_id, amount)?;
+
+        let balance = account.get_balance(asset_id).unwrap();
+        Ok((balance.avail(), balance.frozen()))
+    }
+
+    // ============================================================
     // WAL OPERATIONS
     // ============================================================
 
@@ -653,5 +711,79 @@ mod tests {
         let b = ubs.get_balance(1, 1).unwrap();
         assert_eq!(b.avail(), 80_0000_0000);
         assert_eq!(b.frozen(), 0);
+    }
+
+    // ============================================================
+    // INTERNAL TRANSFER TESTS (Phase 0x0B-a)
+    // ============================================================
+
+    #[test]
+    fn test_withdraw_for_transfer() {
+        let manager = test_manager();
+        let wal_config = test_wal_config();
+        let mut ubs = UBSCore::new(manager, wal_config).unwrap();
+
+        // Setup: deposit 100 BTC to user 1
+        ubs.deposit(1, 1, 100_0000_0000).unwrap();
+
+        // Withdraw 30 BTC for transfer
+        let (avail, frozen) = ubs.withdraw_for_transfer(1, 1, 30_0000_0000).unwrap();
+
+        // Check: 70 avail, 0 frozen (no freeze for transfers)
+        assert_eq!(avail, 70_0000_0000);
+        assert_eq!(frozen, 0);
+
+        let b = ubs.get_balance(1, 1).unwrap();
+        assert_eq!(b.avail(), 70_0000_0000);
+    }
+
+    #[test]
+    fn test_withdraw_for_transfer_insufficient() {
+        let manager = test_manager();
+        let wal_config = test_wal_config();
+        let mut ubs = UBSCore::new(manager, wal_config).unwrap();
+
+        // Setup: deposit only 50 BTC
+        ubs.deposit(1, 1, 50_0000_0000).unwrap();
+
+        // Try to withdraw 100 BTC
+        let result = ubs.withdraw_for_transfer(1, 1, 100_0000_0000);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "Insufficient balance");
+    }
+
+    #[test]
+    fn test_deposit_from_transfer_existing_account() {
+        let manager = test_manager();
+        let wal_config = test_wal_config();
+        let mut ubs = UBSCore::new(manager, wal_config).unwrap();
+
+        // Setup: existing account with 50 BTC
+        ubs.deposit(1, 1, 50_0000_0000).unwrap();
+
+        // Deposit 30 BTC from transfer
+        let (avail, frozen) = ubs.deposit_from_transfer(1, 1, 30_0000_0000).unwrap();
+
+        // Check: 80 avail
+        assert_eq!(avail, 80_0000_0000);
+        assert_eq!(frozen, 0);
+    }
+
+    #[test]
+    fn test_deposit_from_transfer_new_account() {
+        let manager = test_manager();
+        let wal_config = test_wal_config();
+        let mut ubs = UBSCore::new(manager, wal_config).unwrap();
+
+        // Deposit 100 BTC to new user (lazy init)
+        let (avail, frozen) = ubs.deposit_from_transfer(999, 1, 100_0000_0000).unwrap();
+
+        // Check: 100 avail
+        assert_eq!(avail, 100_0000_0000);
+        assert_eq!(frozen, 0);
+
+        // Verify account was created
+        let b = ubs.get_balance(999, 1).unwrap();
+        assert_eq!(b.avail(), 100_0000_0000);
     }
 }
