@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="Integration Tests" tests="1" failures="1" skipped="0" time="9">
-  <testsuite name="Phase0x09" tests="1" failures="1" skipped="0" time="9">
+<testsuites name="Integration Tests" tests="9" failures="2" skipped="2" time="40">
+  <testsuite name="Phase0x09" tests="9" failures="2" skipped="2" time="40">
+    <testcase name="Account_Integration" classname="integration" />
     <testcase name="Depth_API" classname="integration" />
     <testcase name="Gateway_E2E" classname="integration" />
-    <testcase name="KLine_E2E" classname="integration"><failure message="Test failed">   - OHLC: 85000000000.00 / 85050000000.00 / 85000000000.00 / 85050000000.00 [0;32m✅ Symbol is correct[0m  =================== 🎉 K-Line E2E Test Complete! </failure></testcase>
+    <testcase name="KLine_E2E" classname="integration"><failure message="Test failed"> Step 6: Verifying response... [0;31m❌ API returned error code: 5001[0m  Stopping Gateway (PID 19741)... </failure></testcase>
     <testcase name="Persistence" classname="integration" />
     <testcase name="balance_events" classname="integration"><failure message="Test failed">Issues found:   - Lock events (0) != Accepted orders (1300000)   - Settle events (0) != Trades * 4 (2670268)   - Lock events have unexpected source_types: set()   - Settle events have unexpected sourc</failure></testcase>
     <testcase name="cargo_build" classname="integration" />

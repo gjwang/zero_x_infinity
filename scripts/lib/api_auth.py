@@ -144,13 +144,22 @@ class ApiClient:
         Send authenticated GET request.
         
         Args:
-            path: Request path (e.g., "/api/v1/private/orders?user_id=1")
+            path: Request path (e.g., "/api/v1/private/orders")
             **kwargs: Additional arguments passed to requests.get
             
         Returns:
             Response object
         """
-        auth = self._sign_request("GET", path)
+        # Prepare full path with query params for signing
+        params = kwargs.get("params")
+        signed_path = path
+        if params:
+            from requests.models import PreparedRequest
+            req = PreparedRequest()
+            req.prepare_url(f"http://placeholder{path}", params)
+            signed_path = req.url.replace("http://placeholder", "")
+            
+        auth = self._sign_request("GET", signed_path)
         headers = kwargs.pop("headers", {})
         headers["Authorization"] = auth
         return requests.get(

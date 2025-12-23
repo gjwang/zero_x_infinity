@@ -64,24 +64,37 @@ pub async fn init_schema(taos: &Taos) -> Result<()> {
     Ok(())
 }
 
-/// Check the precision of the trading database
 async fn check_database_precision(taos: &Taos) -> Result<String> {
-    // Use SHOW DATABASES and look for precision in output
-    // This is simpler than parsing schema tables
-    let result = taos
+    #[derive(serde::Deserialize)]
+    struct ShowCreate {
+        #[serde(rename = "Create Database")]
+        create: String,
+    }
+
+    // Use SHOW CREATE DATABASE trading
+    let mut result = taos
         .query("SHOW CREATE DATABASE trading")
         .await
         .map_err(|e| anyhow::anyhow!("Failed to query database info: {}", e))?;
 
-    // Convert to string and look for PRECISION
-    let output = format!("{:?}", result);
+    let rows: Vec<ShowCreate> = result
+        .deserialize()
+        .try_collect()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to deserialize: {}", e))?;
 
-    if output.contains("PRECISION 'us'") || output.contains("precision 'us'") {
-        return Ok("us".to_string());
-    } else if output.contains("PRECISION 'ms'") || output.contains("precision 'ms'") {
-        return Ok("ms".to_string());
-    } else if output.contains("PRECISION 'ns'") || output.contains("precision 'ns'") {
-        return Ok("ns".to_string());
+    if let Some(row) = rows.first() {
+        let create_stmt = row.create.to_uppercase();
+
+        if create_stmt.contains("PRECISION 'US'") || create_stmt.contains("PRECISION 'NS'") {
+            if create_stmt.contains("PRECISION 'US'") {
+                return Ok("us".to_string());
+            } else {
+                return Ok("ns".to_string());
+            }
+        } else if create_stmt.contains("PRECISION 'MS'") {
+            return Ok("ms".to_string());
+        }
     }
 
     // Default precision is milliseconds if not specified

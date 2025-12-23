@@ -11,6 +11,11 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Set paths
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+cd "$PROJECT_DIR"
+
 # Test counters
 TESTS_PASSED=0
 TESTS_FAILED=0
@@ -68,10 +73,12 @@ wait_for_service() {
 # Cleanup function
 cleanup() {
     print_info "Cleaning up..."
-    # IMPORTANT: Do NOT use `pkill -f "zero_x_infinity"` - it will kill IDE!
-    # Use the saved PID instead:
     if [ -n "$GATEWAY_PID" ]; then
         kill "$GATEWAY_PID" 2>/dev/null || true
+    fi
+    # Restore config
+    if [ -f "config/dev.yaml.bak" ]; then
+        mv "config/dev.yaml.bak" "config/dev.yaml"
     fi
     sleep 1
 }
@@ -123,6 +130,14 @@ else
     exit 1
 fi
 
+# Clean and Init all databases using unified scripts
+print_info "Cleaning and initializing databases..."
+# Explicitly drop TDengine database to ensure correct precision (us)
+docker exec tdengine taos -s "DROP DATABASE IF EXISTS trading;" > /dev/null 2>&1
+./scripts/db/clean.sh all > /dev/null
+./scripts/db/init.sh all > /dev/null
+print_success "Databases initialized"
+
 # ============================================
 # Build Application
 # ============================================
@@ -142,7 +157,7 @@ fi
 print_header "Unit Tests"
 
 print_test "Running persistence unit tests..."
-if cargo test --lib persistence -- --ignored --nocapture 2>&1 | grep -q "test result: ok"; then
+if cargo test --lib persistence -- --ignored --nocapture --test-threads=1 2>&1 | grep -q "test result: ok"; then
     print_success "All unit tests passed"
 else
     print_error "Unit tests failed"
@@ -162,7 +177,7 @@ print_test "Starting Gateway server..."
 GATEWAY_PID=$!
 print_info "Gateway PID: $GATEWAY_PID"
 
-if wait_for_service "http://localhost:8080/api/v1/orders?user_id=1&limit=1"; then
+if wait_for_service "http://localhost:8080/api/v1/health"; then
     print_success "Gateway started successfully"
 else
     print_error "Gateway failed to start"
@@ -183,7 +198,7 @@ else
 fi
 
 print_test "Checking Super Tables..."
-STABLES=$(docker exec tdengine taos -s "USE trading; SHOW STABLES;" 2>/dev/null | grep -c "orders\|trades\|balances\|order_events" || echo 0)
+STABLES=$(docker exec tdengine taos -s "USE trading; SHOW STABLES;" 2>/dev/null | grep -E "orders|trades|balances|order_events" | wc -l | tr -d ' ')
 if [ "$STABLES" -ge 4 ]; then
     print_success "All 4 Super Tables exist"
 else
@@ -196,8 +211,9 @@ fi
 print_header "API Endpoint Tests"
 
 # Test 1: Orders query
-print_test "GET /api/v1/orders?user_id=1001&limit=5"
-RESPONSE=$(curl -s "http://localhost:8080/api/v1/orders?user_id=1001&limit=5")
+print_test "GET /api/v1/private/orders?limit=5"
+PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH" RESPONSE=$(python3 "$SCRIPT_DIR/query_api.py" GET "/api/v1/private/orders" --user 1001 --params '{"limit": 5}')
+
 CODE=$(echo "$RESPONSE" | jq -r '.code')
 if [ "$CODE" = "0" ]; then
     print_success "Orders query successful (code: $CODE)"
@@ -207,8 +223,9 @@ else
 fi
 
 # Test 2: Order by ID query
-print_test "GET /api/v1/order/100"
-RESPONSE=$(curl -s "http://localhost:8080/api/v1/order/100")
+print_test "GET /api/v1/private/order/100"
+PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH" RESPONSE=$(python3 "$SCRIPT_DIR/query_api.py" GET "/api/v1/private/order/100" --user 1001)
+
 CODE=$(echo "$RESPONSE" | jq -r '.code')
 if [ "$CODE" = "0" ] || [ "$CODE" = "4001" ]; then
     print_success "Order by ID query successful (code: $CODE)"
@@ -218,8 +235,9 @@ else
 fi
 
 # Test 3: Trades query
-print_test "GET /api/v1/trades?limit=5"
-RESPONSE=$(curl -s "http://localhost:8080/api/v1/trades?limit=5")
+print_test "GET /api/v1/private/trades?limit=5"
+PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH" RESPONSE=$(python3 "$SCRIPT_DIR/query_api.py" GET "/api/v1/private/trades" --user 1001 --params '{"limit": 5}')
+
 CODE=$(echo "$RESPONSE" | jq -r '.code')
 if [ "$CODE" = "0" ]; then
     print_success "Trades query successful (code: $CODE)"
@@ -229,8 +247,9 @@ else
 fi
 
 # Test 4: Balance query
-print_test "GET /api/v1/balances?user_id=1001&asset_id=1"
-RESPONSE=$(curl -s "http://localhost:8080/api/v1/balances?user_id=1001&asset_id=1")
+print_test "GET /api/v1/private/balances?asset_id=1"
+PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH" RESPONSE=$(python3 "$SCRIPT_DIR/query_api.py" GET "/api/v1/private/balances" --user 1001 --params '{"asset_id": 1}')
+
 CODE=$(echo "$RESPONSE" | jq -r '.code')
 if [ "$CODE" = "0" ]; then
     DATA=$(echo "$RESPONSE" | jq -r '.data')
@@ -255,7 +274,8 @@ print_header "Connection Stability Test"
 print_test "Testing connection stability (5 consecutive queries)..."
 STABLE=true
 for i in {1..5}; do
-    RESPONSE=$(curl -s "http://localhost:8080/api/v1/orders?user_id=1001&limit=1")
+    PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH" RESPONSE=$(python3 "$SCRIPT_DIR/query_api.py" GET "/api/v1/private/orders" --user 1001 --params '{"limit": 1}')
+
     CODE=$(echo "$RESPONSE" | jq -r '.code')
     if [ "$CODE" != "0" ]; then
         print_error "Query $i failed (code: $CODE)"
@@ -277,16 +297,14 @@ fi
 print_header "Create Order Test"
 
 print_test "Creating a test order..."
-RESPONSE=$(curl -s -X POST http://localhost:8080/api/v1/create_order \
-    -H "Content-Type: application/json" \
-    -H "X-User-ID: 1001" \
-    -d '{
+PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH" RESPONSE=$(python3 "$SCRIPT_DIR/query_api.py" POST "/api/v1/private/order" --user 1001 --data '{
         "symbol": "BTC_USDT",
         "side": "BUY",
         "order_type": "LIMIT",
         "price": "85000.00",
         "qty": "0.001"
     }')
+
 CODE=$(echo "$RESPONSE" | jq -r '.code')
 if [ "$CODE" = "0" ]; then
     ORDER_ID=$(echo "$RESPONSE" | jq -r '.data.order_id')
