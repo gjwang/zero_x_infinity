@@ -17,6 +17,19 @@ NC='\033[0m' # No Color
 
 echo -e "${BLUE}=== Order Book Depth API Test ===${NC}\n"
 
+# Create test directory with initial balances
+TEST_DIR="/tmp/depth_test"
+mkdir -p "$TEST_DIR"
+
+# Create initial balances for test users
+cat > "$TEST_DIR/balances_init.csv" << EOF
+user_id,asset_id,avail,frozen,version
+1001,1,1000000000000,0,0
+1001,2,1000000000000,0,0
+1002,1,1000000000000,0,0
+1002,2,1000000000000,0,0
+EOF
+
 # Check if Gateway is running, start if needed
 if ! curl -sf "$BASE_URL/api/v1/health" > /dev/null 2>&1; then
     echo -e "${BLUE}Gateway not running, starting...${NC}"
@@ -29,7 +42,7 @@ if ! curl -sf "$BASE_URL/api/v1/health" > /dev/null 2>&1; then
         ENV_FLAG=""
     fi
     
-    cargo run --release -- --gateway $ENV_FLAG --port 8080 > /tmp/gateway_depth.log 2>&1 &
+    cargo run --release -- --gateway $ENV_FLAG --port 8080 --input "$TEST_DIR" > /tmp/gateway_depth.log 2>&1 &
     GATEWAY_PID=$!
     
     # Wait for Gateway
@@ -56,10 +69,7 @@ echo -e "\n"
 # Test 2: Create test orders via inject_orders.py (Ed25519 authenticated)
 echo -e "${BLUE}Test 2: Submit test orders (Ed25519 auth)${NC}"
 
-# Create temporary orders file
-TEST_DIR="/tmp/depth_test"
-mkdir -p "$TEST_DIR"
-
+# Create orders file in the test directory
 cat > "$TEST_DIR/depth_orders.csv" << EOF
 order_id,user_id,side,price,qty
 1,1001,buy,29900,0.1
