@@ -70,7 +70,7 @@ jobs:
           POSTGRES_USER: trading
           POSTGRES_PASSWORD: trading123
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U trading"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -178,7 +178,7 @@ jobs:
           POSTGRES_USER: trading
           POSTGRES_PASSWORD: trading123
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U trading"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -230,7 +230,7 @@ jobs:
           POSTGRES_USER: trading
           POSTGRES_PASSWORD: trading123
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U trading"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -282,7 +282,7 @@ jobs:
           POSTGRES_USER: trading
           POSTGRES_PASSWORD: trading123
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U trading"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -317,9 +317,14 @@ jobs:
 
   test-account:
     name: Account Integration
-    needs: [build, check-postgres]
+    needs: [build, check-postgres, check-tdengine]
     runs-on: ubuntu-latest
     services:
+      tdengine:
+        image: tdengine/tdengine:latest
+        ports:
+          - 6030:6030
+          - 6041:6041
       postgres:
         image: postgres:18
         ports:
@@ -329,7 +334,7 @@ jobs:
           POSTGRES_USER: trading
           POSTGRES_PASSWORD: trading123
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U trading"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -346,6 +351,9 @@ jobs:
       
       - name: Initialize DB
         run: PG_PORT=5432 ./scripts/db/init.sh pg
+
+      - name: Initialize TDengine
+        run: ./scripts/db/init.sh td
 
       - name: Download Binary
         uses: actions/download-artifact@v4
