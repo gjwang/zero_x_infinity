@@ -452,4 +452,51 @@ mod tests {
         assert_eq!(format_amount(1, 8), "0.00000001");
         assert_eq!(format_amount(0, 8), "0.00000000");
     }
+
+    #[test]
+    fn test_asset_validation_info_defaults() {
+        let info = AssetValidationInfo {
+            asset_id: 1,
+            decimals: 8,
+            status: 1,
+            is_active: true,
+            can_internal_transfer: true,
+            min_transfer_amount: 1,
+            max_transfer_amount: u64::MAX / 2,
+        };
+
+        assert!(info.is_active);
+        assert!(info.can_internal_transfer);
+        assert_eq!(info.min_transfer_amount, 1);
+    }
+
+    #[test]
+    fn test_asset_validation_inactive_asset() {
+        let info = AssetValidationInfo {
+            asset_id: 1,
+            decimals: 8,
+            status: 0, // Inactive
+            is_active: false,
+            can_internal_transfer: true,
+            min_transfer_amount: 1,
+            max_transfer_amount: u64::MAX / 2,
+        };
+
+        assert!(!info.is_active);
+    }
+
+    #[test]
+    fn test_asset_validation_transfer_not_allowed() {
+        let info = AssetValidationInfo {
+            asset_id: 1,
+            decimals: 8,
+            status: 1,
+            is_active: true,
+            can_internal_transfer: false, // Transfer not allowed
+            min_transfer_amount: 1,
+            max_transfer_amount: u64::MAX / 2,
+        };
+
+        assert!(!info.can_internal_transfer);
+    }
 }
