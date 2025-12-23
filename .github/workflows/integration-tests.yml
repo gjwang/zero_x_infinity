@@ -133,8 +133,10 @@ jobs:
       
       - name: Initialize DB
         run: |
-          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/001_init_schema.sql || echo "Schema init failed"
-          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f fixtures/seed_data.sql || echo "Seed failed"
+          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/001_init_schema.sql || echo "Schema 001 failed"
+          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/002_create_api_keys.sql || echo "Schema 002 failed"
+          # Seed data - ignore errors for tables that don't exist in PG (e.g., balances_tb is in TDengine)
+          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f fixtures/seed_data.sql 2>&1 | grep -v 'does not exist' || true
       
       - name: Download Binary
         uses: actions/download-artifact@v4
@@ -274,8 +276,9 @@ jobs:
       
       - name: Initialize DB
         run: |
-          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/001_init_schema.sql || echo "Schema init failed"
-          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f fixtures/seed_data.sql || echo "Seed failed"
+          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/001_init_schema.sql || echo "Schema 001 failed"
+          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/002_create_api_keys.sql || echo "Schema 002 failed"
+          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f fixtures/seed_data.sql 2>&1 | grep -v 'does not exist' || true
 
       - name: Download Binary
         uses: actions/download-artifact@v4
