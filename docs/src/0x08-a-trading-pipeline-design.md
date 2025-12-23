@@ -1,4 +1,408 @@
-# 0x08-a 交易流水线设计 (Trading Pipeline Design)
+# 0x08-a Trading Pipeline Design
+
+<h3>
+  <a href="#-english">🇺🇸 English</a>
+  &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
+  <a href="#-chinese">🇨🇳 中文</a>
+</h3>
+
+<div id="-english"></div>
+
+## 🇺🇸 English
+
+> **📦 Code Changes**: [View Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.7-b-perf-baseline...v0.8-a-trading-pipeline-design)
+
+> **Core Objective**: To design a complete trading pipeline architecture that ensures order persistence, balance consistency, and system recoverability.
+
+This chapter addresses the most critical design issues in a matching engine: **Service Partitioning, Data Flow, and Atomicity Guarantees**.
+
+### 1. Why Persistence?
+
+#### 1.1 The Problem Scenario
+
+Suppose the system crashes during matching:
+
+```
+User A sends Buy Order → ME receives & fills → System Crash
+                                               ↓
+                                        User A's funds deducted
+                                        But no trade record
+                                        Order Lost!
+```
+
+**Consequences of No Persistence**:
+*   **Order Loss**: User orders vanish.
+*   **Inconsistent State**: Funds changed but no record exists.
+*   **Unrecoverable**: Upon restart, valid orders are unknown.
+
+#### 1.2 Solution: Persist First, Match Later
+
+```
+User A Buy Order → WAL Persist → ME Match → System Crash
+                     ↓             ↓
+                Order Saved    Replay & Recover!
+```
+
+### 2. Unique Ordering
+
+#### 2.1 Why Unique Ordering?
+
+In distributed systems, multiple nodes must agree on order sequence:
+
+| Scenario | Problem |
+|----------|---------|
+| Node A receives Order 1 then Order 2 | |
+| Node B receives Order 2 then Order 1 | Inconsistent Order! |
+
+**Result**: Matching results differ between nodes!
+
+#### 2.2 Solution: Single Sequencer + Global Sequence ID
+
+```
+All Orders → Sequencer → Assign Global sequence_id → Persist → Dispatch to ME
+              ↓
+         Unique Arrival Order
+```
+
+| Field | Description |
+|-------|-------------|
+| `sequence_id` | Monotonically increasing global ID |
+| `timestamp` | Nanosecond precision timestamp |
+| `order_id` | Business level Order ID |
+
+### 3. Order Lifecycle
+
+#### 3.1 Persist First, Execute Later
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          Order Lifecycle                                │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   ┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐             │
+│   │ Gateway │───▶│Pre-Check│───▶│   WAL   │───▶│   ME    │             │
+│   │(Receiver)│    │(Balance) │    │(Persist)│    │ (Match) │             │
+│   └─────────┘    └─────────┘    └─────────┘    └─────────┘             │
+│        │              │              │              │                   │
+│        ▼              ▼              ▼              ▼                   │
+│   Receive Order   Insufficient?   Disk Write     Execute Match           │
+│                   Early Reject    Assign SeqID   Guaranteed Exec         │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+#### 3.2 Pre-Check: Reducing Invalid Orders
+
+Pre-Check queries **UBSCore** (User Balance Core Service) for balance info. **Read-Only, No Side Effects**.
+
+```rust
+async fn pre_check(order: Order) -> Result<Order, Reject> {
+    // 1. Query UBSCore for balance (Read-Only)
+    let balance = ubscore.query_balance(order.user_id, asset);
+
+    // 2. Calculate required amount
+    let required = match order.side {
+        Buy  => order.price * order.qty / QTY_UNIT,  // quote
+        Sell => order.qty,                            // base
+    };
+
+    // 3. Balance Check (Read-Only, No Lock)
+    if balance.avail < required {
+        return Err(Reject::InsufficientBalance);
+    }
+
+    // 4. Pass
+    Ok(order)
+}
+// Note: Balance might be consumed by others between Pre-Check and WAL.
+// This is allowed; WAL's Balance Lock will handle it.
+```
+
+**Why Pre-Check?**
+
+The Core Flow (WAL + Balance Lock + Matching) is expensive. We must filter garbage orders **fast**.
+
+| No Pre-Check | With Pre-Check |
+|--------------|----------------|
+| Garbage enters core flow | Filters most invalid orders |
+| Core wastes latency on invalid orders | Core processes mostly valid orders |
+| Vulnerable to spam attacks | Reduces impact of malicious requests |
+
+ **Pre-Check Items**:
+*   ✅ Balance Check
+*   📋 User Status (Banned?)
+*   📋 Format Validation
+*   📋 Rate Limiting
+*   📋 Risk Rules
+
+#### 3.3 Must Execute Once Persisted
+
+Once an order is persisted, it MUST end in one of these states:
+
+```
+┌─────────────────────┐
+│   Order Persisted   │
+└─────────────────────┘
+           │
+           ├──▶ Filled
+           ├──▶ PartialFilled
+           ├──▶ New (Booked)
+           ├──▶ Cancelled
+           ├──▶ Expired
+           └──▶ Rejected (Insufficient Balance) ← Valid Final State!
+
+❌ Never: Logged but state unknown.
+```
+
+### 4. WAL: Why it's the Best Choice?
+
+#### 4.1 What is WAL (Write-Ahead Log)?
+
+WAL is an **Append-Only** log structure:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                          WAL File                               │
+├─────────────────────────────────────────────────────────────────┤
+│  Entry 1  │  Entry 2  │  Entry 3  │  Entry 4  │  ...  │ ← Append│
+│ (seq=1)   │ (seq=2)   │ (seq=3)   │ (seq=4)   │       │         │
+└─────────────────────────────────────────────────────────────────┘
+                                                          ↑
+                                                     Append Only!
+```
+
+#### 4.2 Why WAL for HFT?
+
+| Method | Write Pattern | Latency | Throughput | HFT Suitability |
+|--------|---------------|---------|------------|-----------------|
+| DB (MySQL) | Random + Txn | ~1-10ms | ~1K ops/s | ❌ Too Slow |
+| KV (Redis) | Random | ~0.1-1ms | ~10K ops/s | ⚠️ Average |
+| **WAL** | **Sequential** | **~1-10µs** | **~1M ops/s** | ✅ **Best** |
+
+**Why is WAL fast?**
+
+1.  **Sequential Write vs Random Write**:
+    *   HDD: No seek time (~10ms saved).
+    *   SSD: Reduces Write Amplification.
+    *   Result: **10-100x faster**.
+2.  **No Transaction Overhead**:
+    *   DB: Txn start, lock, redo log, data page, binlog, commit...
+    *   WAL: Serialize -> Append -> (Optional) Fsync.
+3.  **Group Commit**:
+    *   Batch multiple writes into one `fsync`.
+
+```rust
+// Group Commit Logic
+pub fn flush(&mut self) -> io::Result<()> {
+    self.file.write_all(&self.buffer)?;
+    self.file.sync_data()?;  // fsync once for N orders
+    self.buffer.clear();
+    Ok(())
+}
+```
+
+### 5. Single Thread + Lock-Free Architecture
+
+#### 5.1 Why Single Thread?
+
+Intuition: Concurrency = Fast.
+Reality in HFT: **Single Thread is Faster**.
+
+| Multi-Thread | Single Thread |
+|--------------|---------------|
+| Locks & Contention | Lock-Free |
+| Cache Invalidation | Cache Friendly |
+| Context Switch Overhead | No Context Switch |
+| Hard Ordering | Naturally Ordered |
+| Complex Sync Logic | Simple Code |
+
+#### 5.2 Mechanical Sympathy
+
+**CPU Cache Hierarchy**:
+*   L1 Cache: ~1ns
+*   L2 Cache: ~4ns
+*   RAM: ~100ns
+
+Single Thread Advantage: Data stays in L1/L2 (Hot). No cache line contention.
+
+#### 5.3 LMAX Disruptor Pattern
+
+Originating from LMAX Exchange (6M TPS on single thread):
+
+1.  **Single Writer** (Avoid write contention)
+2.  **Pre-allocated Memory** (Avoid GC/malloc)
+3.  **Cache Padding** (Avoid false sharing)
+4.  **Batch Consumption**
+
+### 6. Ring Buffer: Inter-Service Communication
+
+#### 6.1 Why Ring Buffer?
+
+| Method | Latency | Throughput |
+|--------|---------|------------|
+| HTTP/gRPC | ~1ms | ~10K/s |
+| Kafka | ~1-10ms | ~1M/s |
+| **Shared Memory Ring Buffer** | **~100ns** | **~10M/s** |
+
+#### 6.2 Ring Buffer Principle
+
+```
+      write_idx                       read_idx
+          ↓                               ↓
+   ┌───┬───┬───┬───┬───┬───┬───┬───┬───┬───┐
+   │ 8 │ 9 │10 │11 │12 │13 │14 │ 0 │ 1 │ 2 │ ...
+   └───┴───┴───┴───┴───┴───┴───┴───┴───┴───┘
+         ↑                               ↑
+     New Data                        Consumer
+```
+
+*   Fixed size, circular.
+*   Zero allocation during runtime.
+*   SPSC (Single Producer Single Consumer) is lock-free.
+
+### 7. Overall Architecture
+
+#### 7.1 Core Services
+
+| Service | Responsibility | State |
+|---------|----------------|-------|
+| **Gateway** | Receive Requests | Stateless |
+| **Pre-Check** | Read-only Balance Check | Stateless |
+| **UBSCore** | Balance Ops + Order WAL | Stateful (Balance) |
+| **ME** | Matching, Generate Trades | Stateful (OrderBook) |
+| **Settlement** | Persist Events | Stateless |
+
+#### 7.2 UBSCore Service (User Balance Core)
+
+**Single Entry Point for ALL Balance Operations**.
+
+**Why UBSCore?**
+*   **Atomic**: Single thread = No Double Spend.
+*   **Audit**: Complete trace of all changes.
+*   **Recovery**: Single WAL restores state.
+
+**Pipeline Role**:
+1.  **Write Order WAL** (Persist)
+2.  **Lock Balance**
+    *   Success → Forward to ME
+    *   Fail → Rejected
+3.  **Handle Trade Events** (Settlement)
+    *   Update buyer/seller balances.
+
+#### 7.3 Matching Engine (ME)
+
+**ME is Pure Matching. It ignores Balances.**
+
+*   Does: Maintain OrderBook, Match by Price/Time, Generate Trade Events.
+*   Does NOT: Check balance, lock funds, persist data.
+
+**Trade Event Drive Balance Update**:
+`TradeEvent` contains `{price, qty, user_ids}` → sufficient to calculate balance changes.
+
+#### 7.4 Settlement Service
+
+**Settlement Persists, does not modify Balances.**
+
+*   Persist Trade Events, Order Events.
+*   Write Audit Log (Ledger).
+
+#### 7.5 Architecture Diagram
+
+```
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                         0xInfinity HFT Architecture                               │
+├──────────────────────────────────────────────────────────────────────────────────┤
+│   Client Orders                                                                   │
+│        │                                                                          │
+│        ▼                                                                          │
+│   ┌──────────────┐                                                                │
+│   │   Gateway    │                                                                │
+│   └──────┬───────┘                                                                │
+│          ▼                                                                        │
+│   ┌──────────────┐         query balance                                          │
+│   │  Pre-Check   │ ──────────────────────────────▶   UBSCore Service              │
+│   └──────┬───────┘                                                                │
+│          ▼                                                                        │
+│   ┌──────────────┐                                   ┌────────────────────┐       │
+│   │ Order Buffer │                                   │  Balance State     │       │
+│   └──────┬───────┘                                   │  (RAM, Single Thd) │       │
+│          │ Ring Buffer                               └────────────────────┘       │
+│          ▼                                                                        │
+│   ┌──────────────────────────────────────────┐                                    │
+│   │  UBSCore: Order Processing               │       Operations:                  │
+│   │  1. Write Order WAL (Persist)            │       - lock / unlock              │
+│   │  2. Lock Balance                         │       - spend_frozen               │
+│   │     - OK → forward to ME                 │       - deposit                    │
+│   │     - Fail → Rejected                    │                                    │
+│   └──────────────┬───────────────────────────┘                                    │
+│                  │ Ring Buffer (valid orders)                                     │
+│                  ▼                                                                │
+│   ┌──────────────────────────────────────────┐                                    │
+│   │         Matching Engine (ME)             │                                    │
+│   │                                          │                                    │
+│   │  Pure Matching, Ignore Balance           │                                    │
+│   │  Output: Trade Events                    │                                    │
+│   └──────────────┬───────────────────────────┘                                    │
+│                  │ Ring Buffer (Trade Events)                                     │
+│         ┌───────┴────────┐                                                        │
+│         ▼                ▼                                                        │
+│   ┌───────────┐   ┌─────────────────────────┐                                     │
+│   │ Settlement│   │ Balance Update Events   │────▶   Execute Balance Update       │
+│   │           │   │ (from Trade Events)     │                                     │
+│   │ Persist:  │   └─────────────────────────┘                                     │
+│   │ - Trades  │                                                                   │
+│   │ - Ledger  │                                                                   │
+│   └───────────┘                                                                   │
+└───────────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### 7.7 Event Sourcing + Pure State Machine
+
+**Order WAL = Single Source of Truth**
+
+```
+State(t) = Replay(Order_WAL[0..t])
+```
+
+Any state (Balance, OrderBook) can be 100% reconstructed by replaying the Order WAL.
+
+**Pure State Machines**:
+*   **UBSCore**: Order Events → Balance Events (Deterministic)
+*   **ME**: Valid Orders → Trade Events (Deterministic)
+
+**Recovery Flow**:
+1.  Load Checkpoint (Snapshot).
+2.  Replay Order WAL from checkpoint.
+3.  ME re-matches and generates events.
+4.  UBSCore applies balance updates.
+5.  System Restored.
+
+### 8. Summary
+
+**Core Decisions**:
+*   **Persist First**: WAL ensures recoverability.
+*   **Pre-Check**: Filters invalid orders early.
+*   **Single Thread + Lock-Free**: Avoids contention, maximizes throughput.
+*   **UBSCore**: Centralized, atomic balance management.
+*   **Responsibility Segregation**: UBSCore (Money), ME (Match), Settlement (Log).
+
+**Refactoring**:
+For the upcoming implementation, we refactored the code structure:
+*   `lib.rs`, `main.rs`, `core_types.rs`, `config.rs`
+*   `orderbook.rs`, `balance.rs`, `engine.rs`
+*   `csv_io.rs`, `ledger.rs`, `perf.rs`
+
+Next: Detailed implementation of UBSCore and Ring Buffer.
+
+<br>
+<div align="right"><a href="#-english">↑ Back to Top</a></div>
+<br>
+
+---
+
+<div id="-chinese"></div>
+
+## 🇨🇳 中文
 
 > **📦 代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.7-b-perf-baseline...v0.8-a-trading-pipeline-design)
 
@@ -6,11 +410,9 @@
 
 本章解决撮合引擎最关键的设计问题：**服务划分、数据流和原子性保证**。
 
----
+### 1. 为什么需要持久化？
 
-## 1. 为什么需要持久化？
-
-### 1.1 问题场景
+#### 1.1 问题场景
 
 假设系统在撮合过程中崩溃：
 
@@ -27,7 +429,7 @@
 - **状态不一致**：资金变动了但没有记录
 - **无法恢复**：重启后不知道有哪些订单
 
-### 1.2 解决方案：先持久化，后撮合
+#### 1.2 解决方案：先持久化，后撮合
 
 ```
 用户 A 发送买单 → WAL 持久化 → ME 撮合 → 系统崩溃
@@ -35,11 +437,9 @@
                订单已保存      可以重放恢复!
 ```
 
----
+### 2. 唯一排序 (Unique Ordering)
 
-## 2. 唯一排序 (Unique Ordering)
-
-### 2.1 为什么需要唯一排序？
+#### 2.1 为什么需要唯一排序？
 
 在分布式系统中，多个节点必须对订单顺序达成一致：
 
@@ -50,7 +450,7 @@
 
 **结果**：两个节点的撮合结果可能不同！
 
-### 2.2 解决方案：单点排序 + 全局序号
+#### 2.2 解决方案：单点排序 + 全局序号
 
 ```
 所有订单 → Sequencer → 分配全局 sequence_id → 持久化 → 分发到 ME
@@ -64,11 +464,9 @@
 | `timestamp` | 精确到纳秒的时间戳 |
 | `order_id` | 业务层订单 ID |
 
----
+### 3. 订单生命周期
 
-## 3. 订单生命周期
-
-### 3.1 先持久化，后执行
+#### 3.1 先持久化，后执行
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -87,39 +485,32 @@
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 3.2 Pre-Check：减少无效订单
+#### 3.2 Pre-Check：减少无效订单
 
 Pre-Check 通过查询 **UBSCore** (User Balance Core Service，用户余额核心服务，详见第 7.2 节) 获取余额信息，**只读，无副作用**：
 
-```
-┌───────────────────────────────────────────────────────────────────┐
-│                     Pre-Check 流程 (伪代码)                        │
-├───────────────────────────────────────────────────────────────────┤
-│                                                                   │
-│  async fn pre_check(order: Order) -> Result<Order, Reject> {      │
-│      // 1. 查询 UBSCore 获取余额 (只读查询)                        │
-│      let balance = ubscore.query_balance(order.user_id, asset);   │
-│                                                                   │
-│      // 2. 计算所需金额                                            │
-│      let required = match order.side {                            │
-│          Buy  => order.price * order.qty / QTY_UNIT,  // quote    │
-│          Sell => order.qty,                            // base    │
-│      };                                                           │
-│                                                                   │
-│      // 3. 余额检查 (只读，不锁定)                                  │
-│      if balance.avail < required {                                │
-│          return Err(Reject::InsufficientBalance);                 │
-│      }                                                            │
-│                                                                   │
-│      // 4. 检查通过，放行订单到下一阶段                             │
-│      Ok(order)                                                    │
-│  }                                                                │
-│                                                                   │
-│  注意：Pre-Check 不锁定余额！                                       │
-│  余额可能在 Pre-Check 和 WAL 之间被其他订单消耗                     │
-│  这是允许的，WAL 后的 Balance Lock 会处理这种情况                   │
-│                                                                   │
-└───────────────────────────────────────────────────────────────────┘
+```rust
+async fn pre_check(order: Order) -> Result<Order, Reject> {
+     // 1. 查询 UBSCore 获取余额 (只读查询)
+     let balance = ubscore.query_balance(order.user_id, asset);
+
+     // 2. 计算所需金额
+     let required = match order.side {
+         Buy  => order.price * order.qty / QTY_UNIT,  // quote
+         Sell => order.qty,                            // base
+     };
+
+     // 3. 余额检查 (只读，不锁定)
+     if balance.avail < required {
+         return Err(Reject::InsufficientBalance);
+     }
+
+     // 4. 检查通过，放行订单到下一阶段
+     Ok(order)
+}
+// 注意：Pre-Check 不锁定余额！
+// 余额可能在 Pre-Check 和 WAL 之间被其他订单消耗
+// 这是允许的，WAL 后的 Balance Lock 会处理这种情况
 ```
 
 **为什么需要 Pre-Check？**
@@ -143,7 +534,7 @@ Pre-Check 通过查询 **UBSCore** (User Balance Core Service，用户余额核�
 **重要**：Pre-Check 是"尽力而为"的过滤器，不保证 100% 准确。
 通过 Pre-Check 的订单，仍可能在 WAL + Balance Lock 阶段被拒绝。
 
-### 3.3 一旦持久化，必须完整执行
+#### 3.3 一旦持久化，必须完整执行
 
 ```
 订单被持久化后，无论发生什么，都必须有以下其中一个结果：
@@ -162,11 +553,9 @@ Pre-Check 通过查询 **UBSCore** (User Balance Core Service，用户余额核�
 ❌ 绝对不能：订单消失 / 状态未知
 ```
 
----
+### 4. WAL：为什么是最佳选择？
 
-## 4. WAL：为什么是最佳选择？
-
-### 4.1 什么是 WAL (Write-Ahead Log)?
+#### 4.1 什么是 WAL (Write-Ahead Log)?
 
 WAL 是一种**追加写** (Append-Only) 的日志结构：
 
@@ -181,7 +570,7 @@ WAL 是一种**追加写** (Append-Only) 的日志结构：
                                                      只追加，不修改
 ```
 
-### 4.2 为什么 WAL 是 HFT 最佳实践？
+#### 4.2 为什么 WAL 是 HFT 最佳实践？
 
 | 持久化方式 | 写入模式 | 延迟 | 吞吐量 | HFT 适用性 |
 |-----------|----------|------|--------|-----------|
@@ -191,86 +580,18 @@ WAL 是一种**追加写** (Append-Only) 的日志结构：
 
 **为什么 WAL 这么快？**
 
-#### 4.2.1 顺序写 vs 随机写
+1.  **顺序写 vs 随机写**：
+    *   机械硬盘不用寻道。
+    *   SSD 减少写放大。
+    *   结果：快 10-100 倍。
+2.  **无事务开销**：
+    *   无需锁、redo log、binlog 等数据库复杂机制。
+3.  **批量刷盘 (Group Commit)**：
+    *   合并多次写入一次 fsync。
 
-```
-随机写 (数据库):
-┌─────┐     ┌─────┐     ┌─────┐
-│ 写1 │     │ 写2 │     │ 写3 │
-└──┬──┘     └──┬──┘     └──┬──┘
-   │           │           │
-   ▼           ▼           ▼
- 位置 A      位置 X      位置 M
+### 5. 单线程 + Lock-Free 架构
 
-顺序写 (WAL):
-┌─────┬─────┬─────┐
-│ 写1 │ 写2 │ 写3 │ ← 追加到文件末尾
-└─────┴─────┴─────┘
-```
-
-**为什么顺序写更快？**
-
-| 存储类型 | 随机写的问题 | 顺序写的优势 |
-|---------|-------------|-------------|
-| **HDD** | 磁头寻道延迟 ~10ms | 无寻道，连续写入 |
-| **SSD** | 写放大 (Write Amplification)、GC 开销 | 减少写放大，延长寿命 |
-
-即使是 SSD，顺序写也比随机写快 **10-100 倍**。
-
-#### 4.2.2 无事务开销
-
-```
-数据库写入:
-1. 开启事务
-2. 获取锁
-3. 写 redo log
-4. 写数据页
-5. 写 binlog
-6. 提交事务，释放锁
-→ 多次磁盘操作，多次同步
-
-WAL 写入:
-1. 序列化数据
-2. 追加写入
-3. (可选) fsync
-→ 最少一次磁盘操作
-```
-
-#### 4.2.3 批量刷盘 (Group Commit)
-
-```rust
-/// 批量提交 WAL
-impl WalWriter {
-    /// 写入但不立即刷盘
-    pub fn append(&mut self, entry: &[u8]) -> u64 {
-        self.buffer.extend_from_slice(entry);
-        self.pending_count += 1;
-        self.next_seq()
-    }
-    
-    /// 批量刷盘（每 N 个订单或每 T 毫秒）
-    pub fn flush(&mut self) -> io::Result<()> {
-        self.file.write_all(&self.buffer)?;
-        self.file.sync_data()?;  // fsync
-        self.buffer.clear();
-        Ok(())
-    }
-}
-```
-
-**Group Commit 效果**：
-
-| 刷盘策略 | 延迟 | 吞吐量 | 数据安全 |
-|----------|------|--------|----------|
-| 每条 fsync | ~50µs | ~20K/s | 最高 |
-| 每 100 条 fsync | ~5µs (均摊) | ~200K/s | 高 |
-| 每 1ms fsync | ~1µs (均摊) | ~1M/s | 中 |
-
----
-
-## 5. 单线程 + Lock-Free 架构
-
-### 5.1 为什么选择单线程？
+#### 5.1 为什么选择单线程？
 
 大多数人直觉认为：并发 = 快。但在 HFT 领域，**单线程往往更快**：
 
@@ -282,148 +603,55 @@ impl WalWriter {
 | 顺序难以保证 | 天然有序 |
 | 复杂的同步逻辑 | 代码简单直观 |
 
-### 5.2 Mechanical Sympathy
+#### 5.2 Mechanical Sympathy
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    CPU Cache Hierarchy                          │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│   ┌─────────┐                                                   │
-│   │   CPU   │  L1 Cache: ~1ns (32KB)                           │
-│   │  Core 0 │  L2 Cache: ~4ns (256KB)                          │
-│   └────┬────┘  L3 Cache: ~12ns (shared, MB级)                  │
-│        │                                                        │
-│        ▼                                                        │
-│   ┌─────────┐                                                   │
-│   │   RAM   │  ~100ns                                          │
-│   └─────────┘                                                   │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+**CPU Cache Hierarchy**:
+*   L1 Cache: ~1ns
+*   L2 Cache: ~4ns
+*   RAM: ~100ns
 
-单线程优势：
-- 数据始终在 L1/L2 缓存中（热数据）
-- 无 cache line 争用
-- 无 false sharing
-```
+单线程优势：数据始终在 L1/L2 缓存中（热数据），无 cache line 争用。
 
-### 5.3 LMAX Disruptor 模式
+#### 5.3 LMAX Disruptor 模式
 
 这种单线程 + Ring Buffer 的架构源自 **LMAX Exchange**（伦敦多资产交易所），号称能在单线程上处理 **600 万订单/秒**：
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    LMAX Disruptor Architecture                  │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│   Publisher ───▶ Ring Buffer ───▶ Consumer                     │
-│   (单线程写)      (无锁队列)       (单线程读)                    │
-│                                                                 │
-│   关键特性：                                                     │
-│   1. 单一 Writer（避免写竞争）                                   │
-│   2. 预分配内存（避免 GC/malloc）                                │
-│   3. 缓存行填充（避免 false sharing）                           │
-│   4. 批量消费（减少同步点）                                      │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
+1.  **Single Writer** (避免写竞争)
+2.  **Pre-allocated Memory** (避免 GC/malloc)
+3.  **Cache Padding** (避免 false sharing)
+4.  **Batch Consumption**
 
----
+### 6. Ring Buffer：服务间通信
 
-## 6. Ring Buffer：服务间通信
-
-### 6.1 为什么使用 Ring Buffer？
+#### 6.1 为什么使用 Ring Buffer？
 
 服务间通信的选择：
 
-| 方式 | 延迟 | 吞吐量 | 复杂度 |
-|------|------|--------|--------|
-| HTTP/gRPC | ~1ms | ~10K/s | 低 |
-| Kafka | ~1-10ms | ~1M/s | 中 |
-| Socket/ZMQ | ~100µs | ~100K/s | 中 |
-| **Shared Memory Ring Buffer** | **~100ns** | **~10M/s** | 高 |
+| 方式 | 延迟 | 吞吐量 |
+|------|------|--------|
+| HTTP/gRPC | ~1ms | ~10K/s |
+| Kafka | ~1-10ms | ~1M/s |
+| **Shared Memory Ring Buffer** | **~100ns** | **~10M/s** |
 
-### 6.2 Ring Buffer 原理
+#### 6.2 Ring Buffer 原理
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Ring Buffer                              │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│      write_idx                       read_idx                   │
-│          ↓                               ↓                      │
-│   ┌───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┐            │
-│   │ 8 │ 9 │ 10│ 11│ 12│ 13│ 14│ 15│ 0 │ 1 │ 2 │ 3 │ ...        │
-│   └───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┘            │
-│         ↑                               ↑                       │
-│     新数据写入                        消费者读取                  │
-│                                                                 │
-│   特性：                                                         │
-│   - 固定大小，循环使用                                           │
-│   - 无需动态分配                                                 │
-│   - Single Producer, Single Consumer (SPSC) 可完全无锁          │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+      write_idx                       read_idx
+          ↓                               ↓
+   ┌───┬───┬───┬───┬───┬───┬───┬───┬───┬───┐
+   │ 8 │ 9 │ 10│ 11│ 12│ 13│ 14│ 15│ 0 │ 1 │ ...
+   └───┴───┴───┴───┴───┴───┴───┴───┴───┴───┘
+         ↑                               ↑
+     新数据写入                        消费者读取
 ```
 
-### 6.3 为什么 Ring Buffer 这么快？
+*   固定大小，循环使用
+*   无需动态分配
+*   Single Producer, Single Consumer ({SPSC) 可完全无锁
 
-```rust
-/// SPSC Ring Buffer 核心实现
-pub struct RingBuffer<T, const N: usize> {
-    buffer: [MaybeUninit<T>; N],
-    write_idx: AtomicUsize,  // 生产者独占
-    read_idx: AtomicUsize,   // 消费者独占
-}
+### 7. 整体架构
 
-impl<T, const N: usize> RingBuffer<T, N> {
-    /// 生产者写入（无锁）
-    pub fn push(&self, item: T) -> bool {
-        let write = self.write_idx.load(Ordering::Relaxed);
-        let read = self.read_idx.load(Ordering::Acquire);
-        
-        if (write + 1) % N == read {
-            return false;  // 满了
-        }
-        
-        unsafe {
-            self.buffer[write].as_mut_ptr().write(item);
-        }
-        
-        self.write_idx.store((write + 1) % N, Ordering::Release);
-        true
-    }
-    
-    /// 消费者读取（无锁）
-    pub fn pop(&self) -> Option<T> {
-        let read = self.read_idx.load(Ordering::Relaxed);
-        let write = self.write_idx.load(Ordering::Acquire);
-        
-        if read == write {
-            return None;  // 空的
-        }
-        
-        let item = unsafe { self.buffer[read].as_ptr().read() };
-        
-        self.read_idx.store((read + 1) % N, Ordering::Release);
-        Some(item)
-    }
-}
-```
-
-**关键点**：
-- **无锁**：使用 Atomic 操作代替互斥锁
-- **无分配**：预分配固定大小的数组
-- **缓存友好**：连续内存布局
-- **批量操作**：可以一次读取多个条目
-
----
-
-## 7. 整体架构
-
-### 7.1 核心服务
-
-系统由以下核心服务组成：
+#### 7.1 核心服务
 
 | 服务 | 职责 | 状态 |
 |------|------|------|
@@ -433,436 +661,111 @@ impl<T, const N: usize> RingBuffer<T, N> {
 | **ME** | 纯撮合，生成 Trade Events | 有状态 (OrderBook) |
 | **Settlement** | 持久化 events，未来写 DB | 无状态 |
 
-### 7.2 UBSCore Service (User Balance Core)
+#### 7.2 UBSCore Service (User Balance Core)
 
 **UBSCore 是所有账户余额操作的唯一入口**，单线程执行保证原子性。
 
-#### 7.2.1 为什么需要 UBSCore？
+**应用场景**：
+1.  **Write Order WAL** (持久化)
+2.  **Lock Balance** (锁定)
+3.  **Handle Trade Events** (成交后结算)
 
-| 分散处理余额 | 集中到 UBSCore |
-|-------------|----------------|
-| 多处修改余额，需要分布式锁 | 唯一入口，单线程无锁 |
-| 双花风险高 | 天然原子，无双花 |
-| 难以审计 | 所有变更可追踪 |
-| 恢复困难 | 单一 WAL 可完整恢复 |
-
-#### 7.2.2 UBSCore 提供的操作
-
-```rust
-// 余额查询 (只读)
-fn query_balance(user_id: UserId, asset_id: AssetId) -> Balance;
-
-// 余额操作 (修改)
-fn lock(user_id: UserId, asset_id: AssetId, amount: u64) -> Result<()>;
-fn unlock(user_id: UserId, asset_id: AssetId, amount: u64) -> Result<()>;
-fn spend_frozen(user_id: UserId, asset_id: AssetId, amount: u64) -> Result<()>;
-fn deposit(user_id: UserId, asset_id: AssetId, amount: u64) -> Result<()>;
-```
-
-#### 7.2.3 UBSCore 在订单流程中的角色
-
-```
-订单到达 UBSCore 后：
-1. Write Order WAL (持久化订单)
-2. Lock Balance (锁定资金)
-   - 成功 → 转发到 ME
-   - 失败 → 标记为 Rejected，不进入 ME
-3. 收到 Trade Events 后执行 Settlement
-   - Buyer: spend_frozen(quote), deposit(base)
-   - Seller: spend_frozen(base), deposit(quote)
-```
-
-### 7.3 Matching Engine (ME)
+#### 7.3 Matching Engine (ME)
 
 **ME 是纯撮合引擎，不关心余额**。
 
-| ME 做的事 | ME 不做的事 |
-|----------|------------|
-| 维护 OrderBook | 检查余额 |
-| 价格-时间优先撮合 | 锁定/解锁余额 |
-| 生成 Trade Events | 更新余额 |
-|  | 持久化任何数据 |
+*   负责：维护 OrderBook，撮合，生成 Trade Events。
+*   不负责：检查余额，锁定资金，持久化。
 
-**Trade Event 包含足够信息生成 Balance Update**：
+**Trade Event 驱动余额更新**：
+`TradeEvent` 包含 {price, qty, user_ids}，足够计算出余额变化。
 
-```rust
-struct TradeEvent {
-    trade_id: TradeId,
-    buyer_order_id: OrderId,
-    seller_order_id: OrderId,
-    buyer_user_id: UserId,
-    seller_user_id: UserId,
-    price: u64,
-    qty: u64,
-    // 可以从这些信息计算出：
-    // - buyer 需要 spend_frozen(quote, price * qty)
-    // - buyer 需要 deposit(base, qty)
-    // - seller 需要 spend_frozen(base, qty)
-    // - seller 需要 deposit(quote, price * qty)
-}
-```
-
-### 7.4 Settlement Service
+#### 7.4 Settlement Service
 
 **Settlement 负责持久化，不修改余额**。
 
-| Settlement 做的事 | Settlement 不做的事 |
-|------------------|-------------------|
-| 持久化 Trade Events | 更新余额 (由 UBSCore 做) |
-| 持久化 Order Events | 撮合订单 |
-| 未来写入 DB 供查询 | |
-| 生成审计日志 | |
+*   持久化 Trade Events，Order Events。
+*   写审计日志 (Ledger)。
 
-### 7.5 完整架构图
+#### 7.5 完整架构图
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────┐
 │                         0xInfinity HFT Architecture                               │
 ├──────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                   │
 │   Client Orders                                                                   │
 │        │                                                                          │
 │        ▼                                                                          │
 │   ┌──────────────┐                                                                │
-│   │   Gateway    │  ← 多线程接收网络请求                                           │
+│   │   Gateway    │                                                                │
 │   └──────┬───────┘                                                                │
-│          │                                                                        │
 │          ▼                                                                        │
-│   ┌──────────────┐         query balance          ┌────────────────────────────┐ │
-│   │  Pre-Check   │ ──────────────────────────────▶│                            │ │
-│   │  (只读查询)   │◀────────────────────────────── │                            │ │
-│   └──────┬───────┘         return balance         │                            │ │
-│          │                                        │                            │ │
-│          │ 过滤明显无效订单                        │                            │ │
-│          ▼                                        │                            │ │
-│   ┌──────────────┐                                │      UBSCore Service       │ │
-│   │ Order Buffer │                                │   (User Balance Core)      │ │
-│   └──────┬───────┘                                │                            │ │
-│          │ Ring Buffer                            │   ┌────────────────────┐   │ │
-│          ▼                                        │   │  Balance State     │   │ │
-│   ┌──────────────────────────────────────────┐    │   │  (内存, 单线程)    │   │ │
-│   │  UBSCore: Order Processing               │    │   └────────────────────┘   │ │
-│   │  1. Write Order WAL (持久化)              │    │                            │ │
-│   │  2. Lock Balance                         │    │   Operations:              │ │
-│   │     - OK → forward to ME                 │    │   - lock / unlock          │ │
-│   │     - Fail → Rejected (记录状态)         │    │   - spend_frozen           │ │
-│   └──────────────┬───────────────────────────┘    │   - deposit                │ │
-│                  │                                │                            │ │
-│                  │ Ring Buffer (valid orders)     │                            │ │
-│                  ▼                                │                            │ │
-│   ┌──────────────────────────────────────────┐    │                            │ │
-│   │         Matching Engine (ME)             │    │                            │ │
-│   │                                          │    │                            │ │
-│   │  纯撮合，不关心 Balance                   │    │                            │ │
-│   │  输出: Trade Events                      │    │                            │ │
-│   │                                          │    │                            │ │
-│   └──────────────┬───────────────────────────┘    │                            │ │
-│                  │                                │                            │ │
-│                  │ Ring Buffer (Trade Events)     │                            │ │
-│                  │                                │                            │ │
-│         ┌───────┴────────┐                        │                            │ │
-│         │                │                        │                            │ │
-│         ▼                ▼                        │                            │ │
-│   ┌───────────┐   ┌─────────────────────────┐     │                            │ │
-│   │ Settlement│   │ Balance Update Events   │────▶│  执行余额更新:             │ │
-│   │           │   │ (from Trade Events)     │     │  - Buyer: -quote, +base    │ │
-│   │ 持久化:    │   └─────────────────────────┘     │  - Seller: -base, +quote   │ │
-│   │ - Trades  │                                   │                            │ │
-│   │ - Orders  │                                   └────────────────────────────┘ │
+│   ┌──────────────┐         query balance                                          │
+│   │  Pre-Check   │ ──────────────────────────────▶   UBSCore Service              │
+│   └──────┬───────┘                                                                │
+│          ▼                                                                        │
+│   ┌──────────────┐                                   ┌────────────────────┐       │
+│   │ Order Buffer │                                   │  Balance State     │       │
+│   └──────┬───────┘                                   │  (RAM, Single Thd) │       │
+│          │ Ring Buffer                               └────────────────────┘       │
+│          ▼                                                                        │
+│   ┌──────────────────────────────────────────┐                                    │
+│   │  UBSCore: Order Processing               │       Operations:                  │
+│   │  1. Write Order WAL (持久化)              │       - lock / unlock              │
+│   │  2. Lock Balance                         │       - spend_frozen               │
+│   │     - OK → forward to ME                 │       - deposit                    │
+│   │     - Fail → Rejected                    │                                    │
+│   └──────────────┬───────────────────────────┘                                    │
+│                  │ Ring Buffer (valid orders)                                     │
+│                  ▼                                                                │
+│   ┌──────────────────────────────────────────┐                                    │
+│   │         Matching Engine (ME)             │                                    │
+│   │                                          │                                    │
+│   │  纯撮合，不关心 Balance                   │                                    │
+│   │  输出: Trade Events                      │                                    │
+│   └──────────────┬───────────────────────────┘                                    │
+│                  │ Ring Buffer (Trade Events)                                     │
+│         ┌───────┴────────┐                                                        │
+│         ▼                ▼                                                        │
+│   ┌───────────┐   ┌─────────────────────────┐                                     │
+│   │ Settlement│   │ Balance Update Events   │────▶   执行余额更新                 │
+│   │           │   │ (from Trade Events)     │                                     │
+│   │ 持久化:    │   └─────────────────────────┘                                     │
+│   │ - Trades  │                                                                   │
 │   │ - Ledger  │                                                                   │
-│   │           │                                                                   │
-│   │ 未来 → DB │                                                                   │
 │   └───────────┘                                                                   │
-│                                                                                   │
-└──────────────────────────────────────────────────────────────────────────────────┘
+└───────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 7.6 数据流详解
+#### 7.7 Event Sourcing + Pure State Machine
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                              订单处理流程                                         │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
-│  [1] Pre-Check                                                                   │
-│      │                                                                           │
-│      ├── Query UBSCore: 获取用户余额 (只读)                                       │
-│      ├── 检查: 余额是否足够？                                                     │
-│      └── 过滤: 明显无效订单不进入系统                                             │
-│                                                                                  │
-│  [2] Order Buffer → Ring Buffer → UBSCore                                       │
-│      │                                                                           │
-│      ├── UBSCore 收到订单                                                        │
-│      ├── Step 1: Write Order WAL (先持久化)                                      │
-│      ├── Step 2: Lock Balance                                                   │
-│      │     ├── 成功 → 订单有效，转发到 ME                                        │
-│      │     └── 失败 → 订单 Rejected (仍有记录)                                   │
-│      └── Step 3: Forward to ME (via Ring Buffer)                                │
-│                                                                                  │
-│  [3] ME                                                                          │
-│      │                                                                           │
-│      ├── 收到有效订单                                                            │
-│      ├── 撮合: 价格-时间优先                                                      │
-│      └── 输出: Trade Events                                                      │
-│                                                                                  │
-│  [4] Trade Events → Fan-out                                                      │
-│      │                                                                           │
-│      ├── → UBSCore: Balance Update                                              │
-│      │     ├── Buyer: spend_frozen(quote, cost), deposit(base, qty)             │
-│      │     └── Seller: spend_frozen(base, qty), deposit(quote, cost)            │
-│      │                                                                           │
-│      └── → Settlement: Persist                                                   │
-│            ├── 持久化 Trade Events                                               │
-│            ├── 持久化 Order Events (状态变更)                                    │
-│            └── 写审计日志 (Ledger)                                               │
-│                                                                                  │
-└─────────────────────────────────────────────────────────────────────────────────┘
-```
-
-### 7.7 Event Sourcing + Pure State Machine：核心设计原则
-
-#### 7.7.1 Order WAL = Single Source of Truth
-
-**Order WAL 是系统唯一的事实来源**。所有其他状态都可以从 Order WAL 100% 重新生成：
-
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                      Order WAL: Single Source of Truth                          │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
-│   Order WAL (唯一事实)                                                           │
-│   ┌─────────┬─────────┬─────────┬─────────┬─────────┬─────────┐                │
-│   │ Order 1 │ Order 2 │ Order 3 │ Order 4 │ Order 5 │  ...    │                │
-│   │ seq=1   │ seq=2   │ seq=3   │ seq=4   │ seq=5   │         │                │
-│   └────┬────┴────┬────┴────┬────┴────┬────┴────┬────┴─────────┘                │
-│        │         │         │         │         │                                │
-│        ▼         ▼         ▼         ▼         ▼                                │
-│   ┌──────────────────────────────────────────────────────────────┐              │
-│   │              Pure State Machines (纯状态机)                   │              │
-│   │                                                               │              │
-│   │  Balance State = f(Order WAL)   ← 可完全重建                  │              │
-│   │  OrderBook     = f(Order WAL)   ← 可完全重建                  │              │
-│   │  Trade History = f(Order WAL)   ← 可完全重建                  │              │
-│   │                                                               │              │
-│   └──────────────────────────────────────────────────────────────┘              │
-│                                                                                  │
-│   只要有 Order WAL，就能恢复整个系统状态！                                        │
-│                                                                                  │
-└─────────────────────────────────────────────────────────────────────────────────┘
-```
-
-#### 7.7.2 Pure State Machine (纯状态机)
-
-**所有处理器都是 Pure State Machine**：给定相同输入，必定产生相同输出。
-
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                          Pure State Machine 特性                                 │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
-│   Pure Function: output = f(state, input)                                       │
-│                                                                                  │
-│   ┌─────────────┐    ┌──────────────┐    ┌──────────────┐                       │
-│   │   Input     │───▶│ State Machine│───▶│   Output     │                       │
-│   │  (Order)    │    │   (ME/UBSC)  │    │  (Events)    │                       │
-│   └─────────────┘    └──────────────┘    └──────────────┘                       │
-│                             │                                                    │
-│                             ▼                                                    │
-│                      ┌──────────────┐                                            │
-│                      │  New State   │                                            │
-│                      └──────────────┘                                            │
-│                                                                                  │
-│   特性：                                                                          │
-│   ✅ 确定性 (Deterministic): 相同输入 → 相同输出                                 │
-│   ✅ 无副作用 (No Side Effects): 不依赖外部状态                                   │
-│   ✅ 可重放 (Replayable): 重放输入序列 → 相同结果                                 │
-│   ✅ 可测试 (Testable): 输入输出明确，易于验证                                    │
-│                                                                                  │
-└─────────────────────────────────────────────────────────────────────────────────┘
-```
-
-**架构中的 Pure State Machines**：
-
-| 组件 | 输入 | 状态 | 输出 |
-|------|------|------|------|
-| **UBSCore** | Order Events | Balance State | Balance Events |
-| **ME** | Valid Orders | OrderBook | Trade Events |
-
-#### 7.7.3 Event Sourcing + Pure State Machine 的优势
-
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│              Event Sourcing + Pure State Machine = 最佳组合                      │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
-│   1. 崩溃恢复                                                                    │
-│      系统崩溃 → 加载 Order WAL → 重放到最后一条 → 恢复完整状态                    │
-│                                                                                  │
-│   2. 多副本一致性                                                                │
-│      多个节点 + 相同 Order WAL → 重放 → 完全相同的状态                            │
-│                                                                                  │
-│   3. 调试和审计                                                                  │
-│      任何问题 → 重放到问题发生时刻 → 观察状态变化                                 │
-│                                                                                  │
-│   4. 时间旅行                                                                    │
-│      想知道昨天 14:00 的状态？→ 重放 Order WAL 到那个时刻                         │
-│                                                                                  │
-│   5. 增量快照                                                                    │
-│      定期保存 Snapshot + 之后的 WAL                                              │
-│      恢复 = 加载 Snapshot + 重放增量 WAL                                         │
-│                                                                                  │
-│   6. 分布式扩展                                                                  │
-│      新节点加入 → 拉取 Order WAL → 重放 → 同步完成                               │
-│                                                                                  │
-└─────────────────────────────────────────────────────────────────────────────────┘
-```
-
-**关键等式**：
+**Order WAL = Single Source of Truth**
 
 ```
 State(t) = Replay(Order_WAL[0..t])
-
-其中：
-  - Order_WAL = 所有订单的持久化序列
-  - Replay = 纯状态机重放函数
-  - State = Balance + OrderBook + TradeHistory
 ```
 
-#### 7.7.4 与传统架构的对比
+只要有 Order WAL，就能恢复整个系统状态！
 
-| 传统架构 | Event Sourcing + PSM |
-|---------|---------------------|
-| 只存储当前状态 | 存储完整事件历史 |
-| 状态丢失无法恢复 | 从 WAL 完全重建 |
-| 调试困难 | 任意时刻可重放 |
-| 多副本难以同步 | 重放 WAL 保证一致 |
-| 数据库是核心 | WAL 是核心，数据库是派生 |
+**Pure State Machines**:
+*   **UBSCore**: Order Events → Balance Events (确定性)
+*   **ME**: Valid Orders → Trade Events (确定性)
 
+**恢复流程**:
+1.  加载最近快照 Checkpoint。
+2.  重放 Order WAL。
+3.  系统恢复到崩溃前状态。
 
-### 7.8 为什么这样设计？
+### 8. Summary
 
-| 设计决策 | 原因 |
-|---------|------|
-| UBSCore 单线程 | 余额操作天然原子，无双花 |
-| ME 不关心余额 | 职责分离，ME 只做撮合 |
-| Trade Events 驱动 | Balance update 从 events 生成，可重放 |
-| Settlement 只持久化 | 与余额操作解耦，方便扩展 |
-| Pre-Check 只读 | 无副作用，可水平扩展 |
-| **Event Sourcing** | **完整审计、可恢复、可扩展** |
+**核心设计**：
+*   **先持久化**：WAL 保证可恢复性。
+*   **Pre-Check**：提前过滤无效订单。
+*   **单线程 + 无锁**：避免锁竞争，最大化吞吐。
+*   **UBSCore**：集中式、原子的余额管理。
+*   **职责分离**：UBSCore (钱)，ME (撮合)，Settlement (日志)。
 
-### 7.9 恢复流程
+**代码重构**：
+为后续章节准备，我们重构了 `src` 目录结构，模块化了 `main.rs`, `core_types.rs` 等。
 
-```
-系统重启后：
-
-1. UBSCore 从 Snapshot 恢复 Balance State
-   └── 最近的 checkpoint
-
-2. UBSCore 重放 Order WAL
-   └── 从 checkpoint 之后的订单开始
-   └── 重新执行 Lock Balance + Forward to ME
-
-3. ME 重新撮合
-   └── 生成 Trade Events
-
-4. Trade Events → Balance Update
-   └── UBSCore 执行余额更新
-
-5. 系统恢复到崩溃前状态
-```
-
----
-
-## 8. Summary
-
-本章核心设计：
-
-| 设计点 | 解决的问题 | 方案 |
-|--------|------------|------|
-| 订单丢失 | 系统崩溃后无法恢复 | 先持久化，后撮合 |
-| 顺序不一致 | 分布式节点顺序不同 | 单点 Sequencer + 全局序号 |
-| 无效订单 | 浪费持久化空间 | Pre-Check 余额校验 (只读) |
-| 持久化性能 | 数据库太慢 | WAL 追加写 + Group Commit |
-| 锁竞争 | 多线程同步开销 | 单线程 + Lock-Free |
-| 服务间通信 | 网络调用延迟高 | Shared Memory Ring Buffer |
-| **双花风险** | 并发修改余额 | **UBSCore 单线程处理所有余额操作** |
-| **职责不清** | ME 既撮合又管余额 | **ME 纯撮合，UBSCore 管余额** |
-
-**核心服务职责**：
-
-| 服务 | 职责 |
-|------|------|
-| **Pre-Check** | 只读查询 UBSCore，过滤无效订单 |
-| **UBSCore** | 所有余额操作 + Order WAL (单线程) |
-| **ME** | 纯撮合，生成 Trade Events |
-| **Settlement** | 持久化 events，写 DB |
-
-**核心理念**：
-
-> 在 HFT 领域，**简单就是快**。单线程 + 顺序写 + 无锁设计，
-> 比复杂的多线程 + 随机写 + 加锁设计，往往快 10-100 倍。
->
-> **职责分离**：UBSCore 管余额，ME 管撮合，Settlement 管持久化。
-> 每个服务单线程，自然原子，无需分布式锁。
->
-> **Event Sourcing + Pure State Machine**：Order WAL 是唯一事实来源，
-> 所有状态都可以从 WAL 100% 重建。
-
-**本章代码重构**：
-
-为后续章节的实现做好准备，本章对代码进行了大规模模块化重构：
-
-| 重构内容 | 说明 |
-|---------|------|
-| `main.rs` | 从 963 行精简到 394 行，只保留主流程编排 |
-| `engine.rs` → `orderbook.rs` | 提取 OrderBook 为独立模块 |
-| `enforced_balance.rs` → `balance.rs` | 重命名为更简洁的模块名 |
-| 新增 `types.rs` → `core_types.rs` | 核心类型别名 (AssetId, UserId, OrderId, TradeId) |
-| 新增 `config.rs` | TradingConfig, AssetConfig, SymbolConfig |
-| 新增 `csv_io.rs` | 所有 CSV 加载/保存函数 |
-| 新增 `ledger.rs` | LedgerWriter, LedgerEntry |
-| 新增 `perf.rs` | PerfMetrics 性能指标 |
-| 新增 `lib.rs` | 模块导出，crate 入口 |
-| `OrderBook.all_orders()` | 按价格优先序输出（买单高价优先，卖单低价优先） |
-
-**模块结构现在为**：
-
-```
-src/
-├── lib.rs           # crate 入口，模块导出
-├── main.rs          # 主流程编排
-├── core_types.rs    # 核心类型别名
-├── config.rs        # 配置结构
-├── balance.rs       # Balance 结构和操作
-├── user_account.rs  # 用户账户管理
-├── orderbook.rs     # 订单簿数据结构
-├── engine.rs        # 撮合引擎
-├── models.rs        # Order, Trade 等模型
-├── csv_io.rs        # CSV I/O
-├── ledger.rs        # 审计日志
-├── perf.rs          # 性能指标
-└── symbol_manager.rs # 交易对管理
-```
-
----
-
-## 9. 下一步
-
-1. **实现 UBSCore Service**：`src/ubscore.rs`
-   - Balance state 管理
-   - Order WAL 写入
-   - Balance lock/unlock/spend_frozen/deposit
-   
-2. **实现 Ring Buffer**：`src/ringbuffer.rs`
-   - 服务间无锁通信
-   
-3. **重构 ME**：`src/engine.rs`
-   - 移除所有 balance 相关代码
-   - 只负责撮合，输出 Trade Events
-   
-4. **实现 Settlement**：`src/settlement.rs`
-   - 持久化 Trade/Order Events
-   - 写审计日志
-   
-5. **集成测试**：验证完整流程
-
+下一步：实现 UBSCore 和 Ring Buffer。

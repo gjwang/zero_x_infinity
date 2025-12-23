@@ -10,7 +10,7 @@
 - [0x06 Enforced Balance | 强制余额](./0x06-enforced-balance.md)
 - [0x07 Testing Framework | 测试框架](./0x07-a-testing-framework.md)
     - [0x07-b Perf Baseline | 性能基线](./0x07-b-perf-baseline.md)
-- [0x08 交易流水线与多线程优化](./0x08-a-trading-pipeline-design.md)
+- [0x08 Trading Pipeline | 交易流水线](./0x08-a-trading-pipeline-design.md)
     - [0x08-b UBScore 实现](./0x08-b-ubscore-implementation.md)
     - [0x08-c Ring Buffer Pipeline](./0x08-c-ring-buffer-pipeline.md)
     - [0x08-d 完整订单生命周期](./0x08-d-complete-order-lifecycle.md)
