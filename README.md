@@ -2,7 +2,11 @@
 
 # ⚔️ 0xInfinity
 
-[🇺🇸 English](#-english) | [🇨🇳 中文](#-chinese)
+<h3>
+  <a href="#-english">🇺🇸 English</a>
+  &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
+  <a href="#-chinese">🇨🇳 中文</a>
+</h3>
 
 </div>
 
@@ -166,6 +170,10 @@ docker exec -it tdengine taos
 USE trading;
 SELECT * FROM orders LIMIT 10;
 ```
+
+<br>
+<div align="right"><a href="#-english">↑ Back to Top</a></div>
+<br>
 
 ---
 
