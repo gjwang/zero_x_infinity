@@ -312,18 +312,43 @@ fn main() {
                 .flat_map(|uid| [base_id, quote_id].map(move |aid| (uid, aid)))
                 .collect();
 
+            let total_tables = accounts_clone.len();
+            println!(
+                "\n[Persistence] Pre-creating {} balance tables...",
+                total_tables
+            );
+
             shared_rt.block_on(async {
+                use tokio::task::JoinSet;
+                let mut set = JoinSet::new();
+                let mut table_count = 0;
+                let concurrency_limit = 50;
+
                 for (user_id, asset_id) in accounts_clone {
-                    if let Err(e) = zero_x_infinity::persistence::schema::ensure_balance_table(
-                        db_clone.taos(),
-                        user_id,
-                        asset_id,
-                    )
-                    .await
-                    {
-                        tracing::warn!("Failed to pre-create balance table: {}", e);
+                    let db = db_clone.clone();
+
+                    // Controlled concurrency: wait if we have too many pending tasks
+                    if set.len() >= concurrency_limit {
+                        set.join_next().await;
+                    }
+
+                    set.spawn(async move {
+                        zero_x_infinity::persistence::schema::ensure_balance_table(
+                            db.taos(),
+                            user_id,
+                            asset_id,
+                        )
+                        .await
+                    });
+
+                    table_count += 1;
+                    if table_count % 500 == 0 {
+                        println!("   Progress: {}/{} tables...", table_count, total_tables);
                     }
                 }
+
+                // Wait for remaining tasks
+                while let Some(_res) = set.join_next().await {}
             });
             println!("✅ Balance tables pre-created for {} users", accounts.len());
         }

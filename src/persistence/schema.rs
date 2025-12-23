@@ -270,10 +270,19 @@ pub async fn ensure_all_symbol_tables(
     let symbol_ids: Vec<u32> = symbol_mgr.symbol_info.keys().copied().collect();
     tracing::info!("Pre-creating subtables for {} symbols...", symbol_ids.len());
 
+    let mut tasks = Vec::new();
     for symbol_id in symbol_ids {
-        ensure_symbol_tables(taos, symbol_id).await?;
+        tasks.push(ensure_symbol_tables(taos, symbol_id));
     }
 
-    tracing::info!("All symbol subtables pre-created successfully");
+    // Run all symbol table creations in parallel
+    let results = futures::future::join_all(tasks).await;
+    for (idx, res) in results.into_iter().enumerate() {
+        if let Err(e) = res {
+            tracing::error!("Failed to pre-create tables for symbol {}: {}", idx, e);
+        }
+    }
+
+    tracing::info!("All symbol subtables pre-creation finished");
     Ok(())
 }
