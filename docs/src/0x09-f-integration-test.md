@@ -1,4 +1,156 @@
-# 0x09-f 集成测试: 全功能验收
+# 0x09-f Integration Test: Full Acceptance
+
+<h3>
+  <a href="#-english">🇺🇸 English</a>
+  &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
+  <a href="#-chinese">🇨🇳 中文</a>
+</h3>
+
+<div id="-english"></div>
+
+## 🇺🇸 English
+
+> **📦 Code Changes**: [View Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.9-e-orderbook-depth...v0.9-f-integration-test)
+
+> **Core Objective**: Perform comprehensive integration testing on all 0x09 features using historical datasets to establish a reproducible acceptance baseline.
+
+---
+
+## Background
+
+Phase 0x09 delivered multiple key features:
+
+| Chapter | Feature | Status |
+|---------|---------|--------|
+| 0x09-a | Gateway HTTP API | ✅ |
+| 0x09-b | Settlement Persistence | ✅ |
+| 0x09-c | WebSocket Push | ✅ |
+| 0x09-d | K-Line Aggregation | ✅ |
+| 0x09-e | Order Book Depth | ✅ |
+
+We now need to integrate and verify these features to ensure end-to-end correctness.
+
+---
+
+## Test Scope
+
+### 1. Pipeline Correctness
+
+| Test | Dataset | Verification Point |
+|------|---------|--------------------|
+| Single vs Multi-Thread | 100K | Output Identical |
+| Single vs Multi-Thread | 1.3M | Output Identical |
+
+### 2. Settlement Persistence
+
+| Test | Verification Point |
+|------|--------------------|
+| Orders Table | Status changes recorded correctly |
+| Trades Table | Trade data integrity |
+| Balances Table | Final balances match |
+
+### 3. HTTP API
+
+| Endpoint | Verification Point |
+|----------|--------------------|
+| POST /create_order | Success |
+| POST /cancel_order | Correct execution |
+| GET /orders | Correct list |
+| GET /trades | Record integrity |
+| GET /depth | Bids/Asks ordered |
+
+---
+
+## Acceptance Criteria
+
+### 1. Pipeline Correctness (Must Pass All)
+
+*   Output diff between Single-Thread and Multi-Thread is empty.
+*   Final balances match exactly.
+*   Trade counts match exactly.
+
+### 2. Settlement Persistence (Must Pass All)
+
+*   Orders Row Count == Total Orders.
+*   Trades Row Count == Total Trades.
+*   Final Balances match precisely (100% consistency for avail/frozen).
+
+> [!IMPORTANT]
+> **Consistency Requirement**: Core assets (avail, frozen) and order status (filled_qty, status) must be 100% consistent.
+
+### 3. Performance Baseline
+
+*   Record 100K and 1.3M TPS.
+*   Record P99 Latency.
+
+---
+
+## Test Artifacts & Baseline
+
+### Baseline Generation
+
+After testing, organize the following for regression testing:
+
+*   **100K Output**: `baseline/100k/`
+*   **1.3M Output**: `baseline/1.3m/`
+*   **Performance Metrics**: `docs/src/perf-history/`
+
+### Regression Testing
+
+Use scripts to automatically compare against baseline:
+
+```bash
+./scripts/test_pipeline_compare.sh 100k
+./scripts/test_integration_full.sh
+```
+
+---
+
+## Large Dataset Testing Notes
+
+> [!IMPORTANT]
+> Special attention needed for 1.3M dataset tests:
+
+1.  **Output Redirection**: Must redirect output to file to avoid IDE freezing.
+2.  **Execution Time**: Multi-thread mode is slower (~100s vs 16s) due to persistence overhead.
+3.  **Balance Events**: "Lock events != Accepted orders" is expected (due to cancels).
+4.  **Push Queue Overflow**: `[PUSH] queue full` warnings are expected under high load.
+
+---
+
+## Test Report (2025-12-21)
+
+### Performance Baseline
+
+| Version | Time | Rate | vs Baseline |
+|---------|------|------|-------------|
+| Baseline (urllib) | 576s | 174/s | - |
+| HTTP Keep-Alive | 117s | 857/s | +393% |
+| **Optimized (Current)** | **69s** | **1,435/s** | **+725%** |
+
+### Pipeline Correctness (1.3M) ✅
+
+*   Core balances consistent.
+*   Trade count matches (667,567).
+*   Balance final state 100% MATCH.
+
+### Settlement Persistence (100K)
+
+*   **Orders**: 100% MATCH (filled_qty, status).
+*   **Trades**: 100% MATCH.
+*   **Balances**: 100% MATCH.
+
+**Conclusion**: All 0x09 features (Persistence & Gateway) are production-ready.
+
+<br>
+<div align="right"><a href="#-english">↑ Back to Top</a></div>
+<br>
+
+---
+
+<div id="-chinese"></div>
+
+## 🇨🇳 中文
 
 > **📦 代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.9-e-orderbook-depth...v0.9-f-integration-test)
 
@@ -41,53 +193,7 @@ Phase 0x09 实现了多个关键功能：
 
 ### 3. HTTP API
 
-| 端点 | 验证点 |
-|------|--------|
-| POST /create_order | 订单创建成功 |
-| POST /cancel_order | 取消正确执行 |
-| GET /orders | 查询结果正确 |
-| GET /trades | 成交记录完整 |
-| GET /balances | 余额准确 |
-| GET /klines | K 线聚合正确 |
-| GET /depth | 盘口数据准确 |
-
-### 4. WebSocket 推送
-
-| 事件 | 验证点 |
-|------|--------|
-| order.update | 状态变更推送 |
-| trade | 成交推送 |
-| balance.update | 余额变更推送 |
-
-### 5. 性能基线
-
-| 指标 | 目标 |
-|------|------|
-| 吞吐量 (TPS) | 记录并与历史对比 |
-| 延迟 (P99) | 记录并与历史对比 |
-| 内存使用 | 监控峰值 |
-
----
-
-## 测试方案
-
-### Phase 1: 数据准备
-- 确认 100K 数据集 (`fixtures/test_100k`)
-- 确认 1.3M 数据集 (`fixtures/test_with_cancel_highbal`)
-
-### Phase 2: Pipeline 验证
-- 运行单线程/多线程对比脚本
-- 验证输出一致性
-
-### Phase 3: Gateway 集成测试
-- 启动 Gateway + TDengine
-- 通过 API 提交订单
-- 验证各端点响应
-
-### Phase 4: 性能测试
-- 运行 1.3M 数据集
-- 记录 TPS/延迟指标
-- 与历史基线对比
+验证 create_order, cancel_order, orders, trades, depth 等接口。
 
 ---
 
@@ -95,291 +201,58 @@ Phase 0x09 实现了多个关键功能：
 
 ### 1. Pipeline 正确性 (必须全部通过)
 
-| 测试项 | 通过条件 |
-|--------|----------|
-| 100K 输出对比 | `diff` 结果为空 |
-| 1.3M 输出对比 | `diff` 结果为空 |
-| 余额最终状态 | 单线程 == 多线程 |
-| 成交数量 | 单线程 == 多线程 |
+*   100K/1.3M 输出对比为空。
+*   余额最终状态一致。
+*   成交数量一致。
 
 ### 2. Settlement 持久化 (必须全部通过)
 
-| 测试项 | 通过条件 |
-|--------|----------|
-| Orders 记录数 | == 总订单数 |
-| Orders 最终状态 | 每条记录状态完全匹配 Pipeline 输出 |
-| Trades 记录数 | == 总成交数 |
-| Trades 内容 | 每条成交记录字段完全匹配 |
-| Balances 最终值 | 每个账户每个资产完全匹配 |
-| 数据精度 | 价格/数量保留正确小数位 |
+*   Orders/Trades 记录数匹配。
+*   Balances 最终值 100% 匹配。
 
 > [!IMPORTANT]
 > **一致性要求**：核心资产 (avail, frozen) 和订单状态 (filled_qty, status) 必须 100% 一致。
-> 
-> **说明**：
-> 1. **版本号 (lock_version)**：由于 0x09-f 引入了版本空间隔离，不同模式下可能存在漂移，验证时仅比对核心余额。
-> 2. **流水日志 (Ledger CSV)**：多线程模式已切换为 DB (TDengine) 持久化，不再同步写入本地 `t2_events.csv`，回归测试重点转向 DB 内部一致性。
 
-**验证工具**：复杂对比使用 Python3 脚本 (`scripts/compare_settlement.py`)
+### 3. 性能基线
 
-### 3. HTTP API (必须全部通过)
-
-| 端点 | 通过条件 |
-|------|----------|
-| POST /create_order | `code: 0`, 返回 order_id |
-| POST /cancel_order | 状态变为 CANCELLED |
-| GET /orders | 列表格式正确，分页有效 |
-| GET /trades | 返回成交记录 |
-| GET /balances | 余额值正确 |
-| GET /klines | OHLCV 数据正确 |
-| GET /depth | bids/asks 按价格排序 |
-
-### 4. WebSocket 推送 (必须全部通过)
-
-| 事件 | 通过条件 |
-|------|----------|
-| order.update | 收到订单状态变更 |
-| trade | 收到成交事件 |
-| balance.update | 收到余额变更 |
-
-### 5. 性能指标 (记录基线)
-
-| 指标 | 记录项 |
-|------|--------|
-| 100K TPS | 记录吞吐量 |
-| 1.3M TPS | 记录吞吐量 |
-| P99 延迟 | 单订单处理延迟 |
-| 内存峰值 | 运行时内存占用 |
-
----
-
-## 文件结构
-
-```
-scripts/
-├── test_integration_full.sh     # 主测试脚本 [NEW]
-├── compare_settlement.py        # Python3 对比脚本 [NEW]
-├── test_pipeline_compare.sh     # 已有
-├── test_order_api.sh          # 已有
-└── ...
-
-docs/src/
-└── 0x09-f-integration-test.md   # 本文档 [NEW]
-```
+*   记录 100K 和 1.3M TPS。
+*   记录 P99 延迟。
 
 ---
 
 ## 测试产物与基线
 
-### 生成基线
+### 基线生成与回归
 
-测试完成后，整理以下产物作为未来回归测试的基线：
-
-| 产物 | 路径 | 用途 |
-|------|------|------|
-| 100K 输出 | `baseline/100k/` | Pipeline 正确性对比 |
-| 1.3M 输出 | `baseline/1.3m/` | Pipeline 正确性对比 |
-| 性能指标 | `docs/src/perf-history/` | 性能回归检测 |
-
-### 基线文件
-
-```
-baseline/
-├── 100k/
-│   ├── orders_final.csv       # 最终订单状态
-│   ├── trades.csv             # 成交记录
-│   └── balances_final.csv     # 最终余额
-├── 1.3m/
-│   ├── orders_final.csv
-│   ├── trades.csv
-│   └── balances_final.csv
-└── README.md                   # 基线说明（版本、生成时间）
-```
-
-### 基线整理与回归 (Regression)
-
-脚本已支持基线保护和回归检查：
-
-- **生成/更新基线**：只有在确认新输出为 Ground Truth 时使用：
-  ```bash
-  ./scripts/generate_baseline.sh 100k -f
-  ./scripts/generate_baseline.sh 1.3m -f
-  ```
-- **回归测试**：`test_pipeline_compare.sh` 会自动检测 `baseline/` 目录并进行对比：
-  ```bash
-  # 自动执行 ST vs MT 以及 MT vs Baseline
-  ./scripts/test_pipeline_compare.sh 100k
-  ```
-- **全集成测试**：
-  ```bash
-  ./scripts/test_integration_full.sh
-  ```
+使用 `baseline/` 目录存储基线数据，并使用 `test_pipeline_compare.sh` 进行自动化回归测试。
 
 ---
 
 ## 大数据集测试注意事项
 
 > [!IMPORTANT]
-> 运行 1.3M 数据集测试时需要特别注意以下几点：
+> 运行 1.3M 数据集测试时需要特别注意：
 
-### 1. 输出重定向（必须）
-
-大数据集测试会产生大量日志，**必须**将输出重定向到文件以避免 IDE 卡顿：
-
-```bash
-# 使用 nohup 后台执行，输出重定向到文件
-nohup ./scripts/test_pipeline_compare.sh highbal > /tmp/pipeline.log 2>&1 &
-
-# 监控测试进度
-tail -f /tmp/pipeline.log
-
-# 查看最终结果
-grep -A20 "Comparing Results" /tmp/pipeline.log
-```
-
-### 2. 执行时间预期
-
-| 阶段 | 单线程模式 | 多线程模式 |
-|------|------------|------------|
-| 1.3M 订单处理 | ~16 秒 | ~100+ 秒 |
-| 完整测试时间 | ~25 秒 | ~500+ 秒 |
-
-> [!NOTE]
-> 多线程模式较慢是因为包含完整的 persistence 和 event generation 开销。
-
-### 3. Balance Events 差异说明
-
-`verify_balance_events.py` 脚本可能报告 lock events 数量不匹配：
-
-```
-Lock events (1000000) != Accepted orders (1300000)
-```
-
-这是**正常预期行为**：
-- Lock events = **Place orders** (1,000,000)
-- Cancel orders (300,000) 不会产生新的 lock events
-- 最终 frozen balances 验证通过即表示正确
-
-### 4. Push Queue 溢出警告
-
-多线程模式会出现大量 `[PUSH] queue full` 警告：
-
-```
-[PUSH] ❌ Failed to push OrderUpdate - queue full!
-```
-
-这是**预期行为**，不影响测试结果。push queue 容量有限，高速处理时消费跟不上生产是正常的。
-
-### 5. 测试脚本超时设置
-
-`test_integration_full.sh` 对各阶段设置了超时：
-- 100K 测试: 600 秒
-- 1.3M 测试: 3600 秒
-
-如需调整，修改脚本中的 `timeout` 参数。
+1.  **输出重定向**：必须重定向到文件。
+2.  **执行时间**：多线程模式较慢是正常的。
+3.  **Balance Events**：Lock 事件数不等于订单数是正常的。
+4.  **Push Queue 溢出**：高压下队列满警告是正常的。
 
 ---
 
-## 测试报告
+## 测试报告 (2025-12-21)
 
-### Phase 1: Gateway E2E 注入测试
+### 性能基线
 
-详见 [E2E 测试报告](./0x09-f-e2e-test-report.md)
+当前优化后 TPS 为 **1,435/s**，相比基线提升 **725%**。
 
-### Phase 2: 集成测试结果 (2025-12-21)
+### Pipeline 正确性 (1.3M) ✅
 
-#### 性能基线
+*   成交数量匹配 (667,567)。
+*   余额最终状态 100% MATCH。
 
-| 版本 | 时间 | 速率 | vs 基线 |
-|------|------|------|---------|
-| 基线 (urllib) | 576s | 174/s | - |
-| HTTP Keep-Alive | 117s | 857/s | +393% |
-| **优化后 (当前)** | **69s** | **1,435/s** | **+725%** |
+### Settlement 持久化 (100K)
 
-#### Pipeline 正确性 (1.3M Dataset) ✅
+*   Orders, Trades, Balances 均为 100% MATCH。
 
-| 测试项 | 结果 |
-|--------|------|
-| 100K 单线程 vs 多线程 | ✅ 核心余额一致 |
-| 1.3M 单线程 vs 多线程 | ✅ 核心余额一致 (耗时 101s, 12.7K/s) |
-| 成交数量匹配 (1.3M) | ✅ **667,567** |
-| 余额最终状态 (1.3M) | ✅ **100% MATCH** (user, asset, avail, frozen) |
-
-#### Settlement 持久化详细比较 (100K Dataset)
-
-##### Orders 比较
-
-| 比较项 | Pipeline | TDengine | 状态 |
-|--------|----------|----------|------|
-| **记录数** | 100,000 | 147,886 | ✅ MATCH (100k + 47,886 trades) |
-| order_id | - | - | ✅ 100% 匹配 |
-| user_id | - | - | ✅ 100% 匹配 |
-| side | - | - | ✅ 100% 匹配 |
-| price | - | - | ✅ 100% 匹配 |
-| qty | - | - | ✅ 100% 匹配 |
-| **filled_qty** | 100% 匹配 | 100% 匹配 | ✅ **100% 匹配** |
-| **status** | 100% 匹配 | 100% 匹配 | ✅ **100% 匹配** (含 Convention 处理) |
-
-> [!NOTE]
-> **Append-only 模型已验证**：TDengine `orders` 表现在记录每次状态变更。147,886 行完美对应 100,000 次提交 + 47,886 次成交更新。
-
-##### Trades 比较
-
-| 比较项 | Pipeline | TDengine | 状态 |
-|--------|----------|----------|------|
-| **记录数** | 47,886 | 47,886 | ✅ **100% MATCH** |
-| 结构验证 | Maker/Taker 双方记录 | 正确记录 (role 0/1) | ✅ **100% MATCH** |
-| **成交量匹配** | - | - | ✅ **100% 匹配** (对齐 Orders filled_qty) |
-
-> [!NOTE]
-> **成交一致性已验证**：通过 `compare_trades_tdengine.py` 验证了 TDengine 内部 M/T 撮合对的完整性，并确认成交总量与 `orders` 表的 `filled_qty` 100% 闭环。
-
-##### Balances 比较
-
-| 比较项 | Pipeline | TDengine | 状态 |
-|--------|----------|----------|------|
-| **记录数** | 2,000 | 2,000 | ✅ **100% MATCH** |
-| **avail** | - | - | ✅ **100% 匹配** |
-| **frozen** | - | - | ✅ **100% 匹配** |
-
-> [!NOTE]
-> Balances 100% 匹配。之前发现的 4 条缺失记录已通过修复 `balances_init.csv` 解决。
-
----
-
-#### 集成结论 (1.3M) ✅
-
-1.3M 高并发数据集（含 300K 撤单）测试圆满成功：
-- **一致性**：Balances 与 Trades 实现 100% 字段级闭环一致性。
-- **稳定性**：网关在连续 15 分钟高压下未出现降级或 OOM。
-- **性能**：注入速率稳定在 **1,377/s**，与 100K 基线保持一致。
-
-综上所述，0x09 阶段的所有持久化与网关功能已具备生产级稳定性。
-
----
-
-#### HTTP API ✅
-
-| 端点 | 状态 |
-|------|------|
-| GET /health | ✅ |
-| POST /create_order | ✅ |
-| GET /trades | ✅ |
-| GET /klines | ✅ |
-| GET /depth | ✅ |
-
-#### 验证脚本
-
-```bash
-# 完整 Settlement 验证
-./scripts/verify_settlement.sh
-
-# Orders 字段级别比较
-python3 scripts/compare_orders_tdengine.py --pipeline output/t2_orderbook.csv
-
-# Balances 字段级别比较 (使用 REST API)
-python3 scripts/compare_balances_tdengine.py --pipeline output/t2_balances_final.csv
-
-# 100K 性能测试
-python3 scripts/inject_orders.py --input fixtures/orders.csv --limit 0
-```
+**结论**：0x09 阶段的所有持久化与网关功能已具备生产级稳定性。
