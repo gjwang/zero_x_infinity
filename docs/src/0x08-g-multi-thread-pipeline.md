@@ -1,4 +1,153 @@
-# 0x08-g 多线程 Pipeline 设计 (Multi-Thread Pipeline Design)
+# 0x08-g Multi-Thread Pipeline Design
+
+<h3>
+  <a href="#-english">🇺🇸 English</a>
+  &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
+  <a href="#-chinese">🇨🇳 中文</a>
+</h3>
+
+<div id="-english"></div>
+
+## 🇺🇸 English
+
+> **📦 Code Changes**: [View Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.8-f-ring-buffer-pipeline...v0.8-h-performance-monitoring) | [Key File: pipeline_mt.rs](https://github.com/gjwang/zero_x_infinity/blob/main/src/pipeline_mt.rs)
+
+## Overview
+
+The Multi-Thread Pipeline distributes processing logic across 4 independent threads, communicating via lock-free queues to achieve high throughput order processing.
+
+## Architecture
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│  Ingestion  │────▶│   UBSCore   │────▶│     ME      │────▶│ Settlement  │
+│  (Thread 1) │     │  (Thread 2) │     │  (Thread 3) │     │  (Thread 4) │
+└─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
+      │                   │ ▲                 │                   │
+      │                   │ │                 │                   │
+      ▼                   ▼ │                 ▼                   ▼
+  order_queue ────▶ action_queue      balance_update_queue   trade_queue
+                           │                                balance_event_queue
+                           └──────────────────────────────────────┘
+```
+
+### Thread Responsibilities
+
+| Thread | Responsibility | Input Queue | Output |
+|--------|----------------|-------------|--------|
+| **Ingestion** | Parse orders, assign SeqNum | orders (iterator) | order_queue |
+| **UBSCore** | Pre-Trade (WAL + Lock) + Post-Trade (Settle) | order_queue, balance_update_queue | action_queue, balance_event_queue |
+| **ME** | Match, Cancel handling | action_queue | trade_queue, balance_update_queue |
+| **Settlement** | Persist Events (Trade, Balance) | trade_queue, balance_event_queue | ledgers |
+
+## Queue Design
+
+Using `crossbeam-queue::ArrayQueue` for lock-free MPSC queues:
+
+```rust
+pub struct MultiThreadQueues {
+    pub order_queue: Arc<ArrayQueue<OrderAction>>,     // 64K
+    pub action_queue: Arc<ArrayQueue<ValidAction>>,    // 64K
+    pub trade_queue: Arc<ArrayQueue<TradeEvent>>,      // 64K
+    pub balance_update_queue: Arc<ArrayQueue<BalanceUpdateRequest>>,  // 64K
+    pub balance_event_queue: Arc<ArrayQueue<BalanceEvent>>,           // 64K
+}
+```
+
+## Cancel Handling
+
+1.  **Ingestion**: Create `OrderAction::Cancel`.
+2.  **UBSCore**: Pass to `action_queue` (No lock needed).
+3.  **ME**: Remove from OrderBook, send `BalanceUpdateRequest::Cancel`.
+4.  **UBSCore**: Process unlock, generate `BalanceEvent::Unlock`.
+5.  **Settlement**: Persist `BalanceEvent`.
+
+## Consistency Verification
+
+### Test Script
+
+```bash
+# Run full comparison test
+./scripts/test_pipeline_compare.sh highbal
+
+# Supported Datasets:
+#   100k    - 100k orders without cancel
+#   cancel  - 1.3M orders with 30% cancel
+#   highbal - 1.3M orders with 30% cancel, high balance (Recommended)
+```
+
+### Verification Results (1.3M orders, 30% cancel, high balance)
+
+```
+╔════════════════════════════════════════════════════════════════╗
+║                    ✅ ALL TESTS PASSED                         ║
+║  Multi-thread pipeline matches single-thread exactly!          ║
+╚════════════════════════════════════════════════════════════════╝
+```
+
+### Key Metrics
+
+| Dataset | Total | Place | Cancel | Trades | Result |
+|---------|-------|-------|--------|--------|--------|
+| 100k | 100,000 | 100,000 | 0 | 47,886 | ✅ Match |
+| 1.3M HighBal | 1,300,000 | 1,000,000 | 300,000 | 667,567 | ✅ Match |
+
+## Important Considerations
+
+### Balance Sufficiency
+Insufficient balance may cause rejections. In concurrent environments, rejection timing can vary due to settlement latency, leading to non-deterministic results.
+**Solution**: Use `highbal` dataset (1000 BTC + 100M USDT per user).
+
+### Shutdown Synchronization
+Wait for queues to drain before signaling shutdown:
+
+```rust
+while !queues.all_empty() {
+    std::hint::spin_loop();
+}
+shutdown.request_shutdown();
+```
+
+## Performance
+
+| Mode | 100k orders | 1.3M orders |
+|------|-------------|-------------|
+| Single-Thread | 350ms | 15.5s |
+| Multi-Thread | 330ms | 15.6s |
+
+**Note**: Multi-thread version includes overhead for BalanceEvent generation/persistence, matching Single-Thread performance. Future optimizations: Batch I/O, reduce contention.
+
+## Queue Priority Strategy (Future)
+
+**Current Implementation**:
+Prioritize draining `balance_update_queue` completely before processing `order_queue`.
+
+**Future: Weighted Round-Robin**:
+Allow alternating processing to improve responsiveness.
+
+```rust
+const SETTLE_WEIGHT: u32 = 3;  // settle : order = 3 : 1
+```
+
+## File Structure
+
+```
+src/
+├── pipeline.rs       # Shared types
+├── pipeline_mt.rs    # Multi-thread impl
+├── pipeline_runner.rs # Single-thread impl
+└── main.rs
+```
+
+<br>
+<div align="right"><a href="#-english">↑ Back to Top</a></div>
+<br>
+
+---
+
+<div id="-chinese"></div>
+
+## 🇨🇳 中文
 
 > **📦 代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.8-f-ring-buffer-pipeline...v0.8-h-performance-monitoring) | [关键文件: pipeline_mt.rs](https://github.com/gjwang/zero_x_infinity/blob/main/src/pipeline_mt.rs)
 
@@ -72,25 +221,6 @@ Cancel 订单流程：
 
 ```
 ╔════════════════════════════════════════════════════════════════╗
-║        Pipeline Comparison Test                                ║
-╠════════════════════════════════════════════════════════════════╣
-║  Dataset: 1.3M orders with 30% cancel (high balance)
-╚════════════════════════════════════════════════════════════════╝
-
-════════════════════════════════════════════════════════════════
-Metric            Single-Thread    Multi-Thread     Status
-────────────────────────────────────────────────────────────────
-Ingested               1300000         1300000   ✅ PASS
-Place                  1000000         1000000   ✅ PASS
-Cancel                  300000          300000   ✅ PASS
-Accepted               1000000         1000000   ✅ PASS
-Rejected                     0               0   ✅ PASS
-Trades                  667567          667567   ✅ PASS
-════════════════════════════════════════════════════════════════
-
-Final balances: ✅ MATCH (0 differences)
-
-╔════════════════════════════════════════════════════════════════╗
 ║                    ✅ ALL TESTS PASSED                         ║
 ║  Multi-thread pipeline matches single-thread exactly!          ║
 ╚════════════════════════════════════════════════════════════════╝
@@ -116,15 +246,9 @@ Final balances: ✅ MATCH (0 differences)
 Multi-thread pipeline 在 shutdown 时需要确保所有队列都已 drain：
 
 ```rust
-// Wait for all processing queues to drain before signaling shutdown
-loop {
-    if queues.all_empty() {
-        break;
-    }
+while !queues.all_empty() {
     std::hint::spin_loop();
 }
-
-// Now signal shutdown
 shutdown.request_shutdown();
 ```
 
@@ -137,105 +261,16 @@ shutdown.request_shutdown();
 
 注：Multi-thread 当前版本包含 BalanceEvent 生成和持久化开销，性能与 Single-Thread 相当。未来优化方向包括批量 I/O 和减少队列竞争。
 
-## 队列优先级策略
+## 队列优先级策略 (未来)
 
-### 当前实现
+**当前实现**:
+完全优先 drain `balance_update_queue`，然后才处理新订单。
 
-UBSCore 同时消费两个队列：
-- `balance_update_queue` - 来自 ME 的 settle/unlock 请求
-- `order_queue` - 新订单
-
-**当前策略**: 完全 drain `balance_update_queue` 后才处理 `order_queue`。
-
-```rust
-// PRIORITY 1: 先处理所有 balance updates
-while let Some(update) = balance_update_queue.pop() {
-    process_settlement(update);
-}
-
-// PRIORITY 2: 再处理一个新订单
-if let Some(order) = order_queue.pop() {
-    process_order(order);
-}
-```
-
-### 未来优化: 加权优先级
-
-生产环境建议实现更灵活的优先级策略，允许交替处理但保持 settle 优先：
-
-#### 方案 1: 加权轮询 (Weighted Round-Robin)
+**未来优化: 加权轮询 (Weighted Round-Robin)**:
+允许交替处理，提高响应性。
 
 ```rust
 const SETTLE_WEIGHT: u32 = 3;  // settle : order = 3 : 1
-
-let mut settle_count = 0;
-loop {
-    if settle_count < SETTLE_WEIGHT {
-        if let Some(update) = balance_update_queue.pop() {
-            process_settlement(update);
-            settle_count += 1;
-            continue;
-        }
-    }
-    
-    if let Some(order) = order_queue.pop() {
-        process_order(order);
-        settle_count = 0;  // 重置
-    }
-}
-```
-
-#### 方案 2: 批量处理 (Batch Processing)
-
-```rust
-const MAX_SETTLE_BATCH: usize = 10;
-const MAX_ORDER_BATCH: usize = 3;
-
-loop {
-    // Phase 1: 最多 10 个 settlements
-    for _ in 0..MAX_SETTLE_BATCH {
-        if balance_update_queue.pop().map(process_settlement).is_none() {
-            break;
-        }
-    }
-    
-    // Phase 2: 最多 3 个 orders
-    for _ in 0..MAX_ORDER_BATCH {
-        if order_queue.pop().map(process_order).is_none() {
-            break;
-        }
-    }
-}
-```
-
-#### 方案 3: 动态自适应 (Adaptive)
-
-```rust
-loop {
-    let settle_depth = balance_update_queue.len();
-    
-    // 根据积压深度动态调整比例
-    let ratio = match settle_depth {
-        0..=10 => 2,    // 空闲: 2:1
-        11..=100 => 5,  // 正常: 5:1
-        _ => 10,        // 积压: 10:1
-    };
-    
-    // 按比例处理...
-}
-```
-
-### 配置结构 (未来)
-
-```rust
-pub struct QueuePriority {
-    /// Settle:Order ratio (e.g., 3 = process 3 settlements per 1 order)
-    pub settle_weight: u32,
-    /// Max batch size per round
-    pub max_batch: usize,
-    /// Enable adaptive mode based on queue depth
-    pub adaptive: bool,
-}
 ```
 
 ## 文件结构
@@ -246,10 +281,4 @@ src/
 ├── pipeline_mt.rs    # Multi-thread 实现: run_pipeline_multi_thread()
 ├── pipeline_runner.rs # Single-thread 实现: run_pipeline()
 └── main.rs           # --pipeline / --pipeline-mt 模式选择
-
-scripts/
-├── test_pipeline_compare.sh        # 统一测试脚本
-├── test_pipeline_baseline.sh       # 生成 baseline
-├── test_pipeline_verify.sh         # 验证 multi-thread
-└── generate_orders_with_cancel_highbal.py  # 生成高余额测试数据
 ```
