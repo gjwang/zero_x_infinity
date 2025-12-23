@@ -35,6 +35,7 @@ use crate::api_auth::{
 // Phase 0x0B-a: Internal Transfer FSM
 use crate::transfer::{
     adapters::{FundingAdapter, TradingAdapter},
+    channel::TransferSender,
     coordinator::TransferCoordinator,
     db::TransferDb,
 };
@@ -144,6 +145,8 @@ pub async fn run_server(
     pg_db: Option<Arc<Database>>,
     pg_assets: Arc<Vec<Asset>>,
     pg_symbols: Arc<Vec<Symbol>>,
+    // Phase 0x0B-a: Optional channel to UBSCore for TradingAdapter
+    transfer_sender: Option<TransferSender>,
 ) {
     // Create WebSocket connection manager
     let ws_manager = Arc::new(ConnectionManager::new());
@@ -169,10 +172,17 @@ pub async fn run_server(
         // Create TransferDb using same connection pool as account DB
         let transfer_db = Arc::new(TransferDb::new(db.pool().clone()));
 
-        // Create adapters - both use placeholder mode for now
-        // TODO: Connect TradingAdapter to real UBSCore via TransferChannel
+        // Create adapters
+        // FundingAdapter uses PostgreSQL directly
         let funding_adapter = Arc::new(FundingAdapter::new(db.pool().clone()));
-        let trading_adapter = Arc::new(TradingAdapter::new());
+        // TradingAdapter uses UBSCore via TransferChannel (if provided)
+        let trading_adapter = if let Some(sender) = transfer_sender {
+            println!("  → TradingAdapter connected to UBSCore via TransferChannel");
+            Arc::new(TradingAdapter::with_channel(sender))
+        } else {
+            println!("  → TradingAdapter in simulation mode (no UBSCore connection)");
+            Arc::new(TradingAdapter::new())
+        };
 
         // Create coordinator
         let coordinator = Arc::new(TransferCoordinator::new(
