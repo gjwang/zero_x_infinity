@@ -18,13 +18,13 @@ services:
     image: postgres:latest
     container_name: postgres
     ports:
-      - "5432:5432"
+      - "5433:5432" # Local uses 5433, container internal is 5432
     environment:
       POSTGRES_USER: trading
       POSTGRES_PASSWORD: trading123
       POSTGRES_DB: exchange_info_db
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql # PG 18+ uses subdirectory
       - ./migrations:/docker-entrypoint-initdb.d
     restart: unless-stopped
     healthcheck:
