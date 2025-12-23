@@ -37,3 +37,4 @@ test_gateway/
 test_results.log
 config/*.bak
 __pycache__/
+test-reports/
