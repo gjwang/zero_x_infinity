@@ -1955,11 +1955,17 @@ function withdraw(req_id, user_id, asset_id, amount):
 
 ---
 
-## 📋 E2E Testing Documentation | E2E 测试文档
+## 📋 Implementation & Verification | 实现与验证
 
-For detailed testing methodology, scripts, and verification steps:
+本章的完整实现细节、API 说明、E2E 测试脚本和验证结果请参阅:
 
-完整的测试方法、脚本和验证步骤请参阅:
+For complete implementation details, API documentation, E2E test scripts, and verification results:
 
-👉 **[Internal Transfer E2E Testing Guide](./0x0B-a-transfer-testing.md)**
+👉 **[Phase 0x0B-a: Implementation & Testing Guide](./0x0B-a-transfer-testing.md)**
 
+包含 / Includes:
+- 架构实现与核心模块 (Architecture & Core Modules)
+- 新增 API 端点 (New API Endpoints)
+- 可复用 E2E 测试脚本 (Reusable E2E Test Script)
+- 数据库验证方法 (Database Verification)
+- 已修复 Bug 清单 (Fixed Bugs)
