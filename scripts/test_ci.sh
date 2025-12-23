@@ -168,6 +168,9 @@ run_test() {
             log_test_fail "(timeout after ${timeout_sec}s)"
         else
             log_test_fail "(exit code: $exit_code, see $log_file)"
+            echo "--- Log tail ($log_file) ---"
+            tail -n 10 "$log_file" || true
+            echo "--------------------------"
         fi
         return 1
     fi
@@ -196,11 +199,17 @@ run_test_with_pattern() {
             return 0
         else
             log_test_fail "(pattern not found: $pattern)"
+            echo "--- Log tail ($log_file) ---"
+            tail -n 10 "$log_file" || true
+            echo "--------------------------"
             return 1
         fi
     else
         local exit_code=$?
         log_test_fail "(exit code: $exit_code)"
+        echo "--- Log tail ($log_file) ---"
+        tail -n 10 "$log_file" || true
+        echo "--------------------------"
         return 1
     fi
 }

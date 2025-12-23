@@ -210,6 +210,28 @@ jobs:
 
       - name: Run Gateway E2E
         run: ./scripts/test_ci.sh --test-gateway-e2e
+        id: run-test
+        continue-on-error: true
+
+      - name: Dump Logs on Failure
+        if: steps.run-test.outcome == 'failure'
+        run: |
+          echo "=== Gateway E2E Log ==="
+          cat logs/Gateway_E2E.log || true
+          echo ""
+          echo "=== Gateway Output Log ==="
+          cat /tmp/gateway.log || true
+          exit 1
+
+      - name: Upload Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-gateway-e2e
+          path: |
+            logs/
+            /tmp/gateway.log
+          retention-days: 7
 
   test-kline:
     name: K-Line E2E
@@ -262,6 +284,28 @@ jobs:
 
       - name: Run K-Line E2E
         run: ./scripts/test_ci.sh --test-kline
+        id: run-test
+        continue-on-error: true
+
+      - name: Dump Logs on Failure
+        if: steps.run-test.outcome == 'failure'
+        run: |
+          echo "=== K-Line E2E Log ==="
+          cat logs/KLine_E2E.log || true
+          echo ""
+          echo "=== Gateway Output Log ==="
+          cat /tmp/gateway.log || true
+          exit 1
+
+      - name: Upload Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-kline-e2e
+          path: |
+            logs/
+            /tmp/gateway.log
+          retention-days: 7
 
   test-depth:
     name: Depth API
@@ -314,6 +358,28 @@ jobs:
 
       - name: Run Depth API
         run: ./scripts/test_ci.sh --test-depth
+        id: run-test
+        continue-on-error: true
+
+      - name: Dump Logs on Failure
+        if: steps.run-test.outcome == 'failure'
+        run: |
+          echo "=== Depth API Log ==="
+          cat logs/Depth_API.log || true
+          echo ""
+          echo "=== Gateway Output Log ==="
+          cat /tmp/gateway.log || true
+          exit 1
+
+      - name: Upload Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-depth-api
+          path: |
+            logs/
+            /tmp/gateway.log
+          retention-days: 7
 
   test-account:
     name: Account Integration
@@ -378,6 +444,16 @@ jobs:
           echo "=== Gateway Output Log ==="
           cat /tmp/gateway.log || true
           exit 1
+
+      - name: Upload Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-account-integration
+          path: |
+            logs/
+            /tmp/gateway.log
+          retention-days: 7
 
       - name: Report Success
         if: steps.run-test.outcome == 'success'
