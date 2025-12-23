@@ -34,6 +34,7 @@
     - [0x0A-b ID Specification | ID 规范](./0x0A-a-id-specification.md)
     - [0x0A-c Authentication | 安全鉴权](./0x0A-b-api-auth.md)
 - [0x0B Funding & Transfer | 资金体系: 充提与划转](./0x0B-funding.md)
+    - [0x0B-a Internal Transfer | 内部划转](./0x0B-a-transfer.md)
 - [0x0C Fee System | 经济模型: 手续费](./0x0C-fee-system.md)
 - [0x0D Snapshot & Recovery | 鲁棒性: 快照与恢复](./0x0D-snapshot-recovery.md)
 
