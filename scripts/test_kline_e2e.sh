@@ -93,7 +93,7 @@ echo ""
 # Step 2: Get initial K-Line count
 echo ""
 echo "Step 2: Getting initial K-Line count..."
-INITIAL=$(curl -s "$BASE_URL/api/v1/klines?interval=$INTERVAL&limit=1000" | jq '.data | length')
+INITIAL=$(curl -s "$BASE_URL/api/v1/public/klines?interval=$INTERVAL&limit=1000" | jq '.data | length')
 echo "   Initial K-Lines: $INITIAL"
 
 # Step 3: Create matching orders to generate a trade
@@ -143,7 +143,7 @@ sleep 5
 # Step 5: Query K-Line API
 echo ""
 echo "Step 5: Querying K-Line API..."
-KLINE_RESP=$(curl -s "$BASE_URL/api/v1/klines?interval=$INTERVAL&limit=5")
+KLINE_RESP=$(curl -s "$BASE_URL/api/v1/public/klines?interval=$INTERVAL&limit=5")
 echo "$KLINE_RESP" | jq '.'
 
 # Step 6: Verify response

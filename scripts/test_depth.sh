@@ -1,6 +1,6 @@
 #!/bin/bash
 # Test script for Order Book Depth API
-# Tests the /api/v1/depth endpoint with various scenarios
+# Tests the /api/v1/public/depth endpoint with various scenarios
 
 set -e
 
@@ -68,7 +68,7 @@ fi
 
 # Test 1: Query empty depth
 echo -e "${BLUE}Test 1: Query depth${NC}"
-curl -s "${BASE_URL}/api/v1/depth?symbol=${SYMBOL}&limit=5" | jq .
+curl -s "${BASE_URL}/api/v1/public/depth?symbol=${SYMBOL}&limit=5" | jq .
 echo -e "\n"
 
 # Test 2: Create test orders via inject_orders.py (Ed25519 authenticated)
@@ -118,7 +118,7 @@ sleep 0.5
 
 # Test 3: Query depth with orders
 echo -e "${BLUE}Test 3: Query depth (should show bids and asks)${NC}"
-DEPTH_RESULT=$(curl -s "${BASE_URL}/api/v1/depth?symbol=${SYMBOL}&limit=5")
+DEPTH_RESULT=$(curl -s "${BASE_URL}/api/v1/public/depth?symbol=${SYMBOL}&limit=5")
 echo "$DEPTH_RESULT" | jq .
 
 # Verify depth has data
