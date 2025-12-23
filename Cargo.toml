@@ -47,6 +47,9 @@ rand = "0.8"
 num-bigint = "0.4"
 num-integer = "0.1"
 
+# Internal Transfer FSM (Phase 0x0B-a)
+async-trait = "0.1"
+
 [dev-dependencies]
 crossterm = "0.29.0"
 ratatui = "0.29.0"
