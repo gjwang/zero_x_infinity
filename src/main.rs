@@ -271,37 +271,7 @@ fn main() {
         let db_client_for_pipeline = db_client.clone();
         let rt_handle_for_pipeline = Some(rt_handle.clone());
 
-        // Start HTTP Server in separate thread with tokio runtime
-        let queues_clone = queues.clone();
-        let symbol_mgr_clone = symbol_mgr.clone();
-        let gateway_thread = std::thread::spawn(move || {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(async {
-                // Spawn DepthService task (inside tokio runtime)
-                let depth_service_clone = depth_service.clone();
-                tokio::spawn(async move {
-                    depth_service_clone.run().await;
-                });
-                println!("📊 DepthService started");
-
-                // Use shared db_client from main thread (no duplicate init needed)
-                zero_x_infinity::gateway::run_server(
-                    port,
-                    queues_clone.order_queue.clone(),
-                    symbol_mgr_clone,
-                    active_symbol_id,
-                    db_client_for_gateway,
-                    queues_clone.push_event_queue.clone(),
-                    depth_service,
-                    _pg_db.clone(),
-                    _pg_assets.clone(),
-                    _pg_symbols.clone(),
-                )
-                .await;
-            });
-        });
-
-        println!("🚀 Gateway thread started");
+        // We will start the gateway after pre-creating tables below
 
         // Prepare for Trading Core
         println!("\n[1] Initializing Trading Core...");
@@ -357,6 +327,38 @@ fn main() {
             });
             println!("✅ Balance tables pre-created for {} users", accounts.len());
         }
+
+        // Start HTTP Server in separate thread with tokio runtime
+        let queues_clone = queues.clone();
+        let symbol_mgr_clone = symbol_mgr.clone();
+        let gateway_thread = std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(async {
+                // Spawn DepthService task (inside tokio runtime)
+                let depth_service_clone = depth_service.clone();
+                tokio::spawn(async move {
+                    depth_service_clone.run().await;
+                });
+                println!("📊 DepthService started");
+
+                // Use shared db_client from main thread (no duplicate init needed)
+                zero_x_infinity::gateway::run_server(
+                    port,
+                    queues_clone.order_queue.clone(),
+                    symbol_mgr_clone,
+                    active_symbol_id,
+                    db_client_for_gateway,
+                    queues_clone.push_event_queue.clone(),
+                    depth_service,
+                    _pg_db.clone(),
+                    _pg_assets.clone(),
+                    _pg_symbols.clone(),
+                )
+                .await;
+            });
+        });
+
+        println!("🚀 Gateway thread started");
 
         for (user_id, account) in &accounts {
             for asset_id in [base_id, quote_id] {

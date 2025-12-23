@@ -152,12 +152,14 @@ run_test() {
     
     log_test_start "$name"
     
-    if [ ! -f "$PROJECT_DIR/$script" ]; then
-        log_test_skip "(script not found: $script)"
+    # Extract the script path (first word) to check for existence
+    local script_path=$(echo "$script" | awk '{print $1}')
+    if [ ! -f "$PROJECT_DIR/$script_path" ]; then
+        log_test_skip "(script not found: $script_path)"
         return 0
     fi
     
-    if timeout "$timeout_sec" "$PROJECT_DIR/$script" > "$log_file" 2>&1; then
+    if timeout "$timeout_sec" bash -c "$PROJECT_DIR/$script" > "$log_file" 2>&1; then
         log_test_pass
         return 0
     else
@@ -181,12 +183,14 @@ run_test_with_pattern() {
     
     log_test_start "$name"
     
-    if [ ! -f "$PROJECT_DIR/$script" ]; then
+    # Extract the script path (first word) to check for existence
+    local script_path=$(echo "$script" | awk '{print $1}')
+    if [ ! -f "$PROJECT_DIR/$script_path" ]; then
         log_test_skip "(script not found)"
         return 0
     fi
     
-    if timeout "$timeout_sec" "$PROJECT_DIR/$script" > "$log_file" 2>&1; then
+    if timeout "$timeout_sec" bash -c "$PROJECT_DIR/$script" > "$log_file" 2>&1; then
         if grep -q "$pattern" "$log_file"; then
             log_test_pass
             return 0

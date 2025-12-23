@@ -315,7 +315,7 @@ mod tests {
     #[ignore] // Requires TDengine running
     async fn test_insert_order() {
         let client =
-            crate::persistence::TDengineClient::connect("taos://root:taosdata@localhost:6030")
+            crate::persistence::TDengineClient::connect("taos+ws://root:taosdata@localhost:6041")
                 .await
                 .expect("Failed to connect");
 
@@ -343,7 +343,7 @@ mod tests {
         use crate::models::{OrderStatus, Trade};
 
         let client =
-            crate::persistence::TDengineClient::connect("taos://root:taosdata@localhost:6030")
+            crate::persistence::TDengineClient::connect("taos+ws://root:taosdata@localhost:6041")
                 .await
                 .expect("Failed to connect");
 
@@ -423,7 +423,7 @@ mod tests {
     #[ignore] // Requires TDengine running
     async fn test_auto_create_orders_trades_tables() {
         let client =
-            crate::persistence::TDengineClient::connect("taos://root:taosdata@localhost:6030")
+            crate::persistence::TDengineClient::connect("taos+ws://root:taosdata@localhost:6041")
                 .await
                 .expect("Failed to connect");
 
