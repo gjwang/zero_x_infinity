@@ -14,6 +14,9 @@ use crate::account::{Asset, Database, Symbol};
 // Phase 0x0A-b: Authentication
 use crate::api_auth::AuthState;
 
+// Phase 0x0B-a: Internal Transfer FSM
+use crate::transfer::TransferCoordinator;
+
 /// Gateway application state (shared)
 #[derive(Clone)]
 pub struct AppState {
@@ -39,6 +42,8 @@ pub struct AppState {
     pub pg_symbols: Arc<Vec<Symbol>>,
     /// Authentication state (Phase 0x0A-b)
     pub auth_state: Arc<AuthState>,
+    /// Transfer coordinator (Phase 0x0B-a) - optional until fully integrated
+    pub transfer_coordinator: Option<Arc<TransferCoordinator>>,
 }
 
 impl AppState {
@@ -67,7 +72,14 @@ impl AppState {
             pg_assets,
             pg_symbols,
             auth_state,
+            transfer_coordinator: None, // Will be set when FSM is enabled
         }
+    }
+
+    /// Set the transfer coordinator (call after setup)
+    pub fn with_transfer_coordinator(mut self, coordinator: Arc<TransferCoordinator>) -> Self {
+        self.transfer_coordinator = Some(coordinator);
+        self
     }
 
     /// Generate next order ID
