@@ -57,8 +57,8 @@
 
 # Reference
 
-- [开发规范 (Development Guidelines)](../standards/development-guidelines.md)
-- [API 规范 (API Conventions)](../standards/api-conventions.md)
-- [ID 规范 (ID Specification)](../standards/id-specification.md)
-- [命名规范 (Naming Convention)](../standards/naming-convention.md)
+- [开发规范 (Development Guidelines)](./standards/development-guidelines.md)
+- [API 规范 (API Conventions)](./standards/api-conventions.md)
+- [ID 规范 (ID Specification)](./standards/id-specification.md)
+- [命名规范 (Naming Convention)](./standards/naming-convention.md)
 - [Database Selection: TDengine | 数据库选型: TDengine](./database-selection-tdengine.md)
