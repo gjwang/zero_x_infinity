@@ -70,18 +70,12 @@ stats_lock = Lock()
 _session = None
 
 # Global ApiClient for Ed25519 auth
-_api_client = None
-
-def get_api_client():
-    """Get or create ApiClient for authenticated requests."""
-    global _api_client
-    if _api_client is None and USE_AUTH:
-        _api_client = ApiClient(
-            api_key=TEST_API_KEY,
-            private_key_hex=TEST_PRIVATE_KEY_HEX,
-            base_url=GATEWAY_URL
-        )
-    return _api_client
+def get_api_client(user_id=1):
+    """Get ApiClient for authenticated requests for specific user."""
+    # Note: We don't cache clients by default here to keep it simple, 
+    # but could cache by user_id if needed for performance.
+    from lib.api_auth import get_test_client
+    return get_test_client(base_url=GATEWAY_URL, user_id=int(user_id))
 
 def get_session():
     """Get or create HTTP session with connection pooling."""
@@ -156,7 +150,8 @@ def submit_order(order_data: dict) -> tuple:
         try:
             if USE_AUTH:
                 # Use Ed25519 authenticated request + X-User-ID header
-                client = get_api_client()
+                client = get_api_client(user_id)
+                # Note: X-User-ID is included for server convenience, but auth is in Authorization header
                 extra_headers = {'X-User-ID': str(user_id)}
                 response = client.post(path, payload, headers=extra_headers)
             elif USE_REQUESTS:
