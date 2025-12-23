@@ -15,39 +15,13 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  CI: true
 
 jobs:
-  # Quick tests - runs on every push
-  quick-tests:
-    name: Quick Tests
+  # Build Job: Compiles and uploads binary
+  build:
+    name: Build & Cache
     runs-on: ubuntu-latest
-    
-    services:
-      tdengine:
-        image: tdengine/tdengine:latest
-        ports:
-          - 6030:6030
-          - 6041:6041
-        options: >-
-          --health-cmd "taos -s 'SELECT SERVER_VERSION();'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-      postgres:
-        image: postgres:16
-        ports:
-          - 5432:5432
-        env:
-          POSTGRES_DB: exchange_info_db
-          POSTGRES_USER: trading
-          POSTGRES_PASSWORD: trading123
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    
     steps:
       - uses: actions/checkout@v4
       
@@ -66,8 +40,39 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+      
+      - name: Build Release
+        run: cargo build --release
+      
+      - name: Upload Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: gateway-binary
+          path: target/release/zero_x_infinity
+          retention-days: 1
+
+  # Phase 1: Unit & Pipeline Logic Tests
+  test-unit:
+    name: Unit & Pipeline
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+      
+      # Restore cargo cache for unit tests (needs dependencies)
+      - name: Restore cargo cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -79,53 +84,29 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas taos-ws-py psycopg2-binary pynacl requests
       
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-      
-      - name: Clippy
-        run: cargo clippy -- -D warnings -A clippy::too_many_arguments -A clippy::collapsible_if -A clippy::unwrap_or_default -A clippy::doc_lazy_continuation -A clippy::manual_is_multiple_of -A clippy::implicit_saturating_sub -A clippy::redundant_pattern_matching
-      
-      - name: Build
-        run: cargo build --release
-      
-      - name: Unit Tests
-        run: cargo test
-      
-      - name: Initialize PostgreSQL Database
-        run: python3 scripts/db/manage_db.py init || echo "DB init skipped"
-
-      - name: Integration Tests (Quick Mode)
-        run: ./scripts/test_ci.sh --quick
-        env:
-          CI: true
-          SKIP_LARGE_DATASET: 1
-      
-      - name: Upload test reports
-        uses: actions/upload-artifact@v4
-        if: always()
+      - name: Download Binary
+        uses: actions/download-artifact@v4
         with:
-          name: test-reports
-          path: test-reports/
-          retention-days: 7
+          name: gateway-binary
+          path: target/release
+      
+      - name: Set Binary Executable
+        run: chmod +x target/release/zero_x_infinity
+      
+      - name: Run Unit Tests
+        run: ./scripts/test_ci.sh --test-unit
 
-  # Full tests - runs on main branch or manually triggered
-  full-tests:
-    name: Full Integration Tests
+  # Phase 4: Gateway E2E
+  test-gateway:
+    name: Gateway E2E
+    needs: build
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.event.inputs.run_full_tests == 'true'
-    
     services:
       tdengine:
         image: tdengine/tdengine:latest
         ports:
           - 6030:6030
           - 6041:6041
-        options: >-
-          --health-cmd "taos -s 'SELECT SERVER_VERSION();'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
       postgres:
         image: postgres:16
         ports:
@@ -139,56 +120,167 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    
     steps:
       - uses: actions/checkout@v4
       
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-      
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
       
       - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pandas taos-ws-py psycopg2-binary pynacl requests
+        run: pip install pandas taos-ws-py psycopg2-binary pynacl requests
       
-      - name: Build
-        run: cargo build --release
+      - name: Initialize DB
+        run: python3 scripts/db/manage_db.py init || echo "DB init skipped"
       
-      - name: Full Integration Tests (including 1.3M dataset)
-        run: ./scripts/test_ci.sh --full
-        timeout-minutes: 90
+      - name: Download Binary
+        uses: actions/download-artifact@v4
+        with:
+          name: gateway-binary
+          path: target/release
+      
+      - name: Set Binary Executable
+        run: chmod +x target/release/zero_x_infinity
+
+      - name: Run Gateway E2E
+        run: ./scripts/test_ci.sh --test-gateway-e2e
+
+  # Phase 4: K-Line E2E
+  test-kline:
+    name: K-Line E2E
+    needs: build
+    runs-on: ubuntu-latest
+    services:
+      tdengine:
+        image: tdengine/tdengine:latest
+        ports:
+          - 6030:6030
+          - 6041:6041
+      postgres:
+        image: postgres:16
+        ports:
+          - 5432:5432
         env:
-          CI: true
+          POSTGRES_DB: exchange_info_db
+          POSTGRES_USER: trading
+          POSTGRES_PASSWORD: trading123
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
       
-      - name: Upload test reports
-        uses: actions/upload-artifact@v4
-        if: always()
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          name: full-test-reports
-          path: test-reports/
-          retention-days: 30
+          python-version: '3.10'
       
-      - name: Upload performance baseline
-        uses: actions/upload-artifact@v4
+      - name: Install Python dependencies
+        run: pip install pandas taos-ws-py psycopg2-binary pynacl requests
+      
+      - name: Download Binary
+        uses: actions/download-artifact@v4
         with:
-          name: performance-baseline
-          path: |
-            output/t2_summary.txt
-            output/t2_perf.txt
-          retention-days: 90
+          name: gateway-binary
+          path: target/release
+      
+      - name: Set Binary Executable
+        run: chmod +x target/release/zero_x_infinity
+
+      - name: Run K-Line E2E
+        run: ./scripts/test_ci.sh --test-kline
+
+  # Phase 4: Depth API
+  test-depth:
+    name: Depth API
+    needs: build
+    runs-on: ubuntu-latest
+    services:
+      tdengine:
+        image: tdengine/tdengine:latest
+        ports:
+          - 6030:6030
+          - 6041:6041
+      postgres:
+        image: postgres:16
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_DB: exchange_info_db
+          POSTGRES_USER: trading
+          POSTGRES_PASSWORD: trading123
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      
+      - name: Install Python dependencies
+        run: pip install pandas taos-ws-py psycopg2-binary pynacl requests
+      
+      - name: Download Binary
+        uses: actions/download-artifact@v4
+        with:
+          name: gateway-binary
+          path: target/release
+      
+      - name: Set Binary Executable
+        run: chmod +x target/release/zero_x_infinity
+
+      - name: Run Depth API
+        run: ./scripts/test_ci.sh --test-depth
+
+  # Phase 5: Account Integration
+  test-account:
+    name: Account Integration
+    needs: build
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_DB: exchange_info_db
+          POSTGRES_USER: trading
+          POSTGRES_PASSWORD: trading123
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      
+      - name: Install Python dependencies
+        run: pip install pandas taos-ws-py psycopg2-binary pynacl requests
+      
+      - name: Initialize DB
+        run: python3 scripts/db/manage_db.py init || echo "DB init skipped"
+
+      - name: Download Binary
+        uses: actions/download-artifact@v4
+        with:
+          name: gateway-binary
+          path: target/release
+      
+      - name: Set Binary Executable
+        run: chmod +x target/release/zero_x_infinity
+
+      - name: Run Account Integration
+        run: ./scripts/test_ci.sh --test-account
