@@ -20,7 +20,7 @@
     - [0x08-h Performance Monitoring | 性能监控](./0x08-h-performance-monitoring.md)
 - [0x09 接入层集成与持久化校验](./0x09-a-gateway.md)
     - [0x09-b Settlement Persistence | Settlement 持久化](./0x09-b-settlement-persistence.md)
-    - [0x09-c WebSocket 推送](./0x09-c-websocket-push.md)
+    - [0x09-c WebSocket Push | WebSocket 推送](./0x09-c-websocket-push.md)
     - [0x09-d K-Line 聚合](./0x09-d-kline-aggregation.md)
     - [0x09-e OrderBook Depth](./0x09-e-orderbook-depth.md)
     - [0x09-f 集成测试](./0x09-f-integration-test.md)
