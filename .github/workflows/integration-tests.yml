@@ -194,6 +194,12 @@ jobs:
       - name: Set Binary Executable
         run: chmod +x target/release/zero_x_infinity
 
+      - name: Initialize DB
+        run: |
+          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/001_init_schema.sql || echo "Schema 001 failed"
+          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/002_create_api_keys.sql || echo "Schema 002 failed"
+          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f fixtures/seed_data.sql 2>&1 | grep -v 'does not exist' || true
+
       - name: Run K-Line E2E
         run: ./scripts/test_ci.sh --test-kline
 
@@ -240,6 +246,12 @@ jobs:
       
       - name: Set Binary Executable
         run: chmod +x target/release/zero_x_infinity
+
+      - name: Initialize DB
+        run: |
+          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/001_init_schema.sql || echo "Schema 001 failed"
+          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/002_create_api_keys.sql || echo "Schema 002 failed"
+          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f fixtures/seed_data.sql 2>&1 | grep -v 'does not exist' || true
 
       - name: Run Depth API
         run: ./scripts/test_ci.sh --test-depth
