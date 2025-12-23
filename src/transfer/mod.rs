@@ -33,6 +33,9 @@ pub mod state;
 pub mod types;
 pub mod worker;
 
+#[cfg(test)]
+mod integration_tests;
+
 // Re-exports for convenience
 pub use api::{TransferApiRequest, TransferApiResponse, create_transfer_fsm, get_transfer_status};
 pub use coordinator::TransferCoordinator;
