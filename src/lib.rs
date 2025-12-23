@@ -61,6 +61,9 @@ pub mod account;
 // API Authentication (Phase 0x0A-b)
 pub mod api_auth;
 
+// Internal Transfers (Phase 0x0B-a)
+pub mod funding;
+
 // Convenient re-exports at crate root
 pub use balance::Balance;
 pub use core_types::{AssetId, OrderId, SeqNum, TradeId, UserId};

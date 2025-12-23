@@ -192,6 +192,7 @@ pub async fn run_server(
         // Trading operations
         .route("/order", post(handlers::create_order))
         .route("/cancel", post(handlers::cancel_order))
+        .route("/transfer", post(handlers::create_transfer))
         // Apply auth middleware
         .layer(from_fn_with_state(state.clone(), gateway_auth_middleware));
 
