@@ -1,9 +1,9 @@
 <div align="center">
 
 # ⚔️ 0xInfinity
-### The Infinity Engine for High-Frequency Trading
+### The Hardest Core HFT Tutorial in Rust
 
-> **"Perfectly balanced, as all things should be."**
+> **"From Hello World to Microsecond Latency."**
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen)]()
 [![License](https://img.shields.io/badge/license-MIT-blue)]()
@@ -14,10 +14,46 @@
 
 ---
 
-## 🚀 The Journey
+## ⚡ Why 0xInfinity?
 
-这是一个从 0 到 1 的硬核交易引擎 in Rust 的教程。
-This is a pilgrimage from `Hello World` to `Microsecond Latency`.
+**This is not another "Toy Matching Engine" tutorial.**
+
+We are building a **production-grade** crypto trading engine that handles **1.3M orders/sec** (P99 < 200µs) on a single core. This project documents the entire journey from a naive `Vec<Order>` implementation to a professional LMAX Disruptor-style Ring Buffer architecture.
+
+### 🔥 Hardcore Tech Stack
+*   **Zero GC**: Pure Rust implementation with zero garbage collection pauses.
+*   **Lock-free**: High-performance Ring Buffer (`crossbeam-queue`) for inter-thread communication.
+*   **Determinism**: Event Sourcing architecture ensures 100% reproduceability.
+*   **Safety**: Ed25519 Authentication & Type-safe Asset handling.
+*   **Persistence**: TDengine (Time-Series Database) for high-speed audit logging.
+
+## 🏗️ Architecture
+
+```mermaid
+graph TD
+    Client[Client] -->|HTTP/WS| Gateway
+    Gateway -->|RingBuffer| Ingestion
+    subgraph "Trading Core (Single Thread)"
+        Ingestion -->|SeqOrder| UBSCore[UBSCore (Risk/Balance)]
+        UBSCore -->|LockedOrder| ME[Matching Engine]
+        ME -->|Trade/OrderUpdate| Settlement
+    end
+    Settlement -->|Async| Persistence[TDengine]
+    Settlement -->|Async| MktData[Market Data (K-Line)]
+    Settlement -->|Async| WS[WebSocket Push]
+```
+
+## ✨ Core Features
+
+*   **Order Management**: Limit, Market, Cancel, Maker/Taker logic.
+*   **Risk Control**: Pre-trade balance check, exact fund locking.
+*   **Market Data**: Real-time Depth (Orderbook), K-Line (followers Binance format), Ticker.
+*   **Interfaces**: REST API, WebSocket Stream (Pub/Sub).
+*   **Replay**: Full determinism allows replaying from genesis for exactly-once state recovery.
+
+---
+
+## 🚀 The Journey
 
 **📖 [Read the Book Online →](https://gjwang.github.io/zero_x_infinity/)**
 
