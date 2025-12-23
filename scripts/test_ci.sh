@@ -343,9 +343,38 @@ main() {
     echo "Phase 4: HTTP API Endpoints"
     echo "═══════════════════════════════════════════════════════════════"
     
+    # Helper to clean environment between tests
+    clean_env() {
+        echo ""
+        echo "   [CI] Cleaning environment..."
+        
+        # Kill Gateway
+        pkill -f "zero_x_infinity" || true
+        pkill -f "zero_x_infinity.*--gateway" || true
+        
+        # Clean DBs
+        if [ "$CI" = "true" ]; then
+             # Ensure cleanup script exists
+             if [ -f "scripts/ci_clean.py" ]; then
+                python3 scripts/ci_clean.py || echo "   [WARN] DB cleanup script failed"
+             fi
+        fi
+        
+        # Wait for ports to close
+        sleep 2
+    }
+
+    # Ensure clean start
+    clean_env
+
     run_test "Gateway_E2E" "scripts/test_order_api.sh" 180
+    clean_env
+    
     run_test "KLine_E2E" "scripts/test_kline_e2e.sh" 180
+    clean_env
+    
     run_test "Depth_API" "scripts/test_depth.sh" 120
+    clean_env
     
     # ========== Phase 5: Account Integration ==========
     echo ""
