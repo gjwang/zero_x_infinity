@@ -89,7 +89,10 @@ fi
 
 # Initialize database to clean state
 test_start "Initialize database to clean state"
-if python3 scripts/db/manage_db.py init >/dev/null 2>&1; then
+if [ "$CI" = "true" ]; then
+    # In CI, database is already initialized by the workflow's "Initialize DB" step
+    log_success "Database initialization skipped (CI workflow handles this)"
+elif python3 scripts/db/manage_db.py init >/dev/null 2>&1; then
     log_success "Database initialized (reset + seed)"
 else
     log_error "Failed to initialize database"
