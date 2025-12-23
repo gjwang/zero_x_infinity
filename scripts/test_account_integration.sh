@@ -191,7 +191,7 @@ fi
 # ============================================================================
 
 test_start "Test /api/v1/assets endpoint"
-ASSETS_RESPONSE=$(curl -s http://localhost:8080/api/v1/assets)
+ASSETS_RESPONSE=$(curl -s http://localhost:8080/api/v1/public/assets)
 if echo "$ASSETS_RESPONSE" | jq -e '.code == 0' > /dev/null 2>&1; then
     ASSET_COUNT=$(echo "$ASSETS_RESPONSE" | jq '.data | length')
     log_success "Assets endpoint returned $ASSET_COUNT assets"
@@ -208,7 +208,7 @@ else
 fi
 
 test_start "Test /api/v1/symbols endpoint"
-SYMBOLS_RESPONSE=$(curl -s http://localhost:8080/api/v1/symbols)
+SYMBOLS_RESPONSE=$(curl -s http://localhost:8080/api/v1/public/symbols)
 if echo "$SYMBOLS_RESPONSE" | jq -e '.code == 0' > /dev/null 2>&1; then
     SYMBOL_COUNT=$(echo "$SYMBOLS_RESPONSE" | jq '.data | length')
     log_success "Symbols endpoint returned $SYMBOL_COUNT symbols"
@@ -226,7 +226,7 @@ fi
 
 # Test /api/v1/exchange_info endpoint
 test_start "Test /api/v1/exchange_info endpoint"
-EXCHANGE_INFO_RESPONSE=$(curl -s http://localhost:8080/api/v1/exchange_info)
+EXCHANGE_INFO_RESPONSE=$(curl -s http://localhost:8080/api/v1/public/exchange_info)
 if echo "$EXCHANGE_INFO_RESPONSE" | jq -e '.code == 0' > /dev/null 2>&1; then
     ASSET_COUNT=$(echo "$EXCHANGE_INFO_RESPONSE" | jq '.data.assets | length')
     SYMBOL_COUNT=$(echo "$EXCHANGE_INFO_RESPONSE" | jq '.data.symbols | length')
@@ -249,14 +249,14 @@ fi
 # ============================================================================
 
 test_start "Test endpoint idempotency (multiple requests)"
-ASSETS_RESPONSE_2=$(curl -s http://localhost:8080/api/v1/assets)
+ASSETS_RESPONSE_2=$(curl -s http://localhost:8080/api/v1/public/assets)
 if [ "$ASSETS_RESPONSE" = "$ASSETS_RESPONSE_2" ]; then
     log_success "Assets endpoint is idempotent"
 else
     log_error "Assets endpoint returned different results"
 fi
 
-SYMBOLS_RESPONSE_2=$(curl -s http://localhost:8080/api/v1/symbols)
+SYMBOLS_RESPONSE_2=$(curl -s http://localhost:8080/api/v1/public/symbols)
 if [ "$SYMBOLS_RESPONSE" = "$SYMBOLS_RESPONSE_2" ]; then
     log_success "Symbols endpoint is idempotent"
 else

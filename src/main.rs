@@ -399,7 +399,7 @@ fn main() {
 
         println!("✅ Trading Core initialized");
         println!(
-            "\n🎯 System ready! Send orders to http://localhost:{}/api/v1/create_order",
+            "\n🎯 System ready! Send orders to http://localhost:{}/api/v1/private/order",
             port
         );
         println!("Press Ctrl+C to shutdown\n");
