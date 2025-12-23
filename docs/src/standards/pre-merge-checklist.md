@@ -20,9 +20,25 @@
 
 ## 3. CI/CD ✓
 
-- [ ] 本地 `./scripts/test_ci.sh --quick` 通过
-- [ ] CI workflow 包含新功能依赖 (PostgreSQL/TDengine)
-- [ ] CI workflow 包含新测试脚本
+### 3.1 本地验证（必须）
+- [ ] `./scripts/test_ci.sh --quick` 通过
+- [ ] **模拟 CI 单独运行**（关键！本地全跑可能掩盖问题）：
+  ```bash
+  CI=true ./scripts/test_ci.sh --test-gateway-e2e
+  CI=true ./scripts/test_ci.sh --test-kline
+  CI=true ./scripts/test_ci.sh --test-depth
+  CI=true ./scripts/test_ci.sh --test-account
+  ```
+
+### 3.2 CI 环境检查
+- [ ] 不使用 `docker exec` (CI service container 不支持)
+- [ ] 数据库连接使用 `localhost` 而非容器名
+- [ ] 所有 helper 函数定义在全局作用域（不在 `if` 块内）
+
+### 3.3 CI 失败时
+1. **立即下载日志**：`gh run view <run-id> --log-failed`
+2. **搜索错误**：`grep -i "error\|fail\|fatal" logs/*.txt`
+3. **根据日志修复**，不要瞎猜
 
 ## 4. Git 操作 ✓
 
