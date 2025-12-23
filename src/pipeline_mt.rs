@@ -47,6 +47,8 @@ use crate::ubscore::UBSCore;
 use crate::user_account::UserAccount;
 use rustc_hash::FxHashMap;
 
+use crate::transfer::channel::TransferReceiver;
+
 // ============================================================
 // LOGGING & PERFORMANCE CONSTANTS
 // ============================================================
@@ -101,6 +103,8 @@ pub fn run_pipeline_multi_thread(
     // TDengine persistence support (Gateway mode)
     _rt_handle: Option<tokio::runtime::Handle>,
     db_client: Option<Arc<crate::persistence::TDengineClient>>,
+    // Optional: Internal transfer channel (Phase 0x0B-a)
+    transfer_receiver: Option<TransferReceiver>,
 ) -> MultiThreadPipelineResult {
     tracing::info!(
         "[TRACE] Starting Multi-Thread Pipeline with {} orders...",
@@ -142,12 +146,23 @@ pub fn run_pipeline_multi_thread(
     };
 
     let t2_ubscore = {
-        let mut service = crate::pipeline_services::UBSCoreService::new(
-            services.ubscore,
-            queues.clone(),
-            stats.clone(),
-            _start_time,
-        );
+        // Use transfer channel if provided (Phase 0x0B-a)
+        let mut service = if let Some(transfer_rx) = transfer_receiver {
+            crate::pipeline_services::UBSCoreService::with_transfer_channel(
+                services.ubscore,
+                queues.clone(),
+                stats.clone(),
+                _start_time,
+                transfer_rx,
+            )
+        } else {
+            crate::pipeline_services::UBSCoreService::new(
+                services.ubscore,
+                queues.clone(),
+                stats.clone(),
+                _start_time,
+            )
+        };
         let s = shutdown.clone();
         thread::spawn(move || {
             service.run(&s);

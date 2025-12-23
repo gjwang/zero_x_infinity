@@ -397,6 +397,7 @@ fn main() {
             queues,
             rt_handle_for_pipeline, // rt_handle for SettlementService TDengine
             db_client_for_pipeline, // db_client for SettlementService TDengine
+            None,                   // transfer_receiver: TODO: connect to Gateway
         );
 
         // Wait for gateway thread
@@ -530,6 +531,7 @@ fn main() {
             queues,
             None, // rt_handle: Pipeline MT mode doesn't use TDengine
             None, // db_client
+            None, // transfer_receiver: not used in non-gateway mode
         );
 
         // Print stats (use snapshot to get place/cancel counts)

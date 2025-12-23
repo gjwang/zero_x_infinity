@@ -126,15 +126,19 @@ use std::time::Duration;
 
 use crate::messages::BalanceEvent;
 use crate::pipeline::ValidAction;
+use crate::transfer::channel::{TransferReceiver, TransferSender, process_transfer_requests};
+use crate::transfer::types::RequestId;
 use crate::ubscore::UBSCore;
 
 const IDLE_SPIN_LIMIT: u32 = 1000;
 const IDLE_SLEEP_US: Duration = Duration::from_micros(100);
 const UBSC_SETTLE_BATCH: usize = 128;
 const UBSC_ORDER_BATCH: usize = 16;
+const UBSC_TRANSFER_BATCH: usize = 16;
 
 /// Service that handles UBSCore processing (pre-trade + post-trade balance updates).
 ///
+/// Also handles internal transfer requests from TradingAdapter.
 /// Processes orders through UBSCore, commits to WAL, and publishes results downstream.
 pub struct UBSCoreService {
     ubscore: UBSCore,
@@ -143,6 +147,10 @@ pub struct UBSCoreService {
     start_time: Instant,
     batch_actions: Vec<ValidAction>,
     batch_events: Vec<BalanceEvent>,
+    /// Optional: Internal transfer receiver (Phase 0x0B-a)
+    transfer_receiver: Option<TransferReceiver>,
+    /// Processed transfer request IDs for idempotency
+    processed_transfers: std::collections::HashSet<RequestId>,
 }
 
 impl UBSCoreService {
@@ -159,7 +167,37 @@ impl UBSCoreService {
             start_time,
             batch_actions: Vec::with_capacity(UBSC_ORDER_BATCH),
             batch_events: Vec::with_capacity(UBSC_ORDER_BATCH + UBSC_SETTLE_BATCH * 4),
+            transfer_receiver: None,
+            processed_transfers: std::collections::HashSet::new(),
         }
+    }
+
+    /// Create service with transfer channel for internal transfer support (Phase 0x0B-a)
+    pub fn with_transfer_channel(
+        ubscore: UBSCore,
+        queues: Arc<MultiThreadQueues>,
+        stats: Arc<PipelineStats>,
+        start_time: Instant,
+        transfer_receiver: TransferReceiver,
+    ) -> Self {
+        Self {
+            ubscore,
+            queues,
+            stats,
+            start_time,
+            batch_actions: Vec::with_capacity(UBSC_ORDER_BATCH),
+            batch_events: Vec::with_capacity(UBSC_ORDER_BATCH + UBSC_SETTLE_BATCH * 4),
+            transfer_receiver: Some(transfer_receiver),
+            processed_transfers: std::collections::HashSet::new(),
+        }
+    }
+
+    /// Get the TransferSender for this service (if transfer channel was configured)
+    /// This is used by external code to get the sender side of the channel
+    pub fn get_transfer_sender(&self) -> Option<TransferSender> {
+        // Note: We can't return the sender from here since we only have the receiver
+        // The sender should be created at the same time as the service
+        None
     }
 
     /// Run the UBSCore service (MT blocking mode)
@@ -209,6 +247,23 @@ impl UBSCoreService {
                     }
                 } else {
                     break;
+                }
+            }
+
+            // 1.3 Process Internal Transfers (Phase 0x0B-a)
+            if let Some(ref mut receiver) = self.transfer_receiver {
+                let transfer_count = process_transfer_requests(
+                    &mut self.ubscore,
+                    receiver,
+                    &mut self.processed_transfers,
+                    UBSC_TRANSFER_BATCH,
+                );
+                if transfer_count > 0 {
+                    did_work = true;
+                    tracing::debug!(
+                        "[TRANSFER] Processed {} internal transfer requests",
+                        transfer_count
+                    );
                 }
             }
 
