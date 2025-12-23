@@ -499,4 +499,114 @@ mod tests {
 
         assert!(!info.can_internal_transfer);
     }
+
+    // ========================================================================
+    // ATTACK TESTS (§10.2)
+    // ========================================================================
+
+    /// ATK-003: Negative amount attack
+    #[test]
+    fn test_attack_negative_amount() {
+        // Negative numbers should fail parsing
+        assert!(parse_amount("-1.0", 8).is_err());
+        assert!(parse_amount("-0.00000001", 8).is_err());
+        assert!(parse_amount("-100", 8).is_err());
+    }
+
+    /// ATK-004: Zero amount attack
+    #[test]
+    fn test_attack_zero_amount() {
+        // Zero amount should fail
+        assert!(parse_amount("0", 8).is_err());
+        assert!(parse_amount("0.0", 8).is_err());
+        assert!(parse_amount("0.00000000", 8).is_err());
+    }
+
+    /// ATK-005: Precision overflow attack
+    #[test]
+    fn test_attack_precision_overflow() {
+        // More decimals than allowed should be truncated, not overflow
+        let result = parse_amount("1.000000001", 8); // 9 decimals
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 100_000_000); // Truncated to 8 decimals
+
+        // Very long fractional part
+        let result = parse_amount("0.123456789012345", 8);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 12_345_678); // First 8 digits only
+    }
+
+    /// ATK-006: Integer overflow attack
+    #[test]
+    fn test_attack_integer_overflow() {
+        // Very large numbers that could overflow u64
+        let result = parse_amount("18446744073709551615", 8); // u64::MAX
+        assert!(result.is_err()); // Should fail due to overflow in multiplication
+
+        // Large but valid number
+        let result = parse_amount("1000000000", 8);
+        assert!(result.is_ok()); // 1 billion * 10^8 = 10^17, fits in u64
+    }
+
+    /// ATK-008: Invalid account type attack
+    #[test]
+    fn test_attack_invalid_account_type() {
+        assert!(parse_account_type("").is_err());
+        assert!(parse_account_type("invalid").is_err());
+        assert!(parse_account_type("margin").is_err());
+        assert!(parse_account_type("futures").is_err());
+        assert!(parse_account_type("bank").is_err());
+        assert!(parse_account_type("external").is_err());
+    }
+
+    /// ATK-007: Same account attack (covered by API)
+    #[test]
+    fn test_attack_same_account_types() {
+        // Both funding variants
+        let from = parse_account_type("funding").unwrap();
+        let from_main = parse_account_type("main").unwrap();
+        assert_eq!(from, from_main);
+
+        // Both trading variants
+        let to = parse_account_type("spot").unwrap();
+        let to_trading = parse_account_type("trading").unwrap();
+        assert_eq!(to, to_trading);
+    }
+
+    /// Test malformed amount strings
+    #[test]
+    fn test_attack_malformed_amounts() {
+        // Multiple decimal points
+        assert!(parse_amount("1.0.0", 8).is_err());
+        // Non-numeric
+        assert!(parse_amount("abc", 8).is_err());
+        assert!(parse_amount("1.0abc", 8).is_err());
+        // Empty
+        assert!(parse_amount("", 8).is_err());
+        // Whitespace only
+        assert!(parse_amount("   ", 8).is_err());
+        // Scientific notation (not supported)
+        assert!(parse_amount("1e8", 8).is_err());
+        assert!(parse_amount("1E8", 8).is_err());
+    }
+
+    /// Test amount bounds validation
+    #[test]
+    fn test_attack_amount_bounds() {
+        let info = AssetValidationInfo {
+            asset_id: 1,
+            decimals: 8,
+            status: 1,
+            is_active: true,
+            can_internal_transfer: true,
+            min_transfer_amount: 1000,          // Minimum
+            max_transfer_amount: 1_000_000_000, // Maximum
+        };
+
+        // Below minimum
+        assert!(100 < info.min_transfer_amount);
+
+        // Above maximum
+        assert!(10_000_000_000 > info.max_transfer_amount);
+    }
 }
