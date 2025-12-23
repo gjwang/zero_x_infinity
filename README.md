@@ -1,7 +1,14 @@
 <div align="center">
 
 # ⚔️ 0xInfinity
-### The Hardest Core HFT Tutorial in Rust
+
+[🇺🇸 English](#-english) | [🇨🇳 中文](#-chinese)
+
+</div>
+
+<div id="-english"></div>
+
+# 🇺🇸 English
 
 > **"From Hello World to Microsecond Latency."**
 
@@ -9,10 +16,6 @@
 [![License](https://img.shields.io/badge/license-MIT-blue)]()
 [![Rust](https://img.shields.io/badge/language-Rust-orange)]()
 [![mdBook](https://img.shields.io/badge/docs-mdBook-blue)](https://gjwang.github.io/zero_x_infinity/)
-
-[🇨🇳 中文文档](README_CN.md)
-
-</div>
 
 ---
 
@@ -63,6 +66,166 @@ graph TD
 
 | Stage | Title | Description |
 |-------|-------|-------------|
+| 0x01 | [Genesis](./docs/src/0x01-genesis.md) | Basic OrderBook Engine |
+| 0x02 | [The Curse of Float](./docs/src/0x02-the-curse-of-float.md) | Float Curse → u64 Refactor |
+| 0x03 | [Decimal World](./docs/src/0x03-decimal-world.md) | Decimal System & Precision |
+| 0x04 | [BTree OrderBook](./docs/src/0x04-btree-orderbook.md) | BTreeMap Structure Refactor |
+| 0x05 | [User Balance](./docs/src/0x05-user-balance.md) | Account & Balance Management |
+| 0x06 | [Enforced Balance](./docs/src/0x06-enforced-balance.md) | Type-Safe Enforced Balance |
+| 0x07-a | [Testing Framework](./docs/src/0x07-a-testing-framework.md) | 1M Orders Batch Testing |
+| 0x07-b | [Performance Baseline](./docs/src/0x07-b-perf-baseline.md) | Baseline & Bottleneck Analysis |
+| 0x08-a | [Trading Pipeline Design](./docs/src/0x08-a-trading-pipeline-design.md) | Pipeline Architecture |
+| 0x08-b | [UBSCore Implementation](./docs/src/0x08-b-ubscore-implementation.md) | UBSCore Implementation |
+| 0x08-c | [Complete Event Flow](./docs/src/0x08-c-ring-buffer-pipeline.md) | Complete Event Flow |
+| 0x08-d | [Complete Order Lifecycle](./docs/src/0x08-d-complete-order-lifecycle.md) | Complete Order Lifecycle |
+| 0x08-e | [Cancel Optimization](./docs/src/0x08-e-cancel-optimization.md) | Cancel Optimization: Order Index |
+| 0x08-f | [Ring Buffer Pipeline](./docs/src/0x08-f-ring-buffer-pipeline.md) | Ring Buffer Performance |
+| 0x08-g | [Multi-Thread Pipeline](./docs/src/0x08-g-multi-thread-pipeline.md) | Multi-Thread Pipeline |
+| 0x08-h | [Performance Monitoring](./docs/src/0x08-h-performance-monitoring.md) | Monitoring & Intent-Encoded |
+| 0x09-a | [Gateway: Client Access Layer](./docs/src/0x09-a-gateway.md) | HTTP Gateway Access Layer |
+| 0x09-b | [Settlement Persistence](./docs/src/0x09-b-settlement-persistence.md) | TDengine Persistence |
+| 0x09-c | [WebSocket Push](./docs/src/0x09-c-websocket-push.md) | Real-time Push |
+| 0x09-d | [K-Line Aggregation](./docs/src/0x09-d-kline-aggregation.md) | K-Line Aggregation |
+| 0x09-e | [Order Book Depth](./docs/src/0x09-e-orderbook-depth.md) | OrderBook Depth |
+| 0x09-f | [Full Integration Test](./docs/src/0x09-f-integration-test.md) | E2E Integration & Regression |
+| **Part II** | **Productization** | |
+| 0x0A | [Part II Introduction](./docs/src/0x0A-part-ii-introduction.md) | Productization Roadmap |
+| 0x0A-a | [Account System](./docs/src/0x0A-a-account-system.md) | PostgreSQL Account Manager |
+| 0x0A-b | [API Auth](./docs/src/0x0A-b-api-auth.md) | Ed25519 Authentication (WIP) |
+
+---
+
+## 🏃 Quick Start
+
+```bash
+# Install git hooks
+./scripts/install-hooks.sh
+
+# Run Gateway mode (HTTP API + Trading Core)
+cargo run --release -- --gateway --port 8080
+
+# Run single-threaded pipeline (1.3M orders)
+cargo run --release -- --pipeline --input fixtures/test_with_cancel_highbal
+
+# Run multi-threaded pipeline
+cargo run --release -- --pipeline-mt --input fixtures/test_with_cancel_highbal
+
+# Compare both pipelines (ST vs MT)
+./scripts/test_pipeline_compare.sh highbal
+
+# Regression check (vs Golden Baseline)
+./scripts/test_pipeline_compare.sh 100k
+
+# Generate new baseline (requires --force)
+./scripts/generate_baseline.sh 100k -f
+```
+
+---
+
+## 📑 Regression Testing
+
+We use a **Golden Set** strategy. Baselines are stored in `baseline/`.
+
+- **Consistnecy**: MT mode must match ST mode 100%.
+- **Persistence**: MT mode relies on **TDengine** for audit trails.
+- **Protection**: Updates to baseline require `generate_baseline.sh --force`.
+
+---
+
+## 💾 Persistence (TDengine)
+
+### Start TDengine
+
+```bash
+docker run -d --name tdengine -p 6030:6030 -p 6041:6041 tdengine/tdengine:latest
+```
+
+### Enable Persistence
+
+Edit `config/dev.yaml`:
+
+```yaml
+persistence:
+  enabled: true
+  tdengine_dsn: "taos+ws://root:taosdata@localhost:6041"
+```
+
+### Start Persistence Mode
+
+```bash
+cargo run --release -- --gateway --env dev
+```
+
+### Query Data
+
+```bash
+# Connect to TDengine
+docker exec -it tdengine taos
+
+# Query orders
+USE trading;
+SELECT * FROM orders LIMIT 10;
+```
+
+---
+
+<div id="-chinese"></div>
+
+# 🇨🇳 中文文档
+
+> **"From Hello World to Microsecond Latency."**
+
+---
+
+## ⚡ 为什么选择 0xInfinity?
+
+**这不是另一个 "玩具级撮合引擎" 教程。**
+
+我们正在构建一个**生产级**的加密货币交易引擎，在单核上可处理 **130万订单/秒** (P99 < 200µs)。本项目记录了从最朴素的 `Vec<Order>` 实现到专业的 LMAX Disruptor 风格 Ring Buffer 架构的完整演进过程。
+
+### 🔥 硬核技术栈
+*   **零 GC (Zero GC)**: 纯 Rust 实现，无垃圾回收暂停。
+*   **无锁并发 (Lock-free)**: 基于高性能 Ring Buffer (`crossbeam-queue`) 的线程间通信。
+*   **确定性 (Determinism)**: 事件溯源架构，确保 100% 可重现性。
+*   **安全性 (Safety)**: Ed25519 非对称鉴权 & 类型安全的资产处理。
+*   **持久化 (Persistence)**: 集成 TDengine 时序数据库，实现极速审计日志。
+
+---
+
+## 🏗️ 架构概览
+
+```mermaid
+graph TD
+    Client[客户端] -->|HTTP/WS| Gateway
+    Gateway -->|RingBuffer| Ingestion
+    subgraph "核心交易线程 (Single Thread)"
+        Ingestion -->|SeqOrder| UBSCore[UBSCore (风控/余额)]
+        UBSCore -->|LockedOrder| ME[撮合引擎]
+        ME -->|Trade/OrderUpdate| Settlement
+    end
+    Settlement -->|异步| Persistence[TDengine]
+    Settlement -->|异步| MktData[行情数据 (K-Line)]
+    Settlement -->|异步| WS[WebSocket 推送]
+```
+
+## ✨ 核心特性
+
+*   **订单管理**: 限价单、市价单、撤单、Maker/Taker 逻辑。
+*   **风控系统**: 交易前余额检查、精确资金锁定。
+*   **行情数据**: 实时深度 (Orderbook)、K线 (Binance 格式)、Ticker。
+*   **接口支持**: REST API、WebSocket流 (Pub/Sub)。
+*   **回放机制**: 全确定性设计，允许从创世状态重放以实现精确的状态恢复。
+
+---
+
+## 🚀 学习之旅
+
+**📖 [在线阅读完整教程 →](https://gjwang.github.io/zero_x_infinity/)**
+
+### 章节索引
+
+| 阶段 | 标题 | 描述 |
+|-------|-------|-------------|
 | 0x01 | [Genesis](./docs/src/0x01-genesis.md) | 基础订单簿引擎 |
 | 0x02 | [The Curse of Float](./docs/src/0x02-the-curse-of-float.md) | 浮点数的诅咒 → u64 重构 |
 | 0x03 | [Decimal World](./docs/src/0x03-decimal-world.md) | 十进制转换与精度配置 |
@@ -95,26 +258,23 @@ graph TD
 ## 🏃 快速开始
 
 ```bash
-# Install git hooks
+# 安装 git hooks
 ./scripts/install-hooks.sh
 
-# Run Gateway mode (HTTP API + Trading Core)
+# 运行 Gateway 模式 (HTTP API + 交易核心)
 cargo run --release -- --gateway --port 8080
 
-# Run single-threaded pipeline (1.3M orders)
+# 运行单线程流水线 (吞吐量基准测试)
 cargo run --release -- --pipeline --input fixtures/test_with_cancel_highbal
 
-# Run multi-threaded pipeline
+# 运行多线程流水线
 cargo run --release -- --pipeline-mt --input fixtures/test_with_cancel_highbal
 
-# Compare both pipelines (ST vs MT)
+# 对比测试 (单线程 vs 多线程)
 ./scripts/test_pipeline_compare.sh highbal
 
-# Regression check (vs Golden Baseline)
+# 回归检查 (对比黄金基线)
 ./scripts/test_pipeline_compare.sh 100k
-
-# Generate new baseline (requires --force)
-./scripts/generate_baseline.sh 100k -f
 ```
 
 ---
@@ -131,15 +291,15 @@ cargo run --release -- --pipeline-mt --input fixtures/test_with_cancel_highbal
 
 ## 💾 结算持久化 (TDengine)
 
-### 启动 TDengine
+### 1. 启动 TDengine
 
 ```bash
 docker run -d --name tdengine -p 6030:6030 -p 6041:6041 tdengine/tdengine:latest
 ```
 
-### 启用持久化
+### 2. 启用持久化配置
 
-Edit `config/dev.yaml`:
+编辑 `config/dev.yaml`:
 
 ```yaml
 persistence:
@@ -147,42 +307,15 @@ persistence:
   tdengine_dsn: "taos+ws://root:taosdata@localhost:6041"
 ```
 
-### 启动持久化模式
+### 3. API 概览
 
-```bash
-cargo run --release -- --gateway --env dev
-```
-
-### 查询数据
-
-```bash
-# Connect to TDengine
-docker exec -it tdengine taos
-
-# Query orders
-USE trading;
-SELECT * FROM orders LIMIT 10;
-
-# Query trades
-SELECT * FROM trades LIMIT 10;
-
-# Query balances
-SELECT * FROM balances LIMIT 10;
-```
-
-### API 端点
-
-- `POST /api/v1/create_order` - 创建订单 ✅
-- `POST /api/v1/cancel_order` - 取消订单 ✅
-- `GET /api/v1/order/:order_id` - 查询订单 ✅
-- `GET /api/v1/orders?user_id=&limit=` - 查询订单列表 ✅
-- `GET /api/v1/trades?limit=` - 查询成交记录 ✅
-- `GET /api/v1/balances?user_id=&asset_id=` - 查询余额 ✅
-- `GET /api/v1/klines?interval=&limit=` - 查询 K 线 ✅
-- `GET /api/v1/depth?symbol=&limit=` - 查询盘口深度 ✅
-- `WS /ws?user_id=` - WebSocket 实时推送 ✅
+- `POST /api/v1/create_order` - 创建订单
+- `POST /api/v1/cancel_order` - 取消订单
+- `GET /api/v1/order/:order_id` - 查询订单
+- `GET /api/v1/klines?interval=&limit=` - 查询 K 线
+- `GET /api/v1/depth?symbol=&limit=` - 查询盘口深度
+- `WS /ws?user_id=` - WebSocket 实时推送
 
 ---
-
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
