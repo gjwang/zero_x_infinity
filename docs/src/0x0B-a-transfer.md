@@ -1953,3 +1953,13 @@ function withdraw(req_id, user_id, asset_id, amount):
 <div align="right"><a href="#-chinese">↑ Back to Top</a></div>
 <br>
 
+---
+
+## 📋 E2E Testing Documentation | E2E 测试文档
+
+For detailed testing methodology, scripts, and verification steps:
+
+完整的测试方法、脚本和验证步骤请参阅:
+
+👉 **[Internal Transfer E2E Testing Guide](./0x0B-a-transfer-testing.md)**
+
