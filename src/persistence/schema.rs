@@ -246,18 +246,43 @@ pub async fn ensure_symbol_tables(taos: &Taos, symbol_id: u32) -> Result<()> {
     Ok(())
 }
 
-/// Pre-create balance subtable for a user+asset pair
-///
-/// Call this during user onboarding to avoid runtime table creation overhead.
 pub async fn ensure_balance_table(taos: &Taos, user_id: u64, asset_id: u32) -> Result<()> {
-    taos.exec(format!(
+    let sql = format!(
         "CREATE TABLE IF NOT EXISTS balances_{}_{} USING balances TAGS ({}, {})",
         user_id, asset_id, user_id, asset_id
-    ))
-    .await
-    .map_err(|e| anyhow::anyhow!("Failed to create balances_{}_{}: {}", user_id, asset_id, e))?;
+    );
 
-    Ok(())
+    // Retry logic to handle "Sync leader is restoring" errors during CI startup
+    let mut last_err = None;
+    for attempt in 1..=5 {
+        match taos.exec(&sql).await {
+            Ok(_) => return Ok(()),
+            Err(e) => {
+                let err_str = e.to_string();
+                if err_str.contains("restoring") || err_str.contains("not ready") {
+                    tracing::warn!(
+                        "TDengine not ready (attempt {}/5): {}. Retrying in 1s...",
+                        attempt,
+                        err_str
+                    );
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    last_err = Some(e);
+                    continue;
+                }
+                return Err(anyhow::anyhow!(
+                    "Failed to create balances_{}_{}: {}",
+                    user_id,
+                    asset_id,
+                    e
+                ));
+            }
+        }
+    }
+
+    Err(anyhow::anyhow!(
+        "Failed to create balance table after retries: {}",
+        last_err.unwrap()
+    ))
 }
 
 /// Pre-create all symbol subtables from SymbolManager
