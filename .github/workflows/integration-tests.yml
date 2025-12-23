@@ -77,11 +77,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Apply Schema 001
-        run: PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/001_init_schema.sql
-      
-      - name: Apply Schema 002
-        run: PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/002_create_api_keys.sql
+      - name: Apply All Migrations
+        run: |
+          for f in migrations/*.sql; do
+            echo "Applying $f..."
+            PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f "$f"
+          done
       
       - name: Seed Data
         run: PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f fixtures/seed_data.sql 2>&1 | grep -v 'does not exist' || true
@@ -93,6 +94,7 @@ jobs:
           grep -q "assets_tb" tables.txt || (echo "❌ assets_tb missing" && exit 1)
           grep -q "symbols_tb" tables.txt || (echo "❌ symbols_tb missing" && exit 1)
           grep -q "api_keys_tb" tables.txt || (echo "❌ api_keys_tb missing" && exit 1)
+          grep -q "balances_tb" tables.txt || (echo "❌ balances_tb missing" && exit 1)
           echo "✅ All required tables exist"
 
   check-tdengine:
@@ -199,8 +201,10 @@ jobs:
       
       - name: Initialize DB
         run: |
-          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/001_init_schema.sql
-          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/002_create_api_keys.sql
+          for f in migrations/*.sql; do
+            echo "Applying $f..."
+            PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f "$f"
+          done
           PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f fixtures/seed_data.sql 2>&1 | grep -v 'does not exist' || true
       
       - name: Download Binary
@@ -251,8 +255,10 @@ jobs:
       
       - name: Initialize DB
         run: |
-          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/001_init_schema.sql
-          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/002_create_api_keys.sql
+          for f in migrations/*.sql; do
+            echo "Applying $f..."
+            PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f "$f"
+          done
           PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f fixtures/seed_data.sql 2>&1 | grep -v 'does not exist' || true
       
       - name: Download Binary
@@ -303,8 +309,10 @@ jobs:
       
       - name: Initialize DB
         run: |
-          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/001_init_schema.sql
-          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/002_create_api_keys.sql
+          for f in migrations/*.sql; do
+            echo "Applying $f..."
+            PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f "$f"
+          done
           PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f fixtures/seed_data.sql 2>&1 | grep -v 'does not exist' || true
       
       - name: Download Binary
@@ -350,8 +358,10 @@ jobs:
       
       - name: Initialize DB
         run: |
-          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/001_init_schema.sql
-          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f migrations/002_create_api_keys.sql
+          for f in migrations/*.sql; do
+            echo "Applying $f..."
+            PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f "$f"
+          done
           PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f fixtures/seed_data.sql 2>&1 | grep -v 'does not exist' || true
 
       - name: Download Binary
