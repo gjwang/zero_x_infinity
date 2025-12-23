@@ -1,0 +1,353 @@
+//! Funding Account Adapter
+//!
+//! PostgreSQL-based adapter for Funding account balance operations.
+//! Uses `balances_tb` with `account_type = FUNDING (2)`.
+
+use async_trait::async_trait;
+use sqlx::{PgPool, Row};
+use tracing::{debug, error, warn};
+
+use super::ServiceAdapter;
+use crate::transfer::db::{OpType, check_operation, record_operation};
+use crate::transfer::types::{OpResult, RequestId, ServiceId};
+
+/// Funding account adapter
+///
+/// Implements balance operations directly against PostgreSQL.
+pub struct FundingAdapter {
+    pool: PgPool,
+}
+
+/// Account type ID for Funding in balances_tb
+const FUNDING_ACCOUNT_TYPE: i16 = 2;
+
+impl FundingAdapter {
+    /// Create a new FundingAdapter
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl ServiceAdapter for FundingAdapter {
+    fn name(&self) -> &'static str {
+        "Funding"
+    }
+
+    async fn withdraw(
+        &self,
+        req_id: RequestId,
+        user_id: u64,
+        asset_id: u32,
+        amount: u64,
+    ) -> OpResult {
+        debug!(
+            req_id = req_id,
+            user_id = user_id,
+            asset_id = asset_id,
+            amount = amount,
+            "Funding withdraw"
+        );
+
+        // Check idempotency - was this already processed?
+        match check_operation(&self.pool, req_id, OpType::Withdraw, ServiceId::Funding).await {
+            Ok(Some(result)) => {
+                debug!(req_id = req_id, result = %result, "Funding withdraw already processed");
+                return if result == "SUCCESS" {
+                    OpResult::Success
+                } else {
+                    OpResult::Failed("Previously failed".to_string())
+                };
+            }
+            Err(e) => {
+                warn!(req_id = req_id, error = %e, "Failed to check idempotency");
+                return OpResult::Pending;
+            }
+            Ok(None) => {}
+        }
+
+        // Start transaction
+        let mut tx = match self.pool.begin().await {
+            Ok(tx) => tx,
+            Err(e) => {
+                error!(req_id = req_id, error = %e, "Failed to start transaction");
+                return OpResult::Pending;
+            }
+        };
+
+        // Lock and check balance with SELECT FOR UPDATE
+        let balance_row = sqlx::query(
+            r#"
+            SELECT available FROM balances_tb
+            WHERE user_id = $1 AND asset_id = $2 AND account_type = $3
+            FOR UPDATE
+            "#,
+        )
+        .bind(user_id as i64)
+        .bind(asset_id as i32)
+        .bind(FUNDING_ACCOUNT_TYPE)
+        .fetch_optional(&mut *tx)
+        .await;
+
+        let available = match balance_row {
+            Ok(Some(row)) => {
+                let available: rust_decimal::Decimal = row.get("available");
+                available
+            }
+            Ok(None) => {
+                // Account doesn't exist
+                let _ = tx.rollback().await;
+                let _ = record_operation(
+                    &self.pool,
+                    req_id,
+                    OpType::Withdraw,
+                    ServiceId::Funding,
+                    "FAILED",
+                    Some("Account not found"),
+                )
+                .await;
+                return OpResult::Failed("Account not found".to_string());
+            }
+            Err(e) => {
+                error!(req_id = req_id, error = %e, "Failed to query balance");
+                let _ = tx.rollback().await;
+                return OpResult::Pending;
+            }
+        };
+
+        // Check sufficient balance
+        let amount_decimal = rust_decimal::Decimal::from(amount);
+        if available < amount_decimal {
+            let _ = tx.rollback().await;
+            let _ = record_operation(
+                &self.pool,
+                req_id,
+                OpType::Withdraw,
+                ServiceId::Funding,
+                "FAILED",
+                Some("Insufficient balance"),
+            )
+            .await;
+            return OpResult::Failed("Insufficient balance".to_string());
+        }
+
+        // Deduct balance
+        let update_result = sqlx::query(
+            r#"
+            UPDATE balances_tb
+            SET available = available - $1, version = version + 1
+            WHERE user_id = $2 AND asset_id = $3 AND account_type = $4
+            "#,
+        )
+        .bind(amount_decimal)
+        .bind(user_id as i64)
+        .bind(asset_id as i32)
+        .bind(FUNDING_ACCOUNT_TYPE)
+        .execute(&mut *tx)
+        .await;
+
+        if let Err(e) = update_result {
+            error!(req_id = req_id, error = %e, "Failed to update balance");
+            let _ = tx.rollback().await;
+            return OpResult::Pending;
+        }
+
+        // Commit transaction
+        if let Err(e) = tx.commit().await {
+            error!(req_id = req_id, error = %e, "Failed to commit transaction");
+            return OpResult::Pending;
+        }
+
+        // Record success for idempotency
+        let _ = record_operation(
+            &self.pool,
+            req_id,
+            OpType::Withdraw,
+            ServiceId::Funding,
+            "SUCCESS",
+            None,
+        )
+        .await;
+
+        debug!(req_id = req_id, "Funding withdraw successful");
+        OpResult::Success
+    }
+
+    async fn deposit(
+        &self,
+        req_id: RequestId,
+        user_id: u64,
+        asset_id: u32,
+        amount: u64,
+    ) -> OpResult {
+        debug!(
+            req_id = req_id,
+            user_id = user_id,
+            asset_id = asset_id,
+            amount = amount,
+            "Funding deposit"
+        );
+
+        // Check idempotency
+        match check_operation(&self.pool, req_id, OpType::Deposit, ServiceId::Funding).await {
+            Ok(Some(result)) => {
+                debug!(req_id = req_id, result = %result, "Funding deposit already processed");
+                return if result == "SUCCESS" {
+                    OpResult::Success
+                } else {
+                    OpResult::Failed("Previously failed".to_string())
+                };
+            }
+            Err(e) => {
+                warn!(req_id = req_id, error = %e, "Failed to check idempotency");
+                return OpResult::Pending;
+            }
+            Ok(None) => {}
+        }
+
+        // UPSERT balance (create if not exists, or add to existing)
+        let amount_decimal = rust_decimal::Decimal::from(amount);
+        let result = sqlx::query(
+            r#"
+            INSERT INTO balances_tb (user_id, asset_id, account_type, available, frozen, version)
+            VALUES ($1, $2, $3, $4, 0, 1)
+            ON CONFLICT (user_id, asset_id, account_type)
+            DO UPDATE SET available = balances_tb.available + EXCLUDED.available,
+                          version = balances_tb.version + 1
+            "#,
+        )
+        .bind(user_id as i64)
+        .bind(asset_id as i32)
+        .bind(FUNDING_ACCOUNT_TYPE)
+        .bind(amount_decimal)
+        .execute(&self.pool)
+        .await;
+
+        match result {
+            Ok(_) => {
+                let _ = record_operation(
+                    &self.pool,
+                    req_id,
+                    OpType::Deposit,
+                    ServiceId::Funding,
+                    "SUCCESS",
+                    None,
+                )
+                .await;
+                debug!(req_id = req_id, "Funding deposit successful");
+                OpResult::Success
+            }
+            Err(e) => {
+                error!(req_id = req_id, error = %e, "Failed to deposit");
+                OpResult::Pending
+            }
+        }
+    }
+
+    async fn rollback(&self, req_id: RequestId) -> OpResult {
+        debug!(req_id = req_id, "Funding rollback");
+
+        // Check idempotency
+        match check_operation(&self.pool, req_id, OpType::Rollback, ServiceId::Funding).await {
+            Ok(Some(_)) => {
+                debug!(req_id = req_id, "Funding rollback already processed");
+                return OpResult::Success;
+            }
+            Err(e) => {
+                warn!(req_id = req_id, error = %e, "Failed to check idempotency");
+                return OpResult::Pending;
+            }
+            Ok(None) => {}
+        }
+
+        // Get original withdraw details from transfer record
+        // This requires looking up the original transfer to reverse it
+        // For now, we'll query the fsm_transfers_tb
+        let transfer_row = sqlx::query(
+            r#"
+            SELECT user_id, asset_id, amount FROM fsm_transfers_tb WHERE req_id = $1
+            "#,
+        )
+        .bind(req_id.to_string())
+        .fetch_optional(&self.pool)
+        .await;
+
+        let (user_id, asset_id, amount) = match transfer_row {
+            Ok(Some(row)) => {
+                let user_id: i64 = row.get("user_id");
+                let asset_id: i32 = row.get("asset_id");
+                let amount: rust_decimal::Decimal = row.get("amount");
+                (user_id, asset_id, amount)
+            }
+            Ok(None) => {
+                error!(req_id = req_id, "Transfer not found for rollback");
+                return OpResult::Failed("Transfer not found".to_string());
+            }
+            Err(e) => {
+                error!(req_id = req_id, error = %e, "Failed to query transfer");
+                return OpResult::Pending;
+            }
+        };
+
+        // Credit back the withdrawn amount (same as deposit logic)
+        let result = sqlx::query(
+            r#"
+            UPDATE balances_tb
+            SET available = available + $1, version = version + 1
+            WHERE user_id = $2 AND asset_id = $3 AND account_type = $4
+            "#,
+        )
+        .bind(amount)
+        .bind(user_id)
+        .bind(asset_id)
+        .bind(FUNDING_ACCOUNT_TYPE)
+        .execute(&self.pool)
+        .await;
+
+        match result {
+            Ok(_) => {
+                let _ = record_operation(
+                    &self.pool,
+                    req_id,
+                    OpType::Rollback,
+                    ServiceId::Funding,
+                    "SUCCESS",
+                    None,
+                )
+                .await;
+                debug!(req_id = req_id, "Funding rollback successful");
+                OpResult::Success
+            }
+            Err(e) => {
+                error!(req_id = req_id, error = %e, "Failed to rollback");
+                OpResult::Pending
+            }
+        }
+    }
+
+    async fn commit(&self, req_id: RequestId) -> OpResult {
+        debug!(req_id = req_id, "Funding commit");
+
+        // For Funding, commit is a no-op (we don't use locks)
+        // Just record for audit trail
+        let _ = record_operation(
+            &self.pool,
+            req_id,
+            OpType::Commit,
+            ServiceId::Funding,
+            "SUCCESS",
+            None,
+        )
+        .await;
+
+        OpResult::Success
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_funding_account_type() {
+        assert_eq!(super::FUNDING_ACCOUNT_TYPE, 2);
+    }
+}
