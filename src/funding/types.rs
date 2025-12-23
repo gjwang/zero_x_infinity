@@ -3,17 +3,12 @@ use std::fmt;
 use std::str::FromStr;
 
 /// Account type for internal transfers
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum AccountType {
+    #[default]
     Spot = 1,
     Funding = 2,
-}
-
-impl Default for AccountType {
-    fn default() -> Self {
-        Self::Spot
-    }
 }
 
 impl fmt::Display for AccountType {
