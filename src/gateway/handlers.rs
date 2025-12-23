@@ -248,6 +248,51 @@ pub async fn cancel_order(
     ))
 }
 
+/// Create internal transfer endpoint
+///
+/// POST /api/v1/private/transfer
+pub async fn create_transfer(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<crate::funding::transfer::TransferRequest>,
+) -> Result<
+    (
+        StatusCode,
+        Json<ApiResponse<crate::funding::transfer::TransferResponse>>,
+    ),
+    (StatusCode, Json<ApiResponse<()>>),
+> {
+    // 1. Extract user_id
+    let user_id = extract_user_id(&headers)?;
+    tracing::info!("[TRACE] Transfer Request: From User {}", user_id);
+
+    // 2. Check DB availability
+    let db = state.pg_db.as_ref().ok_or_else(|| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ApiResponse::<()>::error(
+                error_codes::SERVICE_UNAVAILABLE,
+                "Database not available",
+            )),
+        )
+    })?;
+
+    // 3. Execute Transfer
+    match crate::funding::service::TransferService::execute(db, user_id as i64, req).await {
+        Ok(resp) => Ok((StatusCode::OK, Json(ApiResponse::success(resp)))),
+        Err(e) => {
+            tracing::error!("Transfer failed: {:?}", e);
+            Err((
+                StatusCode::BAD_REQUEST, // Or map specific errors
+                Json(ApiResponse::<()>::error(
+                    error_codes::INVALID_PARAMETER, // Generic for now
+                    e.to_string(),
+                )),
+            ))
+        }
+    }
+}
+
 // ============================================================================
 // Helper Functions
 // ============================================================================

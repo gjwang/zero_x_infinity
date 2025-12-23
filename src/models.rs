@@ -15,8 +15,10 @@ pub enum Side {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum OrderType {
-    Limit,  // Limit order: must specify price
-    Market, // Market order: execute at best avail price
+    Limit,    // Limit order: must specify price
+    Market,   // Market order: execute at best avail price
+    Deposit,  // Internal Transfer: Funding -> Spot
+    Withdraw, // Internal Transfer: Spot -> Funding
 }
 
 /// Order status - all possible terminal states for a persisted order

@@ -1,36 +1,32 @@
 -- 003_internal_transfer.sql
--- Support for internal transfers (Funding <-> Spot)
 
 -- 1. Add account_type to balances_tb
--- 1=Spot (Default), 2=Funding
-ALTER TABLE balances_tb ADD COLUMN IF NOT EXISTS account_type SMALLINT NOT NULL DEFAULT 1;
+-- account_type: 1 = Spot (Default, UBSCore Managed), 2 = Funding (PostgreSQL Managed)
+ALTER TABLE balances_tb 
+ADD COLUMN account_type SMALLINT NOT NULL DEFAULT 1;
 
--- 2. Update unique constraint on balances_tb
--- Drop old constraint on (user_id, asset_id)
-ALTER TABLE balances_tb DROP CONSTRAINT IF EXISTS balances_tb_user_id_asset_id_key;
--- Add new constraint on (user_id, asset_id, account_type)
-ALTER TABLE balances_tb ADD CONSTRAINT balances_tb_unique 
-    UNIQUE(user_id, asset_id, account_type);
+-- 2. Update Unique Constraint
+-- Old: UNIQUE (user_id, asset_id)
+-- New: UNIQUE (user_id, asset_id, account_type)
+ALTER TABLE balances_tb DROP CONSTRAINT balances_tb_user_id_asset_id_key;
+ALTER TABLE balances_tb ADD CONSTRAINT balances_tb_user_id_asset_id_account_type_key UNIQUE (user_id, asset_id, account_type);
 
--- 3. Create transfers table
-CREATE TABLE IF NOT EXISTS transfers_tb (
-    transfer_id     BIGSERIAL PRIMARY KEY,
-    user_id         BIGINT NOT NULL REFERENCES users_tb(user_id),
-    asset_id        INTEGER NOT NULL REFERENCES assets_tb(asset_id),
-    from_account    SMALLINT NOT NULL,  -- 1=Spot, 2=Funding
-    to_account      SMALLINT NOT NULL,
-    amount          BIGINT NOT NULL,    -- Transfer amount
-    created_at      TIMESTAMPTZ DEFAULT NOW(),
-    
-    CONSTRAINT chk_amount_positive CHECK (amount > 0),
-    CONSTRAINT chk_diff_accounts CHECK (from_account != to_account),
-    CONSTRAINT chk_valid_accounts CHECK (from_account IN (1, 2) AND to_account IN (1, 2))
+-- 3. Create transfers_tb table
+-- Tracks internal transfers between account types
+CREATE TABLE transfers_tb (
+    transfer_id BIGSERIAL PRIMARY KEY,
+    req_id VARCHAR(64) NOT NULL, -- Idempotency Key
+    user_id BIGINT NOT NULL,
+    asset_id INTEGER NOT NULL,
+    amount DECIMAL(30, 8) NOT NULL, -- Logical amount (will be scaled in logic)
+    from_type SMALLINT NOT NULL,
+    to_type SMALLINT NOT NULL,
+    status SMALLINT NOT NULL DEFAULT 0, -- 0=PENDING, 1=SUCCESS, 2=FAILED
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT transfers_tb_req_id_key UNIQUE (req_id)
 );
 
--- Indexes
-CREATE INDEX IF NOT EXISTS idx_transfers_user ON transfers_tb(user_id);
-CREATE INDEX IF NOT EXISTS idx_transfers_created ON transfers_tb(created_at);
-
--- Comments
-COMMENT ON TABLE transfers_tb IS 'Internal transfer history between accounts';
-COMMENT ON COLUMN balances_tb.account_type IS '1=Spot, 2=Funding';
+-- Index for querying user history
+CREATE INDEX idx_transfers_user_id ON transfers_tb(user_id);

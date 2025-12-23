@@ -1,388 +1,480 @@
-# 0x0B-a 内部划转 (Internal Transfer)
+# 0x0B-a Internal Transfer Architecture (Strict FSM)
 
-> **📅 状态**: 🔵 **架构设计中**  
-> **分支**: `0x0B-a-transfer`  
-> **日期**: 2025-12-23
-
----
-
-## 1. 概述
-
-### 1.1 目标
-
-实现用户账户间的内部资金划转功能：
-- **Funding → Spot**: 从资金账户转入现货账户（用于交易）
-- **Spot → Funding**: 从现货账户转回资金账户（用于提现）
-
-### 1.2 范围
-
-| 功能 | 本期 | 说明 |
-|------|------|------|
-| Funding ↔ Spot 划转 | ✅ P1 | 同一用户，账户间转移 |
-| 用户间转账 | ❌ P2 | 不同用户间转账 |
-| 子账户管理 | ❌ P2 | 创建多个子账户 |
-
-### 1.3 设计原则
-
-| 原则 | 说明 |
-|------|------|
-| **原子性** | 划转操作要么全部成功，要么全部失败 |
-| **同步执行** | 划转立即完成，无需异步等待 |
-| **余额验证** | 划转前检查可用余额 |
-| **流水记录** | 每笔划转生成完整流水 |
-| **幂等性** | 相同请求多次执行结果一致 |
+> **Author**: System Architect
+> **Version**: 2.0 (Exhaustive Specification)
+> **Audience**: Implementation Engineers
+> **Criticality**: HIGH. Any logical error = Financial Catastrophe.
 
 ---
 
-## 2. 数据模型
+## 1. Problem Statement
 
-### 2.1 账户类型
+### 1.1 System Topology
+| System | Role | Source of Truth | Persistence |
+|---|---|---|---|
+| **PostgreSQL** | Funding Account | `balances_tb` | ACID, Durable |
+| **UBSCore** | Trading Account | RAM | WAL + Volatile |
 
-```rust
-/// 账户类型
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AccountType {
-    /// 现货账户 - 用于撮合交易
-    Spot = 1,
-    /// 资金账户 - 用于充提
-    Funding = 2,
-}
+### 1.2 The Core Constraint
+These two systems **cannot share a transaction**. There is no XA/2PC database protocol.
+Therefore: **We must build our own 2-Phase Commit using an external FSM Coordinator.**
+
+---
+
+## 1.5 Security Pre-Validation (MANDATORY)
+
+> [!CAUTION]
+> **Defense-in-Depth**
+> All checks below MUST be performed at **every independent module**, not just API layer.
+> - **API Layer**: First line of defense, reject obviously invalid requests
+> - **Coordinator**: Re-validate, prevent internal calls bypassing API
+> - **Adapters**: Final defense, each adapter must independently validate parameters
+> - **UBSCore**: Last check before in-memory operations
+>
+> **Safety > Performance**. The cost of redundant checks is acceptable; security vulnerabilities are not.
+
+### 1.5.1 Identity & Authorization Checks
+
+| Check | Attack Vector | Validation Logic | Error Code |
+|---|---|---|---|
+| **User Authentication** | Forged request | JWT/Session must be valid | `UNAUTHORIZED` |
+| **User ID Consistency** | Cross-user transfer attack | `request.user_id == auth.user_id` | `FORBIDDEN` |
+| **Account Ownership** | Steal others' funds | Source/Target accounts belong to same `user_id` | `FORBIDDEN` |
+
+### 1.5.2 Account Type Checks
+
+| Check | Attack Vector | Validation Logic | Error Code |
+|---|---|---|---|
+| **from != to** | Infinite wash trading/resource waste | `request.from != request.to` | `SAME_ACCOUNT` |
+| **Account Type Valid** | Inject invalid type | `from, to ∈ {FUNDING, SPOT}` | `INVALID_ACCOUNT_TYPE` |
+| **Account Type Supported** | Request unlaunched feature | `from, to` both in supported list | `UNSUPPORTED_ACCOUNT_TYPE` |
+
+### 1.5.3 Amount Checks
+
+| Check | Attack Vector | Validation Logic | Error Code |
+|---|---|---|---|
+| **amount > 0** | Zero/negative transfer | `amount > 0` | `INVALID_AMOUNT` |
+| **Precision Check** | Precision overflow | `decimal_places(amount) <= asset.precision` | `PRECISION_OVERFLOW` |
+| **Minimum Amount** | Dust attack | `amount >= asset.min_transfer_amount` | `AMOUNT_TOO_SMALL` |
+| **Maximum Single Amount** | Risk control bypass | `amount <= asset.max_transfer_amount` | `AMOUNT_TOO_LARGE` |
+| **Integer Overflow** | u64 overflow attack | `amount <= u64::MAX / safety_factor` | `OVERFLOW` |
+
+### 1.5.4 Asset Checks
+
+| Check | Attack Vector | Validation Logic | Error Code |
+|---|---|---|---|
+| **Asset Exists** | Fake asset_id | `asset_id` exists in system | `INVALID_ASSET` |
+| **Asset Status** | Delisted asset | `asset.status == ACTIVE` | `ASSET_SUSPENDED` |
+| **Transfer Permission** | Some assets forbid internal transfer | `asset.internal_transfer_enabled == true` | `TRANSFER_NOT_ALLOWED` |
+
+### 1.5.5 Account Status Checks
+
+#### Account Initialization Rules (Overview)
+
+| Account Type | Init Timing | Notes |
+|---|---|---|
+| **FUNDING** | Created on first deposit request | Triggered by external deposit flow |
+| **SPOT** | Created on first internal transfer | Lazy Init |
+| **FUTURE** | Created on first internal transfer [P2] | Lazy Init |
+| **MARGIN** | Created on first internal transfer [P2] | Lazy Init |
+
+> [!NOTE]
+> - Specific initialization behaviors and business rules for each account type are defined in their dedicated documents.
+> - Each account has its own state definitions (e.g., whether transfer is allowed); not detailed here.
+> - **Default State**: On account initialization, transfer is allowed by default.
+
+#### Account Status Check Table
+
+| Check | Attack Vector | Validation Logic | Error Code |
+|---|---|---|---|
+| **Source Account Exists** | Non-existent account | Source account record must exist | `SOURCE_ACCOUNT_NOT_FOUND` |
+| **Target Account Exists/Create** | Non-existent target | FUNDING must exist; SPOT/FUTURE/MARGIN can create | `TARGET_ACCOUNT_NOT_FOUND` (FUNDING only) |
+| **Source Not Frozen** | Frozen account transfer out | `source.status != FROZEN` | `ACCOUNT_FROZEN` |
+| **Source Not Disabled** | Disabled account operation | `source.status != DISABLED` | `ACCOUNT_DISABLED` |
+| **Sufficient Balance** | Insufficient balance direct reject | `source.available >= amount` | `INSUFFICIENT_BALANCE` |
+
+
+### 1.5.6 Rate Limiting - **[P2 Future Optimization]**
+
+> [!NOTE]
+> This is a V2 optimization. V1 may skip this.
+
+| Check | Attack Vector | Validation Logic | Error Code |
+|---|---|---|---|
+| **Requests Per Second** | DoS attack | `user_requests_per_second <= 10` | `RATE_LIMIT_EXCEEDED` |
+| **Daily Transfer Count** | Abuse | `user_daily_transfers <= 100` | `DAILY_LIMIT_EXCEEDED` |
+| **Daily Transfer Amount** | Large amount risk control | `user_daily_amount <= daily_limit` | `DAILY_AMOUNT_EXCEEDED` |
+
+### 1.5.7 Idempotency Check
+
+| Check | Attack Vector | Validation Logic | Error Code |
+|---|---|---|---|
+| **client_order_id Unique** | Duplicate submission | If `client_order_id` provided, check if exists | `DUPLICATE_REQUEST` (return original result) |
+
+### 1.5.8 Check Order (Recommended)
+
+```
+1. Authentication (JWT valid?)
+2. Authorization (user_id match?)
+3. Request Format (from/to/amount valid?)
+4. Account Type (from != to, type supported?)
+5. Asset Check (exists? enabled? transferable?)
+6. Amount Check (range? precision? overflow?)
+7. Rate Limiting (exceeded?)
+8. Idempotency (duplicate?)
+9. Balance Check (sufficient?) ← Check last, avoid unnecessary queries
 ```
 
-### 2.2 划转记录
+---
 
-```rust
-/// 划转记录
-pub struct Transfer {
-    pub transfer_id: i64,
-    pub user_id: i64,
-    pub asset_id: i32,
-    pub from_account: AccountType,
-    pub to_account: AccountType,
-    pub amount: i64,          // 划转金额 (最小单位)
-    pub created_at: DateTime<Utc>,
-}
+
+## 2. FSM Design (The State Machine)
+
+### 2.1 States (Exhaustive)
+
+| ID | State Name | Entry Condition | Terminal? | Funds Location |
+|---|---|---|---|---|
+| 0 | `INIT` | User request accepted. | No | Source |
+| 10 | `SOURCE_PENDING` | CAS success, Adapter call initiated. | No | Source (Deducting) |
+| 20 | `SOURCE_DONE` | Source Adapter returned `OK`. | No | **In-Flight** |
+| 30 | `TARGET_PENDING` | CAS success, Target Adapter call initiated. | No | In-Flight (Crediting) |
+| 40 | `COMMITTED` | Target Adapter returned `OK`. | **YES** | Target |
+| -10 | `FAILED` | Source Adapter returned `FAIL`. | **YES** | Source (Unchanged) |
+| -20 | `COMPENSATING` | Target Adapter `FAIL` AND Source is Reversible. | No | In-Flight (Refunding) |
+| -30 | `ROLLED_BACK` | Source Refund `OK`. | **YES** | Source (Restored) |
+
+### 2.2 State Transition Rules (Exhaustive)
+
+```
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                         CANONICAL STATE TRANSITIONS                           │
+├───────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  INIT ──────[CAS OK]───────► SOURCE_PENDING                                   │
+│    │                              │                                           │
+│    │                              ├──[Adapter OK]────► SOURCE_DONE            │
+│    │                              │                         │                 │
+│    │                              └──[Adapter FAIL]──► FAILED (Terminal)      │
+│    │                                                        │                 │
+│    │                                                        │                 │
+│    │                              SOURCE_DONE ──[CAS OK]──► TARGET_PENDING    │
+│    │                                                             │            │
+│    │                        ┌────────────────────────────────────┤            │
+│    │                        │                                    │            │
+│    │            [Adapter OK]│                       [Adapter FAIL]            │
+│    │                        │                                    │            │
+│    │                        ▼                                    ▼            │
+│    │                   COMMITTED                     ┌───────────────────┐    │
+│    │                   (Terminal)                    │ SOURCE REVERSIBLE?│    │
+│    │                                                 └─────────┬─────────┘    │
+│    │                                                   YES     │     NO       │
+│    │                                                   ▼       │     ▼        │
+│    │                                           COMPENSATING    │  INFINITE    │
+│    │                                                 │         │   RETRY      │
+│    │                                    [Refund OK]  │         │ (Stay in     │
+│    │                                         ▼       │         │  TARGET_     │
+│    │                                    ROLLED_BACK  │         │  PENDING)    │
+│    │                                    (Terminal)   │         │              │
+│    │                                                 │         │              │
+│    └─────────────────────────────────────────────────┴─────────┴──────────────┘
 ```
 
-### 2.3 数据库设计
+### 2.3 Reversibility Rule (CRITICAL)
+
+**Core Principle**: Only when an Adapter returns an **explicitly defined failure** can we safely rollback.
+
+| Response Type | Meaning | Can Safely Rollback? | Handling |
+|---|---|---|---|
+| `SUCCESS` | Operation succeeded | N/A | Continue to next step |
+| `EXPLICIT_FAIL` | Explicit business failure (e.g., insufficient balance) | **YES** | Can enter `COMPENSATING` |
+| `TIMEOUT` | Timeout, state unknown | **NO** | Infinite Retry |
+| `PENDING` | Processing, state unknown | **NO** | Infinite Retry |
+| `NETWORK_ERROR` | Network error, state unknown | **NO** | Infinite Retry |
+| `UNKNOWN` | Any other situation | **NO** | Infinite Retry or Manual Intervention |
+
+> [!CAUTION]
+> **Only `EXPLICIT_FAIL` allows safe rollback.**
+> Any unknown state (Timeout, Pending, Network Error) means funds are **In-Flight**.
+> We cannot know whether the counterparty has processed the request. Rash rollback will cause **Double Spend** or **Fund Loss**.
+> Only safe actions: **Infinite Retry** or **Manual Intervention**.
+
+---
+
+## 3. Transfer Scenarios (Step-by-Step)
+
+### 3.1 Scenario A: Funding → Spot (Deposit to Trading)
+
+**Happy Path:**
+
+| Step | Actor | Action | Pre-State | Post-State | Funds |
+|---|---|---|---|---|---|
+| 1 | API | Validate, Create Record | - | `INIT` | Funding |
+| 2 | Coordinator | CAS(`INIT` → `SOURCE_PENDING`) | `INIT` | `SOURCE_PENDING` | Funding |
+| 3 | Coordinator | Call `FundingAdapter.withdraw(req_id)` | - | - | - |
+| 4 | PG | `UPDATE balances SET amount = amount - X` | - | - | Deducted |
+| 5 | Coordinator | On `OK`: CAS(`SOURCE_PENDING` → `SOURCE_DONE`) | `SOURCE_PENDING` | `SOURCE_DONE` | **In-Flight** |
+| 6 | Coordinator | CAS(`SOURCE_DONE` → `TARGET_PENDING`) | `SOURCE_DONE` | `TARGET_PENDING` | In-Flight |
+| 7 | Coordinator | Call `TradingAdapter.deposit(req_id)` | - | - | - |
+| 8 | UBSCore | Credit RAM, Write WAL, Emit Event | - | - | Credited |
+| 9 | Coordinator | On Event: CAS(`TARGET_PENDING` → `COMMITTED`) | `TARGET_PENDING` | `COMMITTED` | **Trading** |
+
+**Failure Path (Target Fails):**
+
+| Step | Actor | Action | Pre-State | Post-State | Funds |
+|---|---|---|---|---|---|
+| 7' | Coordinator | Call `TradingAdapter.deposit(req_id)` → **FAIL/Timeout** | `TARGET_PENDING` | - | In-Flight |
+| 8' | Coordinator | Check: Source = **Funding** (Reversible) | - | - | - |
+| 9' | Coordinator | CAS(`TARGET_PENDING` → `COMPENSATING`) | `TARGET_PENDING` | `COMPENSATING` | In-Flight |
+| 10' | Coordinator | Call `FundingAdapter.refund(req_id)` | - | - | - |
+| 11' | PG | `UPDATE balances SET amount = amount + X` | - | - | Refunded |
+| 12' | Coordinator | CAS(`COMPENSATING` → `ROLLED_BACK`) | `COMPENSATING` | `ROLLED_BACK` | **Funding** |
+
+---
+
+### 3.2 Scenario B: Spot → Funding (Withdraw from Trading)
+
+**Happy Path:**
+
+| Step | Actor | Action | Pre-State | Post-State | Funds |
+|---|---|---|---|---|---|
+| 1 | API | Validate, Create Record | - | `INIT` | Trading |
+| 2 | Coordinator | CAS(`INIT` → `SOURCE_PENDING`) | `INIT` | `SOURCE_PENDING` | Trading |
+| 3 | Coordinator | Call `TradingAdapter.withdraw(req_id)` | - | - | - |
+| 4 | UBSCore | Check Balance, Deduct RAM, Write WAL, Emit Event | - | - | Deducted |
+| 5 | Coordinator | On Event: CAS(`SOURCE_PENDING` → `SOURCE_DONE`) | `SOURCE_PENDING` | `SOURCE_DONE` | **In-Flight** |
+| 6 | Coordinator | CAS(`SOURCE_DONE` → `TARGET_PENDING`) | `SOURCE_DONE` | `TARGET_PENDING` | In-Flight |
+| 7 | Coordinator | Call `FundingAdapter.deposit(req_id)` | - | - | - |
+| 8 | PG | `INSERT ... ON CONFLICT UPDATE SET amount = amount + X` | - | - | Credited |
+| 9 | Coordinator | On `OK`: CAS(`TARGET_PENDING` → `COMMITTED`) | `TARGET_PENDING` | `COMMITTED` | **Funding** |
+
+**Failure Path (Target Fails):**
+
+| Step | Actor | Action | Pre-State | Post-State | Funds |
+|---|---|---|---|---|---|
+| 7a | Coordinator | Call `FundingAdapter.deposit(req_id)` → **EXPLICIT_FAIL** (e.g., constraint) | `TARGET_PENDING` | - | In-Flight |
+| 8a | Coordinator | Check response type = **EXPLICIT_FAIL** (can safely rollback) | - | - | - |
+| 9a | Coordinator | CAS(`TARGET_PENDING` → `COMPENSATING`) | `TARGET_PENDING` | `COMPENSATING` | In-Flight |
+| 10a | Coordinator | Call `TradingAdapter.refund(req_id)` (refund to UBSCore) | - | - | - |
+| 11a | UBSCore | Credit RAM balance, write WAL | - | - | Refunded |
+| 12a | Coordinator | CAS(`COMPENSATING` → `ROLLED_BACK`) | `COMPENSATING` | `ROLLED_BACK` | **Trading** |
+
+| Step | Actor | Action | Pre-State | Post-State | Funds |
+|---|---|---|---|---|---|
+| 7b | Coordinator | Call `FundingAdapter.deposit(req_id)` → **TIMEOUT/UNKNOWN** | `TARGET_PENDING` | - | In-Flight |
+| 8b | Coordinator | Check response type = **UNKNOWN** (cannot safely rollback) | - | - | - |
+| 9b | Coordinator | **DO NOT TRANSITION**. Stay `TARGET_PENDING`. | `TARGET_PENDING` | `TARGET_PENDING` | In-Flight |
+| 10b | Coordinator | Log CRITICAL. Alert Ops. Schedule Retry. | - | - | - |
+| 11b | Recovery | Retry `FundingAdapter.deposit(req_id)` **INFINITELY**. | - | - | - |
+| 12b | (Eventually) | On `OK`: CAS(`TARGET_PENDING` → `COMMITTED`) | `TARGET_PENDING` | `COMMITTED` | **Funding** |
+
+> [!WARNING]
+> **Only enter `COMPENSATING` when Target returns `EXPLICIT_FAIL`.**
+> If Timeout or Unknown, funds are In-Flight. Must Infinite Retry or Manual Intervention.
+
+---
+
+## 4. Failure Mode and Effects Analysis (FMEA)
+
+### 4.1 Phase 1 Failures (Source Operation)
+
+| Failure | Cause | Current State | Funds | Resolution |
+|---|---|---|---|---|
+| Adapter returns `FAIL` | Insufficient balance, DB constraint | `SOURCE_PENDING` | Source | Transition to `FAILED`. User sees error. |
+| Adapter returns `PENDING` | Timeout, network issue | `SOURCE_PENDING` | Unknown | **Retry**. Adapter MUST be idempotent. |
+| Coordinator crashes after CAS, before call | Process kill | `SOURCE_PENDING` | Source | Recovery Worker retries call. |
+| Coordinator crashes after call, before result | Process kill | `SOURCE_PENDING` | Unknown | Recovery Worker retries (idempotent). |
+
+### 4.2 Phase 2 Failures (Target Operation)
+
+| Failure | Cause | Response Type | Current State | Funds | Resolution |
+|---|---|---|---|---|---|
+| Target explicit reject | Business rule | `EXPLICIT_FAIL` | `TARGET_PENDING` | In-Flight | `COMPENSATING` → Refund. |
+| Timeout | Network delay | `TIMEOUT` | `TARGET_PENDING` | Unknown | **Infinite Retry**. |
+| Network error | Connection lost | `NETWORK_ERROR` | `TARGET_PENDING` | Unknown | **Infinite Retry**. |
+| Unknown error | System exception | `UNKNOWN` | `TARGET_PENDING` | Unknown | **Infinite Retry** or Manual Intervention. |
+| Coordinator crashes | Process kill | N/A | `TARGET_PENDING` | In-Flight | Recovery Worker retries. |
+
+### 4.3 Compensation Failures
+
+| Failure | Cause | Current State | Funds | Resolution |
+|---|---|---|---|---|
+| Refund `FAIL` | PG down, constraint | `COMPENSATING` | In-Flight | **Infinite Retry**. Funds stuck until PG up. |
+| Refund `PENDING` | Timeout | `COMPENSATING` | Unknown | **Retry**. |
+
+---
+
+## 5. Idempotency Requirements (MANDATORY)
+
+### 5.1 Why Idempotency?
+Retries are the foundation of crash recovery. Without idempotency, a retry will cause **double execution** (double deduction, double credit).
+
+### 5.2 Implementation (Funding Adapter)
+
+**Requirement**: Given the same `req_id`, calling `withdraw()` or `deposit()` multiple times MUST have the same effect as calling it once.
+
+**Mechanism**:
+1.  `transfers_tb` has `UNIQUE(req_id)`.
+2.  **Atomic Transaction**:
+    ```sql
+    BEGIN;
+    -- Check if already processed
+    SELECT state FROM transfers_tb WHERE req_id = $1;
+    IF state >= expected_post_state THEN
+        RETURN 'AlreadyProcessed';
+    END IF;
+    
+    -- Perform balance update
+    UPDATE balances_tb SET amount = amount - $2 WHERE user_id = $3 AND asset_id = $4 AND amount >= $2;
+    IF NOT FOUND THEN
+        RETURN 'InsufficientBalance';
+    END IF;
+    
+    -- Update state
+    UPDATE transfers_tb SET state = $new_state, updated_at = NOW() WHERE req_id = $1;
+    COMMIT;
+    RETURN 'Success';
+    ```
+
+### 5.3 Implementation (Trading Adapter)
+
+**Requirement**: Same as above. UBSCore MUST reject duplicate `req_id`.
+
+**Mechanism**:
+1.  `InternalOrder` includes `req_id` field (or `cid`).
+2.  UBSCore maintains a `ProcessedTransferSet` (HashSet in RAM, rebuilt from WAL on restart).
+3.  On receiving Transfer Order:
+    ```
+    IF req_id IN ProcessedTransferSet THEN
+        RETURN 'AlreadyProcessed' (Success, no-op)
+    ELSE
+        ProcessTransfer()
+        ProcessedTransferSet.insert(req_id)
+        WriteWAL(TransferEvent)
+        RETURN 'Success'
+    END IF
+    ```
+
+---
+
+## 6. Recovery Worker (Zombie Handler)
+
+### 6.1 Purpose
+On Coordinator startup (or periodically), scan for "stuck" transfers and resume them.
+
+### 6.2 Query
+```sql
+SELECT * FROM transfers_tb 
+WHERE state IN (0, 10, 20, 30, -20) -- INIT, SOURCE_PENDING, SOURCE_DONE, TARGET_PENDING, COMPENSATING
+  AND updated_at < NOW() - INTERVAL '1 minute'; -- Stale threshold
+```
+
+### 6.3 Recovery Logic
+
+| Current State | Action |
+|---|---|
+| `INIT` | Call `step()` (will transition to `SOURCE_PENDING`). |
+| `SOURCE_PENDING` | Retry `Source.withdraw()`. |
+| `SOURCE_DONE` | Call `step()` (will transition to `TARGET_PENDING`). |
+| `TARGET_PENDING` | Retry `Target.deposit()`. Apply Reversibility Rule. |
+| `COMPENSATING` | Retry `Source.refund()`. |
+
+---
+
+## 7. Data Model
+
+### 7.1 Table: `transfers_tb`
 
 ```sql
--- 划转记录表
 CREATE TABLE transfers_tb (
-    transfer_id     BIGSERIAL PRIMARY KEY,
-    user_id         BIGINT NOT NULL REFERENCES users_tb(user_id),
-    asset_id        INTEGER NOT NULL REFERENCES assets_tb(asset_id),
-    from_account    SMALLINT NOT NULL,  -- 1=Spot, 2=Funding
-    to_account      SMALLINT NOT NULL,
-    amount          BIGINT NOT NULL,
-    created_at      TIMESTAMPTZ DEFAULT NOW(),
-    
-    CHECK (amount > 0),
-    CHECK (from_account != to_account),
-    CHECK (from_account IN (1, 2)),
-    CHECK (to_account IN (1, 2))
+    transfer_id   BIGSERIAL PRIMARY KEY,
+    req_id        VARCHAR(64) UNIQUE NOT NULL,  -- Client Idempotency Key
+    user_id       BIGINT NOT NULL,
+    asset_id      INTEGER NOT NULL,
+    amount        DECIMAL(30, 8) NOT NULL,
+    transfer_type SMALLINT NOT NULL,            -- 1 = Funding->Spot, 2 = Spot->Funding
+    source_type   SMALLINT NOT NULL,            -- 1 = Funding, 2 = Trading
+    state         SMALLINT NOT NULL DEFAULT 0,  -- FSM State ID
+    error_message TEXT,                         -- Last error (for debugging)
+    retry_count   INTEGER NOT NULL DEFAULT 0,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_transfers_user ON transfers_tb(user_id);
-CREATE INDEX idx_transfers_created ON transfers_tb(created_at);
+CREATE INDEX idx_transfers_state ON transfers_tb(state) WHERE state NOT IN (40, -10, -30);
 ```
 
----
-
-## 3. 余额模型扩展
-
-### 3.1 现有余额表扩展
-
-当前 `balances_tb` 服务于 Spot 账户。需要扩展以支持多账户：
-
-**方案 A: 添加 account_type 列** ✅ 选择
-
+### 7.2 Invariant Check
+Run periodically to detect data corruption:
 ```sql
--- 添加账户类型列 (默认 Spot)
-ALTER TABLE balances_tb ADD COLUMN account_type SMALLINT NOT NULL DEFAULT 1;
-
--- 更新唯一约束
-ALTER TABLE balances_tb DROP CONSTRAINT balances_tb_user_id_asset_id_key;
-ALTER TABLE balances_tb ADD CONSTRAINT balances_tb_unique 
-    UNIQUE(user_id, asset_id, account_type);
-```
-
-**方案 B: 创建独立 funding_balances_tb** ❌
-
-优先选择方案 A，复用现有逻辑。
-
-### 3.2 余额结构
-
-```rust
-/// 账户余额
-pub struct AccountBalance {
-    pub user_id: i64,
-    pub asset_id: i32,
-    pub account_type: AccountType,
-    pub available: i64,
-    pub frozen: i64,
-    pub version: i32,
-}
+-- Sum of Funding + Trading + In-Flight should be constant per user per asset
+-- In-Flight = SUM(amount) WHERE state IN (SOURCE_DONE, TARGET_PENDING, COMPENSATING)
 ```
 
 ---
 
-## 4. API 设计
+## 8. API Contract
 
-### 4.1 划转接口
+### 8.1 Endpoint: `POST /api/v1/internal_transfer`
 
-```
-POST /api/v1/private/transfer
-Authorization: ZXINF v1.<api_key>.<ts_nonce>.<signature>
-Content-Type: application/json
-
-Request:
+**Request:**
+```json
 {
-    "from": "funding",      // "spot" | "funding"
-    "to": "spot",           // "spot" | "funding"
-    "asset": "USDT",        // 资产名称
-    "amount": "100.00"      // 划转金额 (字符串)
+  "from": "SPOT",       // Source account type
+  "to": "FUNDING",     // Target account type
+  "asset": "USDT",
+  "amount": "100.00"
 }
+```
 
-Response (成功):
+**Account Type Enum (`AccountType`):**
+| Value | Meaning | Status |
+|---|---|---|
+| `FUNDING` | Funding Account (PostgreSQL) | Supported |
+| `SPOT` | Spot Trading Account (UBSCore) | Supported |
+| `FUTURE` | Futures Account | Future Extension |
+| `MARGIN` | Margin Account | Future Extension |
+
+**Response:**
+```json
 {
-    "code": 0,
-    "data": {
-        "transfer_id": "12345678",
-        "from": "funding",
-        "to": "spot",
-        "asset": "USDT",
-        "amount": "100.00",
-        "timestamp": 1703318400000
-    }
+  "transfer_id": 12345,
+  "req_id": "sr-1734912345678901234",  // Server-generated (Snowflake)
+  "from": "SPOT",
+  "to": "FUNDING",
+  "state": "COMMITTED",  // or "PENDING" if async
+  "message": "Transfer successful"
 }
+```
 
-Response (失败):
+### 8.2 Query Endpoint: `GET /api/v1/internal_transfer/:req_id`
+
+**Response:**
+```json
 {
-    "code": 5001,
-    "error": "INSUFFICIENT_BALANCE",
-    "message": "Insufficient balance in funding account"
+  "transfer_id": 12345,
+  "req_id": "sr-1734912345678901234",
+  "from": "SPOT",
+  "to": "FUNDING",
+  "asset": "USDT",
+  "amount": "100.00",
+  "state": "COMMITTED",
+  "created_at": "2024-12-23T14:00:00Z",
+  "updated_at": "2024-12-23T14:00:01Z"
 }
 ```
 
-### 4.2 错误码
+> [!IMPORTANT]
+> **`req_id` is SERVER-GENERATED**, not client.
+> If client needs idempotency, use optional `client_order_id` field. Server will check for duplicates and return existing result.
 
-| 错误码 | 名称 | 说明 |
-|--------|------|------|
-| 5001 | InsufficientBalance | 余额不足 |
-| 5002 | InvalidAccount | 无效的账户类型 |
-| 5003 | SameAccount | 源和目标账户相同 |
-| 5004 | InvalidAsset | 无效的资产 |
-| 5005 | InvalidAmount | 无效的金额 |
-| 5006 | TransferFailed | 划转失败 |
-
-### 4.3 查询余额接口
-
-```
-GET /api/v1/private/balances?account=funding
-Authorization: ZXINF v1.<api_key>.<ts_nonce>.<signature>
-
-Response:
-{
-    "code": 0,
-    "data": [
-        {
-            "asset": "USDT",
-            "available": "1000.00",
-            "frozen": "0.00",
-            "account": "funding"
-        }
-    ]
-}
-```
+**Error Codes:**
+| Code | Meaning |
+|---|---|
+| `INSUFFICIENT_BALANCE` | Source account balance < amount. |
+| `INVALID_ACCOUNT_TYPE` | `from` or `to` account type is invalid or unsupported. |
+| `SAME_ACCOUNT` | `from` and `to` are the same. |
+| `DUPLICATE_REQUEST` | `client_order_id` already processed. Return original result. |
+| `INVALID_AMOUNT` | amount <= 0 or exceeds precision. |
+| `SYSTEM_ERROR` | Internal failure. Advise retry. |
 
 ---
-
-## 5. 业务流程
-
-### 5.1 划转流程
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     划转请求处理流程                          │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  1. 验证请求参数                                             │
-│     ├── from/to 有效且不同                                   │
-│     ├── asset 存在                                          │
-│     └── amount > 0                                          │
-│                                                             │
-│  2. 开启数据库事务                                           │
-│                                                             │
-│  3. 锁定源账户余额 (SELECT FOR UPDATE)                       │
-│                                                             │
-│  4. 检查可用余额 >= amount                                   │
-│                                                             │
-│  5. 扣减源账户: available -= amount                          │
-│                                                             │
-│  6. 增加目标账户: available += amount                        │
-│     (如不存在则创建)                                         │
-│                                                             │
-│  7. 插入划转记录                                             │
-│                                                             │
-│  8. 提交事务                                                 │
-│                                                             │
-│  9. 返回成功                                                 │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### 5.2 并发控制
-
-使用 PostgreSQL 行级锁确保并发安全：
-
-```sql
--- 锁定源账户余额行
-SELECT available, version 
-FROM balances_tb 
-WHERE user_id = $1 AND asset_id = $2 AND account_type = $3
-FOR UPDATE;
-```
-
----
-
-## 6. 服务端验证流程
-
-```rust
-/// 划转请求处理
-pub async fn handle_transfer(
-    db: &Database,
-    user_id: i64,
-    req: TransferRequest,
-) -> Result<TransferResponse, TransferError> {
-    // 1. 解析并验证参数
-    let from_account = AccountType::from_str(&req.from)?;
-    let to_account = AccountType::from_str(&req.to)?;
-    
-    if from_account == to_account {
-        return Err(TransferError::SameAccount);
-    }
-    
-    let asset = db.get_asset_by_name(&req.asset).await?
-        .ok_or(TransferError::InvalidAsset)?;
-    
-    let amount = parse_amount(&req.amount, asset.decimals)?;
-    if amount <= 0 {
-        return Err(TransferError::InvalidAmount);
-    }
-    
-    // 2. 执行划转 (带事务)
-    let transfer = db.execute_transfer(
-        user_id,
-        asset.asset_id,
-        from_account,
-        to_account,
-        amount,
-    ).await?;
-    
-    // 3. 返回结果
-    Ok(TransferResponse {
-        transfer_id: transfer.transfer_id.to_string(),
-        from: req.from,
-        to: req.to,
-        asset: req.asset,
-        amount: req.amount,
-        timestamp: transfer.created_at.timestamp_millis(),
-    })
-}
-```
-
----
-
-## 7. 实现计划
-
-### 7.1 开发清单
-
-#### Phase 1: 数据库层
-
-| # | 任务 | 输出文件 | 验收标准 |
-|---|------|----------|----------|
-| 1.1 | 扩展 balances_tb | `migrations/003_account_type.sql` | account_type 列存在 |
-| 1.2 | 创建 transfers_tb | `migrations/004_transfers.sql` | 表创建成功 |
-
-#### Phase 2: 核心模块
-
-| # | 任务 | 输出文件 | 验收标准 |
-|---|------|----------|----------|
-| 2.1 | AccountType 枚举 | `src/funding/types.rs` | 序列化正确 |
-| 2.2 | Transfer 模型 | `src/funding/transfer.rs` | CRUD |
-| 2.3 | 划转事务逻辑 | `src/funding/service.rs` | 原子执行 |
-| 2.4 | 错误码定义 | `src/funding/error.rs` | 5001-5006 |
-
-#### Phase 3: API 集成
-
-| # | 任务 | 输出文件 | 验收标准 |
-|---|------|----------|----------|
-| 3.1 | Transfer 处理器 | `src/gateway/handlers.rs` | POST 可用 |
-| 3.2 | Balances 查询扩展 | `src/gateway/handlers.rs` | account 参数 |
-| 3.3 | 路由注册 | `src/gateway/mod.rs` | 路径正确 |
-
-#### Phase 4: 测试验证
-
-| # | 任务 | 输出文件 | 验收标准 |
-|---|------|----------|----------|
-| 4.1 | 单元测试 | `src/funding/tests.rs` | 覆盖主要场景 |
-| 4.2 | 集成测试 | `scripts/test_transfer.py` | E2E 通过 |
-| 4.3 | 并发测试 | 同上 | 无竞态条件 |
-
-### 7.2 关键数据结构
-
-```rust
-// Request/Response
-pub struct TransferRequest {
-    pub from: String,       // "spot" | "funding"
-    pub to: String,
-    pub asset: String,
-    pub amount: String,
-}
-
-pub struct TransferResponse {
-    pub transfer_id: String,
-    pub from: String,
-    pub to: String,
-    pub asset: String,
-    pub amount: String,
-    pub timestamp: i64,
-}
-```
-
-### 7.3 验证 Checklist
-
-- [ ] POST /api/v1/private/transfer 可用
-- [ ] funding → spot 划转成功
-- [ ] spot → funding 划转成功
-- [ ] 余额不足返回 5001
-- [ ] 同账户划转返回 5003
-- [ ] 划转记录正确插入
-- [ ] 并发划转无竞态
-
----
-
-## 8. 设计决策
-
-| 决策 | 选择 | 理由 |
-|------|------|------|
-| 余额表扩展 | 方案 A (添加列) | 复用现有逻辑，改动小 |
-| 并发控制 | SELECT FOR UPDATE | PostgreSQL 行级锁，简单可靠 |
-| 金额格式 | 字符串 | 避免浮点精度问题 |
-| 执行方式 | 同步 | 低延迟，用户体验好 |
-
----
-
-## 9. 安全考虑
-
-| 风险 | 缓解措施 |
-|------|----------|
-| 并发竞态 | 行级锁 + 事务 |
-| 余额溢出 | BIGINT + CHECK 约束 |
-| 重复请求 | 幂等性设计 (考虑添加 request_id) |
-| 未授权访问 | Ed25519 签名验证 |
-
----
-
-**状态**: 等待架构审核
