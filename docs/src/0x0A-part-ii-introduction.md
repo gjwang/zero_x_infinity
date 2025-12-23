@@ -1,4 +1,95 @@
-# 第二部分：产品化 (Productization)
+# Part II: Productization
+
+<h3>
+  <a href="#-english">🇺🇸 English</a>
+  &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
+  <a href="#-chinese">🇨🇳 中文</a>
+</h3>
+
+<div id="-english"></div>
+
+## 🇺🇸 English
+
+> **📦 Code Changes**: [View Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.9-f-integration-test...main)
+
+> **Core Objective**: Upgrade the core matching engine into a complete trading system with Account System, Fund Transfer, and Security Authentication.
+
+---
+
+## 1. Review: Achievements of Part I
+
+| Chapter | Topic | Key Achievement |
+|---------|-------|-----------------|
+| **0x01** | Genesis | Minimal Matching Prototype |
+| **0x02-03** | Floats & Decimals | Financial Grade Precision |
+| **0x04** | BTree OrderBook | O(log n) Matching |
+| **0x05-06** | User Balance | Locking/Unlocking |
+| **0x07** | Testing Framework | 100K Order Baseline |
+| **0x08** | Multi-Thread Pipeline | 4-Thread Concurrency |
+| **0x09** | Gateway & Persistence | Gateway, TDengine, WebSocket |
+
+---
+
+## 2. Gap Analysis: From Engine to System
+
+| Dimension | Current State | Target State |
+|-----------|---------------|--------------|
+| **Identity** | Raw `user_id` | API Key Signature |
+| **Accounts** | Single Balance | Funding + Spot Dual-Account |
+| **Funds** | Manual `deposit()` | Deposit/Withdraw/Transfer |
+| **Economics** | Zero Fee | Maker/Taker Fees |
+
+---
+
+## 3. Blueprint for Part II
+
+```
+0x0A ─── Account System & Security
+        ├── 0x0A-a: Account System (exchange_info + DB)
+        ├── 0x0A-b: ID Specification (Asset/Symbol Naming)
+        └── 0x0A-c: Authentication (API Key Middleware)
+
+0x0B ─── Fund System & Transfers
+        ├── Funding/Spot Dual-Account Structure
+        └── Deposit/Withdraw API
+
+0x0C ─── Economic Model
+        └── Fee Calculation & Deduction
+
+0x0D ─── Snapshot & Recovery
+        └── Graceful Shutdown & State Restoration
+```
+
+---
+
+## 4. Tech Stack Choices
+
+| Component | Choice | Purpose |
+|-----------|--------|---------|
+| **PostgreSQL 18** | Account/Asset/Symbol | Relational Config Data |
+| **TDengine** | Orders/Trades/K-Lines | Time-Series Trading Data |
+| **sqlx** | Rust PG Driver | Async + Compile-time Check |
+
+---
+
+## 5. Design Principles
+
+| Principle | Description |
+|-----------|-------------|
+| **Minimal External Deps** | Auth/Transfer logic is cohesive |
+| **Auditability** | All fund changes must have event logs |
+| **Progressive** | System remains runnable after each module |
+| **Backward Compatible** | Reuse Core types from Part I |
+
+<br>
+<div align="right"><a href="#-english">↑ Back to Top</a></div>
+<br>
+
+---
+
+<div id="-chinese"></div>
+
+## 🇨🇳 中文
 
 > **📦 代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.9-f-integration-test...main)
 
