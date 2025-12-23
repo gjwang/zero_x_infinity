@@ -6,8 +6,7 @@ use crossterm::{
 use rand::Rng;
 use ratatui::{
     prelude::*,
-    style::Palette,
-    widgets::{Block, Borders, Gauge, List, ListItem, Paragraph, Wrap},
+    widgets::{Block, Borders, List, ListItem, Paragraph},
 };
 use std::{
     io::stdout,
@@ -117,7 +116,7 @@ fn ui(frame: &mut Frame, app: &mut App) {
             Constraint::Min(0),    // Content
             Constraint::Length(3), // Footer
         ])
-        .split(frame.size());
+        .split(frame.area());
 
     // 1. Header
     let title = Paragraph::new(
