@@ -103,22 +103,23 @@ init_tdengine() {
     # Create super tables
     log_info "Creating super tables..."
     
-    td_exec "USE ${TD_DB}" > /dev/null
+    # NOTE: REST API is stateless, so "USE db" in separate request won't work.
+    # We must use fully qualified names: ${TD_DB}.table_name
     
     # Orders
-    td_exec "CREATE STABLE IF NOT EXISTS orders (ts TIMESTAMP, order_id BIGINT UNSIGNED, user_id BIGINT UNSIGNED, side TINYINT UNSIGNED, order_type TINYINT UNSIGNED, price BIGINT UNSIGNED, qty BIGINT UNSIGNED, filled_qty BIGINT UNSIGNED, status TINYINT UNSIGNED, cid NCHAR(64)) TAGS (symbol_id INT UNSIGNED)" > /dev/null
+    td_exec "CREATE STABLE IF NOT EXISTS ${TD_DB}.orders (ts TIMESTAMP, order_id BIGINT UNSIGNED, user_id BIGINT UNSIGNED, side TINYINT UNSIGNED, order_type TINYINT UNSIGNED, price BIGINT UNSIGNED, qty BIGINT UNSIGNED, filled_qty BIGINT UNSIGNED, status TINYINT UNSIGNED, cid NCHAR(64)) TAGS (symbol_id INT UNSIGNED)" > /dev/null
     
     # Trades
-    td_exec "CREATE STABLE IF NOT EXISTS trades (ts TIMESTAMP, trade_id BIGINT UNSIGNED, order_id BIGINT UNSIGNED, user_id BIGINT UNSIGNED, side TINYINT UNSIGNED, price BIGINT UNSIGNED, qty BIGINT UNSIGNED, fee BIGINT UNSIGNED, role TINYINT UNSIGNED) TAGS (symbol_id INT UNSIGNED)" > /dev/null
+    td_exec "CREATE STABLE IF NOT EXISTS ${TD_DB}.trades (ts TIMESTAMP, trade_id BIGINT UNSIGNED, order_id BIGINT UNSIGNED, user_id BIGINT UNSIGNED, side TINYINT UNSIGNED, price BIGINT UNSIGNED, qty BIGINT UNSIGNED, fee BIGINT UNSIGNED, role TINYINT UNSIGNED) TAGS (symbol_id INT UNSIGNED)" > /dev/null
     
     # Balances
-    td_exec "CREATE STABLE IF NOT EXISTS balances (ts TIMESTAMP, avail BIGINT UNSIGNED, frozen BIGINT UNSIGNED, lock_version BIGINT UNSIGNED, settle_version BIGINT UNSIGNED) TAGS (user_id BIGINT UNSIGNED, asset_id INT UNSIGNED)" > /dev/null
+    td_exec "CREATE STABLE IF NOT EXISTS ${TD_DB}.balances (ts TIMESTAMP, avail BIGINT UNSIGNED, frozen BIGINT UNSIGNED, lock_version BIGINT UNSIGNED, settle_version BIGINT UNSIGNED) TAGS (user_id BIGINT UNSIGNED, asset_id INT UNSIGNED)" > /dev/null
     
     # K-Lines
-    td_exec "CREATE STABLE IF NOT EXISTS klines (ts TIMESTAMP, open BIGINT UNSIGNED, high BIGINT UNSIGNED, low BIGINT UNSIGNED, close BIGINT UNSIGNED, volume BIGINT UNSIGNED, quote_volume DOUBLE, trade_count INT UNSIGNED) TAGS (symbol_id INT UNSIGNED, intv NCHAR(8))" > /dev/null
+    td_exec "CREATE STABLE IF NOT EXISTS ${TD_DB}.klines (ts TIMESTAMP, open BIGINT UNSIGNED, high BIGINT UNSIGNED, low BIGINT UNSIGNED, close BIGINT UNSIGNED, volume BIGINT UNSIGNED, quote_volume DOUBLE, trade_count INT UNSIGNED) TAGS (symbol_id INT UNSIGNED, intv NCHAR(8))" > /dev/null
     
     # Order events
-    td_exec "CREATE STABLE IF NOT EXISTS order_events (ts TIMESTAMP, order_id BIGINT UNSIGNED, event_type TINYINT UNSIGNED, prev_status TINYINT UNSIGNED, new_status TINYINT UNSIGNED, filled_qty BIGINT UNSIGNED, remaining_qty BIGINT UNSIGNED) TAGS (symbol_id INT UNSIGNED)" > /dev/null
+    td_exec "CREATE STABLE IF NOT EXISTS ${TD_DB}.order_events (ts TIMESTAMP, order_id BIGINT UNSIGNED, event_type TINYINT UNSIGNED, prev_status TINYINT UNSIGNED, new_status TINYINT UNSIGNED, filled_qty BIGINT UNSIGNED, remaining_qty BIGINT UNSIGNED) TAGS (symbol_id INT UNSIGNED)" > /dev/null
     
     log_info "✅ TDengine initialized"
 }
