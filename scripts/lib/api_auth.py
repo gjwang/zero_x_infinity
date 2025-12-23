@@ -212,23 +212,38 @@ class ApiClient:
 
 # These keys are from fixtures/seed_data.sql
 # WARNING: DO NOT USE IN PRODUCTION
-TEST_API_KEY = "AK_D4735E3A265E16EE"
+# These keys are from fixtures/seed_data.sql
+# WARNING: DO NOT USE IN PRODUCTION
+TEST_API_KEY = "AK_D4735E3A265E16EE" # User 1 (System)
 TEST_PRIVATE_KEY_HEX = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
 
+# User ID to (API Key, Private Key) mapping
+USER_KEYS = {
+    # System User
+    1: (TEST_API_KEY, TEST_PRIVATE_KEY_HEX),
+    # Test User 1001
+    1001: ("AK_USER1001_TEST01", TEST_PRIVATE_KEY_HEX),
+    # Test User 1002
+    1002: ("AK_USER1002_TEST02", TEST_PRIVATE_KEY_HEX),
+}
 
-def get_test_client(base_url: str = None) -> ApiClient:
+
+def get_test_client(base_url: str = None, user_id: int = 1) -> ApiClient:
     """
     Get an API client configured with test credentials.
     
     Args:
         base_url: Optional base URL override
+        user_id: User ID to authenticate as (1, 1001, or 1002)
         
     Returns:
         Configured ApiClient instance
     """
+    api_key, private_key = USER_KEYS.get(user_id, (TEST_API_KEY, TEST_PRIVATE_KEY_HEX))
+    
     return ApiClient(
-        api_key=TEST_API_KEY,
-        private_key_hex=TEST_PRIVATE_KEY_HEX,
+        api_key=api_key,
+        private_key_hex=private_key,
         base_url=base_url
     )
 
