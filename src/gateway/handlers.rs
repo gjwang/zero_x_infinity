@@ -1,7 +1,7 @@
 use axum::{
     Extension, Json,
     extract::{Path, Query, State},
-    http::{HeaderMap, StatusCode},
+    http::StatusCode,
 };
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -417,32 +417,6 @@ pub async fn get_transfer(
 // ============================================================================
 // Helper Functions
 // ============================================================================
-
-/// Extract user_id from HTTP headers
-fn extract_user_id(headers: &HeaderMap) -> Result<u64, (StatusCode, Json<ApiResponse<()>>)> {
-    let user_id_str = headers
-        .get("X-User-ID")
-        .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| {
-            (
-                StatusCode::UNAUTHORIZED,
-                Json(ApiResponse::<()>::error(
-                    error_codes::MISSING_AUTH,
-                    "Missing X-User-ID header",
-                )),
-            )
-        })?;
-
-    user_id_str.parse::<u64>().map_err(|_| {
-        (
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<()>::error(
-                error_codes::INVALID_PARAMETER,
-                "Invalid X-User-ID format",
-            )),
-        )
-    })
-}
 
 /// Get current time in nanoseconds
 fn now_ns() -> u64 {
