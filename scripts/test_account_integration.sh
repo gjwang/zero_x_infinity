@@ -139,19 +139,13 @@ test_start "Prepare test data"
 TEST_DIR="test_account"
 mkdir -p "$TEST_DIR"
 
-# Copy essential config files
+# Copy essential config files and the FULL balances file
+# This now works because Gateway pre-creates tables in parallel!
 cp fixtures/assets_config.csv "$TEST_DIR/"
 cp fixtures/symbols_config.csv "$TEST_DIR/"
+cp fixtures/balances_init.csv "$TEST_DIR/"
 
-# Create minimal balances_init.csv (only 1 user) to avoid slow TDengine table creation
-# The default fixtures/balances_init.csv has 2000 users, which is too slow for CI
-cat > "$TEST_DIR/balances_init.csv" << EOF
-user_id,asset_id,avail,frozen,version
-1001,1,1000000000,0,0
-1001,2,1000000000000,0,0
-EOF
-
-log_success "Test data prepared in $TEST_DIR/"
+log_success "Test data (Full Dataset) prepared in $TEST_DIR/"
 
 test_start "Start Gateway in background"
 log_info "Starting Gateway on port 8080..."
@@ -166,10 +160,10 @@ fi
 ./target/release/zero_x_infinity --gateway $ENV_FLAG --port 8080 --input "$TEST_DIR" > /tmp/gateway.log 2>&1 &
 GATEWAY_PID=$!
 
-# Wait for Gateway to start - increased for CI stability
-log_info "Waiting for Gateway to start (max 60s)..."
+# Wait for Gateway to start - increased for CI stability and large dataset
+log_info "Waiting for Gateway to start (max 120s)..."
 READY=false
-for i in {1..60}; do
+for i in {1..120}; do
     if curl -s http://localhost:8080/api/v1/health | grep -q "ok"; then
         log_success "Gateway started successfully"
         READY=true
@@ -183,12 +177,12 @@ for i in {1..60}; do
         exit 1
     fi
     
-    [ $((i % 5)) -eq 0 ] && log_info "Waiting for Gateway... ($i/60)"
+    [ $((i % 5)) -eq 0 ] && log_info "Waiting for Gateway... ($i/120)"
     sleep 1
 done
 
 if [ "$READY" = false ]; then
-    log_error "Gateway failed to start within 60 seconds"
+    log_error "Gateway failed to start within 120 seconds"
     exit 1
 fi
 
