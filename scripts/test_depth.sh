@@ -60,11 +60,12 @@ if ! curl -sf "$BASE_URL/api/v1/health" > /dev/null 2>&1; then
     fi
     GATEWAY_PID=$!
     
-    # Wait for Gateway
-    for i in {1..30}; do
+    # Wait for Gateway - increased for CI stability
+    for i in {1..60}; do
         if curl -sf "$BASE_URL/api/v1/health" > /dev/null 2>&1; then
             break
         fi
+        [ $((i % 5)) -eq 0 ] && echo "   Waiting for Gateway... ($i/60)"
         sleep 1
     done
     

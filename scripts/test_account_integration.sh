@@ -157,22 +157,31 @@ fi
 ./target/release/zero_x_infinity --gateway $ENV_FLAG --port 8080 > /tmp/gateway.log 2>&1 &
 GATEWAY_PID=$!
 
-# Wait for Gateway to start
-log_info "Waiting for Gateway to start (PID: $GATEWAY_PID)..."
-for i in {1..10}; do
-    if curl -s http://localhost:8080/health > /dev/null 2>&1; then
+# Wait for Gateway to start - increased for CI stability
+log_info "Waiting for Gateway to start (max 60s)..."
+READY=false
+for i in {1..60}; do
+    if curl -s http://localhost:8080/api/v1/health | grep -q "ok"; then
         log_success "Gateway started successfully"
+        READY=true
         break
     fi
-    if [ $i -eq 10 ]; then
-        log_error "Gateway failed to start within 10 seconds"
-        log_info "Gateway log:"
-        cat /tmp/gateway.log
-        kill $GATEWAY_PID 2>/dev/null || true
+    
+    # Check if process died
+    if ! kill -0 $GATEWAY_PID 2>/dev/null; then
+        log_error "Gateway process died"
+        tail -n 20 /tmp/gateway.log 2>/dev/null || true
         exit 1
     fi
+    
+    [ $((i % 5)) -eq 0 ] && log_info "Waiting for Gateway... ($i/60)"
     sleep 1
 done
+
+if [ "$READY" = false ]; then
+    log_error "Gateway failed to start within 60 seconds"
+    exit 1
+fi
 
 # ============================================================================
 # API Endpoint Tests
