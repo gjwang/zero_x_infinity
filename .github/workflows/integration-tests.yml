@@ -260,6 +260,9 @@ jobs:
       - name: Set Binary Executable
         run: chmod +x target/release/zero_x_infinity
 
+      - name: Initialize TDengine
+        run: ./scripts/init_tdengine_schema.sh
+
       - name: Run Gateway E2E
         run: ./scripts/test_ci.sh --test-gateway-e2e
 
@@ -314,6 +317,9 @@ jobs:
       - name: Set Binary Executable
         run: chmod +x target/release/zero_x_infinity
 
+      - name: Initialize TDengine
+        run: ./scripts/init_tdengine_schema.sh
+
       - name: Run K-Line E2E
         run: ./scripts/test_ci.sh --test-kline
 
@@ -367,6 +373,9 @@ jobs:
       
       - name: Set Binary Executable
         run: chmod +x target/release/zero_x_infinity
+
+      - name: Initialize TDengine
+        run: ./scripts/init_tdengine_schema.sh
 
       - name: Run Depth API
         run: ./scripts/test_ci.sh --test-depth
