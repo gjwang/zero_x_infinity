@@ -103,14 +103,25 @@ else
     ENV_FLAG=""
 fi
 
-cargo run --release --quiet -- --gateway $ENV_FLAG --port $GATEWAY_PORT --input "$TEST_DIR" > "$TEST_DIR/gateway.log" 2>&1 &
-GATEWAY_PID=$!
-
+# Start Gateway in background using pre-built binary if possible
 log_info "Gateway PID: $GATEWAY_PID"
 log_info "Waiting for Gateway to start..."
 
-# Wait for Gateway to be ready (with retry)
-MAX_RETRIES=10
+# Use pre-built binary if it exists, otherwise use cargo run
+BINARY_EXEC="./target/release/zero_x_infinity"
+if [ ! -f "$BINARY_EXEC" ]; then
+    log_warn "Pre-built binary not found, using cargo run (will be slower)"
+    BINARY_CMD="cargo run --release --quiet --"
+else
+    BINARY_CMD="$BINARY_EXEC"
+fi
+
+# Run Gateway
+$BINARY_CMD --gateway $ENV_FLAG --port $GATEWAY_PORT --input "$TEST_DIR" > "$TEST_DIR/gateway.log" 2>&1 &
+GATEWAY_PID=$!
+
+# Wait for Gateway to be ready (with retry) - increased for CI stability
+MAX_RETRIES=60
 RETRY_COUNT=0
 GATEWAY_READY=false
 
@@ -120,6 +131,7 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     # Check if process is still running
     if ! kill -0 $GATEWAY_PID 2>/dev/null; then
         log_error "Gateway process died"
+        [ -f "$TEST_DIR/gateway.log" ] && tail -n 20 "$TEST_DIR/gateway.log"
         exit 1
     fi
     
@@ -130,7 +142,7 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     fi
     
     RETRY_COUNT=$((RETRY_COUNT + 1))
-    log_info "Retry $RETRY_COUNT/$MAX_RETRIES..."
+    [ $((RETRY_COUNT % 5)) -eq 0 ] && log_info "Waiting for Gateway... ($RETRY_COUNT/$MAX_RETRIES)"
 done
 
 if [ "$GATEWAY_READY" = false ]; then
