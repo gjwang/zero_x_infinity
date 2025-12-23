@@ -203,20 +203,55 @@ fn map_error(e: &TransferError) -> (StatusCode, i32, String) {
 // Handler (for integration with existing Gateway)
 // ============================================================================
 
+/// Asset validation info for security checks
+#[derive(Debug, Clone)]
+pub struct AssetValidationInfo {
+    pub asset_id: u32,
+    pub decimals: u32,
+    pub status: i16,
+    pub is_active: bool,
+    pub can_internal_transfer: bool,
+    /// Minimum transfer amount (scaled) - 0 means no limit
+    pub min_transfer_amount: u64,
+    /// Maximum transfer amount (scaled) - 0 means no limit
+    pub max_transfer_amount: u64,
+}
+
+impl AssetValidationInfo {
+    /// Create from Asset model (Phase 0x0B-a)
+    pub fn from_asset(asset: &crate::exchange_info::asset::models::Asset) -> Self {
+        Self {
+            asset_id: asset.asset_id as u32,
+            decimals: asset.decimals as u32,
+            status: asset.status,
+            is_active: asset.is_active(),
+            can_internal_transfer: asset.can_internal_transfer(),
+            // Default limits - can be extended via database in future
+            min_transfer_amount: 1,            // At least 1 satoshi
+            max_transfer_amount: u64::MAX / 2, // Leave room for arithmetic
+        }
+    }
+}
+
 /// Create transfer using FSM coordinator
 ///
 /// This is a standalone function that can be called from the existing Gateway handler.
 /// It provides the Defense-in-Depth API validation layer.
+///
+/// ## Security Checks (§1.5)
+/// - 1.5.2: Account type validation (from != to, supported types)
+/// - 1.5.3: Amount validation (>0, precision, min/max, overflow)
+/// - 1.5.4: Asset validation (exists, active, transfer allowed)
+/// - 1.5.7: Idempotency (cid check delegated to coordinator)
 pub async fn create_transfer_fsm(
     coordinator: &TransferCoordinator,
     user_id: u64,
     req: TransferApiRequest,
-    asset_id: u32,
-    asset_decimals: u32,
+    asset_info: AssetValidationInfo,
 ) -> Result<TransferApiResponse, (StatusCode, ApiResponse<()>)> {
     // === Defense-in-Depth Layer 1: API Validation ===
 
-    // 1. Parse source and target
+    // 1. Parse source and target (§1.5.2)
     let from = parse_account_type(&req.from).map_err(|e| {
         let (status, code, msg) = map_error(&e);
         (status, ApiResponse::error(code, msg))
@@ -227,7 +262,7 @@ pub async fn create_transfer_fsm(
         (status, ApiResponse::error(code, msg))
     })?;
 
-    // 2. Same account check
+    // 2. Same account check (§1.5.2)
     if from == to {
         return Err((
             StatusCode::BAD_REQUEST,
@@ -238,23 +273,80 @@ pub async fn create_transfer_fsm(
         ));
     }
 
-    // 3. Parse amount
-    let amount = parse_amount(&req.amount, asset_decimals).map_err(|e| {
+    // 3. Asset validation (§1.5.4)
+    // 3a. Asset status check
+    if !asset_info.is_active {
+        return Err((
+            StatusCode::UNPROCESSABLE_ENTITY,
+            ApiResponse::error(error_codes::INVALID_PARAMETER, "Asset is suspended"),
+        ));
+    }
+
+    // 3b. Internal transfer permission check
+    if !asset_info.can_internal_transfer {
+        return Err((
+            StatusCode::UNPROCESSABLE_ENTITY,
+            ApiResponse::error(
+                error_codes::INVALID_PARAMETER,
+                "Internal transfer not allowed for this asset",
+            ),
+        ));
+    }
+
+    // 4. Parse amount (§1.5.3)
+    let amount = parse_amount(&req.amount, asset_info.decimals).map_err(|e| {
         let (status, code, msg) = map_error(&e);
         (status, ApiResponse::error(code, msg))
     })?;
 
-    // 4. Create core request
-    let mut core_req = CoreTransferRequest::new(from, to, user_id, asset_id, amount);
+    // 5. Amount bounds check (§1.5.3)
+    // 5a. Minimum amount check
+    if amount < asset_info.min_transfer_amount {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            ApiResponse::error(
+                error_codes::INVALID_AMOUNT,
+                format!(
+                    "Amount too small (minimum: {})",
+                    asset_info.min_transfer_amount
+                ),
+            ),
+        ));
+    }
+
+    // 5b. Maximum amount check
+    if amount > asset_info.max_transfer_amount {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            ApiResponse::error(
+                error_codes::INVALID_AMOUNT,
+                format!(
+                    "Amount too large (maximum: {})",
+                    asset_info.max_transfer_amount
+                ),
+            ),
+        ));
+    }
+
+    // 5c. Overflow safety check (ensure we have room for arithmetic)
+    if amount > u64::MAX / 2 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            ApiResponse::error(error_codes::INVALID_AMOUNT, "Amount would cause overflow"),
+        ));
+    }
+
+    // 6. Create core request
+    let mut core_req = CoreTransferRequest::new(from, to, user_id, asset_info.asset_id, amount);
     core_req.cid = req.cid.clone();
 
-    // 5. Submit to coordinator
+    // 7. Submit to coordinator (§1.5.7 idempotency check happens here)
     let req_id = coordinator.create(core_req).await.map_err(|e| {
         let (status, code, msg) = map_error(&e);
         (status, ApiResponse::error(code, msg))
     })?;
 
-    // 6. Get initial state
+    // 8. Get initial state
     let state = coordinator
         .get_state(req_id)
         .await
@@ -264,7 +356,7 @@ pub async fn create_transfer_fsm(
         })?
         .unwrap_or(TransferState::Init);
 
-    // 7. Build response
+    // 9. Build response
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
@@ -276,7 +368,7 @@ pub async fn create_transfer_fsm(
         from: req.from,
         to: req.to,
         asset: req.asset,
-        amount: format_amount(amount, asset_decimals),
+        amount: format_amount(amount, asset_info.decimals),
         timestamp: now,
         cid: req.cid,
     })

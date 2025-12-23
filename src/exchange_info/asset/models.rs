@@ -10,7 +10,10 @@ pub mod asset_flags {
     pub const CAN_WITHDRAW: i32 = 0x02;
     pub const CAN_TRADE: i32 = 0x04;
     pub const IS_STABLE_COIN: i32 = 0x08;
-    pub const DEFAULT: i32 = 0x07; // deposit + withdraw + trade
+    /// Allow internal transfers between accounts (Phase 0x0B-a)
+    pub const CAN_INTERNAL_TRANSFER: i32 = 0x10;
+    /// Default flags: deposit + withdraw + trade + internal_transfer
+    pub const DEFAULT: i32 = 0x17;
 }
 
 /// Asset definition (BTC, USDT, etc.)
@@ -33,6 +36,14 @@ impl Asset {
     }
     pub fn can_trade(&self) -> bool {
         self.asset_flags & asset_flags::CAN_TRADE != 0
+    }
+    /// Check if internal transfers are allowed for this asset (Phase 0x0B-a)
+    pub fn can_internal_transfer(&self) -> bool {
+        self.asset_flags & asset_flags::CAN_INTERNAL_TRANSFER != 0
+    }
+    /// Check if asset is active (status = 1)
+    pub fn is_active(&self) -> bool {
+        self.status == 1
     }
 }
 
