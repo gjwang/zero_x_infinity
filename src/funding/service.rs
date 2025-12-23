@@ -135,4 +135,71 @@ impl TransferService {
             timestamp: transfer_rec.created_at.timestamp_millis(),
         })
     }
+
+    /// Get all balances for a user (all account types)
+    /// Returns balances from PostgreSQL balances_tb
+    pub async fn get_all_balances(
+        pool: &sqlx::PgPool,
+        user_id: i64,
+    ) -> Result<Vec<BalanceInfo>, TransferError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT b.user_id, b.asset_id, b.account_type, b.available, b.frozen,
+                   a.asset as asset_name, a.decimals
+            FROM balances_tb b
+            JOIN assets_tb a ON b.asset_id = a.asset_id
+            WHERE b.user_id = $1 AND b.status = 1
+            ORDER BY b.asset_id, b.account_type
+            "#,
+        )
+        .bind(user_id)
+        .fetch_all(pool)
+        .await?;
+
+        let mut balances = Vec::new();
+        for row in rows {
+            let asset_id: i32 = row.get("asset_id");
+            let account_type: i32 = row.get("account_type");
+            let available: Decimal = row.get("available");
+            let frozen: Decimal = row.get("frozen");
+            let asset_name: String = row.get("asset_name");
+            let decimals: i16 = row.get("decimals");
+
+            let account_type_name = match account_type {
+                1 => "spot",
+                2 => "funding",
+                _ => "unknown",
+            };
+
+            balances.push(BalanceInfo {
+                asset_id: asset_id as u32,
+                asset: asset_name,
+                account_type: account_type_name.to_string(),
+                available: format_decimal(available, decimals as u32),
+                frozen: format_decimal(frozen, decimals as u32),
+            });
+        }
+
+        Ok(balances)
+    }
+}
+
+/// Balance info for API response
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct BalanceInfo {
+    pub asset_id: u32,
+    pub asset: String,
+    pub account_type: String,
+    pub available: String,
+    pub frozen: String,
+}
+
+/// Format decimal with proper precision
+fn format_decimal(d: Decimal, decimals: u32) -> String {
+    let scale = d.scale();
+    if scale < decimals {
+        format!("{:.prec$}", d, prec = decimals as usize)
+    } else {
+        d.to_string()
+    }
 }
