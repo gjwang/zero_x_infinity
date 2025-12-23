@@ -78,7 +78,7 @@ impl ServiceAdapter for FundingAdapter {
         // Lock and check balance with SELECT FOR UPDATE
         let balance_row = sqlx::query(
             r#"
-            SELECT available FROM balances_tb
+            SELECT available, status FROM balances_tb
             WHERE user_id = $1 AND asset_id = $2 AND account_type = $3
             FOR UPDATE
             "#,
@@ -89,10 +89,11 @@ impl ServiceAdapter for FundingAdapter {
         .fetch_optional(&mut *tx)
         .await;
 
-        let available = match balance_row {
+        let (available, account_status) = match balance_row {
             Ok(Some(row)) => {
                 let available: rust_decimal::Decimal = row.get("available");
-                available
+                let status: i16 = row.get("status");
+                (available, status)
             }
             Ok(None) => {
                 // Account doesn't exist
@@ -114,6 +115,36 @@ impl ServiceAdapter for FundingAdapter {
                 return OpResult::Pending;
             }
         };
+
+        // === Defense-in-Depth Layer 3: Adapter Account Status Check (§1.5.5) ===
+        // Status codes: 1=ACTIVE, 2=FROZEN, 3=DISABLED
+        if account_status == 2 {
+            let _ = tx.rollback().await;
+            let _ = record_operation(
+                &self.pool,
+                req_id,
+                OpType::Withdraw,
+                ServiceId::Funding,
+                "FAILED",
+                Some("Account is frozen"),
+            )
+            .await;
+            return OpResult::Failed("Account is frozen".to_string());
+        }
+
+        if account_status == 3 {
+            let _ = tx.rollback().await;
+            let _ = record_operation(
+                &self.pool,
+                req_id,
+                OpType::Withdraw,
+                ServiceId::Funding,
+                "FAILED",
+                Some("Account is disabled"),
+            )
+            .await;
+            return OpResult::Failed("Account is disabled".to_string());
+        }
 
         // Check sufficient balance
         let amount_decimal = rust_decimal::Decimal::from(amount);
