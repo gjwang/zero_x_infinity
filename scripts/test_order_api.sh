@@ -54,10 +54,15 @@ echo "║          Gateway E2E Test - Full Integration              ║"
 echo "╚════════════════════════════════════════════════════════════╝"
 echo ""
 
-# Step 1: Build
-log_step "Building project..."
-cargo build --release --quiet
-log_success "Build complete"
+# Step 1: Build (Skip if pre-built binary exists)
+log_step "Preparing Gateway binary..."
+if [ -f "./target/release/zero_x_infinity" ]; then
+    log_success "Using pre-built binary found in target/release/"
+else
+    log_info "No pre-built binary found, building from source..."
+    cargo build --release --quiet
+    log_success "Build complete"
+fi
 echo ""
 
 # Step 2: Prepare test data
