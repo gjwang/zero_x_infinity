@@ -4421,6 +4421,7 @@ name = "zero_x_infinity"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "axum",
  "chrono",
  "crossbeam-queue",
