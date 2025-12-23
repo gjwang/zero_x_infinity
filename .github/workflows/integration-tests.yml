@@ -70,7 +70,7 @@ jobs:
           POSTGRES_USER: trading
           POSTGRES_PASSWORD: trading123
         options: >-
-          --health-cmd "pg_isready -U trading"
+          --health-cmd "pg_isready -U trading -d exchange_info_db"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -178,7 +178,7 @@ jobs:
           POSTGRES_USER: trading
           POSTGRES_PASSWORD: trading123
         options: >-
-          --health-cmd "pg_isready -U trading"
+          --health-cmd "pg_isready -U trading -d exchange_info_db"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -230,7 +230,7 @@ jobs:
           POSTGRES_USER: trading
           POSTGRES_PASSWORD: trading123
         options: >-
-          --health-cmd "pg_isready -U trading"
+          --health-cmd "pg_isready -U trading -d exchange_info_db"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -282,7 +282,7 @@ jobs:
           POSTGRES_USER: trading
           POSTGRES_PASSWORD: trading123
         options: >-
-          --health-cmd "pg_isready -U trading"
+          --health-cmd "pg_isready -U trading -d exchange_info_db"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -334,7 +334,7 @@ jobs:
           POSTGRES_USER: trading
           POSTGRES_PASSWORD: trading123
         options: >-
-          --health-cmd "pg_isready -U trading"
+          --health-cmd "pg_isready -U trading -d exchange_info_db"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5

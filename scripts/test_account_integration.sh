@@ -131,13 +131,17 @@ fi
 # Build and Start Gateway
 # ============================================================================
 
-test_start "Build Gateway"
-log_info "Running: cargo build --release"
-if cargo build --release 2>&1 | tail -5; then
-    log_success "Gateway built successfully"
+test_start "Prepare Gateway binary"
+if [ -f "./target/release/zero_x_infinity" ]; then
+    log_success "Using pre-built binary"
 else
-    log_error "Gateway build failed"
-    exit 1
+    log_info "No pre-built binary found, building from source..."
+    if cargo build --release 2>&1 | tail -5; then
+        log_success "Gateway built successfully"
+    else
+        log_error "Gateway build failed"
+        exit 1
+    fi
 fi
 
 test_start "Start Gateway in background"
