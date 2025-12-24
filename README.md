@@ -98,6 +98,7 @@ graph TD
 | 0x0A-b | [API Auth](./docs/src/0x0A-c-api-auth.md) | Ed25519 Authentication |
 | 0x0B | [Funding & Transfer](./docs/src/0x0B-funding.md) | Funding System Architecture |
 | 0x0B-a | [Internal Transfer](./docs/src/0x0B-a-transfer.md) | FSM-based 2PC Transfer |
+| 0x0C | [Trade Fee](./docs/src/0x0C-trade-fee.md) | Maker/Taker Fee System |
 
 ---
 
@@ -264,6 +265,7 @@ graph TD
 | 0x0A-b | [API Auth](./docs/src/0x0A-c-api-auth.md) | Ed25519 安全鉴权 |
 | 0x0B | [Funding & Transfer](./docs/src/0x0B-funding.md) | 资金体系架构 |
 | 0x0B-a | [Internal Transfer](./docs/src/0x0B-a-transfer.md) | FSM 内部转账 |
+| 0x0C | [Trade Fee](./docs/src/0x0C-trade-fee.md) | Maker/Taker 手续费系统 |
 
 ---
 
