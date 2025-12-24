@@ -37,7 +37,7 @@
     - [0x0B-a Internal Transfer | 内部转账架构](./0x0B-a-transfer.md)
         - [E2E Testing Guide | E2E 测试指南](./0x0B-a-transfer-testing.md)
         - [Build & Verification Guide | 编译与验证事项](./agent-build-verification-guide.md)
-- [0x0C Fee System | 经济模型: 手续费](./0x0C-fee-system.md)
+- [0x0C Trade Fee | 手续费系统](./0x0C-trade-fee.md)
 - [0x0D Snapshot & Recovery | 鲁棒性: 快照与恢复](./0x0D-snapshot-recovery.md)
 
 ---
