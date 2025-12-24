@@ -12,8 +12,15 @@
 # -----------------------------------------------------------------------------
 # PostgreSQL Configuration
 # -----------------------------------------------------------------------------
+# Default PG_PORT varies by environment
+if [ "$CI" = "true" ]; then
+    DEFAULT_PG_PORT="5432"
+else
+    DEFAULT_PG_PORT="5433"
+fi
+
 export PG_HOST="${PG_HOST:-localhost}"
-export PG_PORT="${PG_PORT:-5433}"  # Local: 5433, CI: override with PG_PORT=5432
+export PG_PORT="${PG_PORT:-$DEFAULT_PG_PORT}"
 export PG_USER="${PG_USER:-trading}"
 export PG_PASSWORD="${PG_PASSWORD:-trading123}"
 export PG_DB="${PG_DB:-exchange_info_db}"

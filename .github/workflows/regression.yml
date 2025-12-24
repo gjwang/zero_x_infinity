@@ -14,11 +14,6 @@ env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
   CI: true
-  PG_HOST: localhost
-  PG_PORT: 5432
-  PG_USER: trading
-  PG_PASSWORD: trading123
-  PG_DB: exchange_info_db
 
 jobs:
   check-skip:
