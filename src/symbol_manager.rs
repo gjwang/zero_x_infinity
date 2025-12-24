@@ -11,6 +11,10 @@ pub struct SymbolInfo {
     /// Base asset decimals (e.g., 8 for BTC = satoshi)
     /// Stored here for fast access without additional lookup
     pub base_decimals: u32,
+    /// Base maker fee rate (10^6 precision: 1000 = 0.10%)
+    pub base_maker_fee: u64,
+    /// Base taker fee rate (10^6 precision: 2000 = 0.20%)
+    pub base_taker_fee: u64,
 }
 
 impl SymbolInfo {
@@ -73,6 +77,30 @@ impl SymbolManager {
         price_decimal: u32,
         price_display_decimal: u32,
     ) -> Result<(), &'static str> {
+        self.insert_symbol_with_fees(
+            symbol,
+            id,
+            base_asset_id,
+            quote_asset_id,
+            price_decimal,
+            price_display_decimal,
+            1000, // Default maker fee: 0.10%
+            2000, // Default taker fee: 0.20%
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn insert_symbol_with_fees(
+        &mut self,
+        symbol: &str,
+        id: u32,
+        base_asset_id: u32,
+        quote_asset_id: u32,
+        price_decimal: u32,
+        price_display_decimal: u32,
+        base_maker_fee: u64,
+        base_taker_fee: u64,
+    ) -> Result<(), &'static str> {
         // Lookup base_decimals from assets - return error if not found
         let base_decimals = self
             .assets
@@ -92,6 +120,8 @@ impl SymbolManager {
                 price_decimal,
                 price_display_decimal,
                 base_decimals,
+                base_maker_fee,
+                base_taker_fee,
             },
         );
         Ok(())

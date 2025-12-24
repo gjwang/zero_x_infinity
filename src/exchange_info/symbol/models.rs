@@ -25,6 +25,12 @@ pub struct Symbol {
     pub min_qty: i64,
     pub status: i16,
     pub symbol_flags: i32,
+    /// Base maker fee rate (10^6 precision: 1000 = 0.10%)
+    #[sqlx(default)]
+    pub base_maker_fee: i32,
+    /// Base taker fee rate (10^6 precision: 2000 = 0.20%)
+    #[sqlx(default)]
+    pub base_taker_fee: i32,
 }
 
 impl Symbol {
@@ -52,6 +58,8 @@ mod tests {
             min_qty: 1000,
             status: 1,
             symbol_flags: symbol_flags::DEFAULT,
+            base_maker_fee: 1000,
+            base_taker_fee: 2000,
         };
 
         assert!(symbol.is_tradable());
@@ -69,7 +77,9 @@ mod tests {
             qty_decimals: 4,
             min_qty: 100,
             status: 1,
-            symbol_flags: symbol_flags::IS_TRADABLE, // Tradable but not visible
+            symbol_flags: symbol_flags::IS_TRADABLE,
+            base_maker_fee: 1000,
+            base_taker_fee: 2000, // Tradable but not visible
         };
 
         assert!(symbol.is_tradable());
@@ -87,7 +97,9 @@ mod tests {
             qty_decimals: 6,
             min_qty: 1000,
             status: 0,
-            symbol_flags: 0, // No flags
+            symbol_flags: 0,
+            base_maker_fee: 1000,
+            base_taker_fee: 2000, // No flags
         };
 
         assert!(!symbol.is_tradable());
@@ -105,7 +117,9 @@ mod tests {
             qty_decimals: 6,
             min_qty: 1000,
             status: 1,
-            symbol_flags: symbol_flags::IS_VISIBLE, // Visible but not tradable
+            symbol_flags: symbol_flags::IS_VISIBLE,
+            base_maker_fee: 1000,
+            base_taker_fee: 2000, // Visible but not tradable
         };
 
         assert!(!symbol.is_tradable());
@@ -126,6 +140,8 @@ mod tests {
             symbol_flags: symbol_flags::IS_TRADABLE
                 | symbol_flags::IS_VISIBLE
                 | symbol_flags::ALLOW_MARKET,
+            base_maker_fee: 1000,
+            base_taker_fee: 2000,
         };
 
         assert!(symbol.is_tradable());
@@ -150,6 +166,8 @@ mod tests {
             symbol_flags: symbol_flags::IS_TRADABLE
                 | symbol_flags::IS_VISIBLE
                 | symbol_flags::ALLOW_LIMIT,
+            base_maker_fee: 1000,
+            base_taker_fee: 2000,
         };
 
         assert!(symbol.is_tradable());

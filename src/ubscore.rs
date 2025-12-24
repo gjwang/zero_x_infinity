@@ -314,6 +314,38 @@ impl UBSCore {
         let quote_amount = event.quote_amount();
         let mut results = Vec::with_capacity(4);
 
+        // Get fee rates from symbol (fallback to 0 if not found)
+        let (maker_fee_rate, taker_fee_rate) = self
+            .manager
+            .get_symbol_info_by_id(event.symbol_id)
+            .map(|s| (s.base_maker_fee, s.base_taker_fee))
+            .unwrap_or((0, 0));
+
+        // Determine who is maker/taker
+        // In TradeEvent: taker_order_id tells us which order is the taker
+        // Buyer is taker if taker_order_id == buyer_order_id
+        let buyer_is_taker = event.taker_order_id == trade.buyer_order_id;
+        let buyer_fee_rate = if buyer_is_taker {
+            taker_fee_rate
+        } else {
+            maker_fee_rate
+        };
+        let seller_fee_rate = if buyer_is_taker {
+            maker_fee_rate
+        } else {
+            taker_fee_rate
+        };
+
+        // Calculate fees (fee is deducted from RECEIVED asset)
+        // Buyer receives base → fee in base
+        // Seller receives quote → fee in quote
+        let buyer_fee = crate::fee::calculate_fee(trade.qty, buyer_fee_rate);
+        let seller_fee = crate::fee::calculate_fee(quote_amount, seller_fee_rate);
+
+        // Net amounts after fee
+        let buyer_net_base = trade.qty.saturating_sub(buyer_fee);
+        let seller_net_quote = quote_amount.saturating_sub(seller_fee);
+
         // 1. Buyer settlement
         {
             let buyer = self
@@ -336,15 +368,16 @@ impl UBSCore {
                 event.taker_ingested_at_ns,
             ));
 
+            // Deposit NET amount (after fee deduction)
             buyer
                 .get_balance_mut(event.base_asset_id)?
-                .deposit(trade.qty)?;
+                .deposit(buyer_net_base)?;
             let b_base = buyer.get_balance(event.base_asset_id).unwrap();
             results.push(BalanceEvent::settle_receive(
                 trade.buyer_user_id,
                 event.base_asset_id,
                 trade.trade_id,
-                trade.qty,
+                buyer_net_base, // Net amount after fee
                 b_base.settle_version(),
                 b_base.avail(),
                 b_base.frozen(),
@@ -374,21 +407,25 @@ impl UBSCore {
                 event.taker_ingested_at_ns,
             ));
 
+            // Deposit NET amount (after fee deduction)
             seller
                 .get_balance_mut(event.quote_asset_id)?
-                .deposit(quote_amount)?;
+                .deposit(seller_net_quote)?;
             let s_quote = seller.get_balance(event.quote_asset_id).unwrap();
             results.push(BalanceEvent::settle_receive(
                 trade.seller_user_id,
                 event.quote_asset_id,
                 trade.trade_id,
-                quote_amount,
+                seller_net_quote, // Net amount after fee
                 s_quote.settle_version(),
                 s_quote.avail(),
                 s_quote.frozen(),
                 event.taker_ingested_at_ns,
             ));
         }
+
+        // TODO: Add fee income to REVENUE account (0)
+        // This will be implemented when BalanceEvent::FeeReceived is added
 
         Ok(results)
     }

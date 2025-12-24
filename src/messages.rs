@@ -106,6 +106,8 @@ pub struct TradeEvent {
     pub qty_unit: u64,
     /// Timestamp when taker order was ingested
     pub taker_ingested_at_ns: u64,
+    /// Symbol ID for fee lookup
+    pub symbol_id: u32,
 }
 
 impl TradeEvent {
@@ -123,6 +125,7 @@ impl TradeEvent {
         quote_asset_id: AssetId,
         qty_unit: u64,
         taker_ingested_at_ns: u64,
+        symbol_id: u32,
     ) -> Self {
         Self {
             trade,
@@ -137,6 +140,7 @@ impl TradeEvent {
             quote_asset_id,
             qty_unit,
             taker_ingested_at_ns,
+            symbol_id,
         }
     }
 

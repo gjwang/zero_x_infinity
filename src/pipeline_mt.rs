@@ -80,6 +80,8 @@ pub struct MarketContext {
     pub qty_unit: u64,
     pub base_id: u32,
     pub quote_id: u32,
+    /// Symbol ID for fee lookup
+    pub symbol_id: u32,
 }
 
 // ============================================================
@@ -122,6 +124,7 @@ pub fn run_pipeline_multi_thread(
         qty_unit: symbol_info.qty_unit(),
         base_id: symbol_info.base_asset_id,
         quote_id: symbol_info.quote_asset_id,
+        symbol_id: active_symbol_id,
     };
 
     // Create shared state
