@@ -138,7 +138,7 @@ Final Rate = 2000 × 50 / 100 = 1000 (0.10%)
 > **Why 10^6 Precision?**
 > - 10^4 (bps) only represents down to 0.01%, not fine enough
 > - 10^6 can represent 0.0001%, sufficient for VIP discounts and rebates
-> - No overflow with u64 multiplication (u64 * 10^6 / 10^6)
+> - Safe with u128 intermediate: `(amount as u128 * rate as u128 / 10^6) as u64`
 
 ### 2.3 Fee Collection Point
 
