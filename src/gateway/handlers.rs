@@ -345,7 +345,7 @@ async fn create_transfer_fsm_handler(
         Ok(fsm_resp) => {
             // Convert FSM response to legacy response
             let legacy_resp = crate::funding::transfer::TransferResponse {
-                transfer_id: fsm_resp.req_id,
+                transfer_id: fsm_resp.transfer_id,
                 status: fsm_resp.status,
                 from: fsm_resp.from,
                 to: fsm_resp.to,

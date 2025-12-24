@@ -219,10 +219,8 @@ impl TransferRequest {
 /// Transfer record stored in PostgreSQL
 #[derive(Debug, Clone)]
 pub struct TransferRecord {
-    /// Database primary key
-    pub transfer_id: Option<i64>,
-    /// Server-generated request ID (Snowflake)
-    pub req_id: InternalTransferId,
+    /// Unique transfer ID (ULID, also the DB primary key)
+    pub transfer_id: InternalTransferId,
     /// Client idempotency key
     pub cid: Option<String>,
     /// Source service
@@ -252,7 +250,7 @@ pub struct TransferRecord {
 impl TransferRecord {
     /// Create a new transfer record in INIT state
     pub fn new(
-        req_id: InternalTransferId,
+        transfer_id: InternalTransferId,
         source: ServiceId,
         target: ServiceId,
         user_id: u64,
@@ -265,8 +263,7 @@ impl TransferRecord {
         let now = chrono::Utc::now().timestamp_millis();
 
         Self {
-            transfer_id: None,
-            req_id,
+            transfer_id,
             cid,
             source,
             target,
@@ -288,7 +285,7 @@ impl fmt::Display for TransferRecord {
         write!(
             f,
             "Transfer[{}] {} -> {} user={} asset={} amount={} state={}",
-            self.req_id,
+            self.transfer_id,
             self.source,
             self.target,
             self.user_id,
@@ -366,9 +363,9 @@ mod tests {
 
     #[test]
     fn test_transfer_record_new() {
-        let req_id = InternalTransferId::new();
+        let transfer_id = InternalTransferId::new();
         let record = TransferRecord::new(
-            req_id,
+            transfer_id,
             ServiceId::Funding,
             ServiceId::Trading,
             1001,
@@ -377,7 +374,7 @@ mod tests {
             None,
         );
 
-        assert_eq!(record.req_id, req_id);
+        assert_eq!(record.transfer_id, transfer_id);
         assert_eq!(record.source, ServiceId::Funding);
         assert_eq!(record.target, ServiceId::Trading);
         assert_eq!(record.state, TransferState::Init);

@@ -21,7 +21,7 @@
 //!
 //! 1. **Persist-Before-Call**: Always update DB state before calling external services
 //! 2. **Explicit Fail Rule**: Only rollback on `EXPLICIT_FAIL`, never on timeout/unknown
-//! 3. **Idempotency**: All adapter operations must be idempotent via `req_id`
+//! 3. **Idempotency**: All adapter operations must be idempotent via `transfer_id`
 //! 4. **Trading Cannot Rollback**: Once Trading withdraws, must retry target forever
 
 pub mod adapters;

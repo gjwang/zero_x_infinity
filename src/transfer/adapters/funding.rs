@@ -36,13 +36,13 @@ impl ServiceAdapter for FundingAdapter {
 
     async fn withdraw(
         &self,
-        req_id: InternalTransferId,
+        transfer_id: InternalTransferId,
         user_id: u64,
         asset_id: u32,
         amount: u64,
     ) -> OpResult {
         debug!(
-            req_id = %req_id,
+            transfer_id = %transfer_id,
             user_id = user_id,
             asset_id = asset_id,
             amount = amount,
@@ -50,9 +50,16 @@ impl ServiceAdapter for FundingAdapter {
         );
 
         // Check idempotency - was this already processed?
-        match check_operation(&self.pool, req_id, OpType::Withdraw, ServiceId::Funding).await {
+        match check_operation(
+            &self.pool,
+            transfer_id,
+            OpType::Withdraw,
+            ServiceId::Funding,
+        )
+        .await
+        {
             Ok(Some(result)) => {
-                debug!(req_id = %req_id, result = %result, "Funding withdraw already processed");
+                debug!(transfer_id = %transfer_id, result = %result, "Funding withdraw already processed");
                 return if result == "SUCCESS" {
                     OpResult::Success
                 } else {
@@ -60,7 +67,7 @@ impl ServiceAdapter for FundingAdapter {
                 };
             }
             Err(e) => {
-                warn!(req_id = %req_id, error = %e, "Failed to check idempotency");
+                warn!(transfer_id = %transfer_id, error = %e, "Failed to check idempotency");
                 return OpResult::Pending;
             }
             Ok(None) => {}
@@ -70,7 +77,7 @@ impl ServiceAdapter for FundingAdapter {
         let mut tx = match self.pool.begin().await {
             Ok(tx) => tx,
             Err(e) => {
-                error!(req_id = %req_id, error = %e, "Failed to start transaction");
+                error!(transfer_id = %transfer_id, error = %e, "Failed to start transaction");
                 return OpResult::Pending;
             }
         };
@@ -100,7 +107,7 @@ impl ServiceAdapter for FundingAdapter {
                 let _ = tx.rollback().await;
                 let _ = record_operation(
                     &self.pool,
-                    req_id,
+                    transfer_id,
                     OpType::Withdraw,
                     ServiceId::Funding,
                     "FAILED",
@@ -110,7 +117,7 @@ impl ServiceAdapter for FundingAdapter {
                 return OpResult::Failed("Account not found".to_string());
             }
             Err(e) => {
-                error!(req_id = %req_id, error = %e, "Failed to query balance");
+                error!(transfer_id = %transfer_id, error = %e, "Failed to query balance");
                 let _ = tx.rollback().await;
                 return OpResult::Pending;
             }
@@ -122,7 +129,7 @@ impl ServiceAdapter for FundingAdapter {
             let _ = tx.rollback().await;
             let _ = record_operation(
                 &self.pool,
-                req_id,
+                transfer_id,
                 OpType::Withdraw,
                 ServiceId::Funding,
                 "FAILED",
@@ -136,7 +143,7 @@ impl ServiceAdapter for FundingAdapter {
             let _ = tx.rollback().await;
             let _ = record_operation(
                 &self.pool,
-                req_id,
+                transfer_id,
                 OpType::Withdraw,
                 ServiceId::Funding,
                 "FAILED",
@@ -152,7 +159,7 @@ impl ServiceAdapter for FundingAdapter {
             let _ = tx.rollback().await;
             let _ = record_operation(
                 &self.pool,
-                req_id,
+                transfer_id,
                 OpType::Withdraw,
                 ServiceId::Funding,
                 "FAILED",
@@ -178,21 +185,21 @@ impl ServiceAdapter for FundingAdapter {
         .await;
 
         if let Err(e) = update_result {
-            error!(req_id = %req_id, error = %e, "Failed to update balance");
+            error!(transfer_id = %transfer_id, error = %e, "Failed to update balance");
             let _ = tx.rollback().await;
             return OpResult::Pending;
         }
 
         // Commit transaction
         if let Err(e) = tx.commit().await {
-            error!(req_id = %req_id, error = %e, "Failed to commit transaction");
+            error!(transfer_id = %transfer_id, error = %e, "Failed to commit transaction");
             return OpResult::Pending;
         }
 
         // Record success for idempotency
         let _ = record_operation(
             &self.pool,
-            req_id,
+            transfer_id,
             OpType::Withdraw,
             ServiceId::Funding,
             "SUCCESS",
@@ -200,19 +207,19 @@ impl ServiceAdapter for FundingAdapter {
         )
         .await;
 
-        debug!(req_id = %req_id, "Funding withdraw successful");
+        debug!(transfer_id = %transfer_id, "Funding withdraw successful");
         OpResult::Success
     }
 
     async fn deposit(
         &self,
-        req_id: InternalTransferId,
+        transfer_id: InternalTransferId,
         user_id: u64,
         asset_id: u32,
         amount: u64,
     ) -> OpResult {
         debug!(
-            req_id = %req_id,
+            transfer_id = %transfer_id,
             user_id = user_id,
             asset_id = asset_id,
             amount = amount,
@@ -220,9 +227,9 @@ impl ServiceAdapter for FundingAdapter {
         );
 
         // Check idempotency
-        match check_operation(&self.pool, req_id, OpType::Deposit, ServiceId::Funding).await {
+        match check_operation(&self.pool, transfer_id, OpType::Deposit, ServiceId::Funding).await {
             Ok(Some(result)) => {
-                debug!(req_id = %req_id, result = %result, "Funding deposit already processed");
+                debug!(transfer_id = %transfer_id, result = %result, "Funding deposit already processed");
                 return if result == "SUCCESS" {
                     OpResult::Success
                 } else {
@@ -230,7 +237,7 @@ impl ServiceAdapter for FundingAdapter {
                 };
             }
             Err(e) => {
-                warn!(req_id = %req_id, error = %e, "Failed to check idempotency");
+                warn!(transfer_id = %transfer_id, error = %e, "Failed to check idempotency");
                 return OpResult::Pending;
             }
             Ok(None) => {}
@@ -258,34 +265,41 @@ impl ServiceAdapter for FundingAdapter {
             Ok(_) => {
                 let _ = record_operation(
                     &self.pool,
-                    req_id,
+                    transfer_id,
                     OpType::Deposit,
                     ServiceId::Funding,
                     "SUCCESS",
                     None,
                 )
                 .await;
-                debug!(req_id = %req_id, "Funding deposit successful");
+                debug!(transfer_id = %transfer_id, "Funding deposit successful");
                 OpResult::Success
             }
             Err(e) => {
-                error!(req_id = %req_id, error = %e, "Failed to deposit");
+                error!(transfer_id = %transfer_id, error = %e, "Failed to deposit");
                 OpResult::Pending
             }
         }
     }
 
-    async fn rollback(&self, req_id: InternalTransferId) -> OpResult {
-        debug!(req_id = %req_id, "Funding rollback");
+    async fn rollback(&self, transfer_id: InternalTransferId) -> OpResult {
+        debug!(transfer_id = %transfer_id, "Funding rollback");
 
         // Check idempotency
-        match check_operation(&self.pool, req_id, OpType::Rollback, ServiceId::Funding).await {
+        match check_operation(
+            &self.pool,
+            transfer_id,
+            OpType::Rollback,
+            ServiceId::Funding,
+        )
+        .await
+        {
             Ok(Some(_)) => {
-                debug!(req_id = %req_id, "Funding rollback already processed");
+                debug!(transfer_id = %transfer_id, "Funding rollback already processed");
                 return OpResult::Success;
             }
             Err(e) => {
-                warn!(req_id = %req_id, error = %e, "Failed to check idempotency");
+                warn!(transfer_id = %transfer_id, error = %e, "Failed to check idempotency");
                 return OpResult::Pending;
             }
             Ok(None) => {}
@@ -296,10 +310,10 @@ impl ServiceAdapter for FundingAdapter {
         // For now, we'll query the fsm_transfers_tb
         let transfer_row = sqlx::query(
             r#"
-            SELECT user_id, asset_id, amount FROM fsm_transfers_tb WHERE req_id = $1
+            SELECT user_id, asset_id, amount FROM fsm_transfers_tb WHERE transfer_id = $1
             "#,
         )
-        .bind(req_id.to_string())
+        .bind(transfer_id.to_string())
         .fetch_optional(&self.pool)
         .await;
 
@@ -311,11 +325,11 @@ impl ServiceAdapter for FundingAdapter {
                 (user_id, asset_id, amount)
             }
             Ok(None) => {
-                error!(req_id = %req_id, "Transfer not found for rollback");
+                error!(transfer_id = %transfer_id, "Transfer not found for rollback");
                 return OpResult::Failed("Transfer not found".to_string());
             }
             Err(e) => {
-                error!(req_id = %req_id, error = %e, "Failed to query transfer");
+                error!(transfer_id = %transfer_id, error = %e, "Failed to query transfer");
                 return OpResult::Pending;
             }
         };
@@ -339,31 +353,31 @@ impl ServiceAdapter for FundingAdapter {
             Ok(_) => {
                 let _ = record_operation(
                     &self.pool,
-                    req_id,
+                    transfer_id,
                     OpType::Rollback,
                     ServiceId::Funding,
                     "SUCCESS",
                     None,
                 )
                 .await;
-                debug!(req_id = %req_id, "Funding rollback successful");
+                debug!(transfer_id = %transfer_id, "Funding rollback successful");
                 OpResult::Success
             }
             Err(e) => {
-                error!(req_id = %req_id, error = %e, "Failed to rollback");
+                error!(transfer_id = %transfer_id, error = %e, "Failed to rollback");
                 OpResult::Pending
             }
         }
     }
 
-    async fn commit(&self, req_id: InternalTransferId) -> OpResult {
-        debug!(req_id = %req_id, "Funding commit");
+    async fn commit(&self, transfer_id: InternalTransferId) -> OpResult {
+        debug!(transfer_id = %transfer_id, "Funding commit");
 
         // For Funding, commit is a no-op (we don't use locks)
         // Just record for audit trail
         let _ = record_operation(
             &self.pool,
-            req_id,
+            transfer_id,
             OpType::Commit,
             ServiceId::Funding,
             "SUCCESS",

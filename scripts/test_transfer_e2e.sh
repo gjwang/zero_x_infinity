@@ -101,8 +101,8 @@ INSERT INTO balances_tb (user_id, asset_id, account_type, available, frozen, sta
 VALUES (1001, 2, 2, 1000000000, 0, 1);
 
 -- Clear old transfer records for clean test
-DELETE FROM transfer_operations_tb WHERE req_id IN (
-    SELECT req_id FROM fsm_transfers_tb WHERE user_id = 1001
+DELETE FROM transfer_operations_tb WHERE transfer_id IN (
+    SELECT transfer_id FROM fsm_transfers_tb WHERE user_id = 1001
 );
 DELETE FROM fsm_transfers_tb WHERE user_id = 1001;
 EOF
