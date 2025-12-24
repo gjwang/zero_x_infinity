@@ -531,11 +531,13 @@ pub struct BalanceEvent {
     pub frozen_after: u64,
     /// Timestamp when the originating order/action was ingested
     pub ingested_at_ns: u64,
+    /// Fee amount deducted (only for Settle events, 0 otherwise)
+    pub fee_amount: u64,
 }
 
 #[allow(clippy::too_many_arguments)]
 impl BalanceEvent {
-    /// Create a new BalanceEvent
+    /// Create a new BalanceEvent (fee_amount defaults to 0)
     pub fn new(
         user_id: UserId,
         asset_id: AssetId,
@@ -559,6 +561,7 @@ impl BalanceEvent {
             avail_after,
             frozen_after,
             ingested_at_ns,
+            fee_amount: 0, // Default: no fee (only settle_receive sets this)
         }
     }
 
@@ -638,17 +641,19 @@ impl BalanceEvent {
     }
 
     /// Create a Settle event (trade settlement - receive)
+    /// amount is NET (after fee deduction), fee_amount is the fee deducted
     pub fn settle_receive(
         user_id: UserId,
         asset_id: AssetId,
         trade_id: u64,
-        amount: u64,
+        amount: u64,     // Net amount received (after fee)
+        fee_amount: u64, // Fee deducted from gross
         settle_version: u64,
         avail_after: u64,
         frozen_after: u64,
         ingested_at_ns: u64,
     ) -> Self {
-        Self::new(
+        let mut event = Self::new(
             user_id,
             asset_id,
             BalanceEventType::Settle,
@@ -659,7 +664,9 @@ impl BalanceEvent {
             avail_after,
             frozen_after,
             ingested_at_ns,
-        )
+        );
+        event.fee_amount = fee_amount;
+        event
     }
 
     /// Create a SettleRestore event (refund unused frozen from settlement)

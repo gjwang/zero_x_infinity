@@ -225,7 +225,8 @@ CREATE STABLE IF NOT EXISTS balance_events (
     delta       BIGINT,             -- Change amount (positive=credit, negative=debit)
     avail_after BIGINT UNSIGNED,    -- Balance after change
     frozen_after BIGINT UNSIGNED,   -- Frozen after change
-    from_user   BIGINT UNSIGNED     -- FeeReceived: source user (0 if N/A)
+    from_user   BIGINT UNSIGNED,    -- FeeReceived: source user (0 if N/A)
+    fee_amount  BIGINT UNSIGNED     -- Fee deducted (Settle events only, 0 otherwise)
 ) TAGS (
     user_id       BIGINT UNSIGNED,  -- User identifier (0=REVENUE)
     account_type  TINYINT UNSIGNED  -- 1=Spot, 2=Funding, 3=Futures...

@@ -406,6 +406,7 @@ impl UBSCore {
                 event.base_asset_id,
                 trade.trade_id,
                 buyer_net_base, // Net amount after fee
+                buyer_fee,      // Fee deducted
                 b_base.settle_version(),
                 b_base.avail(),
                 b_base.frozen(),
@@ -445,6 +446,7 @@ impl UBSCore {
                 event.quote_asset_id,
                 trade.trade_id,
                 seller_net_quote, // Net amount after fee
+                seller_fee,       // Fee deducted
                 s_quote.settle_version(),
                 s_quote.avail(),
                 s_quote.frozen(),
