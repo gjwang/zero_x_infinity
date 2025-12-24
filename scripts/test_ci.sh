@@ -394,7 +394,6 @@ main() {
     fi
     
     # ========== Phase 2: Pipeline Correctness ==========
-    # Group with Unit tests for now, or require RUN_ALL
     if [ "$RUN_UNIT" = "true" ]; then
         echo ""
         echo "═══════════════════════════════════════════════════════════════"
@@ -403,7 +402,7 @@ main() {
         
         run_test_with_pattern "Pipeline_100K" "scripts/test_pipeline_compare.sh 100k" "ALL TESTS PASSED" 600
         
-        if [ "$QUICK_MODE" = true ]; then
+        if [ "$QUICK_MODE" = "true" ]; then
             log_test_start "Pipeline_1.3M"
             log_test_skip "(quick mode)"
         else
@@ -412,8 +411,7 @@ main() {
     fi
     
     # ========== Phase 3: Settlement Persistence ==========
-    # Only run if explicitly requested or part of full suite (not supported in CI yet)
-    if [ "$RUN_UNIT" = "true" ]; then
+    if [ "$RUN_GATEWAY" = "true" ]; then
         echo ""
         echo "═══════════════════════════════════════════════════════════════"
         echo "Phase 3: Settlement Persistence"
