@@ -1,0 +1,3 @@
+symbol_id,symbol,base_asset_id,quote_asset_id,price_decimal,price_display_decimal
+0,BTC_USDT,1,2,2,2
+1,ETH_USDT,3,2,4,4
