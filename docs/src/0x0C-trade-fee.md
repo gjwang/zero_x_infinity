@@ -204,23 +204,19 @@ Existing `Trade` struct already has:
 - `fee: u64` - Amount of fee charged (in received asset's scaled units)
 - `role: u8` - 0=Maker, 1=Taker
 
-### 3.4 Fee Ledger (New Table)
+### 3.4 Fee Record Storage
 
-```sql
-CREATE TABLE fee_ledger_tb (
-    id BIGSERIAL PRIMARY KEY,
-    trade_id BIGINT NOT NULL,
-    user_id BIGINT NOT NULL,
-    symbol_id INTEGER NOT NULL,
-    asset_id INTEGER NOT NULL,      -- Asset in which fee was collected
-    fee_amount DECIMAL(36,18) NOT NULL,
-    role SMALLINT NOT NULL,         -- 0=Maker, 1=Taker
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
+手续费信息**已包含在 Trade 记录中**，无需单独的 fee_ledger 表：
 
-CREATE INDEX idx_fee_ledger_user ON fee_ledger_tb(user_id);
-CREATE INDEX idx_fee_ledger_symbol ON fee_ledger_tb(symbol_id);
-```
+| 存储位置 | 内容 |
+|---------|------|
+| `trades_tb` (TDengine) | `fee`, `fee_asset`, `role` 字段 |
+| Trade Event | 实时推送给下游 (WS, Kafka) |
+
+> **Why 不用单独的 fee_ledger 表？**
+> - PostgreSQL 写入性能不满足交易频率
+> - TDengine 的 trades 表已经包含费用信息
+> - 对账时从 trades 表聚合即可
 
 ---
 
