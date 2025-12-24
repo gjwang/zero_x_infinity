@@ -222,36 +222,7 @@ CREATE INDEX idx_fee_ledger_user ON fee_ledger_tb(user_id);
 CREATE INDEX idx_fee_ledger_symbol ON fee_ledger_tb(symbol_id);
 ```
 
-### 3.5 Double-Entry Fee Architecture (Future: TigerBeetle)
-
-从 `indexer-blockdata-rs` 的 UBSCORE_TIGERBEETLE.md 借鉴的账户体系：
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    ACCOUNT HIERARCHY                        │
-├─────────────────────────────────────────────────────────────┤
-│ User Account     │  UserID | AssetID  │ 用户余额           │
-│ Omnibus Account  │  0xFF.. | AssetID  │ 交易所冷钱包(负债) │
-│ Holding Account  │  0xFE.. | AssetID  │ 订单冻结中间账户   │
-│ Revenue Account  │  0xEE.. | AssetID  │ 手续费收入(权益)   │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**Atomic Settlement Batch** (TigerBeetle LINKED flag):
-
-| Idx | Operation | From | To | Asset | Description |
-|-----|-----------|------|----|-------|-------------|
-| 1 | POST Buyer | - | - | USDT | 解冻买方资金 |
-| 2 | POST Seller | - | - | BTC | 解冻卖方资金 |
-| 3 | Principal | Seller → Buyer | - | BTC | 转移基础资产 |
-| 4 | Principal | Buyer → Seller | - | USDT | 转移报价资产 |
-| 5 | **Fee** | Buyer → Revenue | - | BTC | 买方手续费 |
-| 6 | **Fee** | Seller → Revenue | - | USDT | 卖方手续费 |
-
-> **Why Double-Entry?**
-> - **审计性**: `Σ(User Balances) + Σ(Revenue) == Omnibus Balance`
-> - **透明性**: 费用是显式转账，不是隐式扣除
-> - **原子性**: TigerBeetle LINKED flag 确保要么全成功要么全回滚
+---
 
 ## 4. Implementation Architecture
 
