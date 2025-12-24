@@ -215,6 +215,36 @@ UBSCore 内存结构 (启动时加载):
 > - 所有数据都在内存
 > - 输出复用现有 BalanceEvent 通道
 
+### 2.7 Per-User BalanceEvent Design
+
+**核心洞察**: 一个 Trade 产生两个用户的余额变动 → 两个 BalanceEvent
+
+```
+Trade ──▶ UBSCore ──┬──▶ BalanceEvent{user: buyer}  ──▶ WS + TDengine
+                    │
+                    └──▶ BalanceEvent{user: seller} ──▶ WS + TDengine
+```
+
+**Per-User 事件结构**:
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `trade_id` | u64 | 关联原始 Trade |
+| `user_id` | u64 | 这个事件属于谁 |
+| `debit_asset` | u32 | 支出资产 |
+| `debit_amount` | u64 | 支出金额 |
+| `credit_asset` | u32 | 收入资产 |
+| `credit_amount` | u64 | 收入金额 (净额, 已扣 fee) |
+| `fee` | u64 | 手续费 |
+| `is_maker` | bool | 是否 Maker |
+
+> **Why Per-User 设计？**
+> - **单一职责**: 一个事件 = 一个用户的余额变动
+> - **解耦**: 用户不需要知道对手方
+> - **WebSocket 友好**: 按 user_id 直接路由推送
+> - **查询友好**: TDengine 按 user_id 分区
+> - **隐私安全**: 用户只看自己数据
+
 ---
 
 ## 3. Data Model
