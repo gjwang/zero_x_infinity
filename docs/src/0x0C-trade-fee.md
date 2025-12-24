@@ -61,28 +61,61 @@ Implement **Maker/Taker fee model** for trade execution. Fees are the primary re
 
 ### 2.2 Fee Rate Architecture
 
-我们从 `indexer-blockdata-rs` 项目中借鉴了 **VIP 费率表** 的设计思路：
+**两层费率体系**: Symbol 基础费率 × VIP 折扣系数
+
+```
+最终费率 = Symbol.base_fee × VipDiscountTable[user.vip_level] / 100
+```
+
+#### Layer 1: Symbol 基础费率
+
+每个交易对定义自己的基础费率（不同交易对可能有不同费率）：
+
+| 字段 | 精度 | 默认值 | 说明 |
+|------|-----|-------|------|
+| `base_maker_fee` | 10^6 | 1000 | 0.10% |
+| `base_taker_fee` | 10^6 | 2000 | 0.20% |
+
+#### Layer 2: VIP 折扣系数
+
+用户根据 VIP 等级获得折扣（等级越高，折扣越大）：
 
 ```rust
-/// Fee precision: 10^6 (1000 = 0.1%)
-/// VIP 0: Maker 0.10%, Taker 0.15%
-/// VIP 9: Maker 0.01%, Taker 0.04%
-pub struct VipFeeTable {
-    rates: [(u64, u64); 10],  // (maker_rate, taker_rate)
+/// VIP 折扣表 (100 = 100% 无折扣)
+/// VIP 等级正序: VIP 0 最低，VIP 9 最高
+pub struct VipDiscountTable {
+    discounts: [u8; 10],
 }
+
+impl Default for VipDiscountTable {
+    fn default() -> Self {
+        Self::new([
+            100,  // VIP 0: 100% 无折扣 (普通用户)
+            90,   // VIP 1: 90%
+            80,   // VIP 2: 80%
+            70,   // VIP 3: 70%
+            60,   // VIP 4: 60%
+            50,   // VIP 5: 50%
+            40,   // VIP 6: 40%
+            30,   // VIP 7: 30%
+            20,   // VIP 8: 20%
+            10,   // VIP 9: 10% 最高折扣 (顶级用户)
+        ])
+    }
+}
+```
+
+**示例计算**:
+```
+BTC_USDT: base_taker_fee = 2000 (0.20%)
+User VIP 5: discount = 50%
+最终费率 = 2000 × 50 / 100 = 1000 (0.10%)
 ```
 
 > **Why 10^6 精度？**
 > - 10^4 (bps) 只能表示到 0.01%，不够精细
 > - 10^6 可以表示 0.0001%，足够支持 VIP 折扣和返佣
 > - 与 u64 乘法不会溢出 (u64 * 10^6 / 10^6)
-
-**MVP 阶段简化**: 暂不实现 VIP 等级系统，使用固定费率。
-
-| Role | Rate (bps) | Rate (%) | 10^6 Precision |
-|------|-----------|----------|----------------|
-| **Maker** | 10 | 0.10% | 1000 |
-| **Taker** | 20 | 0.20% | 2000 |
 
 ### 2.3 Fee Collection Point
 
@@ -110,17 +143,41 @@ Trade: Alice (Taker, BUY) ← → Bob (Maker, SELL)
 > 2. **避免预算超支**: 买 1 BTC 不会因为手续费导致需要 100,020 USDT
 > 3. **行业惯例**: Binance、Coinbase 都是这样做的
 
-### 2.4 Fee Calculation Timing
+### 2.4 Lock Amount Must Include Max Fee
 
-关键问题：**费用在哪里计算和扣除？**
+**关键设计**: 下单锁定金额必须包含最大潜在手续费，避免成交后余额不足。
+
+```rust
+// 下单时计算锁定金额
+let base_cost = match side {
+    Buy => price * qty / qty_unit,  // USDT
+    Sell => qty,                     // BTC
+};
+
+// 获取用户最大费率 (Taker 费率)
+let max_fee_rate = get_user_fee_rate(user_id, symbol_id, is_taker: true);
+let max_fee = base_cost * max_fee_rate / 1_000_000;
+
+// 实际锁定 = 基础成本 + 最大潜在费用
+let lock_amount = base_cost + max_fee;
+user.lock(lock_amount);
+```
+
+**成交后处理**:
+- 实际费用 <= 预留费用
+- 多余预留金额解冻退回用户可用余额
+
+> **Why 必须预留？**
+> - 避免成交后付不起手续费
+> - 无需产生欠债记录
+> - 用户体验更好
+
+### 2.5 Fee Calculation Timing
+
+关键问题：费用在哪里计算和扣除？
 
 ```
-┌────────────────┐    ┌─────────────┐    ┌────────────────┐
-│ Matching Engine│───▶│  Trade{     │───▶│   Settlement   │
-│   (Match)      │    │   fee=0,    │    │ (Calculate Fee)│
-│                │    │   role      │    │ (Deduct Fee)   │
-│                │    │   }         │    │ (Credit Net)   │
-└────────────────┘    └─────────────┘    └────────────────┘
+ME (Match) --> Trade{role} --> Settlement (Calculate Fee, Deduct, Credit Net)
 ```
 
 > **Why 在 Settlement 层计算**（而不是 ME）？
@@ -132,20 +189,28 @@ Trade: Alice (Taker, BUY) ← → Bob (Maker, SELL)
 
 ## 3. Data Model
 
-### 3.1 Symbol Fee Configuration
+### 3.1 Symbol 基础费率配置
 
 ```sql
-ALTER TABLE symbols_tb ADD COLUMN maker_fee_bps SMALLINT NOT NULL DEFAULT 10;
-ALTER TABLE symbols_tb ADD COLUMN taker_fee_bps SMALLINT NOT NULL DEFAULT 20;
+-- Symbol 基础费率 (10^6 精度: 1000 = 0.10%)
+ALTER TABLE symbols_tb ADD COLUMN base_maker_fee INTEGER NOT NULL DEFAULT 1000;
+ALTER TABLE symbols_tb ADD COLUMN base_taker_fee INTEGER NOT NULL DEFAULT 2000;
 ```
 
-### 3.2 Trade Record Enhancement
+### 3.2 User VIP 等级
+
+```sql
+-- User VIP 等级 (0-9, 0=普通用户, 9=顶级用户)
+ALTER TABLE users_tb ADD COLUMN vip_level SMALLINT NOT NULL DEFAULT 0;
+```
+
+### 3.3 Trade Record Enhancement
 
 Existing `Trade` struct already has:
 - `fee: u64` - Amount of fee charged (in received asset's scaled units)
 - `role: u8` - 0=Maker, 1=Taker
 
-### 3.3 Fee Ledger (New Table)
+### 3.4 Fee Ledger (New Table)
 
 ```sql
 CREATE TABLE fee_ledger_tb (
@@ -163,7 +228,7 @@ CREATE INDEX idx_fee_ledger_user ON fee_ledger_tb(user_id);
 CREATE INDEX idx_fee_ledger_symbol ON fee_ledger_tb(symbol_id);
 ```
 
-### 3.4 Double-Entry Fee Architecture (Future: TigerBeetle)
+### 3.5 Double-Entry Fee Architecture (Future: TigerBeetle)
 
 从 `indexer-blockdata-rs` 的 UBSCORE_TIGERBEETLE.md 借鉴的账户体系：
 
