@@ -537,88 +537,51 @@ BalanceEventBatch
 
 ---
 
-## 1. 概述
+## 设计摘要
 
-### 1.1 目标
+完整设计详见英文部分。以下是核心要点：
 
-实现 **Maker/Taker 手续费模型**。手续费是交易所的主要收入来源。
+### 1. 费率模型
 
-### 1.2 核心概念
-
-| 术语 | 定义 |
-|------|------|
-| **Maker** | 挂单方 (订单在盘口等待成交) |
-| **Taker** | 吃单方 (订单立即匹配成交) |
-| **费率** | 交易额的百分比 |
-| **bps** | 基点 (1 bps = 0.01% = 0.0001) |
-
----
-
-## 2. 费率模型设计
-
-### 2.1 标准费率
-
-| 角色 | 费率 (bps) | 费率 (%) | 示例: 100 USDT 交易 |
-|------|-----------|----------|-------------------|
-| **Maker** | 10 | 0.10% | 0.10 USDT |
-| **Taker** | 20 | 0.20% | 0.20 USDT |
-
-### 2.2 手续费扣除规则
-
-**规则**: 手续费从 **收到的资产** 中扣除，而不是支付的资产。
-
----
-
-## 3. 数据模型
-
-### 3.1 Symbol 费率配置
-
-```sql
-ALTER TABLE symbols_tb ADD COLUMN maker_fee_bps SMALLINT NOT NULL DEFAULT 10;
-ALTER TABLE symbols_tb ADD COLUMN taker_fee_bps SMALLINT NOT NULL DEFAULT 20;
+```
+最终费率 = Symbol.base_fee × VipDiscount[vip_level] / 100
 ```
 
-### 3.2 手续费账本
+- **Layer 1**: Symbol 基础费率 (10^6 精度)
+- **Layer 2**: VIP 折扣系数 (从数据库加载)
 
-```sql
-CREATE TABLE fee_ledger_tb (
-    id BIGSERIAL PRIMARY KEY,
-    trade_id BIGINT NOT NULL,
-    user_id BIGINT NOT NULL,
-    symbol_id INTEGER NOT NULL,
-    asset_id INTEGER NOT NULL,
-    fee_amount DECIMAL(36,18) NOT NULL,
-    role SMALLINT NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
+### 2. 核心设计原则
+
+| 设计点 | 说明 |
+|--------|------|
+| **从 Gain 扣费** | 无需预留，不可能欠费 |
+| **UBSCore 计费** | 余额权威，内存费率 O(1) |
+| **Per-User Event** | 每用户一个事件，解耦隐私 |
+| **BalanceEventBatch** | 原子整体 (buyer + seller + revenue) |
+| **Event Sourcing** | TDengine 存储，聚合衍生 |
+
+### 3. 数据流
+
+```
+ME → Trade{role} → UBSCore(fee计算) → BalanceEventBatch → Settlement → TDengine
+                                           │
+                                           ├── TradeSettled{buyer}
+                                           ├── TradeSettled{seller}
+                                           └── FeeReceived{REVENUE} ×2
+```
+
+### 4. 资产守恒
+
+```
+buyer.debit(quote)  + buyer.credit(base - fee)   = 0  ✓
+seller.debit(base)  + seller.credit(quote - fee) = 0  ✓
+revenue.credit(buyer_fee + seller_fee)           = fee_total ✓
+
+Σ 变动 = 0 (可审计)
 ```
 
 ---
 
-## 4. 实现要点
-
-### 4.1 费率计算
-
-```rust
-fn calculate_fee(amount: u64, fee_bps: u16) -> u64 {
-    (amount as u128 * fee_bps as u128 / 10000) as u64
-}
-```
-
-### 4.2 结算调整
-
-```rust
-let net_amount = received_amount - fee;
-// 记账: 实际到账 = 毛收入 - 手续费
-```
-
----
-
-## 5. 验证计划
-
-- [ ] 手续费计算准确性测试
-- [ ] E2E 交易手续费扣除测试
-- [ ] 手续费账本对账
-- [ ] API/WS 返回手续费信息
-
----
+<br>
+<div align="right"><a href="#-chinese">↑ Back to Top</a></div>
+<br>
