@@ -685,7 +685,7 @@ pub async fn get_all_balances(
     })?;
 
     // Query all balances
-    match crate::funding::service::TransferService::get_all_balances(pg_db.pool(), user_id as i64)
+    match crate::funding::service::TransferService::get_all_balances(pg_db.pool(), user_id)
         .await
     {
         Ok(balances) => Ok((StatusCode::OK, Json(ApiResponse::success(balances)))),

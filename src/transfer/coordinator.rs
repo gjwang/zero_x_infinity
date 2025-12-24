@@ -100,11 +100,11 @@ impl TransferCoordinator {
         }
 
         // Check for duplicate cid
-        if let Some(ref cid) = req.cid {
-            if let Some(existing) = self.db.get_by_cid(cid).await? {
-                debug!(cid = %cid, req_id = existing.req_id, "Duplicate cid found");
-                return Ok(existing.req_id);
-            }
+        if let Some(ref cid) = req.cid
+            && let Some(existing) = self.db.get_by_cid(cid).await?
+        {
+            debug!(cid = %cid, req_id = existing.req_id, "Duplicate cid found");
+            return Ok(existing.req_id);
         }
 
         // Generate RequestId using Snowflake
