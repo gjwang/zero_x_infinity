@@ -303,7 +303,7 @@ pub async fn create_transfer(
 /// FSM-based transfer handler (internal)
 async fn create_transfer_fsm_handler(
     state: Arc<AppState>,
-    coordinator: &std::sync::Arc<crate::transfer::TransferCoordinator>,
+    coordinator: &std::sync::Arc<crate::internal_transfer::TransferCoordinator>,
     user_id: u64,
     req: crate::funding::transfer::TransferRequest,
 ) -> Result<
@@ -314,7 +314,7 @@ async fn create_transfer_fsm_handler(
     (StatusCode, Json<ApiResponse<()>>),
 > {
     // Convert legacy request to FSM request
-    let fsm_req = crate::transfer::TransferApiRequest {
+    let fsm_req = crate::internal_transfer::TransferApiRequest {
         from: req.from.clone(),
         to: req.to.clone(),
         asset: req.asset.clone(),
@@ -338,10 +338,12 @@ async fn create_transfer_fsm_handler(
         })?;
 
     // Create AssetValidationInfo for security checks
-    let asset_info = crate::transfer::AssetValidationInfo::from_asset(asset);
+    let asset_info = crate::internal_transfer::AssetValidationInfo::from_asset(asset);
 
     // Call FSM transfer with full asset validation
-    match crate::transfer::create_transfer_fsm(coordinator, user_id, fsm_req, asset_info).await {
+    match crate::internal_transfer::create_transfer_fsm(coordinator, user_id, fsm_req, asset_info)
+        .await
+    {
         Ok(fsm_resp) => {
             // Convert FSM response to legacy response
             let legacy_resp = crate::funding::transfer::TransferResponse {
@@ -374,20 +376,21 @@ pub async fn get_transfer(
 ) -> Result<
     (
         StatusCode,
-        Json<ApiResponse<crate::transfer::TransferApiResponse>>,
+        Json<ApiResponse<crate::internal_transfer::TransferApiResponse>>,
     ),
     (StatusCode, Json<ApiResponse<()>>),
 > {
     // Parse req_id from string (ULID format)
-    let req_id: crate::transfer::InternalTransferId = req_id_str.parse().map_err(|_| {
-        (
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<()>::error(
-                error_codes::INVALID_PARAMETER,
-                "Invalid request ID format",
-            )),
-        )
-    })?;
+    let req_id: crate::internal_transfer::InternalTransferId =
+        req_id_str.parse().map_err(|_| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<()>::error(
+                    error_codes::INVALID_PARAMETER,
+                    "Invalid request ID format",
+                )),
+            )
+        })?;
 
     // Check if FSM coordinator is available
     let coordinator = state.transfer_coordinator.as_ref().ok_or_else(|| {
@@ -408,7 +411,7 @@ pub async fn get_transfer(
         .unwrap_or(8);
 
     // Query transfer status
-    match crate::transfer::get_transfer_status(coordinator, req_id, decimals).await {
+    match crate::internal_transfer::get_transfer_status(coordinator, req_id, decimals).await {
         Ok(resp) => Ok((StatusCode::OK, Json(ApiResponse::success(resp)))),
         Err((status, err_resp)) => Err((
             status,

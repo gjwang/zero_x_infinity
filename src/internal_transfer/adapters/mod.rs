@@ -199,13 +199,23 @@ pub mod mock {
             let adapter = MockAdapter::new("test");
 
             let result = adapter
-                .withdraw(crate::transfer::InternalTransferId::new(), 1001, 1, 1000)
+                .withdraw(
+                    crate::internal_transfer::InternalTransferId::new(),
+                    1001,
+                    1,
+                    1000,
+                )
                 .await;
             assert!(result.is_success());
             assert_eq!(adapter.withdraw_count(), 1);
 
             let result = adapter
-                .deposit(crate::transfer::InternalTransferId::new(), 1001, 1, 1000)
+                .deposit(
+                    crate::internal_transfer::InternalTransferId::new(),
+                    1001,
+                    1,
+                    1000,
+                )
                 .await;
             assert!(result.is_success());
             assert_eq!(adapter.deposit_count(), 1);
@@ -217,7 +227,12 @@ pub mod mock {
             adapter.set_fail_withdraw(true);
 
             let result = adapter
-                .withdraw(crate::transfer::InternalTransferId::new(), 1001, 1, 1000)
+                .withdraw(
+                    crate::internal_transfer::InternalTransferId::new(),
+                    1001,
+                    1,
+                    1000,
+                )
                 .await;
             assert!(result.is_explicit_fail());
         }
@@ -228,7 +243,12 @@ pub mod mock {
             adapter.set_pending_deposit(true);
 
             let result = adapter
-                .deposit(crate::transfer::InternalTransferId::new(), 1001, 1, 1000)
+                .deposit(
+                    crate::internal_transfer::InternalTransferId::new(),
+                    1001,
+                    1,
+                    1000,
+                )
                 .await;
             assert!(result.is_pending());
         }

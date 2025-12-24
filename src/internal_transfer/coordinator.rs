@@ -512,7 +512,7 @@ impl TransferCoordinator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::transfer::adapters::MockAdapter;
+    use crate::internal_transfer::adapters::MockAdapter;
     use sqlx::postgres::PgPoolOptions;
 
     async fn create_test_pool() -> Option<sqlx::PgPool> {

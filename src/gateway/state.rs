@@ -15,7 +15,7 @@ use crate::account::{Asset, Database, Symbol};
 use crate::api_auth::AuthState;
 
 // Phase 0x0B-a: Internal Transfer FSM
-use crate::transfer::TransferCoordinator;
+use crate::internal_transfer::TransferCoordinator;
 
 /// Gateway application state (shared)
 #[derive(Clone)]

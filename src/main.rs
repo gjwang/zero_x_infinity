@@ -294,7 +294,7 @@ fn main() {
         // Phase 0x0B-a: Create transfer channel for TradingAdapter <-> UBSCore communication
         // Sender goes to Gateway (TradingAdapter), Receiver goes to Pipeline (UBSCoreService)
         let (transfer_sender, transfer_receiver) =
-            zero_x_infinity::transfer::channel::transfer_channel(1024);
+            zero_x_infinity::internal_transfer::channel::transfer_channel(1024);
         println!("🔄 TransferChannel created (buffer=1024)");
 
         // Prepare for Trading Core

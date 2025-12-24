@@ -33,7 +33,7 @@ use crate::api_auth::{
 };
 
 // Phase 0x0B-a: Internal Transfer FSM
-use crate::transfer::{
+use crate::internal_transfer::{
     adapters::{FundingAdapter, TradingAdapter},
     channel::TransferSender,
     coordinator::TransferCoordinator,
