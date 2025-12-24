@@ -1,7 +1,14 @@
 -- 003_internal_transfer.sql
 
 -- 1. Add account_type to balances_tb
--- account_type: 1 = Spot (Default, UBSCore Managed), 2 = Funding (PostgreSQL Managed)
+-- 
+-- IMPORTANT: balances_tb only stores Funding account balances (account_type=2).
+-- Spot (Trading) balances are managed by UBSCore in RAM, NOT in this table.
+--
+-- account_type values:
+--   1 = Spot (UNUSED in PostgreSQL - UBSCore RAM manages Spot balances)
+--   2 = Funding (ACTIVE - deposit/withdraw, stored here)
+--
 ALTER TABLE balances_tb 
 ADD COLUMN account_type SMALLINT NOT NULL DEFAULT 1;
 
