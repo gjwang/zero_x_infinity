@@ -424,8 +424,47 @@ impl UBSCore {
             ));
         }
 
-        // TODO: Add fee income to REVENUE account (0)
-        // This will be implemented when BalanceEvent::FeeReceived is added
+        // 3. REVENUE account fee income (for asset conservation)
+        // Buyer fee in base asset, seller fee in quote asset
+        if buyer_fee > 0 || seller_fee > 0 {
+            use crate::core_types::REVENUE_ID;
+
+            // Ensure REVENUE account exists
+            let revenue = self
+                .accounts
+                .entry(REVENUE_ID)
+                .or_insert_with(|| crate::user_account::UserAccount::new(REVENUE_ID));
+
+            // Buyer fee → REVENUE (in base asset)
+            if buyer_fee > 0 {
+                revenue.deposit(event.base_asset_id, buyer_fee)?;
+                let r_base = revenue.get_balance(event.base_asset_id).unwrap();
+                results.push(BalanceEvent::fee_received(
+                    REVENUE_ID,
+                    event.base_asset_id,
+                    trade.trade_id,
+                    buyer_fee,
+                    trade.buyer_user_id, // from_user
+                    r_base.avail(),
+                    event.taker_ingested_at_ns,
+                ));
+            }
+
+            // Seller fee → REVENUE (in quote asset)
+            if seller_fee > 0 {
+                revenue.deposit(event.quote_asset_id, seller_fee)?;
+                let r_quote = revenue.get_balance(event.quote_asset_id).unwrap();
+                results.push(BalanceEvent::fee_received(
+                    REVENUE_ID,
+                    event.quote_asset_id,
+                    trade.trade_id,
+                    seller_fee,
+                    trade.seller_user_id, // from_user
+                    r_quote.avail(),
+                    event.taker_ingested_at_ns,
+                ));
+            }
+        }
 
         Ok(results)
     }
