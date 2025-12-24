@@ -845,29 +845,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dlopen2"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6bc2c7ed06fd72a8513ded8d0d2f6fd2655a85d6885c48cae8625d80faf28c03"
-dependencies = [
- "dlopen2_derive",
- "libc",
- "once_cell",
- "winapi",
-]
-
-[[package]]
-name = "dlopen2_derive"
-version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0fbbb781877580993a8707ec48672673ec7b81eeba04cfd2310bd28c08e47c8f"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.111",
-]
-
-[[package]]
 name = "document-features"
 version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1020,27 +997,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
 dependencies = [
  "percent-encoding",
-]
-
-[[package]]
-name = "fun_time"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bee194d43605ea83cca7af42af5f9001fab1a8e2220cb8a012e21dda6167fdb0"
-dependencies = [
- "fun_time_derive",
-]
-
-[[package]]
-name = "fun_time_derive"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71555fd2db00938d82d29d8fa62a2ae80aed2c162c328d775f79e98d9212f013"
-dependencies = [
- "darling 0.14.4",
- "proc-macro2",
- "quote",
- "syn 1.0.109",
 ]
 
 [[package]]
@@ -3306,7 +3262,6 @@ dependencies = [
  "bytes",
  "futures",
  "log",
- "taos-optin",
  "taos-query",
  "taos-ws",
 ]
@@ -3323,40 +3278,6 @@ dependencies = [
  "rustc_version",
  "serde",
  "thiserror 1.0.69",
-]
-
-[[package]]
-name = "taos-macros"
-version = "0.2.16"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "052bf816a74ae99f443eb4251907ad86a5cb76337be6be854a2243c1264696ed"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "taos-optin"
-version = "0.12.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "008c5e8558cf1b0fb2114ace13c795a032526e6ae03c71d3f016b0e403361003"
-dependencies = [
- "anyhow",
- "async-trait",
- "bytes",
- "cfg-if",
- "derive_more 0.99.20",
- "dlopen2",
- "fun_time",
- "itertools",
- "lazy_static",
- "num_enum",
- "once_cell",
- "serde_json",
- "taos-macros",
- "taos-query",
- "tracing",
 ]
 
 [[package]]

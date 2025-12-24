@@ -55,6 +55,47 @@ test_start() {
     log_info "Test $TESTS_TOTAL: $1"
 }
 
+# Helper to call API and verify response
+call_api() {
+    local method="$1"
+    local url="$2"
+    local name="$3"
+    
+    # Capture HTTP status code and response body
+    local response_file=$(mktemp)
+    local http_code=$(curl -s -X "$method" -w "%{http_code}" -o "$response_file" "$url")
+    local response_body=$(cat "$response_file")
+    rm -f "$response_file"
+    
+    if [ "$http_code" -ne 200 ]; then
+        log_error "$name failed with HTTP $http_code"
+        log_info "URL: $url"
+        log_info "Response: $response_body"
+        return 1
+    fi
+    
+    echo "$response_body"
+    return 0
+}
+
+# Cleanup on exit
+cleanup() {
+    local exit_code=$?
+    if [ $exit_code -ne 0 ]; then
+        echo ""
+        log_warn "Test suite failed with exit code $exit_code"
+        echo "=== Last 20 lines of Gateway Log (/tmp/gateway.log) ==="
+        tail -n 20 /tmp/gateway.log 2>/dev/null || echo "Log not found"
+        echo "========================================================"
+    fi
+    
+    # Kill gateway if it was started in this script
+    if [ -n "$GATEWAY_PID" ]; then
+        kill "$GATEWAY_PID" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT
+
 # ============================================================================
 # Pre-flight Checks
 # ============================================================================
@@ -89,7 +130,10 @@ fi
 
 # Initialize database to clean state
 test_start "Initialize database to clean state"
-if python3 scripts/db/manage_db.py init >/dev/null 2>&1; then
+if [ "$CI" = "true" ]; then
+    # In CI, database is already initialized by the workflow's "Initialize DB" step
+    log_success "Database initialization skipped (CI workflow handles this)"
+elif python3 scripts/db/manage_db.py init >/dev/null 2>&1; then
     log_success "Database initialized (reset + seed)"
 else
     log_error "Failed to initialize database"
@@ -128,14 +172,53 @@ fi
 # Build and Start Gateway
 # ============================================================================
 
-test_start "Build Gateway"
-log_info "Running: cargo build --release"
-if cargo build --release 2>&1 | tail -5; then
-    log_success "Gateway built successfully"
-else
-    log_error "Gateway build failed"
+BINARY="./target/release/zero_x_infinity"
+
+# Check binary existence
+if [ ! -f "$BINARY" ]; then
+    log_error "Gateway binary not found: $BINARY"
+    log_info "Please run: cargo build --release"
     exit 1
 fi
+
+# Print version info
+log_info "Binary Version: $($BINARY --version | tr '\n' ' ')"
+
+# Check binary freshness (only locally)
+if [ "$CI" != "true" ]; then
+    SRC_LAST_MOD=$(find src -type f -exec stat -f "%m" {} + | sort -nr | head -1)
+    BIN_LAST_MOD=$(stat -f "%m" "$BINARY")
+    
+    if [ "$SRC_LAST_MOD" -gt "$BIN_LAST_MOD" ]; then
+        echo ""
+        log_warn "⚠️  WARNING: Release binary is STALE!"
+        log_info "Source code was modified after the last release build."
+        log_info "Binary build time: $(date -r $BIN_LAST_MOD '+%Y-%m-%d %H:%M:%S')"
+        log_info "Source last mod:   $(date -r $SRC_LAST_MOD '+%Y-%m-%d %H:%M:%S')"
+        log_info "To avoid misleading results, please run: cargo build --release"
+        echo ""
+        # We don't exit here to allow quick iterations for non-core changes, 
+        # but the warning is prominent.
+    else
+        log_success "Binary is up-to-date (Build time: $(date -r $BIN_LAST_MOD '+%m-%d %H:%M'))"
+    fi
+fi
+
+# ============================================================================
+# Prepare Test Data
+# ============================================================================
+
+test_start "Prepare test data"
+TEST_DIR="test_account"
+mkdir -p "$TEST_DIR"
+
+# Copy essential config files and the FULL balances file
+# This now works because Gateway pre-creates tables in parallel!
+cp fixtures/assets_config.csv "$TEST_DIR/"
+cp fixtures/symbols_config.csv "$TEST_DIR/"
+cp fixtures/balances_init.csv "$TEST_DIR/"
+
+log_success "Test data (Full Dataset) prepared in $TEST_DIR/"
 
 test_start "Start Gateway in background"
 log_info "Starting Gateway on port 8080..."
@@ -147,33 +230,42 @@ else
     ENV_FLAG=""
 fi
 
-./target/release/zero_x_infinity --gateway $ENV_FLAG --port 8080 > /tmp/gateway.log 2>&1 &
+./target/release/zero_x_infinity --gateway $ENV_FLAG --port 8080 --input "$TEST_DIR" > /tmp/gateway.log 2>&1 &
 GATEWAY_PID=$!
 
-# Wait for Gateway to start
-log_info "Waiting for Gateway to start (PID: $GATEWAY_PID)..."
-for i in {1..10}; do
-    if curl -s http://localhost:8080/health > /dev/null 2>&1; then
+# Wait for Gateway to start - increased for CI stability and large dataset
+log_info "Waiting for Gateway to start (max 120s)..."
+READY=false
+for i in {1..120}; do
+    if curl -s http://localhost:8080/api/v1/health | grep -q "ok"; then
         log_success "Gateway started successfully"
+        READY=true
         break
     fi
-    if [ $i -eq 10 ]; then
-        log_error "Gateway failed to start within 10 seconds"
-        log_info "Gateway log:"
-        cat /tmp/gateway.log
-        kill $GATEWAY_PID 2>/dev/null || true
+    
+    # Check if process died
+    if ! kill -0 $GATEWAY_PID 2>/dev/null; then
+        log_error "Gateway process died"
+        tail -n 20 /tmp/gateway.log 2>/dev/null || true
         exit 1
     fi
+    
+    [ $((i % 5)) -eq 0 ] && log_info "Waiting for Gateway... ($i/120)"
     sleep 1
 done
+
+if [ "$READY" = false ]; then
+    log_error "Gateway failed to start within 120 seconds"
+    exit 1
+fi
 
 # ============================================================================
 # API Endpoint Tests
 # ============================================================================
 
 test_start "Test /api/v1/assets endpoint"
-ASSETS_RESPONSE=$(curl -s http://localhost:8080/api/v1/assets)
-if echo "$ASSETS_RESPONSE" | jq -e '.code == 0' > /dev/null 2>&1; then
+ASSETS_RESPONSE=$(call_api GET "http://localhost:8080/api/v1/public/assets" "Assets API")
+if [ $? -eq 0 ] && echo "$ASSETS_RESPONSE" | jq -e '.code == 0' > /dev/null 2>&1; then
     ASSET_COUNT=$(echo "$ASSETS_RESPONSE" | jq '.data | length')
     log_success "Assets endpoint returned $ASSET_COUNT assets"
     
@@ -184,13 +276,13 @@ if echo "$ASSETS_RESPONSE" | jq -e '.code == 0' > /dev/null 2>&1; then
         log_error "Asset structure is incorrect"
     fi
 else
-    log_error "Assets endpoint failed"
-    log_info "Response: $ASSETS_RESPONSE"
+    # Details already logged by call_api if it failed
+    [ $? -ne 0 ] || log_error "Assets API returned business error: $ASSETS_RESPONSE"
 fi
 
 test_start "Test /api/v1/symbols endpoint"
-SYMBOLS_RESPONSE=$(curl -s http://localhost:8080/api/v1/symbols)
-if echo "$SYMBOLS_RESPONSE" | jq -e '.code == 0' > /dev/null 2>&1; then
+SYMBOLS_RESPONSE=$(call_api GET "http://localhost:8080/api/v1/public/symbols" "Symbols API")
+if [ $? -eq 0 ] && echo "$SYMBOLS_RESPONSE" | jq -e '.code == 0' > /dev/null 2>&1; then
     SYMBOL_COUNT=$(echo "$SYMBOLS_RESPONSE" | jq '.data | length')
     log_success "Symbols endpoint returned $SYMBOL_COUNT symbols"
     
@@ -201,14 +293,13 @@ if echo "$SYMBOLS_RESPONSE" | jq -e '.code == 0' > /dev/null 2>&1; then
         log_error "Symbol structure is incorrect"
     fi
 else
-    log_error "Symbols endpoint failed"
-    log_info "Response: $SYMBOLS_RESPONSE"
+    [ $? -ne 0 ] || log_error "Symbols API returned business error: $SYMBOLS_RESPONSE"
 fi
 
 # Test /api/v1/exchange_info endpoint
 test_start "Test /api/v1/exchange_info endpoint"
-EXCHANGE_INFO_RESPONSE=$(curl -s http://localhost:8080/api/v1/exchange_info)
-if echo "$EXCHANGE_INFO_RESPONSE" | jq -e '.code == 0' > /dev/null 2>&1; then
+EXCHANGE_INFO_RESPONSE=$(call_api GET "http://localhost:8080/api/v1/public/exchange_info" "ExchangeInfo API")
+if [ $? -eq 0 ] && echo "$EXCHANGE_INFO_RESPONSE" | jq -e '.code == 0' > /dev/null 2>&1; then
     ASSET_COUNT=$(echo "$EXCHANGE_INFO_RESPONSE" | jq '.data.assets | length')
     SYMBOL_COUNT=$(echo "$EXCHANGE_INFO_RESPONSE" | jq '.data.symbols | length')
     SERVER_TIME=$(echo "$EXCHANGE_INFO_RESPONSE" | jq '.data.server_time')
@@ -221,8 +312,7 @@ if echo "$EXCHANGE_INFO_RESPONSE" | jq -e '.code == 0' > /dev/null 2>&1; then
         log_error "Exchange info structure is incorrect"
     fi
 else
-    log_error "Exchange info endpoint failed"
-    log_info "Response: $EXCHANGE_INFO_RESPONSE"
+    [ $? -ne 0 ] || log_error "ExchangeInfo API returned business error: $EXCHANGE_INFO_RESPONSE"
 fi
 
 # ============================================================================
@@ -230,14 +320,14 @@ fi
 # ============================================================================
 
 test_start "Test endpoint idempotency (multiple requests)"
-ASSETS_RESPONSE_2=$(curl -s http://localhost:8080/api/v1/assets)
+ASSETS_RESPONSE_2=$(curl -s http://localhost:8080/api/v1/public/assets)
 if [ "$ASSETS_RESPONSE" = "$ASSETS_RESPONSE_2" ]; then
     log_success "Assets endpoint is idempotent"
 else
     log_error "Assets endpoint returned different results"
 fi
 
-SYMBOLS_RESPONSE_2=$(curl -s http://localhost:8080/api/v1/symbols)
+SYMBOLS_RESPONSE_2=$(curl -s http://localhost:8080/api/v1/public/symbols)
 if [ "$SYMBOLS_RESPONSE" = "$SYMBOLS_RESPONSE_2" ]; then
     log_success "Symbols endpoint is idempotent"
 else
@@ -284,13 +374,8 @@ else
 fi
 
 # ============================================================================
-# Cleanup
+# Cleanup (handled by trap)
 # ============================================================================
-
-log_info "Stopping Gateway (PID: $GATEWAY_PID)..."
-kill $GATEWAY_PID 2>/dev/null || true
-wait $GATEWAY_PID 2>/dev/null || true
-log_success "Gateway stopped"
 
 # ============================================================================
 # Test Summary

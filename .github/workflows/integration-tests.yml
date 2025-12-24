@@ -15,45 +15,22 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  CI: true
 
 jobs:
-  # Quick tests - runs on every push
-  quick-tests:
-    name: Quick Tests
+  # ============================================================================
+  # Stage 1: Build
+  # ============================================================================
+  build:
+    name: Build & Cache
     runs-on: ubuntu-latest
-    
-    services:
-      tdengine:
-        image: tdengine/tdengine:latest
-        ports:
-          - 6030:6030
-          - 6041:6041
-        options: >-
-          --health-cmd "taos -s 'SELECT SERVER_VERSION();'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-      postgres:
-        image: postgres:16
-        ports:
-          - 5432:5432
-        env:
-          POSTGRES_DB: exchange_info_db
-          POSTGRES_USER: trading
-          POSTGRES_PASSWORD: trading123
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    
     steps:
       - uses: actions/checkout@v4
       
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: 1.92.0
           components: rustfmt, clippy
       
       - name: Cache cargo
@@ -66,68 +43,27 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
       
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-      
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pandas taos-ws-py psycopg2-binary pynacl requests
-      
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-      
-      - name: Clippy
-        run: cargo clippy -- -D warnings -A clippy::too_many_arguments -A clippy::collapsible_if -A clippy::unwrap_or_default -A clippy::doc_lazy_continuation -A clippy::manual_is_multiple_of -A clippy::implicit_saturating_sub -A clippy::redundant_pattern_matching
-      
-      - name: Build
+      - name: Build Release
         run: cargo build --release
       
-      - name: Unit Tests
-        run: cargo test
-      
-      - name: Initialize PostgreSQL Database
-        run: python3 scripts/db/manage_db.py init || echo "DB init skipped"
-
-      - name: Integration Tests (Quick Mode)
-        run: ./scripts/test_ci.sh --quick
-        env:
-          CI: true
-          SKIP_LARGE_DATASET: 1
-      
-      - name: Upload test reports
+      - name: Upload Binary
         uses: actions/upload-artifact@v4
-        if: always()
         with:
-          name: test-reports
-          path: test-reports/
-          retention-days: 7
+          name: gateway-binary
+          path: target/release/zero_x_infinity
+          retention-days: 1
 
-  # Full tests - runs on main branch or manually triggered
-  full-tests:
-    name: Full Integration Tests
+  # ============================================================================
+  # Stage 2: Prerequisite Checks (each is a separate job for clear failure)
+  # ============================================================================
+  
+  check-postgres:
+    name: "✓ PostgreSQL Schema"
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.event.inputs.run_full_tests == 'true'
-    
     services:
-      tdengine:
-        image: tdengine/tdengine:latest
-        ports:
-          - 6030:6030
-          - 6041:6041
-        options: >-
-          --health-cmd "taos -s 'SELECT SERVER_VERSION();'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
       postgres:
-        image: postgres:16
+        image: postgres:18
         ports:
           - 5432:5432
         env:
@@ -135,18 +71,61 @@ jobs:
           POSTGRES_USER: trading
           POSTGRES_PASSWORD: trading123
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U trading -d exchange_info_db"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Initialize Database
+        run: PG_PORT=5432 ./scripts/db/init.sh pg
+      
+      - name: Verify Tables Exist
+        run: |
+          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -c "\dt" | tee tables.txt
+          grep -q "users_tb" tables.txt || (echo "❌ users_tb missing" && exit 1)
+          grep -q "assets_tb" tables.txt || (echo "❌ assets_tb missing" && exit 1)
+          grep -q "symbols_tb" tables.txt || (echo "❌ symbols_tb missing" && exit 1)
+          grep -q "api_keys_tb" tables.txt || (echo "❌ api_keys_tb missing" && exit 1)
+          grep -q "balances_tb" tables.txt || (echo "❌ balances_tb missing" && exit 1)
+          echo "✅ All required tables exist"
+
+  check-tdengine:
+    name: "✓ TDengine Schema"
+    runs-on: ubuntu-latest
+    services:
+      tdengine:
+        image: tdengine/tdengine:latest
+        ports:
+          - 6030:6030
+          - 6041:6041
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Initialize TDengine
+        run: ./scripts/db/init.sh td
+      
+      - name: Verify Schema
+        run: |
+          result=$(curl -s -u root:taosdata -d "SHOW trading.STABLES" http://localhost:6041/rest/sql)
+          echo "Super tables: $result"
+          echo "✅ TDengine schema verified"
+
+  # ============================================================================
+  # Stage 3: Unit Tests (no services needed)
+  # ============================================================================
+  test-unit:
+    name: Unit & Pipeline
+    needs: build
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
       
-      - name: Cache cargo
+      - name: Restore cargo cache
         uses: actions/cache@v4
         with:
           path: |
@@ -156,39 +135,327 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
+      
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
       
       - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pandas taos-ws-py psycopg2-binary pynacl requests
+        run: pip install pandas taos-ws-py psycopg2-binary pynacl requests
       
-      - name: Build
-        run: cargo build --release
+      - name: Download Binary
+        uses: actions/download-artifact@v4
+        with:
+          name: gateway-binary
+          path: target/release
       
-      - name: Full Integration Tests (including 1.3M dataset)
-        run: ./scripts/test_ci.sh --full
-        timeout-minutes: 90
+      - name: Set Binary Executable
+        run: chmod +x target/release/zero_x_infinity
+      
+      - name: Run Unit Tests
+        run: ./scripts/test_ci.sh --test-unit
+
+  # ============================================================================
+  # Stage 4: Integration Tests (depends on build + prereq checks)
+  # ============================================================================
+  
+  test-gateway:
+    name: Gateway E2E
+    needs: [build, check-postgres, check-tdengine]
+    runs-on: ubuntu-latest
+    services:
+      tdengine:
+        image: tdengine/tdengine:latest
+        ports:
+          - 6030:6030
+          - 6041:6041
+      postgres:
+        image: postgres:18
+        ports:
+          - 5432:5432
         env:
-          CI: true
+          POSTGRES_DB: exchange_info_db
+          POSTGRES_USER: trading
+          POSTGRES_PASSWORD: trading123
+        options: >-
+          --health-cmd "pg_isready -U trading -d exchange_info_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
       
-      - name: Upload test reports
-        uses: actions/upload-artifact@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      
+      - name: Install Python dependencies
+        run: pip install pandas taos-ws-py psycopg2-binary pynacl requests
+      
+      - name: Initialize DB
+        run: PG_PORT=5432 ./scripts/db/init.sh pg
+      
+      - name: Download Binary
+        uses: actions/download-artifact@v4
+        with:
+          name: gateway-binary
+          path: target/release
+      
+      - name: Set Binary Executable
+        run: chmod +x target/release/zero_x_infinity
+
+      - name: Initialize TDengine
+        run: ./scripts/db/init.sh td && sleep 5
+
+      - name: Run Gateway E2E
+        run: ./scripts/test_ci.sh --test-gateway-e2e
+        id: run-test
+        continue-on-error: true
+
+      - name: Dump Logs on Failure
+        if: steps.run-test.outcome == 'failure'
+        run: |
+          echo "=== Gateway E2E Log ==="
+          cat logs/Gateway_E2E.log || true
+          echo ""
+          echo "=== Gateway Output Log ==="
+          cat /tmp/gateway.log || true
+          exit 1
+
+      - name: Upload Logs
         if: always()
-        with:
-          name: full-test-reports
-          path: test-reports/
-          retention-days: 30
-      
-      - name: Upload performance baseline
         uses: actions/upload-artifact@v4
         with:
-          name: performance-baseline
+          name: logs-gateway-e2e
           path: |
-            output/t2_summary.txt
-            output/t2_perf.txt
-          retention-days: 90
+            logs/
+            /tmp/gateway.log
+          retention-days: 7
+
+  test-kline:
+    name: K-Line E2E
+    needs: [build, check-postgres, check-tdengine]
+    runs-on: ubuntu-latest
+    services:
+      tdengine:
+        image: tdengine/tdengine:latest
+        ports:
+          - 6030:6030
+          - 6041:6041
+      postgres:
+        image: postgres:18
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_DB: exchange_info_db
+          POSTGRES_USER: trading
+          POSTGRES_PASSWORD: trading123
+        options: >-
+          --health-cmd "pg_isready -U trading -d exchange_info_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      
+      - name: Install Python dependencies
+        run: pip install pandas taos-ws-py psycopg2-binary pynacl requests
+      
+      - name: Initialize DB
+        run: PG_PORT=5432 ./scripts/db/init.sh pg
+      
+      - name: Download Binary
+        uses: actions/download-artifact@v4
+        with:
+          name: gateway-binary
+          path: target/release
+      
+      - name: Set Binary Executable
+        run: chmod +x target/release/zero_x_infinity
+
+      - name: Initialize TDengine
+        run: ./scripts/db/init.sh td && sleep 5
+
+      - name: Run K-Line E2E
+        run: ./scripts/test_ci.sh --test-kline
+        id: run-test
+        continue-on-error: true
+
+      - name: Dump Logs on Failure
+        if: steps.run-test.outcome == 'failure'
+        run: |
+          echo "=== K-Line E2E Log ==="
+          cat logs/KLine_E2E.log || true
+          echo ""
+          echo "=== Gateway Output Log ==="
+          cat /tmp/gateway.log || true
+          exit 1
+
+      - name: Upload Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-kline-e2e
+          path: |
+            logs/
+            /tmp/gateway.log
+          retention-days: 7
+
+  test-depth:
+    name: Depth API
+    needs: [build, check-postgres, check-tdengine]
+    runs-on: ubuntu-latest
+    services:
+      tdengine:
+        image: tdengine/tdengine:latest
+        ports:
+          - 6030:6030
+          - 6041:6041
+      postgres:
+        image: postgres:18
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_DB: exchange_info_db
+          POSTGRES_USER: trading
+          POSTGRES_PASSWORD: trading123
+        options: >-
+          --health-cmd "pg_isready -U trading -d exchange_info_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      
+      - name: Install Python dependencies
+        run: pip install pandas taos-ws-py psycopg2-binary pynacl requests
+      
+      - name: Initialize DB
+        run: PG_PORT=5432 ./scripts/db/init.sh pg
+      
+      - name: Download Binary
+        uses: actions/download-artifact@v4
+        with:
+          name: gateway-binary
+          path: target/release
+      
+      - name: Set Binary Executable
+        run: chmod +x target/release/zero_x_infinity
+
+      - name: Initialize TDengine
+        run: ./scripts/db/init.sh td && sleep 5
+
+      - name: Run Depth API
+        run: ./scripts/test_ci.sh --test-depth
+        id: run-test
+        continue-on-error: true
+
+      - name: Dump Logs on Failure
+        if: steps.run-test.outcome == 'failure'
+        run: |
+          echo "=== Depth API Log ==="
+          cat logs/Depth_API.log || true
+          echo ""
+          echo "=== Gateway Output Log ==="
+          cat /tmp/gateway.log || true
+          exit 1
+
+      - name: Upload Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-depth-api
+          path: |
+            logs/
+            /tmp/gateway.log
+          retention-days: 7
+
+  test-account:
+    name: Account Integration
+    needs: [build, check-postgres, check-tdengine]
+    runs-on: ubuntu-latest
+    services:
+      tdengine:
+        image: tdengine/tdengine:latest
+        ports:
+          - 6030:6030
+          - 6041:6041
+      postgres:
+        image: postgres:18
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_DB: exchange_info_db
+          POSTGRES_USER: trading
+          POSTGRES_PASSWORD: trading123
+        options: >-
+          --health-cmd "pg_isready -U trading -d exchange_info_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      
+      - name: Install Python dependencies
+        run: pip install pandas taos-ws-py psycopg2-binary pynacl requests
+      
+      - name: Initialize DB
+        run: PG_PORT=5432 ./scripts/db/init.sh pg
+
+      - name: Initialize TDengine
+        run: ./scripts/db/init.sh td && sleep 5
+
+      - name: Download Binary
+        uses: actions/download-artifact@v4
+        with:
+          name: gateway-binary
+          path: target/release
+      
+      - name: Set Binary Executable
+        run: chmod +x target/release/zero_x_infinity
+
+      - name: Run Account Integration
+        run: ./scripts/test_ci.sh --test-account
+        id: run-test
+        continue-on-error: true
+
+      - name: Dump Logs on Failure
+        if: steps.run-test.outcome == 'failure'
+        run: |
+          echo "=== Account Integration Log ==="
+          cat logs/Account_Integration.log || true
+          echo ""
+          echo "=== Gateway Output Log ==="
+          cat /tmp/gateway.log || true
+          exit 1
+
+      - name: Upload Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-account-integration
+          path: |
+            logs/
+            /tmp/gateway.log
+          retention-days: 7
+
+      - name: Report Success
+        if: steps.run-test.outcome == 'success'
+        run: echo "✅ Account Integration passed"

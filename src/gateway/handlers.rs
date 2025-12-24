@@ -1,7 +1,7 @@
 use axum::{
-    Json,
+    Extension, Json,
     extract::{Path, Query, State},
-    http::{HeaderMap, StatusCode},
+    http::StatusCode,
 };
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -125,12 +125,12 @@ fn format_qty_internal(value: u64, decimals: u32, display_decimals: u32) -> Stri
 /// POST /api/v1/create_order
 pub async fn create_order(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
+    Extension(user): Extension<crate::api_auth::AuthenticatedUser>,
     Json(req): Json<ClientOrder>,
 ) -> Result<(StatusCode, Json<ApiResponse<OrderResponseData>>), (StatusCode, Json<ApiResponse<()>>)>
 {
-    // 1. Extract user_id
-    let user_id = extract_user_id(&headers)?;
+    // 1. Extract user_id from authenticated user
+    let user_id = user.user_id as u64;
     tracing::info!("[TRACE] Create Order: Received from User {}", user_id);
 
     // 2. Validate and parse ClientOrder
@@ -197,12 +197,12 @@ pub async fn create_order(
 /// POST /api/v1/cancel_order
 pub async fn cancel_order(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
+    Extension(user): Extension<crate::api_auth::AuthenticatedUser>,
     Json(req): Json<CancelOrderRequest>,
 ) -> Result<(StatusCode, Json<ApiResponse<OrderResponseData>>), (StatusCode, Json<ApiResponse<()>>)>
 {
-    // 1. Extract user_id
-    let user_id = extract_user_id(&headers)?;
+    // 1. Extract user_id from authenticated user
+    let user_id = user.user_id as u64;
     tracing::info!(
         "[TRACE] Cancel Order {}: Received from User {}",
         req.order_id,
@@ -255,7 +255,7 @@ pub async fn cancel_order(
 /// Uses FSM-based transfer when coordinator is available, otherwise falls back to legacy.
 pub async fn create_transfer(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
+    Extension(user): Extension<crate::api_auth::AuthenticatedUser>,
     Json(req): Json<crate::funding::transfer::TransferRequest>,
 ) -> Result<
     (
@@ -264,8 +264,8 @@ pub async fn create_transfer(
     ),
     (StatusCode, Json<ApiResponse<()>>),
 > {
-    // 1. Extract user_id
-    let user_id = extract_user_id(&headers)?;
+    // 1. Extract user_id from authenticated user
+    let user_id = user.user_id as u64;
     tracing::info!("[TRACE] Transfer Request: From User {}", user_id);
 
     // 2. Check if FSM coordinator is available
@@ -413,32 +413,6 @@ pub async fn get_transfer(
 // Helper Functions
 // ============================================================================
 
-/// Extract user_id from HTTP headers
-fn extract_user_id(headers: &HeaderMap) -> Result<u64, (StatusCode, Json<ApiResponse<()>>)> {
-    let user_id_str = headers
-        .get("X-User-ID")
-        .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| {
-            (
-                StatusCode::UNAUTHORIZED,
-                Json(ApiResponse::<()>::error(
-                    error_codes::MISSING_AUTH,
-                    "Missing X-User-ID header",
-                )),
-            )
-        })?;
-
-    user_id_str.parse::<u64>().map_err(|_| {
-        (
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<()>::error(
-                error_codes::INVALID_PARAMETER,
-                "Invalid X-User-ID format",
-            )),
-        )
-    })
-}
-
 /// Get current time in nanoseconds
 fn now_ns() -> u64 {
     SystemTime::now()
@@ -515,6 +489,7 @@ pub async fn get_order(
 /// GET /api/v1/orders?user_id=1001&limit=10
 pub async fn get_orders(
     State(state): State<Arc<AppState>>,
+    Extension(user): Extension<crate::api_auth::AuthenticatedUser>,
     Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> Result<
     (
@@ -534,19 +509,8 @@ pub async fn get_orders(
         )
     })?;
 
-    // Parse query parameters
-    let user_id: u64 = params
-        .get("user_id")
-        .and_then(|s| s.parse().ok())
-        .ok_or_else(|| {
-            (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<()>::error(
-                    error_codes::INVALID_PARAMETER,
-                    "Missing or invalid user_id parameter",
-                )),
-            )
-        })?;
+    // 1. Use user_id from authenticated user
+    let user_id = user.user_id as u64;
 
     let limit: usize = params
         .get("limit")
@@ -629,6 +593,7 @@ pub async fn get_trades(
 /// GET /api/v1/balances?user_id=1001&asset_id=1
 pub async fn get_balances(
     State(state): State<Arc<AppState>>,
+    Extension(user): Extension<crate::api_auth::AuthenticatedUser>,
     Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> Result<
     (
@@ -648,19 +613,8 @@ pub async fn get_balances(
         )
     })?;
 
-    // Parse query parameters
-    let user_id: u64 = params
-        .get("user_id")
-        .and_then(|s| s.parse().ok())
-        .ok_or_else(|| {
-            (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<()>::error(
-                    error_codes::INVALID_PARAMETER,
-                    "Missing or invalid user_id parameter",
-                )),
-            )
-        })?;
+    // 1. Use user_id from authenticated user
+    let user_id = user.user_id as u64;
 
     let asset_id: u32 = params
         .get("asset_id")

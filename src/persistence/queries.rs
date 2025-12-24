@@ -104,7 +104,7 @@ pub async fn query_order(
 ) -> Result<Option<OrderApiData>> {
     // Query from Super Table with WHERE clause
     let sql = format!(
-        "SELECT ts, order_id, user_id, side, order_type, price, qty, filled_qty, status, cid FROM orders WHERE symbol_id = {} AND order_id = {} ORDER BY ts DESC LIMIT 1",
+        "SELECT ts, order_id, user_id, side, order_type, price, qty, filled_qty, status, cid FROM trading.orders WHERE symbol_id = {} AND order_id = {} ORDER BY ts DESC LIMIT 1",
         symbol_id, order_id
     );
 
@@ -176,7 +176,7 @@ pub async fn query_orders(
 ) -> Result<Vec<OrderApiData>> {
     // Query from Super Table with WHERE clause
     let sql = format!(
-        "SELECT ts, order_id, user_id, side, order_type, price, qty, filled_qty, status, cid FROM orders WHERE symbol_id = {} AND user_id = {} ORDER BY ts DESC LIMIT {}",
+        "SELECT ts, order_id, user_id, side, order_type, price, qty, filled_qty, status, cid FROM trading.orders WHERE symbol_id = {} AND user_id = {} ORDER BY ts DESC LIMIT {}",
         symbol_id, user_id, limit
     );
 
@@ -247,7 +247,7 @@ pub async fn query_trades(
 ) -> Result<Vec<TradeApiData>> {
     // Query from Super Table
     let sql = format!(
-        "SELECT ts, trade_id, order_id, user_id, side, price, qty, fee, role FROM trades WHERE symbol_id = {} ORDER BY ts DESC LIMIT {}",
+        "SELECT ts, trade_id, order_id, user_id, side, price, qty, fee, role FROM trading.trades WHERE symbol_id = {} ORDER BY ts DESC LIMIT {}",
         symbol_id, limit
     );
 
@@ -308,7 +308,7 @@ pub async fn query_balance(
     let table_name = format!("balances_{}_{}", user_id, asset_id);
 
     let sql = format!(
-        "SELECT ts, avail, frozen, lock_version, settle_version FROM {} ORDER BY ts DESC LIMIT 1",
+        "SELECT ts, avail, frozen, lock_version, settle_version FROM trading.{} ORDER BY ts DESC LIMIT 1",
         table_name
     );
 
