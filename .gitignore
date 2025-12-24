@@ -38,3 +38,4 @@ test_results.log
 config/*.bak
 __pycache__/
 test-reports/
+indexer-blockdata-rs
