@@ -139,34 +139,32 @@ Trade: Alice (Taker, BUY) ← → Bob (Maker, SELL)
 > 2. **避免预算超支**: 买 1 BTC 不会因为手续费导致需要 100,020 USDT
 > 3. **行业惯例**: Binance、Coinbase 都是这样做的
 
-### 2.4 Lock Amount Must Include Max Fee
+### 2.4 Why No Lock Reservation Needed
 
-**关键设计**: 下单锁定金额必须包含最大潜在手续费，避免成交后余额不足。
+由于手续费从**收到的资产**中扣除，**不需要预留手续费**：
 
-```rust
-// 下单时计算锁定金额
-let base_cost = match side {
-    Buy => price * qty / qty_unit,  // USDT
-    Sell => qty,                     // BTC
-};
-
-// 获取用户最大费率 (Taker 费率)
-let max_fee_rate = get_user_fee_rate(user_id, symbol_id, is_taker: true);
-let max_fee = base_cost * max_fee_rate / 1_000_000;
-
-// 实际锁定 = 基础成本 + 最大潜在费用
-let lock_amount = base_cost + max_fee;
-user.lock(lock_amount);
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ 从 Gain（收到资产）扣费的好处                                        │
+├─────────────────────────────────────────────────────────────────────┤
+│ 用户收到 1 BTC → 扣 0.002 BTC 手续费 → 实际到账 0.998 BTC           │
+│                                                                     │
+│ ✅ 永远不会"余额不足付手续费"                                        │
+│ ✅ 支付金额 = 实际支付金额（不多不少）                               │
+│ ✅ 无需复杂的预留/退还逻辑                                           │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-**成交后处理**:
-- 实际费用 <= 预留费用
-- 多余预留金额解冻退回用户可用余额
+**对比从支付资产扣费**:
 
-> **Why 必须预留？**
-> - 避免成交后付不起手续费
-> - 无需产生欠债记录
-> - 用户体验更好
+| 方案 | 锁定金额 | 问题 |
+|------|---------|------|
+| 从 Gain 扣 | `base_cost` | 无需额外预留 ✅ |
+| 从 Pay 扣 | `base_cost + max_fee` | 余额可能不足，需预留 ❌ |
+
+> **设计决策**: 采用"从 Gain 扣费"模式，简化锁定逻辑。
+> - 买单锁定 USDT，手续费从收到的 BTC 中扣
+> - 卖单锁定 BTC，手续费从收到的 USDT 中扣
 
 ### 2.5 Fee Calculation Timing
 
