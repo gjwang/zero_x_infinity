@@ -95,7 +95,9 @@ graph TD
 | **Part II** | **Productization** | |
 | 0x0A | [Part II Introduction](./docs/src/0x0A-part-ii-introduction.md) | Productization Roadmap |
 | 0x0A-a | [Account System](./docs/src/0x0A-a-account-system.md) | PostgreSQL Account Manager |
-| 0x0A-b | [API Auth](./docs/src/0x0A-b-api-auth.md) | Ed25519 Authentication (WIP) |
+| 0x0A-b | [API Auth](./docs/src/0x0A-c-api-auth.md) | Ed25519 Authentication |
+| 0x0B | [Funding & Transfer](./docs/src/0x0B-funding.md) | Funding System Architecture |
+| 0x0B-a | [Internal Transfer](./docs/src/0x0B-a-transfer.md) | FSM-based 2PC Transfer |
 
 ---
 
@@ -259,7 +261,9 @@ graph TD
 | **Part II** | **产品化阶段 (Productization)** | |
 | 0x0A | [Part II Introduction](./docs/src/0x0A-part-ii-introduction.md) | 产品化路线图 |
 | 0x0A-a | [Account System](./docs/src/0x0A-a-account-system.md) | PostgreSQL 账户管理 |
-| 0x0A-b | [API Auth](./docs/src/0x0A-b-api-auth.md) | 安全鉴权 (进行中) |
+| 0x0A-b | [API Auth](./docs/src/0x0A-c-api-auth.md) | Ed25519 安全鉴权 |
+| 0x0B | [Funding & Transfer](./docs/src/0x0B-funding.md) | 资金体系架构 |
+| 0x0B-a | [Internal Transfer](./docs/src/0x0B-a-transfer.md) | FSM 内部转账 |
 
 ---
 
@@ -317,12 +321,17 @@ persistence:
 
 ### 3. API 概览
 
-- `POST /api/v1/create_order` - 创建订单
-- `POST /api/v1/cancel_order` - 取消订单
-- `GET /api/v1/order/:order_id` - 查询订单
-- `GET /api/v1/klines?interval=&limit=` - 查询 K 线
-- `GET /api/v1/depth?symbol=&limit=` - 查询盘口深度
-- `WS /ws?user_id=` - WebSocket 实时推送
+**公开接口 (Public)**:
+- `GET /api/v1/public/depth` - 盘口深度
+- `GET /api/v1/public/klines` - K 线数据
+- `GET /api/v1/public/assets` - 资产列表
+
+**私有接口 (Private, Ed25519 签名)**:
+- `POST /api/v1/private/order` - 创建订单
+- `POST /api/v1/private/cancel` - 取消订单
+- `POST /api/v1/private/transfer` - 内部转账
+- `GET /api/v1/private/balances/all` - 查询余额
+- `WS /ws` - WebSocket 实时推送
 
 ---
 
