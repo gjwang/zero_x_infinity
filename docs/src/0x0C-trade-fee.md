@@ -59,16 +59,32 @@ Implement **Maker/Taker fee model** for trade execution. Fees are the primary re
 
 > **行业实践**: Binance、OKX、Bybit 等主流交易所都采用此模型。
 
-### 2.2 Standard Rates
+### 2.2 Fee Rate Architecture
 
-| Role | Rate (bps) | Rate (%) | Example: 100 USDT trade |
-|------|-----------|----------|------------------------|
-| **Maker** | 10 | 0.10% | 0.10 USDT |
-| **Taker** | 20 | 0.20% | 0.20 USDT |
+我们从 `indexer-blockdata-rs` 项目中借鉴了 **VIP 费率表** 的设计思路：
 
-> **Industry Reference**: Binance Spot (VIP 0): Maker 0.10%, Taker 0.10%
+```rust
+/// Fee precision: 10^6 (1000 = 0.1%)
+/// VIP 0: Maker 0.10%, Taker 0.15%
+/// VIP 9: Maker 0.01%, Taker 0.04%
+pub struct VipFeeTable {
+    rates: [(u64, u64); 10],  // (maker_rate, taker_rate)
+}
+```
 
-### 2.2 Fee Collection Point
+> **Why 10^6 精度？**
+> - 10^4 (bps) 只能表示到 0.01%，不够精细
+> - 10^6 可以表示 0.0001%，足够支持 VIP 折扣和返佣
+> - 与 u64 乘法不会溢出 (u64 * 10^6 / 10^6)
+
+**MVP 阶段简化**: 暂不实现 VIP 等级系统，使用固定费率。
+
+| Role | Rate (bps) | Rate (%) | 10^6 Precision |
+|------|-----------|----------|----------------|
+| **Maker** | 10 | 0.10% | 1000 |
+| **Taker** | 20 | 0.20% | 2000 |
+
+### 2.3 Fee Collection Point
 
 ```
 Trade: Alice (Taker, BUY) ← → Bob (Maker, SELL)
@@ -93,6 +109,24 @@ Trade: Alice (Taker, BUY) ← → Bob (Maker, SELL)
 > 1. **简化用户心理账单**: 用户支付 100 USDT，就是 100 USDT，不会多扣
 > 2. **避免预算超支**: 买 1 BTC 不会因为手续费导致需要 100,020 USDT
 > 3. **行业惯例**: Binance、Coinbase 都是这样做的
+
+### 2.4 Fee Calculation Timing
+
+关键问题：**费用在哪里计算和扣除？**
+
+```
+┌────────────────┐    ┌─────────────┐    ┌────────────────┐
+│ Matching Engine│───▶│  Trade{     │───▶│   Settlement   │
+│   (Match)      │    │   fee=0,    │    │ (Calculate Fee)│
+│                │    │   role      │    │ (Deduct Fee)   │
+│                │    │   }         │    │ (Credit Net)   │
+└────────────────┘    └─────────────┘    └────────────────┘
+```
+
+> **Why 在 Settlement 层计算**（而不是 ME）？
+> 1. **ME 保持高性能**: 撮合引擎只关注 price-time priority
+> 2. **费用可配置性**: 不同用户可能有不同 VIP 等级或折扣
+> 3. **复杂场景扩展**: BNB 抵扣、返佣等逻辑不影响 ME
 
 ---
 
