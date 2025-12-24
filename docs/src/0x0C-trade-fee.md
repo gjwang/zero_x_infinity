@@ -296,45 +296,61 @@ Existing `Trade` struct already has:
 | `trades_tb` (TDengine) | `fee`, `fee_asset`, `role` 字段 |
 | Trade Event | 实时推送给下游 (WS, Kafka) |
 
-### 3.5 Platform Revenue Account (资产可溯源)
+### 3.5 Event Sourcing: BalanceEventBatch (资产可溯源)
 
-**设计原则**: 任何资产都必须可溯源 → Fee 必须流入 Revenue Account
+**核心设计**: 一个 Trade 产生一组 BalanceEvent 作为**原子整体**
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    Fee Flow (Double-Entry)                          │
-├─────────────────────────────────────────────────────────────────────┤
-│  User debit fee ─────────────────────────▶ Revenue Account credit   │
-│                    (有借必有贷, 资产守恒)                            │
-└─────────────────────────────────────────────────────────────────────┘
+Trade ──▶ UBSCore ──▶ BalanceEventBatch{trade_id, events: [...]}
+                              │
+                              ├── TradeSettled{user: buyer}   // 买方
+                              ├── TradeSettled{user: seller}  // 卖方
+                              ├── FeeReceived{account: REVENUE, from: buyer}
+                              └── FeeReceived{account: REVENUE, from: seller}
 ```
 
-**Revenue Account 设计**:
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `asset_id` | u32 PK | 资产 ID |
-| `balance` | u64 | 累计收入 (scaled) |
-| `last_updated` | TIMESTAMP | 最后更新时间 |
-
-**UBSCore 处理**:
-```
-Trade → UBSCore:
-  ① buyer.credit(net_amount)   // net = received - fee
-  ② seller.credit(net_amount)
-  ③ revenue[base_asset] += buyer_fee    // 平台收入
-  ④ revenue[quote_asset] += seller_fee
+**示例结构 (伪代码)**:
+```rust
+// ⚠️ 伪代码 - 实现时可能有调整
+BalanceEventBatch {
+    trade_id: u64,
+    ts: Timestamp,
+    events: [
+        TradeSettled{user: buyer_id, debit_asset, debit_amount, credit_asset, credit_amount, fee},
+        TradeSettled{user: seller_id, debit_asset, debit_amount, credit_asset, credit_amount, fee},
+        FeeReceived{account: REVENUE_ID, asset: base_asset, amount: buyer_fee, from_user: buyer_id},
+        FeeReceived{account: REVENUE_ID, asset: quote_asset, amount: seller_fee, from_user: seller_id},
+    ]
+}
 ```
 
-**可审计性**:
+**原子整体特性**:
+
+| 特性 | 说明 |
+|------|------|
+| 一起生成 | 同一个 trade_id |
+| 一起持久化 | 同一批写入 TDengine |
+| 一起可追溯 | 通过 trade_id 关联所有事件 |
+
+**资产守恒验证**:
 ```
-Σ(User Balances) + Σ(Revenue Balances) == Omnibus Balance (链上资产)
+buyer.debit(quote)  + buyer.credit(base - fee)   = 0  ✓
+seller.debit(base)  + seller.credit(quote - fee) = 0  ✓
+revenue.credit(buyer_fee + seller_fee)           = fee_total ✓
+
+Σ 变动 = 0 (资产守恒, 可审计)
 ```
 
-> **Why Revenue Account?**
-> - **资产可溯源**: 每一分 fee 都有去向
-> - **实时余额**: 无需聚合查询
-> - **审计友好**: 支持财务对账
+**TDengine 存储 (Event Sourcing)**:
+
+| 表 | 内容 |
+|------|------|
+| `balance_events_tb` | 所有 BalanceEvent (TradeSettled + FeeReceived) |
+
+> **Why Event Sourcing?**
+> - **每笔可追溯**: 任何 fee 都能追溯到 trade_id + user_id
+> - **资产守恒**: 事件批次内守恒可验证
+> - **聚合是衍生**: 余额 = SUM(events)，按需计算
 
 ---
 
