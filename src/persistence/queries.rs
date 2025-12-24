@@ -58,6 +58,26 @@ struct TradeRow {
     role: i8,
 }
 
+/// Trade record without fee (fee is queried separately from balance_events)
+#[derive(Debug, Deserialize)]
+struct TradeRowWithoutFee {
+    ts: String,
+    trade_id: i64,
+    order_id: i64,
+    user_id: i64,
+    side: i8,
+    price: i64,
+    qty: i64,
+    role: i8,
+}
+
+/// Fee record from balance_events table
+#[derive(Debug, Deserialize, Default)]
+struct FeeRow {
+    trade_id: i64,
+    fee_amount: i64,
+}
+
 /// Trade API response data (compliant with API conventions)
 #[derive(Debug, Serialize)]
 pub struct TradeApiData {
@@ -246,22 +266,60 @@ pub async fn query_trades(
     limit: usize,
     symbol_mgr: &SymbolManager,
 ) -> Result<Vec<TradeApiData>> {
-    // Query from Super Table
-    let sql = format!(
-        "SELECT ts, trade_id, order_id, user_id, side, price, qty, fee, role FROM trading.trades WHERE symbol_id = {} ORDER BY ts DESC LIMIT {}",
+    // Query trades (without fee - fee is in balance_events)
+    let trades_sql = format!(
+        "SELECT ts, trade_id, order_id, user_id, side, price, qty, role FROM trading.trades WHERE symbol_id = {} ORDER BY ts DESC LIMIT {}",
         symbol_id, limit
     );
 
     let mut result = taos
-        .query(&sql)
+        .query(&trades_sql)
         .await
-        .map_err(|e| anyhow::anyhow!("Query failed: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Query trades failed: {}", e))?;
 
-    let rows: Vec<TradeRow> = result
+    let rows: Vec<TradeRowWithoutFee> = result
         .deserialize()
         .try_collect()
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to deserialize: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to deserialize trades: {}", e))?;
+
+    // Get trade_ids for balance_events lookup
+    let trade_ids: Vec<i64> = rows.iter().map(|r| r.trade_id).collect();
+
+    // Query fee from balance_events (per-user fee stored here)
+    // event_type = 4 is SettleReceive which contains fee_amount
+    let fee_map: std::collections::HashMap<i64, i64> = if !trade_ids.is_empty() {
+        let trade_id_list = trade_ids
+            .iter()
+            .map(|id| id.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
+
+        let fee_sql = format!(
+            "SELECT trade_id, fee_amount FROM trading.balance_events WHERE trade_id IN ({}) AND event_type = 4",
+            trade_id_list
+        );
+
+        match taos.query(&fee_sql).await {
+            Ok(mut fee_result) => {
+                let fee_rows: Vec<FeeRow> = fee_result
+                    .deserialize()
+                    .try_collect()
+                    .await
+                    .unwrap_or_default();
+                fee_rows
+                    .into_iter()
+                    .map(|r| (r.trade_id, r.fee_amount))
+                    .collect()
+            }
+            Err(e) => {
+                tracing::warn!("Failed to query balance_events for fee: {}", e);
+                std::collections::HashMap::new()
+            }
+        }
+    } else {
+        std::collections::HashMap::new()
+    };
 
     // Get symbol info for formatting
     let symbol_info = symbol_mgr.get_symbol_info_by_id(symbol_id).unwrap();
@@ -305,6 +363,9 @@ pub async fn query_trades(
                 )
             };
 
+            // Get fee from balance_events (keyed by trade_id)
+            let fee = fee_map.get(&row.trade_id).copied().unwrap_or(0);
+
             TradeApiData {
                 trade_id: row.trade_id as u64,
                 order_id: row.order_id as u64,
@@ -317,7 +378,7 @@ pub async fn query_trades(
                     symbol_info.price_display_decimal,
                 ),
                 qty: format_amount(row.qty as u64, base_decimals, base_display_decimals),
-                fee: format_amount(row.fee as u64, fee_decimals, fee_display_decimals),
+                fee: format_amount(fee as u64, fee_decimals, fee_display_decimals),
                 fee_asset,
                 role: if row.role == 1 { "TAKER" } else { "MAKER" }.to_string(),
                 created_at: row.ts,
@@ -499,12 +560,7 @@ pub async fn query_klines(
 // TRADE FEE QUERY (from balance_events)
 // ============================================================
 
-/// Fee record from balance_events table
-#[derive(Debug, Deserialize)]
-struct FeeRow {
-    source_id: i64, // trade_id
-    fee_amount: i64,
-}
+// NOTE: FeeRow struct is defined at top of file (L76)
 
 /// Query trade fees from balance_events for a user
 ///
@@ -524,11 +580,11 @@ pub async fn query_trade_fees(
     let ids: Vec<String> = trade_ids.iter().map(|id| id.to_string()).collect();
     let ids_str = ids.join(", ");
 
-    // Query balance_events for Settle events (event_type=1) with positive delta (receive)
+    // Query balance_events for SettleReceive events (event_type=2) with fee
     // account_type=1 for Spot
     let table_name = format!("balance_events_{}_{}", user_id, 1);
     let sql = format!(
-        "SELECT source_id, fee_amount FROM trading.{} WHERE source_id IN ({}) AND fee_amount > 0",
+        "SELECT trade_id, user_id, fee FROM trading.{} WHERE trade_id IN ({}) AND fee > 0",
         table_name, ids_str
     );
 
@@ -540,7 +596,7 @@ pub async fn query_trade_fees(
 
             Ok(rows
                 .into_iter()
-                .map(|r| (r.source_id as u64, r.fee_amount as u64))
+                .map(|r| (r.trade_id as u64, r.fee_amount as u64))
                 .collect())
         }
         Err(_) => {
