@@ -528,8 +528,7 @@ BalanceEventBatch
 
 | Case | Handling |
 |------|----------|
-| Fee rounds to 0 | Minimum fee = 1 (smallest unit) |
-| Zero-fee symbol | Allow `maker_fee_bps = 0` |
+| Zero-fee symbol | Allow `maker_fee = 0` |
 | Insufficient for fee | N/A - fee always deducted from received asset |
 
 ---
@@ -802,7 +801,6 @@ BalanceEventBatch
 
 | 情况 | 处理 |
 |------|------|
-| Fee 四舍五入为 0 | 最小 fee = 1 |
 | 零费率交易对 | 允许 `maker_fee = 0` |
 
 ---
