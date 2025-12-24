@@ -22,7 +22,7 @@ mod integration_tests {
 
     impl TestHarness {
         fn new(pool: sqlx::PgPool) -> Self {
-            // ULID-based RequestId doesn't need machine_id coordination
+            // ULID-based InternalTransferId doesn't need machine_id coordination
 
             let db = Arc::new(TransferDb::new(pool));
             let funding = Arc::new(MockAdapter::new("funding"));
@@ -62,7 +62,7 @@ mod integration_tests {
 
         // Create transfer
         let req_id = harness.coordinator.create(req).await.unwrap();
-        // RequestId is ULID, no comparison to 0 needed
+        // InternalTransferId is ULID, no comparison to 0 needed
 
         // Execute to completion
         let final_state = harness.coordinator.execute(req_id).await.unwrap();

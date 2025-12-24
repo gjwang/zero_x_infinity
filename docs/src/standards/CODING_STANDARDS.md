@@ -180,6 +180,47 @@ cargo clippy -- -D warnings  # No warnings
 cargo fmt --check     # Properly formatted
 ```
 
+### 2.4 Git Workflow (Rebase-based)
+
+> **MANDATORY**: Use rebase to maintain linear, clean commit history.
+
+**Feature Branch Workflow**:
+```bash
+# 1. Create feature branch from latest main
+git checkout main && git pull
+git checkout -b feature/my-feature
+
+# 2. Work on your feature (multiple commits OK)
+git add -A && git commit -m "feat: ..."
+
+# 3. Before PR: rebase onto latest main
+git fetch origin main
+git rebase origin/main
+
+# 4. Resolve conflicts if any, then force push
+git push --force-with-lease origin feature/my-feature
+```
+
+**When Syncing with Main**:
+```bash
+# ✅ PREFERRED: Rebase (linear history)
+git rebase origin/main
+
+# ❌ AVOID: Merge (creates merge commits)
+git merge origin/main
+```
+
+**Rules**:
+- ✅ **Rebase feature branches** onto main before PR
+- ✅ **Squash** messy commits with `git rebase -i`
+- ✅ Use `--force-with-lease` (safer than `--force`)
+- ❌ **Never rebase public branches** (`main`, `develop`)
+- ❌ **Never rebase after PR is merged**
+
+**PR Merge Strategy** (GitHub):
+- Prefer **"Rebase and Merge"** or **"Squash and Merge"**
+- Avoid **"Create a Merge Commit"** for short-lived feature branches
+
 ---
 
 ## 3. Testing Requirements

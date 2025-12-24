@@ -10,7 +10,7 @@ use super::adapters::ServiceAdapter;
 use super::db::TransferDb;
 use super::error::TransferError;
 use super::state::TransferState;
-use super::types::{OpResult, RequestId, ServiceId, TransferRecord, TransferRequest};
+use super::types::{InternalTransferId, OpResult, ServiceId, TransferRecord, TransferRequest};
 
 /// Transfer Coordinator - orchestrates FSM-based processing
 pub struct TransferCoordinator {
@@ -37,7 +37,7 @@ impl TransferCoordinator {
     ///
     /// # Validation (Defense Layer 2: Coordinator)
     /// Re-validates critical parameters to prevent internal calls bypassing API.
-    pub async fn create(&self, req: TransferRequest) -> Result<RequestId, TransferError> {
+    pub async fn create(&self, req: TransferRequest) -> Result<InternalTransferId, TransferError> {
         // === Defense-in-Depth Layer 2: Coordinator Validation ===
         if req.amount == 0 {
             return Err(TransferError::InvalidAmount);
@@ -59,8 +59,8 @@ impl TransferCoordinator {
             return Ok(existing.req_id);
         }
 
-        // Generate RequestId using ULID (no coordination needed)
-        let req_id = RequestId::new();
+        // Generate InternalTransferId using ULID (no coordination needed)
+        let req_id = InternalTransferId::new();
 
         // Create transfer record
         let record = TransferRecord::new(
@@ -86,7 +86,7 @@ impl TransferCoordinator {
     ///
     /// Returns the new state after processing.
     /// Call repeatedly until a terminal state is reached.
-    pub async fn step(&self, req_id: RequestId) -> Result<TransferState, TransferError> {
+    pub async fn step(&self, req_id: InternalTransferId) -> Result<TransferState, TransferError> {
         let record = self
             .db
             .get(req_id)
@@ -132,7 +132,10 @@ impl TransferCoordinator {
     ///
     /// Runs step() repeatedly until a terminal state is reached.
     /// Returns the final state.
-    pub async fn execute(&self, req_id: RequestId) -> Result<TransferState, TransferError> {
+    pub async fn execute(
+        &self,
+        req_id: InternalTransferId,
+    ) -> Result<TransferState, TransferError> {
         let mut state = TransferState::Init;
         let max_iterations = 100; // Safety limit
 
@@ -480,13 +483,16 @@ impl TransferCoordinator {
     /// Get current state of a transfer
     pub async fn get_state(
         &self,
-        req_id: RequestId,
+        req_id: InternalTransferId,
     ) -> Result<Option<TransferState>, TransferError> {
         Ok(self.db.get(req_id).await?.map(|r| r.state))
     }
 
     /// Get full transfer record
-    pub async fn get(&self, req_id: RequestId) -> Result<Option<TransferRecord>, TransferError> {
+    pub async fn get(
+        &self,
+        req_id: InternalTransferId,
+    ) -> Result<Option<TransferRecord>, TransferError> {
         self.db.get(req_id).await
     }
 
@@ -517,8 +523,8 @@ mod tests {
 
     #[test]
     fn test_ulid_generation() {
-        let id1 = RequestId::new();
-        let id2 = RequestId::new();
+        let id1 = InternalTransferId::new();
+        let id2 = InternalTransferId::new();
 
         assert_ne!(id1, id2); // Should be unique
     }

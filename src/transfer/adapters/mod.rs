@@ -12,7 +12,7 @@ pub use trading::TradingAdapter;
 
 use async_trait::async_trait;
 
-use super::types::{OpResult, RequestId};
+use super::types::{InternalTransferId, OpResult};
 
 /// Service adapter trait for balance operations
 ///
@@ -29,7 +29,7 @@ pub trait ServiceAdapter: Send + Sync {
     /// If already processed with this req_id, return the original result.
     async fn withdraw(
         &self,
-        req_id: RequestId,
+        req_id: InternalTransferId,
         user_id: u64,
         asset_id: u32,
         amount: u64,
@@ -41,7 +41,7 @@ pub trait ServiceAdapter: Send + Sync {
     /// If already processed with this req_id, return the original result.
     async fn deposit(
         &self,
-        req_id: RequestId,
+        req_id: InternalTransferId,
         user_id: u64,
         asset_id: u32,
         amount: u64,
@@ -50,12 +50,12 @@ pub trait ServiceAdapter: Send + Sync {
     /// Rollback a previous withdraw (refund)
     ///
     /// Only called during compensation phase when target deposit fails.
-    async fn rollback(&self, req_id: RequestId) -> OpResult;
+    async fn rollback(&self, req_id: InternalTransferId) -> OpResult;
 
     /// Commit/finalize a transfer (cleanup any locks)
     ///
     /// Called after target deposit succeeds to release any holds.
-    async fn commit(&self, req_id: RequestId) -> OpResult;
+    async fn commit(&self, req_id: InternalTransferId) -> OpResult;
 }
 
 /// Mock adapter for testing
@@ -69,7 +69,7 @@ pub mod mock {
     pub struct MockAdapter {
         name: &'static str,
         /// Track operations for verification
-        operations: Mutex<HashMap<RequestId, Vec<String>>>,
+        operations: Mutex<HashMap<InternalTransferId, Vec<String>>>,
         /// Count of each operation type
         withdraw_count: AtomicUsize,
         deposit_count: AtomicUsize,
@@ -127,7 +127,7 @@ pub mod mock {
 
         async fn withdraw(
             &self,
-            req_id: RequestId,
+            req_id: InternalTransferId,
             _user_id: u64,
             _asset_id: u32,
             _amount: u64,
@@ -146,7 +146,7 @@ pub mod mock {
 
         async fn deposit(
             &self,
-            req_id: RequestId,
+            req_id: InternalTransferId,
             _user_id: u64,
             _asset_id: u32,
             _amount: u64,
@@ -165,7 +165,7 @@ pub mod mock {
             }
         }
 
-        async fn rollback(&self, req_id: RequestId) -> OpResult {
+        async fn rollback(&self, req_id: InternalTransferId) -> OpResult {
             self.rollback_count.fetch_add(1, Ordering::SeqCst);
 
             let mut ops = self.operations.lock().unwrap();
@@ -174,7 +174,7 @@ pub mod mock {
             OpResult::Success
         }
 
-        async fn commit(&self, req_id: RequestId) -> OpResult {
+        async fn commit(&self, req_id: InternalTransferId) -> OpResult {
             let mut ops = self.operations.lock().unwrap();
             ops.entry(req_id).or_default().push("commit".to_string());
 
@@ -191,13 +191,13 @@ pub mod mock {
             let adapter = MockAdapter::new("test");
 
             let result = adapter
-                .withdraw(crate::transfer::RequestId::new(), 1001, 1, 1000)
+                .withdraw(crate::transfer::InternalTransferId::new(), 1001, 1, 1000)
                 .await;
             assert!(result.is_success());
             assert_eq!(adapter.withdraw_count(), 1);
 
             let result = adapter
-                .deposit(crate::transfer::RequestId::new(), 1001, 1, 1000)
+                .deposit(crate::transfer::InternalTransferId::new(), 1001, 1, 1000)
                 .await;
             assert!(result.is_success());
             assert_eq!(adapter.deposit_count(), 1);
@@ -209,7 +209,7 @@ pub mod mock {
             adapter.set_fail_withdraw(true);
 
             let result = adapter
-                .withdraw(crate::transfer::RequestId::new(), 1001, 1, 1000)
+                .withdraw(crate::transfer::InternalTransferId::new(), 1001, 1, 1000)
                 .await;
             assert!(result.is_explicit_fail());
         }
@@ -220,7 +220,7 @@ pub mod mock {
             adapter.set_pending_deposit(true);
 
             let result = adapter
-                .deposit(crate::transfer::RequestId::new(), 1001, 1, 1000)
+                .deposit(crate::transfer::InternalTransferId::new(), 1001, 1, 1000)
                 .await;
             assert!(result.is_pending());
         }
