@@ -174,4 +174,14 @@ impl SymbolManager {
             .find(|a| a.name == name)
             .map(|a| a.asset_id)
     }
+
+    /// Get the number of configured symbols
+    pub fn symbol_count(&self) -> usize {
+        self.symbol_info.len()
+    }
+
+    /// Iterate over all symbols
+    pub fn iter_symbols(&self) -> impl Iterator<Item = (&u32, &SymbolInfo)> {
+        self.symbol_info.iter()
+    }
 }
