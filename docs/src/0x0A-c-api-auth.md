@@ -13,7 +13,7 @@
 > **📅 Status**: ✅ **Implemented**
 > **Branch**: `0x0A-b-api-auth`
 > **Date**: 2025-12-23
-> **Code Changes**: [v0.10-a-account-system...v0.10-b-api-auth](https://github.com/gjwang/zero_x_infinity/compare/v0.10-a-account-system...v0.10-b-api-auth)
+> **Code Changes**: [v0.0A-a-account-system...v0.0A-b-api-auth](https://github.com/gjwang/zero_x_infinity/compare/v0.0A-a-account-system...v0.0A-b-api-auth)
 
 ## Implementation Summary
 
@@ -206,7 +206,7 @@ def sign_request(method, path, body=""):
 ## 🇨🇳 中文
 
 > **📅 状态**: ✅ **实现完成**
-> **代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.10-a-account-system...v0.10-b-api-auth)
+> **代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.0A-a-account-system...v0.0A-b-api-auth)
 
 ## Implementation Summary
 

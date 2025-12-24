@@ -10,7 +10,7 @@
 
 ## 🇺🇸 English
 
-> **📦 Code Changes**: [View Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.9-f-integration-test...0x10-productization-core)
+> **📦 Code Changes**: [View Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.9-f-integration-test...v0.0A-a-account-system)
 
 This chapter establishes the account infrastructure for the trading system: `exchange_info` module, naming conventions, and database management.
 
@@ -189,7 +189,7 @@ cargo test --lib
 
 ## 🇨🇳 中文
 
-> **📦 代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.9-f-integration-test...0x10-productization-core)
+> **📦 代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.9-f-integration-test...v0.0A-a-account-system)
 
 本章建立交易系统的账户基础设施：exchange_info 模块、命名规范、数据库管理。
 
