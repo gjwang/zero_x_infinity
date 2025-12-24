@@ -1,6 +1,6 @@
 # Coding Standards & Developer Guide
 
-> **Last Updated**: 2025-12-23 | **Version**: 2.0
+> **Last Updated**: 2025-12-24 | **Version**: 2.1
 
 This document consolidates all coding standards, development guidelines, and delivery requirements.
 
@@ -8,12 +8,34 @@ This document consolidates all coding standards, development guidelines, and del
 
 ## Table of Contents
 
+- [0. Getting Started](#0-getting-started)
 - [1. Code Quality Rules](#1-code-quality-rules)
 - [2. Commit Guidelines](#2-commit-guidelines)
 - [3. Testing Requirements](#3-testing-requirements)
 - [4. Delivery Checklist](#4-delivery-checklist)
 - [5. Quick Reference](#5-quick-reference)
 - [6. Common Commands](#6-common-commands)
+
+---
+
+## 0. Getting Started
+
+> **MANDATORY**: Run this after cloning the repository.
+
+```bash
+./scripts/setup-dev.sh
+```
+
+This script configures your local environment with:
+- ✅ **Git hooks**: Enforces `cargo fmt` + `cargo clippy` before push
+- ✅ **Rust toolchain**: Ensures rustfmt and clippy are installed
+- ✅ **Python dependencies**: Verifies test script requirements
+
+**What the pre-push hook does**:
+1. Runs `cargo fmt --check` (fails if code is not formatted)
+2. Runs `cargo clippy -- -D warnings` (fails if any clippy warnings)
+
+This ensures **no code that fails CI can be pushed**.
 
 ---
 
