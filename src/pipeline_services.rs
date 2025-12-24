@@ -955,6 +955,9 @@ impl SettlementService {
             });
 
         // Buyer trade
+        // Note: fee=0 here as placeholder. Real fee is in balance_events table.
+        // fee_asset for buyer = base_asset (they receive base)
+        let buyer_is_maker = trade_event.taker_side != Side::Buy;
         let _ = queues
             .push_event_queue
             .push(crate::websocket::PushEvent::Trade {
@@ -965,14 +968,14 @@ impl SettlementService {
                 side: Side::Buy,
                 price: trade.price,
                 qty: trade.qty,
-                role: if trade_event.taker_side == Side::Buy {
-                    1
-                } else {
-                    0
-                },
+                fee: 0, // TODO: Calculate fee from SymbolManager
+                fee_asset_id: trade_event.base_asset_id,
+                is_maker: buyer_is_maker,
             });
 
         // Seller trade
+        // fee_asset for seller = quote_asset (they receive quote)
+        let seller_is_maker = trade_event.taker_side != Side::Sell;
         let _ = queues
             .push_event_queue
             .push(crate::websocket::PushEvent::Trade {
@@ -983,11 +986,9 @@ impl SettlementService {
                 side: Side::Sell,
                 price: trade.price,
                 qty: trade.qty,
-                role: if trade_event.taker_side == Side::Sell {
-                    1
-                } else {
-                    0
-                },
+                fee: 0, // TODO: Calculate fee from SymbolManager
+                fee_asset_id: trade_event.quote_asset_id,
+                is_maker: seller_is_maker,
             });
     }
 
