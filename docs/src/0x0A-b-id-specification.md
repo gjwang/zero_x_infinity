@@ -39,8 +39,7 @@
   ```
   - `account_type = 0x01` -> Funding
   - `account_type = 0x02` -> Spot
-- **Reserved Range**: Account ID `0-255` reserved (when `user_id = 0`)
-  - `0` = Invalid/Null Account ID
+- **Note**: Account ID `0-256000` are system accounts (user_id 0-1000)
 
 ### 1.5 Order ID / Trade ID (`u64`)
 - **Semantics**: Unique identifier for orders/trades within the Matching Engine.
@@ -125,8 +124,7 @@ pub struct Account {
   ```
   - `account_type = 0x01` -> Funding
   - `account_type = 0x02` -> Spot
-- **预留范围**: Account ID `0-255` 预留 (当 `user_id = 0`)
-  - `0` = 无效/空 Account ID
+- **备注**: Account ID `0-256000` 是系统账户 (user_id 0-1000)
 
 ### 1.5 Order ID / Trade ID (`u64`)
 - **语义**: 撮合引擎内的订单/成交唯一标识。
