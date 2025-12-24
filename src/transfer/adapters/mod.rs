@@ -190,11 +190,15 @@ pub mod mock {
         async fn test_mock_adapter_success() {
             let adapter = MockAdapter::new("test");
 
-            let result = adapter.withdraw(123, 1001, 1, 1000).await;
+            let result = adapter
+                .withdraw(crate::transfer::RequestId::new(), 1001, 1, 1000)
+                .await;
             assert!(result.is_success());
             assert_eq!(adapter.withdraw_count(), 1);
 
-            let result = adapter.deposit(123, 1001, 1, 1000).await;
+            let result = adapter
+                .deposit(crate::transfer::RequestId::new(), 1001, 1, 1000)
+                .await;
             assert!(result.is_success());
             assert_eq!(adapter.deposit_count(), 1);
         }
@@ -204,7 +208,9 @@ pub mod mock {
             let adapter = MockAdapter::new("test");
             adapter.set_fail_withdraw(true);
 
-            let result = adapter.withdraw(123, 1001, 1, 1000).await;
+            let result = adapter
+                .withdraw(crate::transfer::RequestId::new(), 1001, 1, 1000)
+                .await;
             assert!(result.is_explicit_fail());
         }
 
@@ -213,7 +219,9 @@ pub mod mock {
             let adapter = MockAdapter::new("test");
             adapter.set_pending_deposit(true);
 
-            let result = adapter.deposit(123, 1001, 1, 1000).await;
+            let result = adapter
+                .deposit(crate::transfer::RequestId::new(), 1001, 1, 1000)
+                .await;
             assert!(result.is_pending());
         }
     }

@@ -3,11 +3,50 @@
 //! Type definitions for the internal transfer FSM.
 
 use std::fmt;
+use std::str::FromStr;
 
 use super::state::TransferState;
 
-/// Request ID type - Snowflake-generated unique identifier
-pub type RequestId = u64;
+/// Request ID type - ULID-based unique identifier
+///
+/// Using ULID provides:
+/// - Monotonic, sortable IDs
+/// - No coordination needed (no machine_id)
+/// - 128-bit with good entropy
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct RequestId(ulid::Ulid);
+
+impl RequestId {
+    /// Generate a new unique RequestId
+    pub fn new() -> Self {
+        Self(ulid::Ulid::new())
+    }
+
+    /// Get the inner ULID value
+    pub fn inner(&self) -> ulid::Ulid {
+        self.0
+    }
+}
+
+impl Default for RequestId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl fmt::Display for RequestId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl FromStr for RequestId {
+    type Err = ulid::DecodeError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(ulid::Ulid::from_string(s)?))
+    }
+}
 
 /// Service identifier for source/target of transfers
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -327,8 +366,9 @@ mod tests {
 
     #[test]
     fn test_transfer_record_new() {
+        let req_id = RequestId::new();
         let record = TransferRecord::new(
-            123456789,
+            req_id,
             ServiceId::Funding,
             ServiceId::Trading,
             1001,
@@ -337,7 +377,7 @@ mod tests {
             None,
         );
 
-        assert_eq!(record.req_id, 123456789);
+        assert_eq!(record.req_id, req_id);
         assert_eq!(record.source, ServiceId::Funding);
         assert_eq!(record.target, ServiceId::Trading);
         assert_eq!(record.state, TransferState::Init);
