@@ -62,22 +62,26 @@ pub fn load_symbol_manager() -> (SymbolManager, u32) {
     for line in reader.lines().skip(1) {
         let line = line.unwrap();
         let parts: Vec<&str> = line.split(',').collect();
-        if parts.len() >= 6 {
+        if parts.len() >= 8 {
             let symbol_id: u32 = parts[0].parse().unwrap();
             let symbol = parts[1];
             let base_asset_id: u32 = parts[2].parse().unwrap();
             let quote_asset_id: u32 = parts[3].parse().unwrap();
             let price_decimal: u32 = parts[4].parse().unwrap();
             let price_display_decimal: u32 = parts[5].parse().unwrap();
+            let base_maker_fee: u64 = parts[6].parse().unwrap_or(0);
+            let base_taker_fee: u64 = parts[7].parse().unwrap_or(0);
 
             manager
-                .insert_symbol(
+                .insert_symbol_with_fees(
                     symbol,
                     symbol_id,
                     base_asset_id,
                     quote_asset_id,
                     price_decimal,
                     price_display_decimal,
+                    base_maker_fee,
+                    base_taker_fee,
                 )
                 .expect("Failed to insert symbol - check asset exists");
 
@@ -87,6 +91,7 @@ pub fn load_symbol_manager() -> (SymbolManager, u32) {
             symbol_count += 1;
         }
     }
+
     println!(
         "Loaded {} symbols from {}",
         symbol_count, SYMBOLS_CONFIG_CSV
