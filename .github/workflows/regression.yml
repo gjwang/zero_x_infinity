@@ -2,7 +2,7 @@ name: Full Regression
 
 on:
   schedule:
-    - cron: '0 2 * * *'  # Every day at 02:00 UTC
+    - cron: '18 18 * * *'  # 02:18 Beijing Time (UTC+8)
   workflow_dispatch:
     inputs:
       force_run:
