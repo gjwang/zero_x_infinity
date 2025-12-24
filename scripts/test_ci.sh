@@ -340,10 +340,15 @@ clean_env() {
     echo ""
     echo "   [CI] Cleaning environment..."
     
-    # IMPORTANT: Do NOT use `pkill -f "zero_x_infinity"` - it matches command line args
-    # and will kill IDE's language_server which has project path in args!
-    # Use exact process name match instead:
+    # 1. Kill by process name
     pkill "^zero_x_infinity$" 2>/dev/null || true
+    
+    # 2. Kill by port (forceful cleanup)
+    local port_pids=$(lsof -Pi :8080 -sTCP:LISTEN -t 2>/dev/null)
+    if [ -n "$port_pids" ]; then
+        echo "   [CI] Killing processes on port 8080: $port_pids"
+        kill -9 $port_pids 2>/dev/null || true
+    fi
     
     if [ "$CI" = "true" ] && [ -f "scripts/ci_clean.py" ]; then
          python3 scripts/ci_clean.py || echo "   [WARN] DB cleanup script failed"
@@ -467,7 +472,7 @@ main() {
             if python3 -c "import psycopg2; psycopg2.connect(host='localhost', dbname='exchange_info_db', user='trading', password='trading123').close()" 2>/dev/null; then
                 POSTGRES_AVAILABLE=true
             fi
-        elif docker ps 2>/dev/null | grep -q postgres; then
+        elif docker ps --format '{{.Names}}' 2>/dev/null | grep -q "postgres"; then
             POSTGRES_AVAILABLE=true
         fi
         
