@@ -64,6 +64,53 @@ pub fn connect(url: &str) -> Database {
 - Use `async/await` for I/O operations
 - Use `Arc` for shared read-only data
 
+### 1.5 Startup Logging Requirements
+
+> **CRITICAL**: All scripts and entry points must print their configuration at startup.
+
+**Mandatory Information**:
+- ✅ Runtime environment (DEV, TEST, PROD, CI)
+- ✅ Config file path being used
+- ✅ Database connection settings (host, port, user, database name)
+- ✅ Service endpoints and ports
+- ❌ Never print full passwords/secrets (use masking)
+
+**Secret Masking Rule**:
+- Show first 3 characters + `***` (e.g., `tra***`)
+- API keys: show first 8 characters (e.g., `ABCD1234...`)
+
+**Implementation**:
+```bash
+# For shell scripts, source db_env.sh and call:
+source scripts/lib/db_env.sh
+print_db_config
+```
+
+```rust
+// For Rust, log config at startup:
+info!("Starting Gateway");
+info!("  Environment: {}", env);
+info!("  Config: {}", config_path);
+info!("  Port: {}", port);
+```
+
+**Example Output**:
+```
+========================================
+ Database Configuration
+========================================
+  Runtime Environment: DEV
+  Config File: /path/to/config/dev.yaml
+  
+  PostgreSQL:
+    Host:     localhost
+    Port:     5433
+    User:     trading
+    Password: tra***
+    Database: exchange_info_db
+========================================
+```
+
 ---
 
 ## 2. Commit Guidelines
