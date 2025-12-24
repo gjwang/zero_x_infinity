@@ -176,6 +176,89 @@ pub async fn batch_upsert_balance_events(
     Ok(())
 }
 
+/// Batch insert balance events to balance_events table (Event Sourcing)
+///
+/// This writes the FULL event record for audit trail, fee tracking, etc.
+/// Different from batch_upsert_balance_events which only updates balance snapshots.
+///
+/// Note: Uses dual TAGs (user_id, account_type) per design doc 4.2
+pub async fn batch_insert_balance_events(
+    taos: &Taos,
+    events: &[crate::messages::BalanceEvent],
+    account_type: u8, // 1=Spot, 2=Funding
+) -> Result<()> {
+    use std::fmt::Write;
+
+    if events.is_empty() {
+        return Ok(());
+    }
+
+    let now_us = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_micros() as i64;
+
+    // Build batch INSERT SQL
+    // Schema: ts, event_type, trade_id, source_id, asset_id, delta, avail_after, frozen_after, from_user
+    let mut sql = String::with_capacity(events.len() * 150 + 20);
+    sql.push_str("INSERT INTO ");
+
+    for (i, event) in events.iter().enumerate() {
+        // Table name: balance_events_{user_id}_{account_type}
+        write!(
+            sql,
+            "balance_events_{}_{} VALUES({}, {}, {}, {}, {}, {}, {}, {}, 0) ",
+            event.user_id,
+            account_type,
+            now_us + i as i64,
+            event.event_type as u8, // Maps to TINYINT
+            event.source_id,        // trade_id for Trade events
+            event.source_id,        // source_id
+            event.asset_id,
+            event.delta,
+            event.avail_after,
+            event.frozen_after,
+        )
+        .unwrap();
+    }
+
+    // First attempt
+    match taos.exec(&sql).await {
+        Ok(_) => return Ok(()),
+        Err(e) => {
+            let err_str = e.to_string();
+            if !err_str.contains("Table does not exist") && !err_str.contains("0x2662") {
+                return Err(anyhow::anyhow!("Batch balance_events insert failed: {}", e));
+            }
+            tracing::debug!("balance_events table not found, auto-creating...");
+        }
+    }
+
+    // Auto-create missing tables and retry
+    let mut created = std::collections::HashSet::new();
+    for event in events {
+        let key = (event.user_id, account_type);
+        if !created.contains(&key) {
+            let create_sql = format!(
+                "CREATE TABLE IF NOT EXISTS balance_events_{}_{} USING balance_events TAGS ({}, {})",
+                event.user_id, account_type, event.user_id, account_type
+            );
+            let _ = taos.exec(&create_sql).await;
+            created.insert(key);
+        }
+    }
+
+    // Retry INSERT
+    taos.exec(&sql).await.map_err(|e| {
+        anyhow::anyhow!(
+            "Batch balance_events insert failed after auto-create: {}",
+            e
+        )
+    })?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

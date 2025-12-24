@@ -758,14 +758,26 @@ impl SettlementService {
                     if let Some(ref db) = db_client {
                         let start = std::time::Instant::now();
 
-                        // Call the shared batch insert function (includes auto-create fallback)
+                        // 1. Balance snapshots (for latest balance query)
                         if let Err(e) = crate::persistence::balances::batch_upsert_balance_events(
                             db.taos(),
                             &batch,
                         )
                         .await
                         {
-                            tracing::error!("[PERSIST] async batch balance failed: {}", e);
+                            tracing::error!("[PERSIST] async batch balance snapshot failed: {}", e);
+                        }
+
+                        // 2. Balance events (for event sourcing/fee audit)
+                        // account_type = 1 for Spot, matches design doc 4.2
+                        if let Err(e) = crate::persistence::balances::batch_insert_balance_events(
+                            db.taos(),
+                            &batch,
+                            1, // account_type = Spot
+                        )
+                        .await
+                        {
+                            tracing::error!("[PERSIST] async batch balance_events failed: {}", e);
                         }
 
                         if start.elapsed().as_millis() > 5 {
