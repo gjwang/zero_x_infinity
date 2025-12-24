@@ -12,11 +12,25 @@
 # -----------------------------------------------------------------------------
 # PostgreSQL Configuration
 # -----------------------------------------------------------------------------
-# Default PG_PORT varies by environment
+# Read port from config files to avoid hardcoding
+# CI uses config/ci.yaml (port 5432), Local uses config/dev.yaml (port 5433)
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
 if [ "$CI" = "true" ]; then
-    DEFAULT_PG_PORT="5432"
+    CONFIG_FILE="$PROJECT_ROOT/config/ci.yaml"
 else
-    DEFAULT_PG_PORT="5433"
+    CONFIG_FILE="$PROJECT_ROOT/config/dev.yaml"
+fi
+
+# Extract port from postgres_url in config file (e.g., localhost:5432)
+if [ -f "$CONFIG_FILE" ]; then
+    PG_URL_FROM_CONFIG=$(grep "postgres_url:" "$CONFIG_FILE" | head -1 | sed 's/.*localhost:\([0-9]*\).*/\1/')
+    DEFAULT_PG_PORT="${PG_URL_FROM_CONFIG:-5432}"
+else
+    # Fallback if config file is missing
+    DEFAULT_PG_PORT="5432"
 fi
 
 export PG_HOST="${PG_HOST:-localhost}"
