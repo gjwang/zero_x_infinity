@@ -528,7 +528,7 @@ BalanceEventBatch
 |------|----------|
 | Fee rounds to 0 | Minimum fee = 1 (smallest unit) |
 | Zero-fee symbol | Allow `maker_fee_bps = 0` |
-| Insufficient for fee | Reject order pre-trade (not applicable, fee from received) |
+| Insufficient for fee | N/A - fee always deducted from received asset |
 
 ---
 
@@ -743,6 +743,7 @@ CREATE STABLE balance_events (
     credit_asset INT,
     credit_amt  BIGINT,
     fee         BIGINT,
+    fee_asset   INT,
     is_maker    BOOL
 ) TAGS (account_id BIGINT);
 ```
