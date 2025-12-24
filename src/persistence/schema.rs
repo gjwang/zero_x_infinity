@@ -60,6 +60,10 @@ pub async fn init_schema(taos: &Taos) -> Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("{}: {}", "Failed to create klines table", e))?;
 
+    taos.exec(CREATE_BALANCE_EVENTS_TABLE)
+        .await
+        .map_err(|e| anyhow::anyhow!("{}: {}", "Failed to create balance_events table", e))?;
+
     tracing::info!("TDengine schema initialized successfully");
     Ok(())
 }
@@ -206,6 +210,25 @@ CREATE STABLE IF NOT EXISTS klines (
 ) TAGS (
     symbol_id INT UNSIGNED,
     intv NCHAR(8)
+)
+"#;
+
+/// Balance Events super table for fee record and event sourcing
+/// Dual TAGs: (user_id, account_type) for efficient user queries
+const CREATE_BALANCE_EVENTS_TABLE: &str = r#"
+CREATE STABLE IF NOT EXISTS balance_events (
+    ts          TIMESTAMP,
+    event_type  TINYINT UNSIGNED,   -- 1=TradeSettled, 2=FeeReceived, 3=Deposit, 4=Withdraw
+    trade_id    BIGINT UNSIGNED,    -- Links to trades table (0 for non-trade events)
+    source_id   BIGINT UNSIGNED,    -- Order ID or external ref
+    asset_id    INT UNSIGNED,       -- Asset for this event
+    delta       BIGINT,             -- Change amount (positive=credit, negative=debit)
+    avail_after BIGINT UNSIGNED,    -- Balance after change
+    frozen_after BIGINT UNSIGNED,   -- Frozen after change
+    from_user   BIGINT UNSIGNED     -- FeeReceived: source user (0 if N/A)
+) TAGS (
+    user_id       BIGINT UNSIGNED,  -- User identifier (0=REVENUE)
+    account_type  TINYINT UNSIGNED  -- 1=Spot, 2=Funding, 3=Futures...
 )
 "#;
 
