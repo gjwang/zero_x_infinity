@@ -13,7 +13,7 @@
 
 | ID | Type | Range | Note |
 |----|------|-------|------|
-| `user_id` | u64 | 0-1000: System, 1001+: Users | 0=REVENUE |
+| `user_id` | u64 | 0-1023: System, 1024+: Users | 0=REVENUE |
 | `account_type` | u8 | 1=Spot, 2=Funding | Enum value |
 | ~~`account_id`~~ | - | **REMOVED** | Use `(user_id, account_type)` tuple |
 
@@ -50,7 +50,7 @@ TAGS (user_id BIGINT, account_type TINYINT);
 |---------|---------|
 | 0 | REVENUE (platform fee income) |
 | 1 | INSURANCE (future) |
-| 2-1000 | Reserved |
+| 2-1023 | Reserved |
 
 ---
 
@@ -71,7 +71,7 @@ TAGS (user_id BIGINT, account_type TINYINT);
 
 ## 💡 Future Consideration: System ID Range
 
-**Current**: System IDs use 0-1000, users start at 1001.
+**Current**: System IDs use 0-1023 (1024 total), users start at 1024.
 
 **Problem**: Test data might accidentally use 1, 2, 3... which conflicts with system IDs.
 
