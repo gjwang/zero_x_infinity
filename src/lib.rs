@@ -70,6 +70,9 @@ pub mod internal_transfer;
 // Trade Fee System (Phase 0x0C)
 pub mod fee;
 
+// Config Hot-Reload (Phase 0x0C)
+pub mod config_watcher;
+
 // Convenient re-exports at crate root
 pub use balance::Balance;
 pub use core_types::{AssetId, OrderId, SeqNum, TradeId, UserId};
