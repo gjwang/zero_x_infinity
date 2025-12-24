@@ -662,7 +662,7 @@ pub async fn get_balances(
 /// Returns balances from PostgreSQL (real source of truth)
 pub async fn get_all_balances(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
+    Extension(user): Extension<crate::api_auth::AuthenticatedUser>,
 ) -> Result<
     (
         StatusCode,
@@ -670,8 +670,8 @@ pub async fn get_all_balances(
     ),
     (StatusCode, Json<ApiResponse<()>>),
 > {
-    // Extract user_id from headers
-    let user_id = extract_user_id(&headers)?;
+    // Extract user_id from authenticated user
+    let user_id = user.user_id;
 
     // Check if PostgreSQL is available
     let pg_db = state.pg_db.as_ref().ok_or_else(|| {

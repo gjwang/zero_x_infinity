@@ -44,12 +44,21 @@ if ! PGPASSWORD=trading123 psql -h localhost -p 5433 -U trading -d exchange_info
 fi
 echo "  ✓ PostgreSQL connected"
 
-# Check release build
-if [ ! -f target/release/zero_x_infinity ]; then
-    echo "  Building release binary..."
-    cargo build --release --quiet
+# Check and ensure binary freshness
+if [ "$1" != "--no-gw" ]; then
+    echo "  [BUILD] Ensuring binary is up to date..."
+    NEWEST_SRC=$(find src -name "*.rs" -exec stat -f "%m" {} + | sort -nr | head -n1)
+    BINARY_MTIME=$(stat -f "%m" target/release/zero_x_infinity 2>/dev/null || echo 0)
+
+    if [ "$NEWEST_SRC" -gt "$BINARY_MTIME" ]; then
+        echo "  [FACT] Source modified, forcing re-link via touch src/main.rs..."
+        touch src/main.rs
+        cargo build --release --quiet
+        echo "  ✓ Build synced"
+    else
+        echo "  ✓ Binary is current"
+    fi
 fi
-echo "  ✓ Release binary ready"
 
 # =============================================================================
 # Step 2: Setup Test Data
@@ -100,6 +109,19 @@ if [ -n "$EXISTING_PID" ]; then
     echo "  Stopping existing Gateway (PID: $EXISTING_PID)"
     kill "$EXISTING_PID" 2>/dev/null || true
     sleep 2
+    # Force kill if still alive
+    if ps -p "$EXISTING_PID" > /dev/null; then
+        echo "  [FORCE] Gateway still alive, sending SIGKILL..."
+        kill -9 "$EXISTING_PID" 2>/dev/null || true
+        sleep 1
+    fi
+fi
+
+# Final check of port 8080
+if lsof -i :8080 > /dev/null 2>&1; then
+    echo -e "${RED}❌ Port 8080 is still blocked by unknown process.${NC}"
+    lsof -i :8080
+    exit 1
 fi
 
 # Start Gateway
