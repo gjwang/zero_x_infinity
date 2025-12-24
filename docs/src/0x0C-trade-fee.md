@@ -78,30 +78,31 @@ Implement **Maker/Taker fee model** for trade execution. Fees are the primary re
 
 #### Layer 2: VIP 折扣系数
 
-用户根据 VIP 等级获得折扣（等级越高，折扣越大）：
+VIP 等级和折扣从数据库配置（不硬编码级数）：
 
+```sql
+-- VIP 等级配置表
+CREATE TABLE vip_levels_tb (
+    level SMALLINT PRIMARY KEY,       -- VIP 等级 (0, 1, 2, ...)
+    discount_percent SMALLINT NOT NULL,  -- 折扣百分比 (100=无折扣, 50=50%折扣)
+    min_volume DECIMAL(30, 8),        -- 升级所需交易量 (可选)
+    description VARCHAR(50)           -- 等级描述 (可选)
+);
+
+-- 示例数据 (运营可配置任意级数)
+INSERT INTO vip_levels_tb (level, discount_percent, description) VALUES
+    (0, 100, 'Normal'),
+    (1, 90, 'VIP 1'),
+    (2, 80, 'VIP 2'),
+    (3, 70, 'VIP 3');
+-- ... 可扩展更多等级
+```
+
+**UBSCore 加载**:
 ```rust
-/// VIP 折扣表 (100 = 100% 无折扣)
-/// VIP 等级正序: VIP 0 最低，VIP 9 最高
+/// VIP 折扣表 (从数据库加载，不硬编码级数)
 pub struct VipDiscountTable {
-    discounts: [u8; 10],
-}
-
-impl Default for VipDiscountTable {
-    fn default() -> Self {
-        Self::new([
-            100,  // VIP 0: 100% 无折扣 (普通用户)
-            90,   // VIP 1: 90%
-            80,   // VIP 2: 80%
-            70,   // VIP 3: 70%
-            60,   // VIP 4: 60%
-            50,   // VIP 5: 50%
-            40,   // VIP 6: 40%
-            30,   // VIP 7: 30%
-            20,   // VIP 8: 20%
-            10,   // VIP 9: 10% 最高折扣 (顶级用户)
-        ])
-    }
+    discounts: HashMap<u8, u8>,  // level -> discount_percent
 }
 ```
 
