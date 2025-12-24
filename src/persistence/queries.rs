@@ -66,9 +66,10 @@ pub struct TradeApiData {
     pub user_id: u64,
     pub symbol: String, // Symbol name (not ID)
     pub side: String,
-    pub price: String, // Formatted with price_display_decimal
-    pub qty: String,   // Formatted with base_asset.display_decimals
-    pub fee: String,   // Formatted with quote_asset.display_decimals
+    pub price: String,     // Formatted with price_display_decimal
+    pub qty: String,       // Formatted with base_asset.display_decimals
+    pub fee: String,       // Formatted with fee_asset decimals
+    pub fee_asset: String, // Asset in which fee was paid (BUY→base, SELL→quote)
     pub role: String,
     pub created_at: String,
 }
@@ -277,23 +278,50 @@ pub async fn query_trades(
         .get_asset_display_decimals(symbol_info.quote_asset_id)
         .unwrap();
 
+    // Get asset names for fee_asset field
+    let base_asset_name = symbol_mgr
+        .get_asset_name(symbol_info.base_asset_id)
+        .unwrap_or_else(|| "BASE".to_string());
+    let quote_asset_name = symbol_mgr
+        .get_asset_name(symbol_info.quote_asset_id)
+        .unwrap_or_else(|| "QUOTE".to_string());
+
     Ok(rows
         .into_iter()
-        .map(|row| TradeApiData {
-            trade_id: row.trade_id as u64,
-            order_id: row.order_id as u64,
-            user_id: row.user_id as u64,
-            symbol: symbol_info.symbol.clone(),
-            side: if row.side == 0 { "BUY" } else { "SELL" }.to_string(),
-            price: format_amount(
-                row.price as u64,
-                symbol_info.price_decimal,
-                symbol_info.price_display_decimal,
-            ),
-            qty: format_amount(row.qty as u64, base_decimals, base_display_decimals),
-            fee: format_amount(row.fee as u64, quote_decimals, quote_display_decimals),
-            role: if row.role == 0 { "MAKER" } else { "TAKER" }.to_string(),
-            created_at: row.ts,
+        .map(|row| {
+            let is_buy = row.side == 0;
+            // Fee is paid in received asset: BUY→base, SELL→quote
+            let (fee_asset, fee_decimals, fee_display_decimals) = if is_buy {
+                (
+                    base_asset_name.clone(),
+                    base_decimals,
+                    base_display_decimals,
+                )
+            } else {
+                (
+                    quote_asset_name.clone(),
+                    quote_decimals,
+                    quote_display_decimals,
+                )
+            };
+
+            TradeApiData {
+                trade_id: row.trade_id as u64,
+                order_id: row.order_id as u64,
+                user_id: row.user_id as u64,
+                symbol: symbol_info.symbol.clone(),
+                side: if is_buy { "BUY" } else { "SELL" }.to_string(),
+                price: format_amount(
+                    row.price as u64,
+                    symbol_info.price_decimal,
+                    symbol_info.price_display_decimal,
+                ),
+                qty: format_amount(row.qty as u64, base_decimals, base_display_decimals),
+                fee: format_amount(row.fee as u64, fee_decimals, fee_display_decimals),
+                fee_asset,
+                role: if row.role == 1 { "TAKER" } else { "MAKER" }.to_string(),
+                created_at: row.ts,
+            }
         })
         .collect())
 }
