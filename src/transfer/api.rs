@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 
 use super::coordinator::TransferCoordinator;
 use super::error::TransferError;
-use super::state::TransferState;
 use super::types::{RequestId, ServiceId, TransferRequest as CoreTransferRequest};
 
 // ============================================================================

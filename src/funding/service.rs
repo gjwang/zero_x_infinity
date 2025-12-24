@@ -159,7 +159,7 @@ impl TransferService {
         let mut balances = Vec::new();
         for row in rows {
             let asset_id: i32 = row.get("asset_id");
-            let account_type: i32 = row.get("account_type");
+            let account_type: i16 = row.get("account_type");
             let available: Decimal = row.get("available");
             let frozen: Decimal = row.get("frozen");
             let asset_name: String = row.get("asset_name");

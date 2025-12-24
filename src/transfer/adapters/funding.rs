@@ -92,7 +92,7 @@ impl ServiceAdapter for FundingAdapter {
         let (available, account_status) = match balance_row {
             Ok(Some(row)) => {
                 let available: rust_decimal::Decimal = row.get("available");
-                let status: i32 = row.get("status");
+                let status: i16 = row.get("status");
                 (available, status)
             }
             Ok(None) => {
