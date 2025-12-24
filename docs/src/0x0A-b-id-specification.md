@@ -195,3 +195,25 @@ pub struct Account {
 ---
 
 > 此设计待确认后，将同步更新至 `src/core_types.rs` 与 `src/account/mod.rs`。
+
+### 💡 未来考虑: 替代系统 ID 范围
+
+**当前**: 系统 ID 使用 0-1000，用户从 1001 开始。
+
+**问题**: 测试数据可能使用 1, 2, 3...，与系统 ID 冲突。
+
+**替代方案**: 使用 `u64::MAX` 倒数作为系统账户：
+```rust
+const REVENUE_ID: u64 = u64::MAX;        // 18446744073709551615
+const INSURANCE_ID: u64 = u64::MAX - 1;  // 18446744073709551614
+const SYSTEM_MIN: u64 = u64::MAX - 1000; // 边界
+
+fn is_system_account(user_id: u64) -> bool {
+    user_id > SYSTEM_MIN
+}
+```
+
+**好处**:
+- 用户可以从 1 开始，更自然
+- 测试数据永不与系统 ID 冲突
+- 清晰分离: 低位=用户，高位=系统
