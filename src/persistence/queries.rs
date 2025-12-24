@@ -495,6 +495,165 @@ pub async fn query_klines(
         .collect())
 }
 
+// ============================================================
+// TRADE FEE QUERY (from balance_events)
+// ============================================================
+
+/// Fee record from balance_events table
+#[derive(Debug, Deserialize)]
+struct FeeRow {
+    source_id: i64, // trade_id
+    fee_amount: i64,
+}
+
+/// Query trade fees from balance_events for a user
+///
+/// Returns a HashMap: trade_id -> fee_amount
+pub async fn query_trade_fees(
+    taos: &Taos,
+    user_id: u64,
+    trade_ids: &[u64],
+) -> Result<std::collections::HashMap<u64, u64>> {
+    use std::collections::HashMap;
+
+    if trade_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    // Build IN clause for trade_ids
+    let ids: Vec<String> = trade_ids.iter().map(|id| id.to_string()).collect();
+    let ids_str = ids.join(", ");
+
+    // Query balance_events for Settle events (event_type=1) with positive delta (receive)
+    // account_type=1 for Spot
+    let table_name = format!("balance_events_{}_{}", user_id, 1);
+    let sql = format!(
+        "SELECT source_id, fee_amount FROM trading.{} WHERE source_id IN ({}) AND fee_amount > 0",
+        table_name, ids_str
+    );
+
+    let result = taos.query(&sql).await;
+
+    match result {
+        Ok(mut rs) => {
+            let rows: Vec<FeeRow> = rs.deserialize().try_collect().await.unwrap_or_default();
+
+            Ok(rows
+                .into_iter()
+                .map(|r| (r.source_id as u64, r.fee_amount as u64))
+                .collect())
+        }
+        Err(_) => {
+            // Table may not exist yet, return empty
+            Ok(HashMap::new())
+        }
+    }
+}
+
+/// Query trades for a specific user (with real fee from balance_events)
+pub async fn query_user_trades(
+    taos: &Taos,
+    user_id: u64,
+    symbol_id: u32,
+    limit: usize,
+    symbol_mgr: &SymbolManager,
+) -> Result<Vec<TradeApiData>> {
+    // Query trades for this user
+    let sql = format!(
+        "SELECT ts, trade_id, order_id, user_id, side, price, qty, fee, role \
+         FROM trading.trades \
+         WHERE symbol_id = {} AND user_id = {} \
+         ORDER BY ts DESC LIMIT {}",
+        symbol_id, user_id, limit
+    );
+
+    let mut result = taos
+        .query(&sql)
+        .await
+        .map_err(|e| anyhow::anyhow!("Query failed: {}", e))?;
+
+    let rows: Vec<TradeRow> = result
+        .deserialize()
+        .try_collect()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to deserialize: {}", e))?;
+
+    if rows.is_empty() {
+        return Ok(vec![]);
+    }
+
+    // Get trade IDs for fee lookup
+    let trade_ids: Vec<u64> = rows.iter().map(|r| r.trade_id as u64).collect();
+
+    // Query real fees from balance_events
+    let fee_map = query_trade_fees(taos, user_id, &trade_ids).await?;
+
+    // Get symbol info for formatting
+    let symbol_info = symbol_mgr.get_symbol_info_by_id(symbol_id).unwrap();
+    let base_decimals = symbol_mgr
+        .get_asset_decimal(symbol_info.base_asset_id)
+        .unwrap();
+    let base_display_decimals = symbol_mgr
+        .get_asset_display_decimals(symbol_info.base_asset_id)
+        .unwrap();
+    let quote_decimals = symbol_mgr
+        .get_asset_decimal(symbol_info.quote_asset_id)
+        .unwrap();
+    let quote_display_decimals = symbol_mgr
+        .get_asset_display_decimals(symbol_info.quote_asset_id)
+        .unwrap();
+
+    // Get asset names for fee_asset field
+    let base_asset_name = symbol_mgr
+        .get_asset_name(symbol_info.base_asset_id)
+        .unwrap_or_else(|| "BASE".to_string());
+    let quote_asset_name = symbol_mgr
+        .get_asset_name(symbol_info.quote_asset_id)
+        .unwrap_or_else(|| "QUOTE".to_string());
+
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            let is_buy = row.side == 0;
+            // Fee is paid in received asset: BUY→base, SELL→quote
+            let (fee_asset, fee_decimals, fee_display_decimals) = if is_buy {
+                (
+                    base_asset_name.clone(),
+                    base_decimals,
+                    base_display_decimals,
+                )
+            } else {
+                (
+                    quote_asset_name.clone(),
+                    quote_decimals,
+                    quote_display_decimals,
+                )
+            };
+
+            // Use real fee from balance_events if available, otherwise 0
+            let real_fee = fee_map.get(&(row.trade_id as u64)).copied().unwrap_or(0);
+
+            TradeApiData {
+                trade_id: row.trade_id as u64,
+                order_id: row.order_id as u64,
+                user_id: row.user_id as u64,
+                symbol: symbol_info.symbol.clone(),
+                side: if is_buy { "BUY" } else { "SELL" }.to_string(),
+                price: format_amount(
+                    row.price as u64,
+                    symbol_info.price_decimal,
+                    symbol_info.price_display_decimal,
+                ),
+                qty: format_amount(row.qty as u64, base_decimals, base_display_decimals),
+                fee: format_amount(real_fee, fee_decimals, fee_display_decimals),
+                fee_asset,
+                role: if row.role == 1 { "TAKER" } else { "MAKER" }.to_string(),
+                created_at: row.ts,
+            }
+        })
+        .collect())
+}
+
 #[cfg(test)]
 mod kline_tests {
     use super::*;
