@@ -135,8 +135,11 @@ if lsof -i :8080 > /dev/null 2>&1; then
     exit 1
 fi
 
-# Start Gateway
-./target/release/zero_x_infinity --gateway --env dev > /tmp/gw_test.log 2>&1 &
+# Start Gateway with appropriate config (ci.yaml in CI, dev.yaml locally)
+GW_ENV="${CI:+ci}"
+GW_ENV="${GW_ENV:-dev}"
+echo "  Using config: config/${GW_ENV}.yaml"
+./target/release/zero_x_infinity --gateway --env "$GW_ENV" > /tmp/gw_test.log 2>&1 &
 GW_PID=$!
 echo "  Gateway started (PID: $GW_PID)"
 
