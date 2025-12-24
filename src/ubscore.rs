@@ -93,6 +93,15 @@ impl UBSCore {
         &mut self.accounts
     }
 
+    /// Set VIP level for a user (called after loading from DB)
+    /// If user doesn't exist yet, creates the account.
+    pub fn set_user_vip_level(&mut self, user_id: UserId, vip_level: u8) {
+        self.accounts
+            .entry(user_id)
+            .or_insert_with(|| UserAccount::new(user_id))
+            .set_vip_level(vip_level);
+    }
+
     /// Get current WAL sequence number
     pub fn current_seq(&self) -> SeqNum {
         self.wal.current_seq()
