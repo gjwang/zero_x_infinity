@@ -14,10 +14,10 @@ use super::state::TransferState;
 /// - No coordination needed (no machine_id)
 /// - 128-bit with good entropy
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct RequestId(ulid::Ulid);
+pub struct InternalTransferId(ulid::Ulid);
 
-impl RequestId {
-    /// Generate a new unique RequestId
+impl InternalTransferId {
+    /// Generate a new unique InternalTransferId
     pub fn new() -> Self {
         Self(ulid::Ulid::new())
     }
@@ -28,19 +28,19 @@ impl RequestId {
     }
 }
 
-impl Default for RequestId {
+impl Default for InternalTransferId {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl fmt::Display for RequestId {
+impl fmt::Display for InternalTransferId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
     }
 }
 
-impl FromStr for RequestId {
+impl FromStr for InternalTransferId {
     type Err = ulid::DecodeError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -222,7 +222,7 @@ pub struct TransferRecord {
     /// Database primary key
     pub transfer_id: Option<i64>,
     /// Server-generated request ID (Snowflake)
-    pub req_id: RequestId,
+    pub req_id: InternalTransferId,
     /// Client idempotency key
     pub cid: Option<String>,
     /// Source service
@@ -252,7 +252,7 @@ pub struct TransferRecord {
 impl TransferRecord {
     /// Create a new transfer record in INIT state
     pub fn new(
-        req_id: RequestId,
+        req_id: InternalTransferId,
         source: ServiceId,
         target: ServiceId,
         user_id: u64,
@@ -366,7 +366,7 @@ mod tests {
 
     #[test]
     fn test_transfer_record_new() {
-        let req_id = RequestId::new();
+        let req_id = InternalTransferId::new();
         let record = TransferRecord::new(
             req_id,
             ServiceId::Funding,

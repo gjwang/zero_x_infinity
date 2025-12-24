@@ -105,14 +105,18 @@ Current `RequestId` is a simple `type RequestId = u64` alias using a custom Snow
    - Each important ID type should be a newtype struct
    - This allows easy internal implementation swap without API changes
 
-### Required ID Structs
+3. **Use specific, descriptive names (NEW)**
+   - Avoid generic names like `RequestId` - too broad, easily confused
+   - Use module-specific prefixes: `InternalTransferId`, `OrderId`, `TradeId`
+   - Name should indicate which module/feature owns the ID
 
 ```rust
-/// Transfer Request ID (ULID-based)
+/// Internal Transfer ID (ULID-based)
+/// Uniquely identifies a transfer operation in the FSM
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct TransferRequestId(ulid::Ulid);
+pub struct InternalTransferId(ulid::Ulid);
 
-impl TransferRequestId {
+impl InternalTransferId {
     pub fn new() -> Self {
         Self(ulid::Ulid::new())
     }
@@ -126,7 +130,7 @@ impl TransferRequestId {
     }
 }
 
-impl std::fmt::Display for TransferRequestId {
+impl std::fmt::Display for InternalTransferId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
@@ -137,8 +141,8 @@ impl std::fmt::Display for TransferRequestId {
 
 | ID Type | Current | Recommended |
 |---------|---------|-------------|
-| `RequestId` (transfer) | `u64` | `TransferRequestId(Ulid)` |
-| `OrderId` | `u64` | `OrderId(u64)` (keep u64 for performance) |
+| Transfer ID | `RequestId` ❌ | `InternalTransferId(Ulid)` ✅ |
+| `OrderId` | `u64` | `OrderId(u64)` |
 | `TradeId` | `u64` | `TradeId(u64)` |
 | `UserId` | `u64` | `UserId(u64)` |
 | `AssetId` | `u32` | `AssetId(u32)` |

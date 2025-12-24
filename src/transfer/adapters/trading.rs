@@ -11,7 +11,7 @@ use tracing::{debug, error, warn};
 
 use super::ServiceAdapter;
 use crate::transfer::channel::{TransferOp, TransferResponse, TransferSender};
-use crate::transfer::types::{OpResult, RequestId};
+use crate::transfer::types::{InternalTransferId, OpResult};
 
 /// Trading account adapter
 ///
@@ -29,7 +29,7 @@ use crate::transfer::types::{OpResult, RequestId};
 pub struct TradingAdapter {
     /// Processed request IDs (for idempotency in RAM)
     /// In production, this is rebuilt from WAL on startup
-    processed: Arc<Mutex<HashSet<RequestId>>>,
+    processed: Arc<Mutex<HashSet<InternalTransferId>>>,
 
     /// Optional channel to UBSCore (None for tests, Some for production)
     channel: Option<TransferSender>,
@@ -77,7 +77,7 @@ impl TradingAdapter {
     }
 
     /// Create adapter with existing processed set (for recovery)
-    pub fn with_processed(processed: HashSet<RequestId>) -> Self {
+    pub fn with_processed(processed: HashSet<InternalTransferId>) -> Self {
         Self {
             processed: Arc::new(Mutex::new(processed)),
             channel: None,
@@ -93,12 +93,12 @@ impl TradingAdapter {
     }
 
     /// Check if a request was already processed
-    fn is_processed(&self, req_id: RequestId) -> bool {
+    fn is_processed(&self, req_id: InternalTransferId) -> bool {
         self.processed.lock().unwrap().contains(&req_id)
     }
 
     /// Mark a request as processed
-    fn mark_processed(&self, req_id: RequestId) {
+    fn mark_processed(&self, req_id: InternalTransferId) {
         self.processed.lock().unwrap().insert(req_id);
     }
 
@@ -135,7 +135,7 @@ impl ServiceAdapter for TradingAdapter {
 
     async fn withdraw(
         &self,
-        req_id: RequestId,
+        req_id: InternalTransferId,
         user_id: u64,
         asset_id: u32,
         amount: u64,
@@ -212,7 +212,7 @@ impl ServiceAdapter for TradingAdapter {
 
     async fn deposit(
         &self,
-        req_id: RequestId,
+        req_id: InternalTransferId,
         user_id: u64,
         asset_id: u32,
         amount: u64,
@@ -276,7 +276,7 @@ impl ServiceAdapter for TradingAdapter {
         OpResult::Success
     }
 
-    async fn rollback(&self, req_id: RequestId) -> OpResult {
+    async fn rollback(&self, req_id: InternalTransferId) -> OpResult {
         debug!(req_id = %req_id, "Trading rollback");
 
         // CRITICAL: Trading rollback means re-crediting a previously withdrawn amount
@@ -351,7 +351,7 @@ impl ServiceAdapter for TradingAdapter {
         }
     }
 
-    async fn commit(&self, req_id: RequestId) -> OpResult {
+    async fn commit(&self, req_id: InternalTransferId) -> OpResult {
         debug!(req_id = %req_id, "Trading commit");
 
         // For Trading, commit is typically a no-op
@@ -370,7 +370,9 @@ mod tests {
         let adapter = TradingAdapter::new();
         adapter.set_test_balance(1001, 1, 10000);
 
-        let result = adapter.withdraw(RequestId::new(), 1001, 1, 5000).await;
+        let result = adapter
+            .withdraw(InternalTransferId::new(), 1001, 1, 5000)
+            .await;
         assert!(result.is_success());
         assert_eq!(adapter.get_test_balance(1001, 1), 5000);
     }
@@ -380,7 +382,9 @@ mod tests {
         let adapter = TradingAdapter::new();
         adapter.set_test_balance(1001, 1, 1000);
 
-        let result = adapter.withdraw(RequestId::new(), 1001, 1, 5000).await;
+        let result = adapter
+            .withdraw(InternalTransferId::new(), 1001, 1, 5000)
+            .await;
         assert!(result.is_explicit_fail());
         // Balance unchanged
         assert_eq!(adapter.get_test_balance(1001, 1), 1000);
@@ -391,7 +395,9 @@ mod tests {
         let adapter = TradingAdapter::new();
         adapter.set_test_balance(1001, 1, 5000);
 
-        let result = adapter.deposit(RequestId::new(), 1001, 1, 3000).await;
+        let result = adapter
+            .deposit(InternalTransferId::new(), 1001, 1, 3000)
+            .await;
         assert!(result.is_success());
         assert_eq!(adapter.get_test_balance(1001, 1), 8000);
     }
@@ -400,7 +406,7 @@ mod tests {
     async fn test_trading_idempotency() {
         let adapter = TradingAdapter::new();
         adapter.set_test_balance(1001, 1, 10000);
-        let req_id = RequestId::new();
+        let req_id = InternalTransferId::new();
 
         // First call
         let result1 = adapter.withdraw(req_id, 1001, 1, 5000).await;

@@ -6,7 +6,7 @@
 use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, error};
 
-use crate::transfer::types::RequestId;
+use crate::transfer::types::InternalTransferId;
 
 // ============================================================================
 // Transfer Request/Response Types
@@ -22,7 +22,7 @@ pub enum TransferOp {
 /// Transfer request to UBSCore
 #[derive(Debug)]
 pub struct TransferRequest {
-    pub req_id: RequestId,
+    pub req_id: InternalTransferId,
     pub op: TransferOp,
     pub user_id: u64,
     pub asset_id: u32,
@@ -52,7 +52,7 @@ impl TransferSender {
     /// Send transfer request and wait for response
     pub async fn send_request(
         &self,
-        req_id: RequestId,
+        req_id: InternalTransferId,
         op: TransferOp,
         user_id: u64,
         asset_id: u32,
@@ -117,7 +117,7 @@ use std::collections::HashSet;
 pub fn process_transfer_requests(
     ubscore: &mut UBSCore,
     receiver: &mut TransferReceiver,
-    processed_set: &mut HashSet<RequestId>,
+    processed_set: &mut HashSet<InternalTransferId>,
     max_per_batch: usize,
 ) -> usize {
     let mut count = 0;
@@ -140,7 +140,7 @@ pub fn process_transfer_requests(
 fn process_single_transfer(
     ubscore: &mut UBSCore,
     req: &TransferRequest,
-    processed_set: &mut HashSet<RequestId>,
+    processed_set: &mut HashSet<InternalTransferId>,
 ) -> TransferResponse {
     // Idempotency check
     if processed_set.contains(&req.req_id) {
@@ -186,7 +186,7 @@ mod tests {
     #[tokio::test]
     async fn test_transfer_channel_send_receive() {
         let (sender, mut receiver) = transfer_channel(10);
-        let test_req_id = crate::transfer::RequestId::new();
+        let test_req_id = crate::transfer::InternalTransferId::new();
 
         // Spawn sender task
         let sender_task = tokio::spawn({

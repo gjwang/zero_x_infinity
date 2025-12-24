@@ -379,7 +379,7 @@ pub async fn get_transfer(
     (StatusCode, Json<ApiResponse<()>>),
 > {
     // Parse req_id from string (ULID format)
-    let req_id: crate::transfer::RequestId = req_id_str.parse().map_err(|_| {
+    let req_id: crate::transfer::InternalTransferId = req_id_str.parse().map_err(|_| {
         (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::<()>::error(
