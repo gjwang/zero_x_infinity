@@ -39,3 +39,6 @@ config/*.bak
 __pycache__/
 test-reports/
 indexer-blockdata-rs
+
+
+.DS_Store
