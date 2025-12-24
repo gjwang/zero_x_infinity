@@ -238,6 +238,23 @@ Trade ──▶ UBSCore ──┬──▶ BalanceEvent{user: buyer}  ──▶ 
 | `fee` | u64 | 手续费 |
 | `is_maker` | bool | 是否 Maker |
 
+**示例代码 (伪代码, 仅供参考)**:
+```rust
+// ⚠️ 伪代码 - 实现时可能有调整
+BalanceEvent::TradeSettled {
+    trade_id: u64,         // 关联原始 Trade
+    user_id: u64,          // 这个事件属于谁
+    
+    debit_asset: u32,      // 支出
+    debit_amount: u64,
+    credit_asset: u32,     // 收入 (净额)
+    credit_amount: u64,
+    
+    fee: u64,              // 手续费
+    is_maker: bool,        // 角色
+}
+```
+
 > **Why Per-User 设计？**
 > - **单一职责**: 一个事件 = 一个用户的余额变动
 > - **解耦**: 用户不需要知道对手方
