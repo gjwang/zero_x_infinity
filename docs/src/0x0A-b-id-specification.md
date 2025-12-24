@@ -20,7 +20,7 @@
 ### 1.1 User ID (`u64`)
 - **Semantics**: Global unique user identifier.
 - **Strategy**: Auto-increment or Snowflake/ULID (for future distributed support).
-- **Initial Value**: `1001` (1-1000 reserved for system accounts).
+- **Initial Value**: `1001` (0-1000 reserved for system accounts).
 
 ### 1.2 Asset ID (`u32`)
 - **Semantics**: Asset identifier (e.g., BTC=1, USDT=2).
@@ -73,10 +73,12 @@ pub struct Account {
 
 ## 3. System Reserved Accounts
 
-| Account ID | User ID | Type | Purpose |
-| :--- | :--- | :--- | :--- |
-| `0x0101` | `1` | Funding | System Fee Income Account |
-| `0x0102` | `1` | Spot | System Spot Account (Optional) |
+| User ID | Purpose | Description |
+| :--- | :--- | :--- |
+| `0` | REVENUE | Platform fee income account |
+| `1` | INSURANCE | Insurance fund (future) |
+| `2-999` | Reserved | For future system use |
+| `1000` | Reserved | Boundary marker |
 
 ---
 
@@ -102,7 +104,7 @@ pub struct Account {
 ### 1.1 User ID (`u64`)
 - **语义**: 全局唯一的用户标识符。
 - **生成策略**: 自增序列 或 Snowflake/ULID (未来支持分布式)。
-- **初始值**: `1001` (保留 1-1000 给系统账户)。
+- **初始值**: `1001` (0-1000 保留给系统账户)。
 
 ### 1.2 Asset ID (`u32`)
 - **语义**: 资产标识符（如 BTC=1, USDT=2）。
@@ -155,10 +157,12 @@ pub struct Account {
 
 ## 3. 系统保留账户
 
-| Account ID | User ID | Type | 用途 |
-| :--- | :--- | :--- | :--- |
-| `0x0101` | `1` | Funding | 系统手续费收入账户 |
-| `0x0102` | `1` | Spot | 系统 Spot 账户 (可选) |
+| User ID | 用途 | 说明 |
+| :--- | :--- | :--- |
+| `0` | REVENUE | 平台手续费收入账户 |
+| `1` | INSURANCE | 保险基金 (未来) |
+| `2-999` | 保留 | 未来系统用途 |
+| `1000` | 保留 | 边界标记 |
 
 ---
 
