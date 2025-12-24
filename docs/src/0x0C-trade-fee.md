@@ -43,6 +43,33 @@ Implement **Maker/Taker fee model** for trade execution. Fees are the primary re
 | **Fee Rate** | Percentage of trade value charged |
 | **bps** | Basis points (1 bps = 0.01% = 0.0001) |
 
+### 1.4 Architecture Overview
+
+```
+┌─────────── 费率模型 ────────────┐
+│                                │
+│  最终费率 = Symbol.base_fee    │
+│           × VipDiscount / 100  │
+└────────────────────────────────┘
+
+┌─────────── 数据流 ─────────────────────────────────────────────────────┐
+│                                                                        │
+│  ME ────▶ Trade{role} ────▶ UBSCore ────▶ BalanceEventBatch ────▶ TDengine
+│              │                  │              │                       │
+│              │           内存: VIP/费率        ├── buyer event         │
+│              │           O(1) fee 计算         ├── seller event        │
+│              │                                 └── revenue event ×2    │
+│              │                                                         │
+└──────────────┴─────────────────────────────────────────────────────────┘
+
+┌─────────── 核心设计 ───────────┐
+│ ✅ 从 Gain 扣费 → 无需预留     │
+│ ✅ UBSCore 计费 → 余额权威     │
+│ ✅ Per-User Event → 解耦隐私   │
+│ ✅ Event Sourcing → 资产守恒   │
+└────────────────────────────────┘
+```
+
 ---
 
 ## 2. Fee Model Design
