@@ -420,22 +420,24 @@ CREATE STABLE balance_events (
     is_maker    BOOL,
     from_user   BIGINT         -- FeeReceived: source user
 ) TAGS (
-    account_id  BIGINT         -- user_id or REVENUE_ID
+    user_id       BIGINT,      -- User identifier (0=REVENUE)
+    account_type  TINYINT      -- 1=Spot, 2=Funding, 3=Futures...
 );
 
--- One subtable per account
-CREATE TABLE user_1001_events USING balance_events TAGS (1001);
-CREATE TABLE user_1002_events USING balance_events TAGS (1002);
-CREATE TABLE revenue_events   USING balance_events TAGS (0);  -- REVENUE_ID=0
+-- Subtable per (user, account_type)
+CREATE TABLE user_1001_spot USING balance_events TAGS (1001, 1);
+CREATE TABLE user_1001_funding USING balance_events TAGS (1001, 2);
+CREATE TABLE revenue_spot USING balance_events TAGS (0, 1);  -- REVENUE
 ```
 
 **Design Points**:
 
 | Design | Rationale |
 |--------|-----------|
-| Partition by account_id | User queries scan only their table |
+| Dual TAGs `(user_id, account_type)` | Future-proof for Futures, Margin... |
+| Partition by user_id | User queries scan only their tables |
+| Partition by account_type | Account-specific queries are O(1) |
 | Timestamp index | TDengine native optimization |
-| event_type field | Distinguish event types |
 
 ### 4.3 Query Patterns
 
@@ -470,7 +472,7 @@ ORDER BY ts;
 BalanceEventBatch
        │
        ├──▶ TDengine Writer (batch write, high throughput)
-       │       └── Route to subtable by account_id
+       │       └── Route to subtable by (user_id, account_type)
        │
        ├──▶ WebSocket Router (real-time push)
        │       └── Route to WS connection by user_id
@@ -745,7 +747,10 @@ CREATE STABLE balance_events (
     fee         BIGINT,
     fee_asset   INT,
     is_maker    BOOL
-) TAGS (account_id BIGINT);
+) TAGS (
+    user_id       BIGINT,      -- 用户 ID (0=REVENUE)
+    account_type  TINYINT      -- 1=Spot, 2=Funding, 3=Futures...
+);
 ```
 
 ### 4.2 查询模式
