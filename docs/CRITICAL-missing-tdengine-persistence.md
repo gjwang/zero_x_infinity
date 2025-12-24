@@ -1,33 +1,56 @@
-# 🚨 CRITICAL: TDengine Balance Event Persistence Not Implemented
+# ✅ RESOLVED: TDengine Balance Event Persistence
 
 ## Issue Summary
 
-**Severity**: P0 - CRITICAL  
+**Severity**: ~~P0 - CRITICAL~~ → **VERIFIED COMPLETE**  
 **Discovery Date**: 2025-12-25  
-**Status**: ❌ NOT IMPLEMENTED
+**Status**: ✅ **FULLY IMPLEMENTED**
 
----
+> **Update**: Initial grep search was misleading. Detailed code review found
+> `batch_insert_balance_events()` in `src/persistence/balances.rs` (L179-263)
+> that implements TDengine write with dual TAGs per design doc 4.2.
 
 ## Problem
 
 The 0x0C Trade Fee design specifies TDengine persistence for `BalanceEvent`, but **NO CODE EXISTS**.
 
-### What We Have
+### 📖 Design Reference
+
+**See**: [docs/src/0x0C-trade-fee.md#L406-L431](file:///Users/gjwang/eclipse-workspace/rust_source/zero_x_infinity/docs/src/0x0C-trade-fee.md)
+
+```sql
+-- DESIGNED BUT NOT IMPLEMENTED:
+CREATE STABLE balance_events (
+    ts          TIMESTAMP,
+    event_type  TINYINT,       -- 1=TradeSettled, 2=FeeReceived, 3=Deposit...
+    trade_id    BIGINT,
+    fee         BIGINT,
+    fee_asset   INT,
+    ...
+) TAGS (
+    user_id       BIGINT,      -- User identifier (0=REVENUE)
+    account_type  TINYINT      -- 1=Spot, 2=Funding, 3=Futures...
+);
+```
+
+### ✅ What We Have (Corrected)
 
 ```
-✅ src/fee.rs           - Fee calculation (complete)
-✅ src/messages.rs      - BalanceEvent struct (complete)
-❌ TDengine connection  - MISSING
-❌ balance_events table - MISSING  
-❌ Write logic          - MISSING
+✅ src/fee.rs                     - Fee calculation (complete)
+✅ src/messages.rs                - BalanceEvent struct (complete)
+✅ src/persistence/balances.rs    - TDengine write (batch_insert_balance_events)
+✅ src/persistence/queries.rs     - TDengine read (query_trade_fees)
+✅ Uses dual TAGs (user_id, account_type) per design 4.2
+✅ Includes fee_amount field
 ```
 
-### What Actually Happens
+### Data Flow (Correct)
 
 ```
-Trade → Fee calculated → BalanceEvent created → ??? → LOST
-                                                 ↑
-                                          Data goes nowhere!
+Trade → Fee calculated → BalanceEvent created → batch_insert_balance_events() → TDengine ✅
+                                                         ↓
+                                              query_trade_fees() ← API
+```
 ```
 
 ---
