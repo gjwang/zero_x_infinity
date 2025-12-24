@@ -22,27 +22,13 @@ mod integration_tests {
 
     impl TestHarness {
         fn new(pool: sqlx::PgPool) -> Self {
-            // Use unique machine_id based on thread ID to avoid Snowflake collisions
-            let thread_id = std::thread::current().id();
-            let machine_id = format!("{:?}", thread_id)
-                .chars()
-                .filter(|c| c.is_ascii_digit())
-                .collect::<String>()
-                .parse::<u8>()
-                .unwrap_or(1)
-                % 255
-                + 1; // Ensure 1-255 range
+            // ULID-based RequestId doesn't need machine_id coordination
 
             let db = Arc::new(TransferDb::new(pool));
             let funding = Arc::new(MockAdapter::new("funding"));
             let trading = Arc::new(MockAdapter::new("trading"));
 
-            let coordinator = TransferCoordinator::with_machine_id(
-                db,
-                funding.clone(),
-                trading.clone(),
-                machine_id,
-            );
+            let coordinator = TransferCoordinator::new(db, funding.clone(), trading.clone());
 
             Self {
                 coordinator,
@@ -76,7 +62,7 @@ mod integration_tests {
 
         // Create transfer
         let req_id = harness.coordinator.create(req).await.unwrap();
-        assert!(req_id > 0);
+        // RequestId is ULID, no comparison to 0 needed
 
         // Execute to completion
         let final_state = harness.coordinator.execute(req_id).await.unwrap();

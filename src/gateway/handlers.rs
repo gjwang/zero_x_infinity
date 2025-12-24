@@ -370,7 +370,7 @@ async fn create_transfer_fsm_handler(
 /// GET /api/v1/private/transfer/:req_id
 pub async fn get_transfer(
     State(state): State<Arc<AppState>>,
-    Path(req_id): Path<u64>,
+    Path(req_id_str): Path<String>,
 ) -> Result<
     (
         StatusCode,
@@ -378,6 +378,17 @@ pub async fn get_transfer(
     ),
     (StatusCode, Json<ApiResponse<()>>),
 > {
+    // Parse req_id from string (ULID format)
+    let req_id: crate::transfer::RequestId = req_id_str.parse().map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<()>::error(
+                error_codes::INVALID_PARAMETER,
+                "Invalid request ID format",
+            )),
+        )
+    })?;
+
     // Check if FSM coordinator is available
     let coordinator = state.transfer_coordinator.as_ref().ok_or_else(|| {
         (

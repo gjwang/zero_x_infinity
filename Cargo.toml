@@ -49,6 +49,7 @@ num-integer = "0.1"
 
 # Internal Transfer FSM (Phase 0x0B-a)
 async-trait = "0.1"
+ulid = "1"
 
 [dev-dependencies]
 crossterm = "0.29.0"

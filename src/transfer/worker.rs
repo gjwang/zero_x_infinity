@@ -98,7 +98,7 @@ impl RecoveryWorker {
 
         for transfer in stale_transfers.iter().take(self.config.batch_size) {
             debug!(
-                req_id = transfer.req_id,
+                req_id = %transfer.req_id,
                 state = %transfer.state,
                 retry_count = transfer.retry_count,
                 "Recovering transfer"
@@ -107,7 +107,7 @@ impl RecoveryWorker {
             // Check for critical stuck states that need alerting
             if transfer.state == TransferState::TargetPending && transfer.retry_count > 10 {
                 warn!(
-                    req_id = transfer.req_id,
+                    req_id = %transfer.req_id,
                     retry_count = transfer.retry_count,
                     "CRITICAL: Transfer stuck in TARGET_PENDING with many retries!"
                 );
@@ -119,7 +119,7 @@ impl RecoveryWorker {
                 Ok(new_state) => {
                     if new_state != transfer.state {
                         info!(
-                            req_id = transfer.req_id,
+                            req_id = %transfer.req_id,
                             old_state = %transfer.state,
                             new_state = %new_state,
                             "Transfer state advanced"
@@ -129,7 +129,7 @@ impl RecoveryWorker {
                 }
                 Err(e) => {
                     error!(
-                        req_id = transfer.req_id,
+                        req_id = %transfer.req_id,
                         error = %e,
                         "Failed to recover transfer"
                     );
