@@ -143,7 +143,9 @@ impl WsService {
                 side,
                 price,
                 qty,
-                role,
+                fee,
+                fee_asset_id,
+                is_maker,
             } => {
                 // Resolve symbol info for name and decimals
                 let symbol_info = self.symbol_mgr.get_symbol_info_by_id(symbol_id);
@@ -167,6 +169,20 @@ impl WsService {
                     .map(|s| (s.price_decimal, s.price_display_decimal))
                     .unwrap_or((2, 2));
 
+                // Get fee asset info for formatting
+                let fee_asset_name = self
+                    .symbol_mgr
+                    .get_asset_name(fee_asset_id)
+                    .unwrap_or_else(|| format!("ASSET_{}", fee_asset_id));
+                let (fee_decimals, fee_display_decimals) = self
+                    .symbol_mgr
+                    .get_asset_decimal(fee_asset_id)
+                    .and_then(|dec| {
+                        let disp = self.symbol_mgr.get_asset_display_decimals(fee_asset_id)?;
+                        Some((dec, disp))
+                    })
+                    .unwrap_or((8, 6));
+
                 let message = WsMessage::Trade {
                     trade_id,
                     order_id,
@@ -174,7 +190,9 @@ impl WsService {
                     side: format!("{:?}", side),
                     price: format_amount(price, price_decimals, price_display_decimals),
                     qty: format_amount(qty, base_decimals, base_display_decimals),
-                    role: if role == 0 { "MAKER" } else { "TAKER" }.to_string(),
+                    fee: format_amount(fee, fee_decimals, fee_display_decimals),
+                    fee_asset: fee_asset_name,
+                    role: if is_maker { "MAKER" } else { "TAKER" }.to_string(),
                 };
                 self.manager.send_to_user(user_id, message);
                 // NOTE: Trade persistence moved to SettlementService (correct architecture)

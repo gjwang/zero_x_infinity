@@ -31,7 +31,9 @@ pub enum WsMessage {
         side: String, // "BUY" or "SELL"
         price: String,
         qty: String,
-        role: String, // "MAKER" or "TAKER"
+        fee: String,       // Fee amount formatted
+        fee_asset: String, // Asset in which fee was paid
+        role: String,      // "MAKER" or "TAKER"
     },
     /// Balance update
     #[serde(rename = "balance.update")]
@@ -69,7 +71,9 @@ pub enum PushEvent {
         side: Side,
         price: u64,
         qty: u64,
-        role: u8, // 0=Maker, 1=Taker
+        fee: u64,          // Fee amount (raw units)
+        fee_asset_id: u32, // Asset ID for fee
+        is_maker: bool,    // true=Maker, false=Taker
     },
     /// Balance changed
     BalanceUpdate {
@@ -110,6 +114,8 @@ mod tests {
             side: "Buy".to_string(),
             price: "85000.00".to_string(),
             qty: "0.100000".to_string(),
+            fee: "0.000020".to_string(),
+            fee_asset: "BTC".to_string(),
             role: "TAKER".to_string(),
         };
         let json = serde_json::to_string(&msg).unwrap();
