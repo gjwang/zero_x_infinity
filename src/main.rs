@@ -105,6 +105,26 @@ fn get_port_override() -> Option<u16> {
 }
 
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+
+    // Check for --version or -V
+    if args.iter().any(|a| a == "--version" || a == "-V") {
+        println!(
+            "zero_x_infinity v{} (rev: {})",
+            env!("CARGO_PKG_VERSION"),
+            env!("GIT_HASH")
+        );
+        println!(
+            "Build Mode: {}",
+            if cfg!(debug_assertions) {
+                "Debug"
+            } else {
+                "Release"
+            }
+        );
+        return;
+    }
+
     let output_dir = get_output_dir();
     let input_dir = get_input_dir();
     let ubscore_mode = use_ubscore_mode();
@@ -277,39 +297,6 @@ fn main() {
             zero_x_infinity::transfer::channel::transfer_channel(1024);
         println!("🔄 TransferChannel created (buffer=1024)");
 
-        // Start HTTP Server in separate thread with tokio runtime
-        let queues_clone = queues.clone();
-        let symbol_mgr_clone = symbol_mgr.clone();
-        let gateway_thread = std::thread::spawn(move || {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(async {
-                // Spawn DepthService task (inside tokio runtime)
-                let depth_service_clone = depth_service.clone();
-                tokio::spawn(async move {
-                    depth_service_clone.run().await;
-                });
-                println!("📊 DepthService started");
-
-                // Use shared db_client from main thread (no duplicate init needed)
-                zero_x_infinity::gateway::run_server(
-                    port,
-                    queues_clone.order_queue.clone(),
-                    symbol_mgr_clone,
-                    active_symbol_id,
-                    db_client_for_gateway,
-                    queues_clone.push_event_queue.clone(),
-                    depth_service,
-                    _pg_db.clone(),
-                    _pg_assets.clone(),
-                    _pg_symbols.clone(),
-                    Some(transfer_sender), // Connect TradingAdapter to UBSCore
-                )
-                .await;
-            });
-        });
-
-        println!("🚀 Gateway thread started");
-
         // Prepare for Trading Core
         println!("\n[1] Initializing Trading Core...");
 
@@ -349,21 +336,79 @@ fn main() {
                 .flat_map(|uid| [base_id, quote_id].map(move |aid| (uid, aid)))
                 .collect();
 
+            let total_tables = accounts_clone.len();
+            println!(
+                "\n[Persistence] Pre-creating {} balance tables...",
+                total_tables
+            );
+
             shared_rt.block_on(async {
+                use tokio::task::JoinSet;
+                let mut set = JoinSet::new();
+                let mut table_count = 0;
+                let concurrency_limit = 50;
+
                 for (user_id, asset_id) in accounts_clone {
-                    if let Err(e) = zero_x_infinity::persistence::schema::ensure_balance_table(
-                        db_clone.taos(),
-                        user_id,
-                        asset_id,
-                    )
-                    .await
-                    {
-                        tracing::warn!("Failed to pre-create balance table: {}", e);
+                    let db = db_clone.clone();
+
+                    // Controlled concurrency: wait if we have too many pending tasks
+                    if set.len() >= concurrency_limit {
+                        set.join_next().await;
+                    }
+
+                    set.spawn(async move {
+                        zero_x_infinity::persistence::schema::ensure_balance_table(
+                            db.taos(),
+                            user_id,
+                            asset_id,
+                        )
+                        .await
+                    });
+
+                    table_count += 1;
+                    if table_count % 500 == 0 {
+                        println!("   Progress: {}/{} tables...", table_count, total_tables);
                     }
                 }
+
+                // Wait for remaining tasks
+                while let Some(_res) = set.join_next().await {}
             });
             println!("✅ Balance tables pre-created for {} users", accounts.len());
         }
+
+        // Start HTTP Server in separate thread with tokio runtime
+        let queues_clone = queues.clone();
+        let symbol_mgr_clone = symbol_mgr.clone();
+        let depth_service_clone = depth_service.clone();
+        let gateway_thread = std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(async {
+                // Spawn DepthService task (inside tokio runtime)
+                tokio::spawn(async move {
+                    depth_service_clone.run().await;
+                });
+                println!("📊 DepthService started");
+
+                // Use shared db_client from main thread (no duplicate init needed)
+                zero_x_infinity::gateway::run_server(
+                    port,
+                    queues_clone.order_queue.clone(),
+                    symbol_mgr_clone,
+                    active_symbol_id,
+                    db_client_for_gateway,
+                    queues_clone.push_event_queue.clone(),
+                    depth_service,
+                    _pg_db.clone(),
+                    _pg_assets.clone(),
+                    _pg_symbols.clone(),
+                    Some(transfer_sender), // Connect TradingAdapter to UBSCore
+                )
+                .await;
+            });
+        });
+
+        println!("🚀 Gateway thread started");
 
         for (user_id, account) in &accounts {
             for asset_id in [base_id, quote_id] {
@@ -379,7 +424,7 @@ fn main() {
 
         println!("✅ Trading Core initialized");
         println!(
-            "\n🎯 System ready! Send orders to http://localhost:{}/api/v1/create_order",
+            "\n🎯 System ready! Send orders to http://localhost:{}/api/v1/private/order",
             port
         );
         println!("Press Ctrl+C to shutdown\n");

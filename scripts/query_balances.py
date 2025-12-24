@@ -76,7 +76,7 @@ def main():
     parser.add_argument('--raw', '-r', action='store_true', help='Output raw JSON')
     args = parser.parse_args()
     
-    result = query_balances(args.user, args.raw)
+    result = query_balances(args.user, None, args.raw)
     return 0 if result else 1
 
 

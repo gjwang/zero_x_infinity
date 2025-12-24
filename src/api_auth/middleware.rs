@@ -201,8 +201,13 @@ pub fn verify_signature(
     let signature_bytes = base62::decode(signature_b62)
         .map_err(|_| AuthError::new(AuthErrorCode::InvalidSignature, "Invalid Base62 signature"))?;
 
-    // Verify signature length (Ed25519 = 64 bytes)
-    if signature_bytes.len() != 64 {
+    // Verify signature length and pad if necessary (Base62 decoding drops leading zeros)
+    let mut signature_bytes = signature_bytes;
+    if signature_bytes.len() < 64 {
+        let mut padded = vec![0u8; 64 - signature_bytes.len()];
+        padded.extend_from_slice(&signature_bytes);
+        signature_bytes = padded;
+    } else if signature_bytes.len() > 64 {
         return Err(AuthError::new(
             AuthErrorCode::InvalidSignature,
             format!("Expected 64 bytes signature, got {}", signature_bytes.len()),

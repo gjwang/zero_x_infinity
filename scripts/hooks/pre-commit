@@ -1,0 +1,36 @@
+#!/bin/bash
+# Pre-commit hook: run cargo fmt, clippy, and test before commit
+# IMPORTANT: clippy flags MUST match .github/workflows/ci.yml
+
+# Clippy flags (keep in sync with CI!)
+CLIPPY_FLAGS="-D warnings -A clippy::too_many_arguments -A clippy::collapsible_if -A clippy::unwrap_or_default -A clippy::doc_lazy_continuation -A clippy::manual_is_multiple_of -A clippy::implicit_saturating_sub -A clippy::redundant_pattern_matching -A clippy::derivable_impls"
+
+# Run cargo fmt check
+if ! cargo fmt --check > /dev/null 2>&1; then
+    echo "❌ Code not formatted. Running cargo fmt..."
+    cargo fmt
+    echo ""
+    echo "Files formatted. Please stage changes and commit again:"
+    echo "  git add -A && git commit"
+    exit 1
+fi
+
+echo "✅ Code formatting OK"
+
+# Run cargo test
+echo "🧪 Running tests..."
+if ! cargo test --quiet 2>&1 | tail -5; then
+    echo "❌ Tests failed. Please fix before committing."
+    exit 1
+fi
+
+echo "✅ All tests passed"
+
+# Run cargo clippy (same flags as CI)
+echo "🔍 Running clippy..."
+if ! cargo clippy -- $CLIPPY_FLAGS 2>&1 | tail -10; then
+    echo "❌ Clippy failed. Please fix before committing."
+    exit 1
+fi
+
+echo "✅ Clippy passed"

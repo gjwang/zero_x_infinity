@@ -66,3 +66,21 @@ CREATE TABLE IF NOT EXISTS symbols_tb (
 --   0x04 = allow_market_order
 --   0x08 = allow_limit_order
 -- 默认 15 (0x0F) = 全部功能
+
+-- ============================================================================
+-- Balances Table (User account balances)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS balances_tb (
+    balance_id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users_tb(user_id),
+    asset_id INT NOT NULL REFERENCES assets_tb(asset_id),
+    available DECIMAL(30, 8) NOT NULL DEFAULT 0,
+    frozen DECIMAL(30, 8) NOT NULL DEFAULT 0,
+    version INT NOT NULL DEFAULT 1,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    
+    CONSTRAINT balances_tb_user_id_asset_id_key UNIQUE (user_id, asset_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_balances_user ON balances_tb(user_id);
