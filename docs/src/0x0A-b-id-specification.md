@@ -64,7 +64,6 @@ pub enum AccountType {
 ### 2.2 `Account` Struct (Conceptual)
 ```rust
 pub struct Account {
-    pub account_id: u64,      // Composite ID
     pub user_id: u64,
     pub account_type: AccountType,
     pub balances: HashMap<AssetId, Balance>,
@@ -152,7 +151,6 @@ pub enum AccountType {
 ### 2.2 `Account` 结构体 (概念)
 ```rust
 pub struct Account {
-    pub account_id: u64,      // 复合 ID
     pub user_id: u64,
     pub account_type: AccountType,
     pub balances: HashMap<AssetId, Balance>,
