@@ -127,7 +127,7 @@ use std::time::Duration;
 use crate::messages::BalanceEvent;
 use crate::pipeline::ValidAction;
 use crate::transfer::channel::{TransferReceiver, TransferSender, process_transfer_requests};
-use crate::transfer::types::RequestId;
+use crate::transfer::types::InternalTransferId;
 use crate::ubscore::UBSCore;
 
 const IDLE_SPIN_LIMIT: u32 = 1000;
@@ -150,7 +150,7 @@ pub struct UBSCoreService {
     /// Optional: Internal transfer receiver (Phase 0x0B-a)
     transfer_receiver: Option<TransferReceiver>,
     /// Processed transfer request IDs for idempotency
-    processed_transfers: std::collections::HashSet<RequestId>,
+    processed_transfers: std::collections::HashSet<InternalTransferId>,
 }
 
 impl UBSCoreService {
