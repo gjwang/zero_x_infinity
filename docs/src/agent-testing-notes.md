@@ -140,18 +140,28 @@ services:
 - 本以为修复了路径问题，但本地测试其实一直在跑根本没改过路径的老代码。
 
 #### 解决方案
-- **自动化校验**：测试脚本已增加时间戳检查逻辑。如果 `src/` 源码比 `release` 二进制更新，脚本会发出**橙色警告**。
+- **自动化校验**：测试脚本已增加时间戳检查逻辑（采用跨平台可用的 `find -newer` 方式）。如果 `src/` 源码比 `release` 二进制更新，脚本会列出最近修改的文件并发出**橙色警告**。
 - **强制重构后构建**：凡是涉及 API 路由、配置文件结构、数据库 Schema 的修改，**必须**执行 `cargo build --release` 后再运行本地集成测试。
 
 ### 2. 数据库“污染”与状态不一致
 
-#### 问题描述
-- **本地环境**：数据库通常是持久化的（Docker Volume），可能积累了上次测试的脏数据或手动修改的记录。
+- **本地环境**：数据库通常是持久化的（Docker Volume），可能积累了上次测试的脏数据或手动修改的记录。`CREATE IF NOT EXISTS` 无法处理已经存在的旧表结构或过期数据。
 - **CI 环境**：每次都是全新的 `init.sh` 状态。
 
 #### 解决方案
-- 本地跑测试前，始终观察脚本输出的 `Initialize database (reset + seed)` 步骤是否成功。
-- 在怀疑数据问题时，使用 `docker exec -it postgres psql -U trading -d exchange_info_db` 手动核查，或强制执行 `python3 scripts/db/manage_db.py init`。
+- **强制重置模式**：使用 `scripts/db/init.sh --reset`。
+    - **PostgreSQL**：会执行 `DROP SCHEMA public CASCADE`，彻底清空所有表和数据，然后重新运行 migration。
+    - **TDengine**：会执行 `DROP DATABASE IF EXISTS`，确保时序数据库也是全新的。
+- **建议流程**：怀疑数据状态不一致时，先运行 `./scripts/db/init.sh --reset`。集成测试脚本在启动前会自动执行基础初始化，但不会自动 `reset`（以保护本地可能想保留的数据）。
+
+### 3. 端口占用与僵尸进程
+
+#### 问题描述
+- 如果上次测试未正常退出，或者本地有其他服务占用了 `8080` 端口，测试脚本启动 Gateway 可能会失败，或者更糟——连接到了错误的进程。
+
+#### 解决方案
+- **启动前检查**：`test_account_integration.sh` 在启动前会探测 `8080` 端口。如果端口已占用，会报错并提示手动清理。
+- **清理命令**：如果端口被占用，建议执行 `pkill zero_x_infinity`。
 
 ### 3. 工具链一致性 (Toolchain Parity)
 

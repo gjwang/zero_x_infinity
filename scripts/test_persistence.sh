@@ -172,6 +172,13 @@ print_test "Enabling persistence in config..."
 sed -i.bak 's/enabled: false/enabled: true/' config/dev.yaml
 print_success "Persistence enabled"
 
+print_test "Checking for port conflicts..."
+if lsof -Pi :8080 -sTCP:LISTEN -t >/dev/null 2>&1; then
+    print_info "Port 8080 is in use. Cleaning up..."
+    lsof -Pi :8080 -sTCP:LISTEN -t | xargs kill -9 2>/dev/null || true
+    sleep 2
+fi
+
 print_test "Starting Gateway server..."
 ./target/release/zero_x_infinity --gateway --env dev > /tmp/gateway.log 2>&1 &
 GATEWAY_PID=$!

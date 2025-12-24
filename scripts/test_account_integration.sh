@@ -186,21 +186,18 @@ log_info "Binary Version: $($BINARY --version | tr '\n' ' ')"
 
 # Check binary freshness (only locally)
 if [ "$CI" != "true" ]; then
-    SRC_LAST_MOD=$(find src -type f -exec stat -f "%m" {} + | sort -nr | head -1)
-    BIN_LAST_MOD=$(stat -f "%m" "$BINARY")
+    STALE_FILES=$(find src -type f -newer "$BINARY" | head -n 5)
     
-    if [ "$SRC_LAST_MOD" -gt "$BIN_LAST_MOD" ]; then
+    if [ -n "$STALE_FILES" ]; then
         echo ""
         log_warn "⚠️  WARNING: Release binary is STALE!"
-        log_info "Source code was modified after the last release build."
-        log_info "Binary build time: $(date -r $BIN_LAST_MOD '+%Y-%m-%d %H:%M:%S')"
-        log_info "Source last mod:   $(date -r $SRC_LAST_MOD '+%Y-%m-%d %H:%M:%S')"
+        log_info "The following files (and possibly others) were modified after the last release build:"
+        echo "$STALE_FILES" | sed 's/^/  - /'
+        echo ""
         log_info "To avoid misleading results, please run: cargo build --release"
         echo ""
-        # We don't exit here to allow quick iterations for non-core changes, 
-        # but the warning is prominent.
     else
-        log_success "Binary is up-to-date (Build time: $(date -r $BIN_LAST_MOD '+%m-%d %H:%M'))"
+        log_success "Binary is up-to-date"
     fi
 fi
 
@@ -213,7 +210,6 @@ TEST_DIR="test_account"
 mkdir -p "$TEST_DIR"
 
 # Copy essential config files and the FULL balances file
-# This now works because Gateway pre-creates tables in parallel!
 cp fixtures/assets_config.csv "$TEST_DIR/"
 cp fixtures/symbols_config.csv "$TEST_DIR/"
 cp fixtures/balances_init.csv "$TEST_DIR/"
@@ -221,6 +217,14 @@ cp fixtures/balances_init.csv "$TEST_DIR/"
 log_success "Test data (Full Dataset) prepared in $TEST_DIR/"
 
 test_start "Start Gateway in background"
+
+# Port conflict detection
+if curl -s http://localhost:8080/api/v1/health >/dev/null 2>&1; then
+    log_error "Port 8080 is already in use by another process!"
+    log_info "If a previous test run didn't clean up, try: pkill zero_x_infinity"
+    exit 1
+fi
+
 log_info "Starting Gateway on port 8080..."
 
 # Use CI config when running in CI environment
@@ -350,7 +354,7 @@ elif docker exec postgres psql -U trading -d exchange_info_db -c "\d assets_tb" 
     # Test lowercase asset rejection (if CHECK constraint exists)
     test_start "Test database constraint: lowercase asset rejected"
     INSERT_RESULT=$(docker exec postgres psql -U trading -d exchange_info_db -c \
-        "INSERT INTO assets_tb (asset, name, decimals, status, asset_flags) VALUES ('btc_test', 'Test', 8, 0, 7)" 2>&1)
+        "INSERT INTO assets_tb (asset, name, decimals, status, asset_flags) VALUES ('btc_test', 'Test', 8, 0, 7)" 2>&1 || true)
     if echo "$INSERT_RESULT" | grep -qi "check\|constraint\|uppercase\|violates"; then
         log_success "Lowercase asset correctly rejected by database"
     else
