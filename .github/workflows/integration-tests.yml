@@ -79,7 +79,7 @@ jobs:
       - uses: actions/checkout@v4
       
       - name: Initialize Database
-        run: PG_PORT=5432 ./scripts/db/init.sh pg
+        run: ./scripts/db/init.sh pg
       
       - name: Verify Tables Exist
         run: |
@@ -195,7 +195,7 @@ jobs:
         run: pip install pandas taos-ws-py psycopg2-binary pynacl requests
       
       - name: Initialize DB
-        run: PG_PORT=5432 ./scripts/db/init.sh pg
+        run: ./scripts/db/init.sh pg
       
       - name: Download Binary
         uses: actions/download-artifact@v4
@@ -269,7 +269,7 @@ jobs:
         run: pip install pandas taos-ws-py psycopg2-binary pynacl requests
       
       - name: Initialize DB
-        run: PG_PORT=5432 ./scripts/db/init.sh pg
+        run: ./scripts/db/init.sh pg
       
       - name: Download Binary
         uses: actions/download-artifact@v4
@@ -343,7 +343,7 @@ jobs:
         run: pip install pandas taos-ws-py psycopg2-binary pynacl requests
       
       - name: Initialize DB
-        run: PG_PORT=5432 ./scripts/db/init.sh pg
+        run: ./scripts/db/init.sh pg
       
       - name: Download Binary
         uses: actions/download-artifact@v4
@@ -417,7 +417,7 @@ jobs:
         run: pip install pandas taos-ws-py psycopg2-binary pynacl requests
       
       - name: Initialize DB
-        run: PG_PORT=5432 ./scripts/db/init.sh pg
+        run: ./scripts/db/init.sh pg
 
       - name: Initialize TDengine
         run: ./scripts/db/init.sh td && sleep 5
