@@ -10,7 +10,7 @@
 
 ## 🇺🇸 English
 
-> **📦 Code Changes**: [View Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.0B-a-transfer...v0.0C-a-trade-fee) *(after implementation)*
+> **📦 Code Changes**: [View Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.0B-a-transfer...0x0C-trade-fee)
 
 ---
 
@@ -561,7 +561,7 @@ BalanceEventBatch
 
 ## 🇨🇳 中文
 
-> **📦 代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.0B-a-transfer...v0.0C-a-trade-fee) *(实现后)*
+> **📦 代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.0B-a-transfer...0x0C-trade-fee)
 
 ---
 
