@@ -16,11 +16,25 @@
 
 ## 1. Overview
 
-### 1.1 Goal
+### 1.1 Connecting the Dots: From Transfer to Trading
 
-Implement **Maker/Taker fee model** for trade execution. Fees are the primary revenue source for exchanges.
+在 **0x0B** 章节中，我们建立了资金划转的 FSM 机制，让用户可以在 Funding 账户和 Spot 账户之间转移资产。但资金进入 Spot 账户后，交易所需要有收入来源。
 
-### 1.2 Key Concepts
+这就是本章的主题：**交易手续费 (Trade Fee)**。
+
+每当买卖双方成交时，交易所收取一定比例的手续费。这是交易所最核心的商业模式，也是整个系统能够持续运营的基础。
+
+> **设计哲学**: 手续费的实现看似简单（不就是扣个百分比吗？），但实际涉及多个关键决策：
+> - 费率在哪里配置？（Symbol 级别 vs 全局）
+> - 从什么资产扣除？（支付的 vs 收到的）
+> - 扣除时机在哪里？（ME 里扣 vs Settlement 扣）
+> - 如何确保精度不丢失？（u64 * bps / 10000 的溢出问题）
+
+### 1.2 Goal
+
+Implement **Maker/Taker fee model** for trade execution. Fees are the primary revenue source for exchanges
+
+### 1.3 Key Concepts
 
 | Term | Definition |
 |------|------------|
@@ -33,7 +47,19 @@ Implement **Maker/Taker fee model** for trade execution. Fees are the primary re
 
 ## 2. Fee Model Design
 
-### 2.1 Standard Rates
+### 2.1 Why Maker/Taker Model?
+
+传统股票交易所往往采用固定费率，但加密货币交易所普遍采用 **Maker/Taker** 模型。这不是随意的选择：
+
+| 问题 | Maker/Taker 如何解决 |
+|------|----------------------|
+| 流动性不足 | 低 Maker 费率鼓励挂单 |
+| 价格发现 | 盘口深度越深，价差越小 |
+| 公平性 | 谁消耗流动性谁多付费 |
+
+> **行业实践**: Binance、OKX、Bybit 等主流交易所都采用此模型。
+
+### 2.2 Standard Rates
 
 | Role | Rate (bps) | Rate (%) | Example: 100 USDT trade |
 |------|-----------|----------|------------------------|
@@ -62,6 +88,11 @@ Trade: Alice (Taker, BUY) ← → Bob (Maker, SELL)
 ```
 
 **Rule**: Fee is always deducted from **what you receive**, not what you pay.
+
+> **Why 从收到的资产扣除？**
+> 1. **简化用户心理账单**: 用户支付 100 USDT，就是 100 USDT，不会多扣
+> 2. **避免预算超支**: 买 1 BTC 不会因为手续费导致需要 100,020 USDT
+> 3. **行业惯例**: Binance、Coinbase 都是这样做的
 
 ---
 
