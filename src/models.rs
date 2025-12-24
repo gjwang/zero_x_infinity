@@ -251,10 +251,8 @@ pub struct Trade {
     pub seller_user_id: u64,
     pub price: u64,
     pub qty: u64,
-    /// Fee charged (0 for now, placeholder)
-    pub fee: u64,
-    /// Role: 0=Maker, 1=Taker (0 for now, placeholder)
-    pub role: u8,
+    // Note: fee is NOT stored here. Fee is calculated in UBSCore.settle_trade()
+    // and stored in balance_events table. Query balance_events for fee info.
 }
 
 impl Trade {
@@ -275,8 +273,6 @@ impl Trade {
             seller_user_id,
             price,
             qty,
-            fee: 0,  // Placeholder
-            role: 0, // Placeholder: 0=Maker
         }
     }
 }

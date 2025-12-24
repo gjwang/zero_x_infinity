@@ -18,8 +18,9 @@ pub async fn insert_trade(taos: &Taos, trade: &Trade, symbol_id: u32) -> Result<
         .map_err(|e| anyhow::anyhow!("{}: {}", "Failed to create trades subtable", e))?;
 
     // Insert buyer's trade record
+    // Note: fee=0, role=0 - actual fee is in balance_events table
     let sql_buyer = format!(
-        "INSERT INTO {} VALUES (NOW, {}, {}, {}, {}, {}, {}, {}, {})",
+        "INSERT INTO {} VALUES (NOW, {}, {}, {}, {}, {}, {}, 0, 0)",
         table_name,
         trade.trade_id,
         trade.buyer_order_id,
@@ -27,13 +28,12 @@ pub async fn insert_trade(taos: &Taos, trade: &Trade, symbol_id: u32) -> Result<
         Side::Buy as u8,
         trade.price,
         trade.qty,
-        trade.fee,
-        trade.role
     );
 
     // Insert seller's trade record
+    // Note: fee=0, role=0 - actual fee is in balance_events table
     let sql_seller = format!(
-        "INSERT INTO {} VALUES (NOW, {}, {}, {}, {}, {}, {}, {}, {})",
+        "INSERT INTO {} VALUES (NOW, {}, {}, {}, {}, {}, {}, 0, 0)",
         table_name,
         trade.trade_id,
         trade.seller_order_id,
@@ -41,8 +41,6 @@ pub async fn insert_trade(taos: &Taos, trade: &Trade, symbol_id: u32) -> Result<
         Side::Sell as u8,
         trade.price,
         trade.qty,
-        trade.fee,
-        trade.role
     );
 
     taos.exec(&sql_buyer)

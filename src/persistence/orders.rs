@@ -158,9 +158,10 @@ pub async fn batch_insert_me_results(
                 let t = &te.trade;
 
                 // Buyer record
+                // Note: fee=0 here, actual fee is in balance_events table
                 write!(
                     trades_sql,
-                    "trades_{} VALUES({}, {}, {}, {}, {}, {}, {}, {}, {}) ",
+                    "trades_{} VALUES({}, {}, {}, {}, {}, {}, {}, 0, {}) ",
                     r.symbol_id,
                     now_us + ts_offset,
                     t.trade_id,
@@ -169,16 +170,16 @@ pub async fn batch_insert_me_results(
                     Side::Buy as u8,
                     t.price,
                     t.qty,
-                    t.fee,
-                    if te.taker_side == Side::Buy { 0u8 } else { 1u8 } // 0=taker, 1=maker
+                    if te.taker_side == Side::Buy { 1u8 } else { 0u8 } // 1=taker, 0=maker
                 )
                 .unwrap();
                 ts_offset += 1;
 
                 // Seller record
+                // Note: fee=0 here, actual fee is in balance_events table
                 write!(
                     trades_sql,
-                    "trades_{} VALUES({}, {}, {}, {}, {}, {}, {}, {}, {}) ",
+                    "trades_{} VALUES({}, {}, {}, {}, {}, {}, {}, 0, {}) ",
                     r.symbol_id,
                     now_us + ts_offset,
                     t.trade_id,
@@ -187,12 +188,11 @@ pub async fn batch_insert_me_results(
                     Side::Sell as u8,
                     t.price,
                     t.qty,
-                    t.fee,
                     if te.taker_side == Side::Sell {
-                        0u8
-                    } else {
                         1u8
-                    } // 0=taker, 1=maker
+                    } else {
+                        0u8
+                    } // 1=taker, 0=maker
                 )
                 .unwrap();
                 ts_offset += 1;
@@ -370,8 +370,6 @@ mod tests {
             seller_user_id: 1002,
             price: 85050_00000000,
             qty: 500000,
-            fee: 100,
-            role: 1,
         };
 
         let trade_event = TradeEvent::new(
