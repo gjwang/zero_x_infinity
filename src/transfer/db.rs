@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use super::error::TransferError;
 use super::state::TransferState;
-use super::types::{RequestId, ServiceId, TransferRecord, TransferType};
+use super::types::{InternalTransferId, ServiceId, TransferRecord, TransferType};
 
 /// Transfer database operations
 pub struct TransferDb {
@@ -47,7 +47,10 @@ impl TransferDb {
     }
 
     /// Get a transfer record by req_id
-    pub async fn get(&self, req_id: RequestId) -> Result<Option<TransferRecord>, TransferError> {
+    pub async fn get(
+        &self,
+        req_id: InternalTransferId,
+    ) -> Result<Option<TransferRecord>, TransferError> {
         let row = sqlx::query(
             r#"
             SELECT transfer_id, req_id, cid, user_id, asset_id, amount, 
@@ -93,7 +96,7 @@ impl TransferDb {
     /// Returns true if update succeeded, false if state didn't match (another worker modified it)
     pub async fn update_state_if(
         &self,
-        req_id: RequestId,
+        req_id: InternalTransferId,
         expected_state: TransferState,
         new_state: TransferState,
     ) -> Result<bool, TransferError> {
@@ -116,7 +119,7 @@ impl TransferDb {
     /// Atomic CAS update with error message
     pub async fn update_state_with_error(
         &self,
-        req_id: RequestId,
+        req_id: InternalTransferId,
         expected_state: TransferState,
         new_state: TransferState,
         error: &str,
@@ -139,7 +142,7 @@ impl TransferDb {
     }
 
     /// Increment retry count for a transfer
-    pub async fn increment_retry(&self, req_id: RequestId) -> Result<(), TransferError> {
+    pub async fn increment_retry(&self, req_id: InternalTransferId) -> Result<(), TransferError> {
         sqlx::query(
             r#"
             UPDATE fsm_transfers_tb 
@@ -193,7 +196,7 @@ impl TransferDb {
     /// Convert database row to TransferRecord
     fn row_to_record(&self, row: &sqlx::postgres::PgRow) -> Result<TransferRecord, TransferError> {
         let req_id_str: String = row.get("req_id");
-        let req_id: RequestId = req_id_str
+        let req_id: InternalTransferId = req_id_str
             .parse()
             .map_err(|_| TransferError::SystemError("Invalid req_id format".to_string()))?;
 
@@ -280,7 +283,7 @@ impl OpType {
 /// Record an adapter operation for idempotency
 pub async fn record_operation(
     pool: &PgPool,
-    req_id: RequestId,
+    req_id: InternalTransferId,
     op_type: OpType,
     service: ServiceId,
     result: &str,
@@ -308,7 +311,7 @@ pub async fn record_operation(
 /// Check if an operation was already recorded
 pub async fn check_operation(
     pool: &PgPool,
-    req_id: RequestId,
+    req_id: InternalTransferId,
     op_type: OpType,
     service: ServiceId,
 ) -> Result<Option<String>, TransferError> {

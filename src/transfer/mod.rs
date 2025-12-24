@@ -45,5 +45,5 @@ pub use api::{
 pub use coordinator::TransferCoordinator;
 pub use error::TransferError;
 pub use state::TransferState;
-pub use types::{OpResult, RequestId, ServiceId, TransferRecord, TransferRequest};
+pub use types::{InternalTransferId, OpResult, ServiceId, TransferRecord, TransferRequest};
 pub use worker::RecoveryWorker;

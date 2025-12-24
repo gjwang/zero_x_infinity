@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use super::coordinator::TransferCoordinator;
 use super::error::TransferError;
-use super::types::{RequestId, ServiceId, TransferRequest as CoreTransferRequest};
+use super::types::{InternalTransferId, ServiceId, TransferRequest as CoreTransferRequest};
 
 // ============================================================================
 // API Request/Response Types
@@ -372,7 +372,7 @@ pub async fn create_transfer_fsm(
 /// Get transfer status
 pub async fn get_transfer_status(
     coordinator: &TransferCoordinator,
-    req_id: RequestId,
+    req_id: InternalTransferId,
     asset_decimals: u32,
 ) -> Result<TransferApiResponse, (StatusCode, ApiResponse<()>)> {
     let record = coordinator

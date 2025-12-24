@@ -9,7 +9,7 @@ use tracing::{debug, error, warn};
 
 use super::ServiceAdapter;
 use crate::transfer::db::{OpType, check_operation, record_operation};
-use crate::transfer::types::{OpResult, RequestId, ServiceId};
+use crate::transfer::types::{InternalTransferId, OpResult, ServiceId};
 
 /// Funding account adapter
 ///
@@ -36,7 +36,7 @@ impl ServiceAdapter for FundingAdapter {
 
     async fn withdraw(
         &self,
-        req_id: RequestId,
+        req_id: InternalTransferId,
         user_id: u64,
         asset_id: u32,
         amount: u64,
@@ -206,7 +206,7 @@ impl ServiceAdapter for FundingAdapter {
 
     async fn deposit(
         &self,
-        req_id: RequestId,
+        req_id: InternalTransferId,
         user_id: u64,
         asset_id: u32,
         amount: u64,
@@ -275,7 +275,7 @@ impl ServiceAdapter for FundingAdapter {
         }
     }
 
-    async fn rollback(&self, req_id: RequestId) -> OpResult {
+    async fn rollback(&self, req_id: InternalTransferId) -> OpResult {
         debug!(req_id = %req_id, "Funding rollback");
 
         // Check idempotency
@@ -356,7 +356,7 @@ impl ServiceAdapter for FundingAdapter {
         }
     }
 
-    async fn commit(&self, req_id: RequestId) -> OpResult {
+    async fn commit(&self, req_id: InternalTransferId) -> OpResult {
         debug!(req_id = %req_id, "Funding commit");
 
         // For Funding, commit is a no-op (we don't use locks)
