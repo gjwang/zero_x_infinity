@@ -31,15 +31,18 @@
 - **Semantics**: Trading Pair identifier (e.g., BTC_USDT=1).
 - **Strategy**: Sequential allocation starting from `1`.
 
-### 1.4 Account ID (`u64`)
-- **Semantics**: User's sub-account identifier (distinguishing Funding vs Spot).
-- **Strategy**: Composite ID (High bits for User, Low bits for Type).
+### 1.4 Account Identification
+- **Semantics**: User's sub-account (distinguishing Funding vs Spot).
+- **Strategy**: Use `(user_id, account_type)` tuple, no composite ID needed.
+  ```rust
+  struct AccountKey {
+      user_id: u64,
+      account_type: AccountType,  // Funding | Spot
+  }
   ```
-  Account ID = (user_id << 8) | account_type
-  ```
-  - `account_type = 0x01` -> Funding
-  - `account_type = 0x02` -> Spot
-- **Note**: Account ID `0-256000` are system accounts (user_id 0-1000)
+- **Account Types**:
+  - `Spot` = 1
+  - `Funding` = 2
 
 ### 1.5 Order ID / Trade ID (`u64`)
 - **Semantics**: Unique identifier for orders/trades within the Matching Engine.
@@ -116,15 +119,18 @@ pub struct Account {
 - **语义**: 交易对标识符（如 BTC/USDT=1）。
 - **生成策略**: 顺序分配，从 `1` 开始。
 
-### 1.4 Account ID (`u64`)
-- **语义**: 用户的子账户标识（区分 Funding 与 Spot）。
-- **生成策略**: 复合 ID，高位用户，低位类型。
+### 1.4 账户标识
+- **语义**: 用户的子账户（区分 Funding 与 Spot）。
+- **策略**: 使用 `(user_id, account_type)` 元组，不需要复合 ID。
+  ```rust
+  struct AccountKey {
+      user_id: u64,
+      account_type: AccountType,  // Funding | Spot
+  }
   ```
-  Account ID = (user_id << 8) | account_type
-  ```
-  - `account_type = 0x01` -> Funding
-  - `account_type = 0x02` -> Spot
-- **备注**: Account ID `0-256000` 是系统账户 (user_id 0-1000)
+- **账户类型**:
+  - `Spot` = 1
+  - `Funding` = 2
 
 ### 1.5 Order ID / Trade ID (`u64`)
 - **语义**: 撮合引擎内的订单/成交唯一标识。
