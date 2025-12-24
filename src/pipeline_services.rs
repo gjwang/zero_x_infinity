@@ -124,10 +124,12 @@ impl IngestionService {
 
 use std::time::Duration;
 
+use crate::internal_transfer::channel::{
+    TransferReceiver, TransferSender, process_transfer_requests,
+};
+use crate::internal_transfer::types::InternalTransferId;
 use crate::messages::BalanceEvent;
 use crate::pipeline::ValidAction;
-use crate::transfer::channel::{TransferReceiver, TransferSender, process_transfer_requests};
-use crate::transfer::types::InternalTransferId;
 use crate::ubscore::UBSCore;
 
 const IDLE_SPIN_LIMIT: u32 = 1000;

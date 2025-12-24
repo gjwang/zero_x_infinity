@@ -6,7 +6,7 @@
 use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, error};
 
-use crate::transfer::types::InternalTransferId;
+use crate::internal_transfer::types::InternalTransferId;
 
 // ============================================================================
 // Transfer Request/Response Types
@@ -186,7 +186,7 @@ mod tests {
     #[tokio::test]
     async fn test_transfer_channel_send_receive() {
         let (sender, mut receiver) = transfer_channel(10);
-        let test_transfer_id = crate::transfer::InternalTransferId::new();
+        let test_transfer_id = crate::internal_transfer::InternalTransferId::new();
 
         // Spawn sender task
         let sender_task = tokio::spawn({

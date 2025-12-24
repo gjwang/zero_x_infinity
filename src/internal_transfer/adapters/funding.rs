@@ -8,8 +8,8 @@ use sqlx::{PgPool, Row};
 use tracing::{debug, error, warn};
 
 use super::ServiceAdapter;
-use crate::transfer::db::{OpType, check_operation, record_operation};
-use crate::transfer::types::{InternalTransferId, OpResult, ServiceId};
+use crate::internal_transfer::db::{OpType, check_operation, record_operation};
+use crate::internal_transfer::types::{InternalTransferId, OpResult, ServiceId};
 
 /// Funding account adapter
 ///

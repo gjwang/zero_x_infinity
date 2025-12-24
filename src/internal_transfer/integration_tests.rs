@@ -7,11 +7,11 @@
 mod integration_tests {
     use std::sync::Arc;
 
-    use crate::transfer::adapters::MockAdapter;
-    use crate::transfer::coordinator::TransferCoordinator;
-    use crate::transfer::db::TransferDb;
-    use crate::transfer::state::TransferState;
-    use crate::transfer::types::{ServiceId, TransferRequest};
+    use crate::internal_transfer::adapters::MockAdapter;
+    use crate::internal_transfer::coordinator::TransferCoordinator;
+    use crate::internal_transfer::db::TransferDb;
+    use crate::internal_transfer::state::TransferState;
+    use crate::internal_transfer::types::{ServiceId, TransferRequest};
 
     /// Helper to create a coordinator with mock adapters for testing
     struct TestHarness {

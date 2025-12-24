@@ -47,7 +47,7 @@ use crate::ubscore::UBSCore;
 use crate::user_account::UserAccount;
 use rustc_hash::FxHashMap;
 
-use crate::transfer::channel::TransferReceiver;
+use crate::internal_transfer::channel::TransferReceiver;
 
 // ============================================================
 // LOGGING & PERFORMANCE CONSTANTS

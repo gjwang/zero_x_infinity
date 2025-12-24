@@ -65,7 +65,7 @@ pub mod api_auth;
 pub mod funding;
 
 // Internal Transfer FSM (Phase 0x0B-a)
-pub mod transfer;
+pub mod internal_transfer;
 
 // Convenient re-exports at crate root
 pub use balance::Balance;

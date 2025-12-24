@@ -10,8 +10,8 @@ use std::sync::{Arc, Mutex};
 use tracing::{debug, error, warn};
 
 use super::ServiceAdapter;
-use crate::transfer::channel::{TransferOp, TransferResponse, TransferSender};
-use crate::transfer::types::{InternalTransferId, OpResult};
+use crate::internal_transfer::channel::{TransferOp, TransferResponse, TransferSender};
+use crate::internal_transfer::types::{InternalTransferId, OpResult};
 
 /// Trading account adapter
 ///
