@@ -47,13 +47,19 @@ if ! PGPASSWORD="${PG_PASSWORD}" psql -h "${PG_HOST}" -p "${PG_PORT}" -U "${PG_U
 fi
 echo "  ✓ PostgreSQL connected (port ${PG_PORT})"
 
-# Check and ensure binary freshness
-if [ "$1" != "--no-gw" ]; then
+# Check and ensure binary freshness (skip in CI - binary is pre-built)
+if [ "$1" != "--no-gw" ] && [ "$CI" != "true" ]; then
     echo "  [BUILD] Ensuring binary is up to date..."
-    NEWEST_SRC=$(find src -name "*.rs" -exec stat -f "%m" {} + | sort -nr | head -n1)
-    BINARY_MTIME=$(stat -f "%m" target/release/zero_x_infinity 2>/dev/null || echo 0)
+    # Cross-platform stat: macOS uses -f, Linux uses -c
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        NEWEST_SRC=$(find src -name "*.rs" -exec stat -f "%m" {} + 2>/dev/null | sort -nr | head -n1 || echo 0)
+        BINARY_MTIME=$(stat -f "%m" target/release/zero_x_infinity 2>/dev/null || echo 0)
+    else
+        NEWEST_SRC=$(find src -name "*.rs" -exec stat -c "%Y" {} + 2>/dev/null | sort -nr | head -n1 || echo 0)
+        BINARY_MTIME=$(stat -c "%Y" target/release/zero_x_infinity 2>/dev/null || echo 0)
+    fi
 
-    if [ "$NEWEST_SRC" -gt "$BINARY_MTIME" ]; then
+    if [ -n "$NEWEST_SRC" ] && [ -n "$BINARY_MTIME" ] && [ "$NEWEST_SRC" -gt "$BINARY_MTIME" ]; then
         echo "  [FACT] Source modified, forcing re-link via touch src/main.rs..."
         touch src/main.rs
         cargo build --release --quiet
@@ -61,6 +67,8 @@ if [ "$1" != "--no-gw" ]; then
     else
         echo "  ✓ Binary is current"
     fi
+else
+    echo "  ✓ Binary is current (CI mode)"
 fi
 
 # =============================================================================
@@ -68,7 +76,7 @@ fi
 # =============================================================================
 echo -e "${YELLOW}[2/6] Setting up test data...${NC}"
 
-PGPASSWORD=trading123 psql -h localhost -p 5433 -U trading -d exchange_info_db -q << 'EOF'
+PGPASSWORD="${PG_PASSWORD}" psql -h "${PG_HOST}" -p "${PG_PORT}" -U "${PG_USER}" -d "${PG_DB}" -q << 'EOF'
 -- Enable internal transfer for USDT (add 0x10 = 16 to flags)
 UPDATE assets_tb SET asset_flags = asset_flags | 16 WHERE asset_id = 2;
 
@@ -251,7 +259,7 @@ echo "$TEST_RESULT"
 # =============================================================================
 echo -e "${YELLOW}[5/6] Final database state...${NC}"
 
-PGPASSWORD=trading123 psql -h localhost -p 5433 -U trading -d exchange_info_db -t << 'EOF'
+PGPASSWORD="${PG_PASSWORD}" psql -h "${PG_HOST}" -p "${PG_PORT}" -U "${PG_USER}" -d "${PG_DB}" -t << 'EOF'
 SELECT 
     CASE account_type WHEN 1 THEN 'Spot' WHEN 2 THEN 'Funding' END as account,
     (available / 1000000)::text || ' USDT' as balance
