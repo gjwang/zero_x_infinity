@@ -380,6 +380,80 @@ CHECK (symbol = UPPER(symbol) AND symbol ~ '^[A-Z0-9_]{3,32}$');
 
 ---
 
-**最后更新**: 2025-12-22  
-**版本**: 1.1  
+## 9. 内部 ID 生成规范 (Internal ID Generation)
+
+### 9.1 核心原则
+
+| 原则 | 说明 |
+|------|------|
+| **使用 ULID** | 不使用自定义 Snowflake，使用 `ulid` crate |
+| **Newtype 封装** | 每个 ID 使用独立的 struct 封装 |
+| **具体命名** | 避免泛化名称如 `RequestId`，使用 `InternalTransferId` |
+
+### 9.2 为什么使用 ULID？
+
+| 特性 | Snowflake | ULID |
+|------|-----------|------|
+| 排序性 | ✅ | ✅ |
+| 唯一性 | 需要 machine_id 协调 | ✅ 无需协调 |
+| 长度 | 64-bit | 128-bit |
+| 可读性 | 数字 | 26 字符 Base32 |
+| 时钟依赖 | ⚠️ 回拨问题 | ✅ 自动处理 |
+
+### 9.3 Newtype 封装要求
+
+**必须**为每个重要 ID 创建独立的 struct：
+
+```rust
+/// 内部转账 ID (ULID-based)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct InternalTransferId(ulid::Ulid);
+
+impl InternalTransferId {
+    pub fn new() -> Self {
+        Self(ulid::Ulid::new())
+    }
+}
+
+impl std::fmt::Display for InternalTransferId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+```
+
+**好处**：
+1. **类型安全**：编译器防止混用不同 ID 类型
+2. **易于替换**：内部实现可随时更换
+3. **自文档化**：函数签名清晰表明期望的 ID 类型
+
+### 9.4 命名规范
+
+❌ **禁止**：
+- `RequestId` - 太宽泛，不知道是什么请求
+- `Id` - 完全无意义
+- `TxId` - 缩写不明确
+
+✅ **推荐**：
+- `InternalTransferId` - 明确是内部转账
+- `OrderId` - 明确是订单
+- `TradeId` - 明确是成交
+- `DepositRequestId` - 明确是充值请求
+
+### 9.5 ID 类型总览
+
+| 模块 | ID 名称 | 内部类型 | 说明 |
+|------|---------|----------|------|
+| Transfer | `InternalTransferId` | `Ulid` | 内部转账唯一标识 |
+| Order | `OrderId` | `u64` | 订单唯一标识 (性能考虑) |
+| Trade | `TradeId` | `u64` | 成交唯一标识 |
+| User | `UserId` | `u64` | 用户唯一标识 |
+| Asset | `AssetId` | `u32` | 资产唯一标识 |
+| Symbol | `SymbolId` | `u32` | 交易对唯一标识 |
+
+---
+
+**最后更新**: 2025-12-24  
+**版本**: 1.2  
 **状态**: 强制执行
+
