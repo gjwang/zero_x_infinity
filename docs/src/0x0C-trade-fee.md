@@ -166,18 +166,54 @@ Trade: Alice (Taker, BUY) ← → Bob (Maker, SELL)
 > - 买单锁定 USDT，手续费从收到的 BTC 中扣
 > - 卖单锁定 BTC，手续费从收到的 USDT 中扣
 
-### 2.5 Fee Calculation Timing
+### 2.5 Fee Responsibility: UBSCore (第一性原理)
 
-关键问题：费用在哪里计算和扣除？
+**核心问题**: 谁负责计费？
 
 ```
-ME (Match) --> Trade{role} --> Settlement (Calculate Fee, Deduct, Credit Net)
+费用扣除 = 余额变动 = 必须由 UBSCore 执行
 ```
 
-> **Why 在 Settlement 层计算**（而不是 ME）？
-> 1. **ME 保持高性能**: 撮合引擎只关注 price-time priority
-> 2. **费用可配置性**: 不同用户可能有不同 VIP 等级或折扣
-> 3. **复杂场景扩展**: BNB 抵扣、返佣等逻辑不影响 ME
+| 问题 | 答案 |
+|------|------|
+| 谁知道成交了？ | ME |
+| 谁管理余额？ | **UBSCore** |
+| 谁能执行扣款？ | **UBSCore** |
+| 谁负责计费？ | **UBSCore** |
+
+**数据流**:
+```
+ME ──▶ Trade{role} ──▶ UBSCore ──▶ BalanceEvent{fee} ──▶ Settlement ──▶ TDengine
+                          │
+                     ① 获取 VIP 等级 (内存)
+                     ② 获取 Symbol 费率 (内存)
+                     ③ 计算 fee = received × rate
+                     ④ credit(net_amount)
+```
+
+### 2.6 High Performance Design
+
+**高效的关键**: 所有配置在 UBSCore 内存中
+
+```
+UBSCore 内存结构 (启动时加载):
+├── user_vip_levels: HashMap<UserId, u8>
+├── vip_discounts: HashMap<u8, u8>  // level → discount%
+└── symbol_fees: HashMap<SymbolId, (u64, u64)>  // (maker, taker)
+
+费用计算 = 纯内存操作, O(1)
+```
+
+| 组件 | 职责 | 阻塞？ |
+|------|------|-------|
+| UBSCore | 计算 fee, 更新余额 | ❌ 纯内存 |
+| BalanceEvent | 传递 fee 信息 | ❌ 异步通道 |
+| Settlement | 写入 TDengine | ❌ 独立线程 |
+
+> **Why 高效？**
+> - 没有 I/O 在关键路径上
+> - 所有数据都在内存
+> - 输出复用现有 BalanceEvent 通道
 
 ---
 
