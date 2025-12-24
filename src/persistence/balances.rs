@@ -205,9 +205,10 @@ pub async fn batch_insert_balance_events(
 
     for (i, event) in events.iter().enumerate() {
         // Table name: balance_events_{user_id}_{account_type}
+        // Schema: ts, event_type, trade_id, source_id, asset_id, delta, avail_after, frozen_after, from_user, fee_amount
         write!(
             sql,
-            "balance_events_{}_{} VALUES({}, {}, {}, {}, {}, {}, {}, {}, 0) ",
+            "balance_events_{}_{} VALUES({}, {}, {}, {}, {}, {}, {}, {}, 0, {}) ",
             event.user_id,
             account_type,
             now_us + i as i64,
@@ -218,6 +219,8 @@ pub async fn batch_insert_balance_events(
             event.delta,
             event.avail_after,
             event.frozen_after,
+            // from_user = 0 (placeholder)
+            event.fee_amount, // Fee deducted (Settle events only)
         )
         .unwrap();
     }
