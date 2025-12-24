@@ -431,6 +431,8 @@ pub enum BalanceEventType {
     Settle,
     /// SettleRestore - unused frozen funds restored to available (price improvement)
     SettleRestore,
+    /// FeeReceived - platform fee income from trades
+    FeeReceived,
 }
 
 impl BalanceEventType {
@@ -442,6 +444,7 @@ impl BalanceEventType {
             Self::Unlock => "unlock",
             Self::Settle => "settle",
             Self::SettleRestore => "settle_restore",
+            Self::FeeReceived => "fee_received",
         }
     }
 
@@ -454,6 +457,7 @@ impl BalanceEventType {
             Self::Unlock => VersionSpace::Lock,
             Self::Settle => VersionSpace::Settle,
             Self::SettleRestore => VersionSpace::Settle,
+            Self::FeeReceived => VersionSpace::Settle,
         }
     }
 }
@@ -679,6 +683,33 @@ impl BalanceEvent {
             amount as i64, // Positive: avail increases
             avail_after,
             frozen_after,
+            ingested_at_ns,
+        )
+    }
+
+    /// Create a FeeReceived event (platform fee income)
+    ///
+    /// Records fee income to REVENUE account with source user info for audit.
+    #[allow(clippy::too_many_arguments)]
+    pub fn fee_received(
+        user_id: UserId, // REVENUE account (0)
+        asset_id: AssetId,
+        trade_id: u64,
+        amount: u64,
+        _from_user: UserId, // User who paid the fee (for audit)
+        avail_after: u64,
+        ingested_at_ns: u64,
+    ) -> Self {
+        Self::new(
+            user_id,
+            asset_id,
+            BalanceEventType::FeeReceived,
+            0, // version - REVENUE doesn't track versions
+            SourceType::Trade,
+            trade_id,
+            amount as i64, // Positive: REVENUE avail increases
+            avail_after,
+            0, // frozen_after - REVENUE doesn't use frozen
             ingested_at_ns,
         )
     }
