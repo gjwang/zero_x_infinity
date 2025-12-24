@@ -10,7 +10,7 @@
 
 ## 🇺🇸 English
 
-> **📦 Code Changes**: [View Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.9-f-integration-test...v0.0B-a)
+> **📦 Code Changes**: [View Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.9-f-integration-test...v0.0B-a-transfer)
 
 ---
 
@@ -977,7 +977,7 @@ function withdraw(req_id, user_id, asset_id, amount):
 
 ## 🇨🇳 中文
 
-> **📦 代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.9-f-integration-test...v0.0B-a)
+> **📦 代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.9-f-integration-test...v0.0B-a-transfer)
 
 ---
 
