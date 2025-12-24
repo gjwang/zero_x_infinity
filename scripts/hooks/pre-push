@@ -1,0 +1,24 @@
+#!/bin/bash
+# Pre-push hook: enforce clippy and format checks before push
+#
+# Install by copying/linking to .git/hooks/pre-push
+# This prevents pushing code that would fail CI.
+
+echo "🔍 Running pre-push checks..."
+
+# Check formatting
+echo "[1/2] cargo fmt --check"
+if ! cargo fmt --check; then
+    echo "❌ Code is not formatted. Run 'cargo fmt' first."
+    exit 1
+fi
+
+# Check clippy
+echo "[2/2] cargo clippy -- -D warnings"
+if ! cargo clippy -- -D warnings 2>&1; then
+    echo "❌ Clippy warnings detected. Fix them before pushing."
+    exit 1
+fi
+
+echo "✅ All pre-push checks passed!"
+exit 0
