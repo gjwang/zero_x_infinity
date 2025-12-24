@@ -39,20 +39,42 @@ Build a complete fund management system supporting:
 
 ## 2. Account Model
 
-### 2.1 Account Types
+### 2.1 Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    User Account System                      │
-├─────────────────────────────────────────────────────────────┤
-│  Main Account                                               │
-│  ├── Spot Account (Matching)                                │
-│  ├── Funding Account (Deposit/Withdraw)                     │
-│  └── Margin Account (Future: Leverage)                      │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         Account Architecture                            │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   ┌───────────────────────────┐    ┌───────────────────────────┐       │
+│   │    Funding Account        │    │     Spot Account          │       │
+│   │    (account_type = 2)     │    │     (account_type = 1)    │       │
+│   ├───────────────────────────┤    ├───────────────────────────┤       │
+│   │  Storage: PostgreSQL      │    │  Storage: UBSCore (RAM)   │       │
+│   │  Table: balances_tb       │    │  HashMap in memory        │       │
+│   │                           │    │                           │       │
+│   │  Purpose:                 │    │  Purpose:                 │       │
+│   │  - Deposit (充值)          │    │  - Trading (撮合)          │       │
+│   │  - Withdraw (提现)         │    │  - Order matching         │       │
+│   │  - Internal Transfer      │    │  - Real-time balance      │       │
+│   └─────────────┬─────────────┘    └─────────────┬─────────────┘       │
+│                 │                                │                     │
+│                 └──────── Transfer (划转) ───────┘                     │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 2.2 Schema (PostgreSQL)
+### 2.2 Storage Summary
+
+| Account | Type | Storage | Table/Structure |
+|---------|------|---------|-----------------|
+| **Funding** | 2 | PostgreSQL | `balances_tb` |
+| **Spot** | 1 | Memory (UBSCore) | `HashMap<(user_id, asset_id), Balance>` |
+
+> **Note**: `balances_tb` is currently used for Funding account only.
+> Spot balances are managed in-memory by UBSCore and persisted to TDengine as events.
+
+### 2.3 Schema (PostgreSQL)
 
 **Current Implementation**: Single `balances_tb` for all user balances.
 
@@ -216,15 +238,44 @@ CREATE TABLE ledger_tb (
 
 ## 2. 账户模型
 
-### 2.1 账户类型
+### 2.1 架构总览
 
-*   **Main Account**: 主账户
-*   **Spot Account**: 现货账户 (撮合)
-*   **Funding Account**: 资金账户 (充提)
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           账户架构                                       │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   ┌───────────────────────────┐    ┌───────────────────────────┐       │
+│   │    Funding 账户           │    │     Spot 账户             │       │
+│   │    (account_type = 2)     │    │     (account_type = 1)    │       │
+│   ├───────────────────────────┤    ├───────────────────────────┤       │
+│   │  存储: PostgreSQL         │    │  存储: UBSCore (内存)      │       │
+│   │  表: balances_tb          │    │  HashMap 内存结构          │       │
+│   │                           │    │                           │       │
+│   │  用途:                    │    │  用途:                    │       │
+│   │  - 充值 (Deposit)         │    │  - 撮合交易 (Trading)      │       │
+│   │  - 提现 (Withdraw)        │    │  - 订单匹配               │       │
+│   │  - 内部划转               │    │  - 实时余额管理            │       │
+│   └─────────────┬─────────────┘    └─────────────┬─────────────┘       │
+│                 │                                │                     │
+│                 └──────── 划转 (Transfer) ───────┘                     │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
 
-### 2.2 数据库设计 (PostgreSQL)
+### 2.2 存储汇总
 
-**当前实现**: 单一 `balances_tb` 表存储所有用户余额。
+| 账户 | 类型 | 存储 | 表/结构 |
+|------|------|------|---------|
+| **Funding** | 2 | PostgreSQL | `balances_tb` |
+| **Spot** | 1 | 内存 (UBSCore) | `HashMap<(user_id, asset_id), Balance>` |
+
+> **备注**: `balances_tb` 目前仅用于 Funding 账户。
+> Spot 余额由 UBSCore 内存管理，事件持久化到 TDengine。
+
+### 2.3 数据库设计 (PostgreSQL)
+
+**当前实现**: `balances_tb` 用于 Funding 账户余额。
 
 ```sql
 -- 001_init_schema.sql
