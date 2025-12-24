@@ -18,17 +18,17 @@
 
 ### 1.1 Connecting the Dots: From Transfer to Trading
 
-在 **0x0B** 章节中，我们建立了资金划转的 FSM 机制，让用户可以在 Funding 账户和 Spot 账户之间转移资产。但资金进入 Spot 账户后，交易所需要有收入来源。
+In **0x0B**, we built the FSM mechanism for fund transfers between Funding and Spot accounts. Once funds enter the Spot account, the exchange needs a revenue source.
 
-这就是本章的主题：**交易手续费 (Trade Fee)**。
+This is the topic of this chapter: **Trade Fee**.
 
-每当买卖双方成交时，交易所收取一定比例的手续费。这是交易所最核心的商业模式，也是整个系统能够持续运营的基础。
+Whenever buyers and sellers execute trades, the exchange collects a percentage fee. This is the core business model of exchanges and the foundation for sustainable operations.
 
-> **设计哲学**: 手续费的实现看似简单（不就是扣个百分比吗？），但实际涉及多个关键决策：
-> - 费率在哪里配置？（Symbol 级别 vs 全局）
-> - 从什么资产扣除？（支付的 vs 收到的）
-> - 扣除时机在哪里？（ME 里扣 vs Settlement 扣）
-> - 如何确保精度不丢失？（u64 * bps / 10000 的溢出问题）
+> **Design Philosophy**: Fee implementation seems simple (just deducting a percentage, right?), but involves multiple key decisions:
+> - Where to configure fee rates? (Symbol level vs Global)
+> - Which asset to deduct from? (Paid vs Received)
+> - When to deduct? (In ME vs In Settlement)
+> - How to ensure precision? (u64 * bps / 10000 overflow issues)
 
 ### 1.2 Goal
 
@@ -46,28 +46,28 @@ Implement **Maker/Taker fee model** for trade execution. Fees are the primary re
 ### 1.4 Architecture Overview
 
 ```
-┌─────────── 费率模型 ────────────┐
-│                                │
-│  最终费率 = Symbol.base_fee    │
-│           × VipDiscount / 100  │
-└────────────────────────────────┘
+┌─────────── Fee Model ────────────┐
+│                                  │
+│  Final Rate = Symbol.base_fee    │
+│             × VipDiscount / 100  │
+└──────────────────────────────────┘
 
-┌─────────── 数据流 ─────────────────────────────────────────────────────┐
-│                                                                        │
+┌─────────── Data Flow ─────────────────────────────────────────────────────┐
+│                                                                           │
 │  ME ────▶ Trade{role} ────▶ UBSCore ────▶ BalanceEventBatch ────▶ TDengine
-│              │                  │              │                       │
-│              │           内存: VIP/费率        ├── buyer event         │
-│              │           O(1) fee 计算         ├── seller event        │
-│              │                                 └── revenue event ×2    │
-│              │                                                         │
-└──────────────┴─────────────────────────────────────────────────────────┘
+│              │                  │              │                          │
+│              │           Memory: VIP/Fees      ├── buyer event            │
+│              │           O(1) fee calc         ├── seller event           │
+│              │                                 └── revenue event ×2       │
+│              │                                                            │
+└──────────────┴────────────────────────────────────────────────────────────┘
 
-┌─────────── 核心设计 ───────────┐
-│ ✅ 从 Gain 扣费 → 无需预留     │
-│ ✅ UBSCore 计费 → 余额权威     │
-│ ✅ Per-User Event → 解耦隐私   │
-│ ✅ Event Sourcing → 资产守恒   │
-└────────────────────────────────┘
+┌─────────── Core Design ───────────┐
+│ ✅ Fee from Gain → No reservation │
+│ ✅ UBSCore billing → Balance auth │
+│ ✅ Per-User Event → Decoupled     │
+│ ✅ Event Sourcing → Conservation  │
+└───────────────────────────────────┘
 ```
 
 ---
@@ -76,47 +76,47 @@ Implement **Maker/Taker fee model** for trade execution. Fees are the primary re
 
 ### 2.1 Why Maker/Taker Model?
 
-传统股票交易所往往采用固定费率，但加密货币交易所普遍采用 **Maker/Taker** 模型。这不是随意的选择：
+Traditional stock exchanges use fixed rates, but crypto exchanges universally adopt the **Maker/Taker** model. This is not arbitrary:
 
-| 问题 | Maker/Taker 如何解决 |
-|------|----------------------|
-| 流动性不足 | 低 Maker 费率鼓励挂单 |
-| 价格发现 | 盘口深度越深，价差越小 |
-| 公平性 | 谁消耗流动性谁多付费 |
+| Problem | How Maker/Taker Solves |
+|---------|------------------------|
+| Low liquidity | Low Maker fees encourage limit orders |
+| Price discovery | Deeper orderbook, narrower spreads |
+| Fairness | Liquidity takers pay more |
 
-> **行业实践**: Binance、OKX、Bybit 等主流交易所都采用此模型。
+> **Industry Practice**: Binance, OKX, Bybit all use this model.
 
 ### 2.2 Fee Rate Architecture
 
-**两层费率体系**: Symbol 基础费率 × VIP 折扣系数
+**Two-Layer System**: Symbol base rate × VIP discount coefficient
 
 ```
-最终费率 = Symbol.base_fee × VipDiscountTable[user.vip_level] / 100
+Final Rate = Symbol.base_fee × VipDiscountTable[user.vip_level] / 100
 ```
 
-#### Layer 1: Symbol 基础费率
+#### Layer 1: Symbol Base Rate
 
-每个交易对定义自己的基础费率（不同交易对可能有不同费率）：
+Each trading pair defines its own base rate:
 
-| 字段 | 精度 | 默认值 | 说明 |
-|------|-----|-------|------|
+| Field | Precision | Default | Description |
+|-------|-----------|---------|-------------|
 | `base_maker_fee` | 10^6 | 1000 | 0.10% |
 | `base_taker_fee` | 10^6 | 2000 | 0.20% |
 
-#### Layer 2: VIP 折扣系数
+#### Layer 2: VIP Discount Coefficient
 
-VIP 等级和折扣从数据库配置（不硬编码级数）。
+VIP levels and discounts are configured from database (not hardcoded).
 
-**VIP 等级表设计**:
+**VIP Level Table Design**:
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `level` | SMALLINT PK | VIP 等级 (0, 1, 2, ...) |
-| `discount_percent` | SMALLINT | 折扣百分比 (100=无折扣, 50=50%折扣) |
-| `min_volume` | DECIMAL | 升级所需交易量 (可选) |
-| `description` | VARCHAR | 等级描述 (可选) |
+| Field | Type | Description |
+|-------|------|-------------|
+| `level` | SMALLINT PK | VIP level (0, 1, 2, ...) |
+| `discount_percent` | SMALLINT | Discount % (100=no discount, 50=50% off) |
+| `min_volume` | DECIMAL | Trading volume for upgrade (optional) |
+| `description` | VARCHAR | Level description (optional) |
 
-**示例数据**:
+**Example Data**:
 
 | level | discount_percent | description |
 |-------|-----------------|-------------|
@@ -126,19 +126,19 @@ VIP 等级和折扣从数据库配置（不硬编码级数）。
 | 3 | 70 | VIP 3 |
 | ... | ... | ... |
 
-> 运营可配置任意数量的 VIP 等级，代码从数据库加载。
+> Operations can configure any number of VIP levels; code loads from database.
 
-**示例计算**:
+**Example Calculation**:
 ```
 BTC_USDT: base_taker_fee = 2000 (0.20%)
 User VIP 5: discount = 50%
-最终费率 = 2000 × 50 / 100 = 1000 (0.10%)
+Final Rate = 2000 × 50 / 100 = 1000 (0.10%)
 ```
 
-> **Why 10^6 精度？**
-> - 10^4 (bps) 只能表示到 0.01%，不够精细
-> - 10^6 可以表示 0.0001%，足够支持 VIP 折扣和返佣
-> - 与 u64 乘法不会溢出 (u64 * 10^6 / 10^6)
+> **Why 10^6 Precision?**
+> - 10^4 (bps) only represents down to 0.01%, not fine enough
+> - 10^6 can represent 0.0001%, sufficient for VIP discounts and rebates
+> - No overflow with u64 multiplication (u64 * 10^6 / 10^6)
 
 ### 2.3 Fee Collection Point
 
@@ -161,90 +161,90 @@ Trade: Alice (Taker, BUY) ← → Bob (Maker, SELL)
 
 **Rule**: Fee is always deducted from **what you receive**, not what you pay.
 
-> **Why 从收到的资产扣除？**
-> 1. **简化用户心理账单**: 用户支付 100 USDT，就是 100 USDT，不会多扣
-> 2. **避免预算超支**: 买 1 BTC 不会因为手续费导致需要 100,020 USDT
-> 3. **行业惯例**: Binance、Coinbase 都是这样做的
+> **Why deduct from received asset?**
+> 1. **Simplify user mental accounting**: User pays 100 USDT, it's exactly 100 USDT
+> 2. **Avoid budget overrun**: Buying 1 BTC won't require 100,020 USDT due to fees
+> 3. **Industry practice**: Binance, Coinbase all do this
 
 ### 2.4 Why No Lock Reservation Needed
 
-由于手续费从**收到的资产**中扣除，**不需要预留手续费**：
+Since fees are deducted from **received asset**, **no fee reservation needed**:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│ 从 Gain（收到资产）扣费的好处                                        │
+│ Benefits of Fee from Gain (Received Asset)                         │
 ├─────────────────────────────────────────────────────────────────────┤
-│ 用户收到 1 BTC → 扣 0.002 BTC 手续费 → 实际到账 0.998 BTC           │
+│ User receives 1 BTC → Deduct 0.002 BTC fee → Net credit 0.998 BTC │
 │                                                                     │
-│ ✅ 永远不会"余额不足付手续费"                                        │
-│ ✅ 支付金额 = 实际支付金额（不多不少）                               │
-│ ✅ 无需复杂的预留/退还逻辑                                           │
+│ ✅ Never "insufficient balance for fee"                            │
+│ ✅ Pay amount = Actual pay amount (exact)                          │
+│ ✅ No complex reservation/refund logic                             │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-**对比从支付资产扣费**:
+**Compare with deducting from paid asset**:
 
-| 方案 | 锁定金额 | 问题 |
-|------|---------|------|
-| 从 Gain 扣 | `base_cost` | 无需额外预留 ✅ |
-| 从 Pay 扣 | `base_cost + max_fee` | 余额可能不足，需预留 ❌ |
+| Approach | Lock Amount | Issue |
+|----------|-------------|-------|
+| From Gain | `base_cost` | No extra reservation ✅ |
+| From Pay | `base_cost + max_fee` | May insufficient, need reservation ❌ |
 
-> **设计决策**: 采用"从 Gain 扣费"模式，简化锁定逻辑。
-> - 买单锁定 USDT，手续费从收到的 BTC 中扣
-> - 卖单锁定 BTC，手续费从收到的 USDT 中扣
+> **Design Decision**: Use "fee from gain" mode, simplify lock logic.
+> - Buy order locks USDT, fee deducted from received BTC
+> - Sell order locks BTC, fee deducted from received USDT
 
-### 2.5 Fee Responsibility: UBSCore (第一性原理)
+### 2.5 Fee Responsibility: UBSCore (First Principles)
 
-**核心问题**: 谁负责计费？
+**Core Question**: Who is responsible for fee calculation?
 
 ```
-费用扣除 = 余额变动 = 必须由 UBSCore 执行
+Fee deduction = Balance change = Must be executed by UBSCore
 ```
 
-| 问题 | 答案 |
-|------|------|
-| 谁知道成交了？ | ME |
-| 谁管理余额？ | **UBSCore** |
-| 谁能执行扣款？ | **UBSCore** |
-| 谁负责计费？ | **UBSCore** |
+| Question | Answer |
+|----------|--------|
+| Who knows trade occurred? | ME |
+| Who manages balances? | **UBSCore** |
+| Who can execute deductions? | **UBSCore** |
+| Who is responsible for fees? | **UBSCore** |
 
-**数据流**:
+**Data Flow**:
 ```
 ME ──▶ Trade{role} ──▶ UBSCore ──▶ BalanceEvent{fee} ──▶ Settlement ──▶ TDengine
                           │
-                     ① 获取 VIP 等级 (内存)
-                     ② 获取 Symbol 费率 (内存)
-                     ③ 计算 fee = received × rate
+                     ① Get VIP level (memory)
+                     ② Get Symbol fee rate (memory)
+                     ③ Calculate fee = received × rate
                      ④ credit(net_amount)
 ```
 
 ### 2.6 High Performance Design
 
-**高效的关键**: 所有配置在 UBSCore 内存中
+**Key to efficiency**: All config in UBSCore memory
 
 ```
-UBSCore 内存结构 (启动时加载):
+UBSCore Memory Structure (loaded at startup):
 ├── user_vip_levels: HashMap<UserId, u8>
 ├── vip_discounts: HashMap<u8, u8>  // level → discount%
 └── symbol_fees: HashMap<SymbolId, (u64, u64)>  // (maker, taker)
 
-费用计算 = 纯内存操作, O(1)
+Fee calculation = Pure memory operation, O(1)
 ```
 
-| 组件 | 职责 | 阻塞？ |
-|------|------|-------|
-| UBSCore | 计算 fee, 更新余额 | ❌ 纯内存 |
-| BalanceEvent | 传递 fee 信息 | ❌ 异步通道 |
-| Settlement | 写入 TDengine | ❌ 独立线程 |
+| Component | Responsibility | Blocking? |
+|-----------|----------------|-----------|
+| UBSCore | Calculate fee, update balance | ❌ Pure memory |
+| BalanceEvent | Pass fee info | ❌ Async channel |
+| Settlement | Write to TDengine | ❌ Separate thread |
 
-> **Why 高效？**
-> - 没有 I/O 在关键路径上
-> - 所有数据都在内存
-> - 输出复用现有 BalanceEvent 通道
+> **Why efficient?**
+> - No I/O on critical path
+> - All data in memory
+> - Output reuses existing BalanceEvent channel
 
 ### 2.7 Per-User BalanceEvent Design
 
-**核心洞察**: 一个 Trade 产生两个用户的余额变动 → 两个 BalanceEvent
+**Core Insight**: One Trade produces two users' balance changes → Two BalanceEvents
 
 ```
 Trade ──▶ UBSCore ──┬──▶ BalanceEvent{user: buyer}  ──▶ WS + TDengine
@@ -252,59 +252,59 @@ Trade ──▶ UBSCore ──┬──▶ BalanceEvent{user: buyer}  ──▶ 
                     └──▶ BalanceEvent{user: seller} ──▶ WS + TDengine
 ```
 
-**Per-User 事件结构**:
+**Per-User Event Structure**:
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `trade_id` | u64 | 关联原始 Trade |
-| `user_id` | u64 | 这个事件属于谁 |
-| `debit_asset` | u32 | 支出资产 |
-| `debit_amount` | u64 | 支出金额 |
-| `credit_asset` | u32 | 收入资产 |
-| `credit_amount` | u64 | 收入金额 (净额, 已扣 fee) |
-| `fee` | u64 | 手续费 |
-| `is_maker` | bool | 是否 Maker |
+| Field | Type | Description |
+|-------|------|-------------|
+| `trade_id` | u64 | Links to original Trade |
+| `user_id` | u64 | Who this event belongs to |
+| `debit_asset` | u32 | Asset paid |
+| `debit_amount` | u64 | Amount paid |
+| `credit_asset` | u32 | Asset received |
+| `credit_amount` | u64 | Net amount (after fee) |
+| `fee` | u64 | Fee charged |
+| `is_maker` | bool | Is Maker role |
 
-**示例代码 (伪代码, 仅供参考)**:
+**Example Code (Pseudocode, for reference only)**:
 ```rust
-// ⚠️ 伪代码 - 实现时可能有调整
+// ⚠️ Pseudocode - may change during implementation
 BalanceEvent::TradeSettled {
-    trade_id: u64,         // 关联原始 Trade
-    user_id: u64,          // 这个事件属于谁
+    trade_id: u64,         // Links to original Trade
+    user_id: u64,          // Who this event belongs to
     
-    debit_asset: u32,      // 支出
+    debit_asset: u32,      // Paid
     debit_amount: u64,
-    credit_asset: u32,     // 收入 (净额)
+    credit_asset: u32,     // Received (net)
     credit_amount: u64,
     
-    fee: u64,              // 手续费
-    is_maker: bool,        // 角色
+    fee: u64,              // Fee
+    is_maker: bool,        // Role
 }
 ```
 
-> **Why Per-User 设计？**
-> - **单一职责**: 一个事件 = 一个用户的余额变动
-> - **解耦**: 用户不需要知道对手方
-> - **WebSocket 友好**: 按 user_id 直接路由推送
-> - **查询友好**: TDengine 按 user_id 分区
-> - **隐私安全**: 用户只看自己数据
+> **Why Per-User Design?**
+> - **Single responsibility**: One event = One user's balance change
+> - **Decoupled**: User doesn't need to know counterparty
+> - **WebSocket friendly**: Route directly by user_id
+> - **Query friendly**: TDengine partitioned by user_id
+> - **Privacy safe**: User only sees own data
 
 ---
 
 ## 3. Data Model
 
-### 3.1 Symbol 基础费率配置
+### 3.1 Symbol Base Fee Configuration
 
 ```sql
--- Symbol 基础费率 (10^6 精度: 1000 = 0.10%)
+-- Symbol base fee (10^6 precision: 1000 = 0.10%)
 ALTER TABLE symbols_tb ADD COLUMN base_maker_fee INTEGER NOT NULL DEFAULT 1000;
 ALTER TABLE symbols_tb ADD COLUMN base_taker_fee INTEGER NOT NULL DEFAULT 2000;
 ```
 
-### 3.2 User VIP 等级
+### 3.2 User VIP Level
 
 ```sql
--- User VIP 等级 (0-9, 0=普通用户, 9=顶级用户)
+-- User VIP level (0-9, 0=normal user, 9=top tier)
 ALTER TABLE users_tb ADD COLUMN vip_level SMALLINT NOT NULL DEFAULT 0;
 ```
 
@@ -316,29 +316,29 @@ Existing `Trade` struct already has:
 
 ### 3.4 Fee Record Storage
 
-手续费信息**已包含在 Trade 记录中**：
+Fee info **is already included in Trade record**:
 
-| 存储位置 | 内容 |
-|---------|------|
-| `trades_tb` (TDengine) | `fee`, `fee_asset`, `role` 字段 |
-| Trade Event | 实时推送给下游 (WS, Kafka) |
+| Storage | Content |
+|---------|---------|
+| `trades_tb` (TDengine) | `fee`, `fee_asset`, `role` fields |
+| Trade Event | Real-time push to downstream (WS, Kafka) |
 
-### 3.5 Event Sourcing: BalanceEventBatch (资产可溯源)
+### 3.5 Event Sourcing: BalanceEventBatch (Full Traceability)
 
-**核心设计**: 一个 Trade 产生一组 BalanceEvent 作为**原子整体**
+**Core Design**: One Trade produces a group of BalanceEvents as **atomic unit**
 
 ```
 Trade ──▶ UBSCore ──▶ BalanceEventBatch{trade_id, events: [...]}
                               │
-                              ├── TradeSettled{user: buyer}   // 买方
-                              ├── TradeSettled{user: seller}  // 卖方
+                              ├── TradeSettled{user: buyer}   // Buyer
+                              ├── TradeSettled{user: seller}  // Seller
                               ├── FeeReceived{account: REVENUE, from: buyer}
                               └── FeeReceived{account: REVENUE, from: seller}
 ```
 
-**示例结构 (伪代码)**:
+**Example Structure (Pseudocode)**:
 ```rust
-// ⚠️ 伪代码 - 实现时可能有调整
+// ⚠️ Pseudocode - may change during implementation
 BalanceEventBatch {
     trade_id: u64,
     ts: Timestamp,
@@ -351,33 +351,33 @@ BalanceEventBatch {
 }
 ```
 
-**原子整体特性**:
+**Atomic Unit Properties**:
 
-| 特性 | 说明 |
-|------|------|
-| 一起生成 | 同一个 trade_id |
-| 一起持久化 | 同一批写入 TDengine |
-| 一起可追溯 | 通过 trade_id 关联所有事件 |
+| Property | Description |
+|----------|-------------|
+| Generated together | Same trade_id |
+| Persisted together | Single batch write to TDengine |
+| Traced together | All events linked by trade_id |
 
-**资产守恒验证**:
+**Asset Conservation Verification**:
 ```
 buyer.debit(quote)  + buyer.credit(base - fee)   = 0  ✓
 seller.debit(base)  + seller.credit(quote - fee) = 0  ✓
 revenue.credit(buyer_fee + seller_fee)           = fee_total ✓
 
-Σ 变动 = 0 (资产守恒, 可审计)
+Σ changes = 0 (Asset conservation, auditable)
 ```
 
-**TDengine 存储 (Event Sourcing)**:
+**TDengine Storage (Event Sourcing)**:
 
-| 表 | 内容 |
-|------|------|
-| `balance_events_tb` | 所有 BalanceEvent (TradeSettled + FeeReceived) |
+| Table | Content |
+|-------|---------|
+| `balance_events_tb` | All BalanceEvents (TradeSettled + FeeReceived) |
 
 > **Why Event Sourcing?**
-> - **每笔可追溯**: 任何 fee 都能追溯到 trade_id + user_id
-> - **资产守恒**: 事件批次内守恒可验证
-> - **聚合是衍生**: 余额 = SUM(events)，按需计算
+> - **Full traceability**: Any fee can be traced to trade_id + user_id
+> - **Asset conservation**: Conservation verifiable within event batch
+> - **Aggregation is derived**: Balance = SUM(events), computed on demand
 
 ---
 
@@ -388,24 +388,24 @@ revenue.credit(buyer_fee + seller_fee)           = fee_total ✓
 ```
 ┌───────────┐    ┌───────────┐    ┌─────────────────────────────────────────┐
 │    ME     │───▶│  UBSCore  │───▶│         BalanceEventBatch               │
-│  (Match)  │    │ (Fee计算)  │    │  ┌─ TradeSettled{buyer}                 │
+│  (Match)  │    │ (Fee calc)│    │  ┌─ TradeSettled{buyer}                 │
 └───────────┘    └───────────┘    │  ├─ TradeSettled{seller}                │
                       │           │  ├─ FeeReceived{REVENUE, from:buyer}    │
                       │           │  └─ FeeReceived{REVENUE, from:seller}   │
-          内存: VIP等级/费率      └───────────────┬─────────────────────────┘
+          Memory: VIP/Fee rates   └───────────────┬─────────────────────────┘
                                                   │
                                                   ▼
                               ┌──────────────────────────────────────────────┐
                               │              Settlement Service              │
-                              │  ① 批量写入 TDengine                         │
-                              │  ② WebSocket 推送 (按 user_id 路由)          │
-                              │  ③ Kafka 发布 (可选)                         │
+                              │  ① Batch write to TDengine                   │
+                              │  ② WebSocket push (routed by user_id)       │
+                              │  ③ Kafka publish (optional)                 │
                               └──────────────────────────────────────────────┘
 ```
 
 ### 4.2 TDengine Schema Design
 
-**balance_events 超级表**:
+**balance_events Super Table**:
 ```sql
 CREATE STABLE balance_events (
     ts          TIMESTAMP,
@@ -418,28 +418,28 @@ CREATE STABLE balance_events (
     fee         BIGINT,
     fee_asset   INT,
     is_maker    BOOL,
-    from_user   BIGINT         -- FeeReceived: 来源用户
+    from_user   BIGINT         -- FeeReceived: source user
 ) TAGS (
-    account_id  BIGINT         -- user_id 或 REVENUE_ID
+    account_id  BIGINT         -- user_id or REVENUE_ID
 );
 
--- 每个账户一个子表
+-- One subtable per account
 CREATE TABLE user_1001_events USING balance_events TAGS (1001);
 CREATE TABLE user_1002_events USING balance_events TAGS (1002);
 CREATE TABLE revenue_events   USING balance_events TAGS (0);  -- REVENUE_ID=0
 ```
 
-**设计要点**:
+**Design Points**:
 
-| 设计 | 理由 |
-|------|------|
-| 按 account_id 分表 | 用户查询只扫自己的表 |
-| 时间戳索引 | TDengine 原生优化 |
-| event_type 字段 | 区分不同事件类型 |
+| Design | Rationale |
+|--------|-----------|
+| Partition by account_id | User queries scan only their table |
+| Timestamp index | TDengine native optimization |
+| event_type field | Distinguish event types |
 
 ### 4.3 Query Patterns
 
-**用户查询手续费历史**:
+**User query fee history**:
 ```sql
 SELECT ts, trade_id, fee, fee_asset, is_maker
 FROM user_1001_events
@@ -449,7 +449,7 @@ ORDER BY ts DESC
 LIMIT 100;
 ```
 
-**平台 Fee 收入统计**:
+**Platform fee income stats**:
 ```sql
 SELECT fee_asset, SUM(credit_amt) as total_fee
 FROM revenue_events
@@ -457,7 +457,7 @@ WHERE ts > NOW() - 1d
 GROUP BY fee_asset;
 ```
 
-**追溯某笔 Trade 的所有事件**:
+**Trace all events for a trade**:
 ```sql
 SELECT * FROM balance_events
 WHERE trade_id = 12345
@@ -469,24 +469,24 @@ ORDER BY ts;
 ```
 BalanceEventBatch
        │
-       ├──▶ TDengine Writer (批量写入, 高吞吐)
-       │       └── 按 account_id 路由到子表
+       ├──▶ TDengine Writer (batch write, high throughput)
+       │       └── Route to subtable by account_id
        │
-       ├──▶ WebSocket Router (实时推送)
-       │       └── 按 user_id 路由到 WS 连接
+       ├──▶ WebSocket Router (real-time push)
+       │       └── Route to WS connection by user_id
        │
-       └──▶ Kafka Publisher (可选, 下游订阅)
+       └──▶ Kafka Publisher (optional, downstream subscription)
                └── Topic: balance_events
 ```
 
 ### 4.5 Performance Considerations
 
-| 优化点 | 策略 |
-|--------|------|
-| **批量写入** | BalanceEventBatch 一次性写入 |
-| **分表策略** | 按 user_id 分表，避免热点 |
-| **时间分区** | TDengine 自动按时间分区 |
-| **异步处理** | UBSCore 发送后不等待 |
+| Optimization | Strategy |
+|--------------|----------|
+| **Batch write** | BalanceEventBatch writes at once |
+| **Partition strategy** | Partition by user_id, avoid hotspots |
+| **Time partition** | TDengine auto partitions by time |
+| **Async processing** | UBSCore doesn't wait after send |
 
 ---
 
