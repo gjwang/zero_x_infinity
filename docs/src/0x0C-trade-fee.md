@@ -356,124 +356,110 @@ revenue.credit(buyer_fee + seller_fee)           = fee_total ✓
 
 ## 4. Implementation Architecture
 
-### 4.1 Data Flow Diagram
+### 4.1 Complete Data Flow
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                        MATCHING ENGINE                           │
-│                                                                  │
-│  Order A (Taker) ──┐                                             │
-│                    ├──▶ Match ──▶ Trade{fee, role} ──┬──▶ ME Result
-│  Order B (Maker) ──┘                                 │           │
-│                                                      │           │
-│             SymbolInfo.taker_fee_bps ───────────────▶│           │
-│             SymbolInfo.maker_fee_bps ───────────────▶│           │
-└──────────────────────────────────────────────────────────────────┘
-                                                       │
-                                                       ▼
-┌──────────────────────────────────────────────────────────────────┐
-│                        SETTLEMENT                                │
-│                                                                  │
-│  Trade.fee ──▶ Calculate net_amount ──▶ Credit to user          │
-│             ──▶ Record fee in fee_ledger_tb                     │
-└──────────────────────────────────────────────────────────────────┘
+┌───────────┐    ┌───────────┐    ┌─────────────────────────────────────────┐
+│    ME     │───▶│  UBSCore  │───▶│         BalanceEventBatch               │
+│  (Match)  │    │ (Fee计算)  │    │  ┌─ TradeSettled{buyer}                 │
+└───────────┘    └───────────┘    │  ├─ TradeSettled{seller}                │
+                      │           │  ├─ FeeReceived{REVENUE, from:buyer}    │
+                      │           │  └─ FeeReceived{REVENUE, from:seller}   │
+          内存: VIP等级/费率      └───────────────┬─────────────────────────┘
+                                                  │
+                                                  ▼
+                              ┌──────────────────────────────────────────────┐
+                              │              Settlement Service              │
+                              │  ① 批量写入 TDengine                         │
+                              │  ② WebSocket 推送 (按 user_id 路由)          │
+                              │  ③ Kafka 发布 (可选)                         │
+                              └──────────────────────────────────────────────┘
 ```
 
-### 4.2 SymbolInfo Enhancement
+### 4.2 TDengine Schema Design
 
-**File**: `src/symbol_manager.rs`
-
-```rust
-#[derive(Debug, Clone)]
-pub struct SymbolInfo {
-    pub symbol: String,
-    pub symbol_id: u32,
-    pub base_asset_id: u32,
-    pub quote_asset_id: u32,
-    pub price_decimal: u32,
-    pub price_display_decimal: u32,
-    pub base_decimals: u32,
-    // NEW: Fee configuration
-    pub maker_fee_bps: u16,  // e.g., 10 = 0.10%
-    pub taker_fee_bps: u16,  // e.g., 20 = 0.20%
-}
-```
-
-### 4.3 Trade Struct (Existing, Use Placeholder)
-
-**File**: `src/models.rs`
-
-```rust
-// Already exists - just populate during matching:
-pub struct Trade {
-    // ... existing fields ...
-    pub fee: u64,   // Amount of fee (in received asset's scaled units)
-    pub role: u8,   // 0=Maker, 1=Taker
-}
-```
-
-### 4.4 Fee Calculation Function
-
-**File**: `src/engine.rs` (or new `src/fee.rs`)
-
-```rust
-/// Calculate fee amount from gross amount
-/// 
-/// # Arguments
-/// - `amount`: Gross amount in scaled units
-/// - `fee_bps`: Fee rate in basis points (10000 = 100%)
-///
-/// # Returns
-/// Fee amount in same scaled units
-#[inline]
-pub fn calculate_fee(amount: u64, fee_bps: u16) -> u64 {
-    // Use u128 to prevent overflow
-    let fee = (amount as u128) * (fee_bps as u128) / 10000;
-    fee as u64
-}
-
-/// Calculate fee with minimum (avoid 0 fee on small trades)
-#[inline]
-pub fn calculate_fee_with_min(amount: u64, fee_bps: u16, min_fee: u64) -> u64 {
-    let fee = calculate_fee(amount, fee_bps);
-    fee.max(min_fee)
-}
-```
-
-### 4.5 Config Loading
-
-**File**: `src/csv_io.rs` (add fee columns to fixtures)
-
-**fixtures/symbols_config.csv** (add columns):
-```csv
-symbol_id,symbol,base_asset_id,quote_asset_id,price_decimal,price_display_decimal,maker_fee_bps,taker_fee_bps
-1,BTC_USDT,1,2,6,2,10,20
-```
-
-### 4.6 PostgreSQL Migration
-
-**File**: `migrations/006_add_fee_config.sql`
-
+**balance_events 超级表**:
 ```sql
--- Add fee columns to symbols_tb
-ALTER TABLE symbols_tb ADD COLUMN maker_fee_bps SMALLINT NOT NULL DEFAULT 10;
-ALTER TABLE symbols_tb ADD COLUMN taker_fee_bps SMALLINT NOT NULL DEFAULT 20;
-
--- Fee ledger table
-CREATE TABLE fee_ledger_tb (
-    id BIGSERIAL PRIMARY KEY,
-    trade_id BIGINT NOT NULL,
-    user_id BIGINT NOT NULL,
-    symbol_id INTEGER NOT NULL,
-    asset_id INTEGER NOT NULL,
-    fee_amount DECIMAL(30,8) NOT NULL,
-    role SMALLINT NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+CREATE STABLE balance_events (
+    ts          TIMESTAMP,
+    event_type  TINYINT,       -- 1=TradeSettled, 2=FeeReceived, 3=Deposit...
+    trade_id    BIGINT,
+    debit_asset INT,
+    debit_amt   BIGINT,
+    credit_asset INT,
+    credit_amt  BIGINT,
+    fee         BIGINT,
+    fee_asset   INT,
+    is_maker    BOOL,
+    from_user   BIGINT         -- FeeReceived: 来源用户
+) TAGS (
+    account_id  BIGINT         -- user_id 或 REVENUE_ID
 );
 
-CREATE INDEX idx_fee_ledger_user ON fee_ledger_tb(user_id, created_at DESC);
-CREATE INDEX idx_fee_ledger_symbol ON fee_ledger_tb(symbol_id);
+-- 每个账户一个子表
+CREATE TABLE user_1001_events USING balance_events TAGS (1001);
+CREATE TABLE user_1002_events USING balance_events TAGS (1002);
+CREATE TABLE revenue_events   USING balance_events TAGS (0);  -- REVENUE_ID=0
 ```
+
+**设计要点**:
+
+| 设计 | 理由 |
+|------|------|
+| 按 account_id 分表 | 用户查询只扫自己的表 |
+| 时间戳索引 | TDengine 原生优化 |
+| event_type 字段 | 区分不同事件类型 |
+
+### 4.3 Query Patterns
+
+**用户查询手续费历史**:
+```sql
+SELECT ts, trade_id, fee, fee_asset, is_maker
+FROM user_1001_events
+WHERE event_type = 1  -- TradeSettled
+  AND ts > NOW() - 30d
+ORDER BY ts DESC
+LIMIT 100;
+```
+
+**平台 Fee 收入统计**:
+```sql
+SELECT fee_asset, SUM(credit_amt) as total_fee
+FROM revenue_events
+WHERE ts > NOW() - 1d
+GROUP BY fee_asset;
+```
+
+**追溯某笔 Trade 的所有事件**:
+```sql
+SELECT * FROM balance_events
+WHERE trade_id = 12345
+ORDER BY ts;
+```
+
+### 4.4 Consumer Architecture
+
+```
+BalanceEventBatch
+       │
+       ├──▶ TDengine Writer (批量写入, 高吞吐)
+       │       └── 按 account_id 路由到子表
+       │
+       ├──▶ WebSocket Router (实时推送)
+       │       └── 按 user_id 路由到 WS 连接
+       │
+       └──▶ Kafka Publisher (可选, 下游订阅)
+               └── Topic: balance_events
+```
+
+### 4.5 Performance Considerations
+
+| 优化点 | 策略 |
+|--------|------|
+| **批量写入** | BalanceEventBatch 一次性写入 |
+| **分表策略** | 按 user_id 分表，避免热点 |
+| **时间分区** | TDengine 自动按时间分区 |
+| **异步处理** | UBSCore 发送后不等待 |
 
 ---
 
