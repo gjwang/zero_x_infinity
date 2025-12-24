@@ -20,7 +20,7 @@
 ### 1.1 User ID (`u64`)
 - **Semantics**: Global unique user identifier.
 - **Strategy**: Auto-increment or Snowflake/ULID (for future distributed support).
-- **Initial Value**: `1025` (0-1024 reserved for system accounts).
+- **Initial Value**: `1024` (0-1023 reserved for system accounts).
 
 ### 1.2 Asset ID (`u32`)
 - **Semantics**: Asset identifier (e.g., BTC=1, USDT=2).
@@ -80,8 +80,7 @@ pub struct Account {
 | :--- | :--- | :--- |
 | `0` | REVENUE | Platform fee income account |
 | `1` | INSURANCE | Insurance fund (future) |
-| `2-1023` | Reserved | For future system use |
-| `1024` | Reserved | Boundary marker |
+| `2-1023` | Reserved | For future system use (1024 total) |
 
 ---
 
@@ -89,7 +88,7 @@ pub struct Account {
 
 ### 💡 Future Consideration: Alternative System ID Range
 
-**Current**: System IDs use 0-1024, users start at 1025.
+**Current**: System IDs use 0-1023 (1024 total), users start at 1024.
 
 **Problem**: Test data might accidentally use 1, 2, 3... which conflicts with system IDs.
 
@@ -129,7 +128,7 @@ fn is_system_account(user_id: u64) -> bool {
 ### 1.1 User ID (`u64`)
 - **语义**: 全局唯一的用户标识符。
 - **生成策略**: 自增序列 或 Snowflake/ULID (未来支持分布式)。
-- **初始值**: `1025` (0-1024 保留给系统账户)。
+- **初始值**: `1024` (0-1023 保留给系统账户)。
 
 ### 1.2 Asset ID (`u32`)
 - **语义**: 资产标识符（如 BTC=1, USDT=2）。
@@ -189,8 +188,7 @@ pub struct Account {
 | :--- | :--- | :--- |
 | `0` | REVENUE | 平台手续费收入账户 |
 | `1` | INSURANCE | 保险基金 (未来) |
-| `2-1023` | 保留 | 未来系统用途 |
-| `1024` | 保留 | 边界标记 |
+| `2-1023` | 保留 | 未来系统用途 (共 1024 个) |
 
 ---
 
@@ -198,7 +196,7 @@ pub struct Account {
 
 ### 💡 未来考虑: 替代系统 ID 范围
 
-**当前**: 系统 ID 使用 0-1024，用户从 1025 开始。
+**当前**: 系统 ID 使用 0-1023 (共 1024 个)，用户从 1024 开始。
 
 **问题**: 测试数据可能使用 1, 2, 3...，与系统 ID 冲突。
 
