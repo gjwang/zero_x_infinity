@@ -46,6 +46,7 @@ pub struct OrderApiData {
 
 /// Trade record from TDengine
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct TradeRow {
     ts: String,
     trade_id: i64,

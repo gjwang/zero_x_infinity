@@ -44,7 +44,7 @@ fn validate_config(manager: &SymbolManager) -> Result<(), String> {
 /// Reload configuration from files
 fn reload_config(_config_path: &Path) -> Result<SymbolManager, String> {
     // Use existing csv_io loading logic
-    match std::panic::catch_unwind(|| crate::csv_io::load_symbol_manager()) {
+    match std::panic::catch_unwind(crate::csv_io::load_symbol_manager) {
         Ok((manager, _active_symbol_id)) => Ok(manager),
         Err(_) => Err("Config loading panicked".to_string()),
     }
