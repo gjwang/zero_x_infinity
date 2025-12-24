@@ -54,26 +54,23 @@ Build a complete fund management system supporting:
 
 ### 2.2 Schema (PostgreSQL)
 
+**Current Implementation**: Single `balances_tb` for all user balances.
+
 ```sql
-CREATE TYPE account_type AS ENUM ('spot', 'funding', 'margin');
-
-CREATE TABLE sub_accounts_tb (
-    sub_account_id  BIGSERIAL PRIMARY KEY,
-    user_id         BIGINT NOT NULL REFERENCES users_tb(user_id),
-    account_type    account_type NOT NULL,
-    created_at      TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(user_id, account_type)
-);
-
-CREATE TABLE sub_balances_tb (
-    balance_id      BIGSERIAL PRIMARY KEY,
-    sub_account_id  BIGINT NOT NULL REFERENCES sub_accounts_tb(sub_account_id),
-    asset_id        INTEGER NOT NULL REFERENCES assets_tb(asset_id),
-    available       BIGINT NOT NULL DEFAULT 0,
-    frozen          BIGINT NOT NULL DEFAULT 0,
-    UNIQUE(sub_account_id, asset_id)
+-- 001_init_schema.sql
+CREATE TABLE balances_tb (
+    balance_id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users_tb(user_id),
+    asset_id INT NOT NULL REFERENCES assets_tb(asset_id),
+    available DECIMAL(30, 8) NOT NULL DEFAULT 0,
+    frozen DECIMAL(30, 8) NOT NULL DEFAULT 0,
+    version INT NOT NULL DEFAULT 1,
+    UNIQUE (user_id, asset_id)
 );
 ```
+
+> **Note**: Current design uses single balance per (user_id, asset_id).
+> Future multi-account support (Spot/Funding/Margin) can add `account_type` column.
 
 ---
 
@@ -225,9 +222,24 @@ CREATE TABLE ledger_tb (
 *   **Spot Account**: 现货账户 (撮合)
 *   **Funding Account**: 资金账户 (充提)
 
-### 2.2 账户结构 (PostgreSQL)
+### 2.2 数据库设计 (PostgreSQL)
 
-采用 `sub_accounts_tb` 和 `sub_balances_tb` 设计，支持扩展多种账户类型 (margin, futures)。
+**当前实现**: 单一 `balances_tb` 表存储所有用户余额。
+
+```sql
+-- 001_init_schema.sql
+CREATE TABLE balances_tb (
+    balance_id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    asset_id INT NOT NULL,
+    available DECIMAL(30, 8) NOT NULL DEFAULT 0,
+    frozen DECIMAL(30, 8) NOT NULL DEFAULT 0,
+    UNIQUE (user_id, asset_id)
+);
+```
+
+> **备注**: 当前设计每个 (user_id, asset_id) 一条余额记录。
+> 未来多账户支持 (Spot/Funding/Margin) 可添加 `account_type` 列。
 
 ---
 
