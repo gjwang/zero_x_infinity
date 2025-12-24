@@ -76,6 +76,7 @@ RUN_GATEWAY=false
 RUN_KLINE=false
 RUN_DEPTH=false
 RUN_ACCOUNT=false
+RUN_TRANSFER=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -86,6 +87,7 @@ while [[ $# -gt 0 ]]; do
         --test-kline) RUN_KLINE=true; RUN_ALL=false; shift ;;
         --test-depth) RUN_DEPTH=true; RUN_ALL=false; shift ;;
         --test-account) RUN_ACCOUNT=true; RUN_ALL=false; shift ;;
+        --test-transfer) RUN_TRANSFER=true; RUN_ALL=false; shift ;;
         --help|-h)
             head -30 "$0" | tail -28
             echo "Granular Test Options:"
@@ -94,6 +96,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --test-kline          Run only K-Line E2E"
             echo "  --test-depth          Run only Depth API"
             echo "  --test-account        Run only Account Integration"
+            echo "  --test-transfer       Run only Transfer E2E"
             exit 0
             ;;
         *) echo "Unknown option: $1"; exit 1 ;;
@@ -107,6 +110,7 @@ if [ "$RUN_ALL" = "true" ]; then
     RUN_KLINE=true
     RUN_DEPTH=true
     RUN_ACCOUNT=true
+    RUN_TRANSFER=true
 fi
 
 # Also respect environment variable
@@ -478,6 +482,32 @@ main() {
             run_test "Account_Integration" "scripts/test_account_integration.sh" 180
         else
             log_test_start "Account_Integration"
+            log_test_skip "(PostgreSQL not available)"
+        fi
+    fi
+    
+    # ========== Phase 6: Transfer E2E ==========
+    if [ "$RUN_TRANSFER" = "true" ]; then
+        echo ""
+        echo "═══════════════════════════════════════════════════════════════"
+        echo "Phase 6: Transfer E2E (Funding <-> Spot)"
+        echo "═══════════════════════════════════════════════════════════════"
+        
+        clean_env
+        
+        POSTGRES_AVAILABLE=false
+        if [ "$CI" = "true" ]; then
+            if python3 -c "import psycopg2; psycopg2.connect(host='localhost', dbname='exchange_info_db', user='trading', password='trading123').close()" 2>/dev/null; then
+                POSTGRES_AVAILABLE=true
+            fi
+        elif docker ps --format '{{.Names}}' 2>/dev/null | grep -q "postgres"; then
+            POSTGRES_AVAILABLE=true
+        fi
+        
+        if [ "$POSTGRES_AVAILABLE" = true ]; then
+            run_test "Transfer_E2E" "scripts/test_transfer_e2e.sh" 180
+        else
+            log_test_start "Transfer_E2E"
             log_test_skip "(PostgreSQL not available)"
         fi
     fi
