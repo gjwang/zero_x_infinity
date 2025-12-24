@@ -336,11 +336,30 @@ impl UBSCore {
             taker_fee_rate
         };
 
-        // Calculate fees (fee is deducted from RECEIVED asset)
+        // Get VIP discount percentages (100 = no discount, 50 = 50% off)
+        // VIP discount table: level 0=100%, 1=90%, 2=80%, ..., 5=50%
+        let buyer_vip = self
+            .accounts
+            .get(&trade.buyer_user_id)
+            .map(|a| a.vip_level())
+            .unwrap_or(0);
+        let seller_vip = self
+            .accounts
+            .get(&trade.seller_user_id)
+            .map(|a| a.vip_level())
+            .unwrap_or(0);
+
+        // Simple VIP discount: 100 - (vip_level * 10), capped at 50%
+        let buyer_discount = (100u8).saturating_sub(buyer_vip.min(5) * 10);
+        let seller_discount = (100u8).saturating_sub(seller_vip.min(5) * 10);
+
+        // Calculate fees with VIP discount
         // Buyer receives base → fee in base
         // Seller receives quote → fee in quote
-        let buyer_fee = crate::fee::calculate_fee(trade.qty, buyer_fee_rate);
-        let seller_fee = crate::fee::calculate_fee(quote_amount, seller_fee_rate);
+        let buyer_fee =
+            crate::fee::calculate_fee_with_discount(trade.qty, buyer_fee_rate, buyer_discount);
+        let seller_fee =
+            crate::fee::calculate_fee_with_discount(quote_amount, seller_fee_rate, seller_discount);
 
         // Net amounts after fee
         let buyer_net_base = trade.qty.saturating_sub(buyer_fee);

@@ -34,6 +34,8 @@ pub use crate::balance::Balance;
 pub struct UserAccount {
     user_id: UserId,      // PRIVATE - use user_id()
     assets: Vec<Balance>, // PRIVATE - O(1) index by asset_id: assets[asset_id]
+    /// VIP level for fee discounts (0 = normal, higher = more discount)
+    vip_level: u8,
 }
 
 impl UserAccount {
@@ -43,6 +45,7 @@ impl UserAccount {
         Self {
             user_id,
             assets: Vec::with_capacity(8),
+            vip_level: 0, // Default: no VIP discount
         }
     }
 
@@ -50,6 +53,17 @@ impl UserAccount {
     #[inline(always)]
     pub fn user_id(&self) -> UserId {
         self.user_id
+    }
+
+    /// Get VIP level for fee discounts
+    #[inline(always)]
+    pub fn vip_level(&self) -> u8 {
+        self.vip_level
+    }
+
+    /// Set VIP level (called during account initialization)
+    pub fn set_vip_level(&mut self, level: u8) {
+        self.vip_level = level;
     }
 
     /// Deposit funds to an asset.
