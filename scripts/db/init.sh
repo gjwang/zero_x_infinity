@@ -148,13 +148,8 @@ init_tdengine() {
 # Main
 # =============================================================================
 main() {
-    echo "======================================"
-    echo " Database Initialization"
-    echo "======================================"
-    echo ""
-    echo "Configuration:"
-    echo "  PG: ${PG_USER}@${PG_HOST}:${PG_PORT}/${PG_DB}"
-    echo "  TD: ${TD_USER}@${TD_HOST}:${TD_PORT_REST}/${TD_DB}"
+    # Print configuration at startup (from db_env.sh)
+    print_db_config
     [ "$RESET_MODE" == "true" ] && echo "  MODE: RESET (Destructive)"
     echo ""
     
