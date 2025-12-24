@@ -564,41 +564,161 @@ BalanceEventBatch
 
 ---
 
-## 设计摘要
+## 1. 概述
 
-完整设计详见英文部分。以下是核心要点：
+### 1.1 从资金划转到交易
 
-### 1. 费率模型
+在 **0x0B** 章节中，我们建立了资金划转机制。本章的主题是**交易手续费**——交易所最核心的商业模式。
+
+### 1.2 目标
+
+实现 **Maker/Taker 手续费模型**。
+
+### 1.3 核心概念
+
+| 术语 | 定义 |
+|------|------|
+| **Maker** | 挂单方 (订单在盘口等待成交) |
+| **Taker** | 吃单方 (订单立即匹配成交) |
+| **费率** | 交易额的百分比 |
+| **bps** | 基点 (1 bps = 0.01%) |
+
+### 1.4 架构总览
+
+```
+┌─────────── 费率模型 ────────────┐
+│  最终费率 = Symbol.base_fee    │
+│           × VipDiscount / 100  │
+└────────────────────────────────┘
+
+┌─────────── 数据流 ─────────────────────────────────────────────────────┐
+│  ME ────▶ Trade{role} ────▶ UBSCore ────▶ BalanceEventBatch ────▶ TDengine
+│              │                  │              │                       │
+│              │           内存: VIP/费率        ├── buyer event         │
+│              │           O(1) fee 计算         ├── seller event        │
+│              │                                 └── revenue event ×2    │
+└──────────────┴─────────────────────────────────────────────────────────┘
+
+┌─────────── 核心设计 ───────────┐
+│ ✅ 从 Gain 扣费 → 无需预留     │
+│ ✅ UBSCore 计费 → 余额权威     │
+│ ✅ Per-User Event → 解耦隐私   │
+│ ✅ Event Sourcing → 资产守恒   │
+└────────────────────────────────┘
+```
+
+---
+
+## 2. 费率模型设计
+
+### 2.1 为什么选择 Maker/Taker?
+
+| 问题 | 解决方案 |
+|------|---------|
+| 流动性不足 | 低 Maker 费率鼓励挂单 |
+| 价格发现 | 盘口深度越深，价差越小 |
+| 公平性 | 消耗流动性者多付费 |
+
+### 2.2 两层费率体系
 
 ```
 最终费率 = Symbol.base_fee × VipDiscount[vip_level] / 100
 ```
 
-- **Layer 1**: Symbol 基础费率 (10^6 精度)
-- **Layer 2**: VIP 折扣系数 (从数据库加载)
+**Layer 1: Symbol 基础费率**
 
-### 2. 核心设计原则
+| 字段 | 精度 | 默认值 | 说明 |
+|------|-----|-------|------|
+| `base_maker_fee` | 10^6 | 1000 | 0.10% |
+| `base_taker_fee` | 10^6 | 2000 | 0.20% |
 
-| 设计点 | 说明 |
-|--------|------|
-| **从 Gain 扣费** | 无需预留，不可能欠费 |
-| **UBSCore 计费** | 余额权威，内存费率 O(1) |
-| **Per-User Event** | 每用户一个事件，解耦隐私 |
-| **BalanceEventBatch** | 原子整体 (buyer + seller + revenue) |
-| **Event Sourcing** | TDengine 存储，聚合衍生 |
+**Layer 2: VIP 折扣系数**
 
-### 3. 数据流
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `level` | SMALLINT PK | VIP 等级 |
+| `discount_percent` | SMALLINT | 折扣百分比 |
+
+### 2.3 手续费扣除点
+
+**规则**: 手续费从**收到的资产**扣除，不是支付的资产。
 
 ```
-ME → Trade{role} → UBSCore(fee计算) → BalanceEventBatch → Settlement → TDengine
-                                           │
-                                           ├── TradeSettled{buyer}
-                                           ├── TradeSettled{seller}
-                                           └── FeeReceived{REVENUE} ×2
+Alice (Taker, BUY) 以 100,000 USDT 购买 1 BTC
+
+Before: Alice -100,000 USDT, +1 BTC
+After:  Alice -100,000 USDT, +0.998 BTC (手续费 0.002 BTC)
 ```
 
-### 4. 资产守恒
+### 2.4 无需预留手续费
 
+从 Gain 扣费的好处：
+- ✅ 永远不会"余额不足付手续费"
+- ✅ 支付金额 = 实际支付金额
+- ✅ 无需复杂的预留/退还逻辑
+
+### 2.5 计费责任: UBSCore (第一性原理)
+
+```
+费用扣除 = 余额变动 = 必须由 UBSCore 执行
+```
+
+| 问题 | 答案 |
+|------|------|
+| 谁管理余额？ | **UBSCore** |
+| 谁能执行扣款？ | **UBSCore** |
+| 谁负责计费？ | **UBSCore** |
+
+### 2.6 高性能设计
+
+```
+UBSCore 内存结构 (启动时加载):
+├── user_vip_levels: HashMap<UserId, u8>
+├── vip_discounts: HashMap<u8, u8>
+└── symbol_fees: HashMap<SymbolId, (u64, u64)>
+
+费用计算 = 纯内存操作, O(1)
+```
+
+### 2.7 Per-User BalanceEvent
+
+一个 Trade → 两个用户事件
+
+```
+Trade ──▶ UBSCore ──┬──▶ BalanceEvent{user: buyer}
+                    └──▶ BalanceEvent{user: seller}
+```
+
+---
+
+## 3. 数据模型
+
+### 3.1 Symbol 费率配置
+
+```sql
+ALTER TABLE symbols_tb ADD COLUMN base_maker_fee INTEGER NOT NULL DEFAULT 1000;
+ALTER TABLE symbols_tb ADD COLUMN base_taker_fee INTEGER NOT NULL DEFAULT 2000;
+```
+
+### 3.2 User VIP 等级
+
+```sql
+ALTER TABLE users_tb ADD COLUMN vip_level SMALLINT NOT NULL DEFAULT 0;
+```
+
+### 3.3 Event Sourcing: BalanceEventBatch
+
+一个 Trade 产生一组 BalanceEvent 作为**原子整体**：
+
+```
+BalanceEventBatch{trade_id}
+├── TradeSettled{user: buyer}
+├── TradeSettled{user: seller}
+├── FeeReceived{REVENUE, from: buyer}
+└── FeeReceived{REVENUE, from: seller}
+```
+
+**资产守恒验证**:
 ```
 buyer.debit(quote)  + buyer.credit(base - fee)   = 0  ✓
 seller.debit(base)  + seller.credit(quote - fee) = 0  ✓
@@ -609,6 +729,87 @@ revenue.credit(buyer_fee + seller_fee)           = fee_total ✓
 
 ---
 
+## 4. 实现架构
+
+### 4.1 TDengine Schema
+
+```sql
+CREATE STABLE balance_events (
+    ts          TIMESTAMP,
+    event_type  TINYINT,
+    trade_id    BIGINT,
+    debit_asset INT,
+    debit_amt   BIGINT,
+    credit_asset INT,
+    credit_amt  BIGINT,
+    fee         BIGINT,
+    is_maker    BOOL
+) TAGS (account_id BIGINT);
+```
+
+### 4.2 查询模式
+
+```sql
+-- 用户手续费历史
+SELECT ts, trade_id, fee FROM user_1001_events WHERE event_type = 1;
+
+-- 平台收入统计
+SELECT fee_asset, SUM(credit_amt) FROM revenue_events GROUP BY fee_asset;
+```
+
+### 4.3 消费者架构
+
+```
+BalanceEventBatch
+├──▶ TDengine Writer (批量写入)
+├──▶ WebSocket Router (按 user_id 推送)
+└──▶ Kafka Publisher (可选)
+```
+
+---
+
+## 5. API 变更
+
+### 5.1 Trade 响应
+
+```json
+{
+  "trade_id": "12345",
+  "fee": "0.002",
+  "fee_asset": "BTC",
+  "role": "TAKER"
+}
+```
+
+### 5.2 WebSocket 推送
+
+```json
+{
+  "e": "trade.update",
+  "data": {"trade_id": "12345", "fee": "0.002", "is_maker": false}
+}
+```
+
+---
+
+## 6. 边界情况
+
+| 情况 | 处理 |
+|------|------|
+| Fee 四舍五入为 0 | 最小 fee = 1 |
+| 零费率交易对 | 允许 `maker_fee = 0` |
+
+---
+
+## 7. 验证计划
+
+- [ ] 手续费计算准确性测试
+- [ ] E2E 交易手续费扣除
+- [ ] API/WS 返回手续费信息
+- [ ] 资产守恒审计
+
+---
+
 <br>
-<div align="right"><a href="#-chinese">↑ Back to Top</a></div>
+<div align="right"><a href="#-chinese">↑ 返回顶部</a></div>
 <br>
