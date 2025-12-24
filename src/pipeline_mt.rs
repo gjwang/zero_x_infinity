@@ -195,6 +195,7 @@ pub fn run_pipeline_multi_thread(
             stats.clone(),
             db_client.clone(),
             active_symbol_id,
+            Arc::new(config.symbol_mgr.clone()),
         );
         let s = shutdown.clone();
 

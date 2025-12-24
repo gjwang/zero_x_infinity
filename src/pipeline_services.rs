@@ -675,6 +675,7 @@ pub struct SettlementService {
     stats: Arc<PipelineStats>,
     db_client: Option<Arc<crate::persistence::TDengineClient>>,
     symbol_id: u32,
+    symbol_mgr: Arc<crate::symbol_manager::SymbolManager>,
 }
 
 impl SettlementService {
@@ -684,6 +685,7 @@ impl SettlementService {
         stats: Arc<PipelineStats>,
         db_client: Option<Arc<crate::persistence::TDengineClient>>,
         symbol_id: u32,
+        symbol_mgr: Arc<crate::symbol_manager::SymbolManager>,
     ) -> Self {
         Self {
             ledger,
@@ -691,6 +693,7 @@ impl SettlementService {
             stats,
             db_client,
             symbol_id,
+            symbol_mgr,
         }
     }
 
@@ -703,6 +706,7 @@ impl SettlementService {
         let queues = self.queues.clone();
         let stats = self.stats.clone();
         let symbol_id = self.symbol_id;
+        let symbol_mgr = self.symbol_mgr.clone();
 
         // Spawn async balance processor
         let balance_task = Self::spawn_balance_processor_async(
@@ -717,6 +721,7 @@ impl SettlementService {
             stats.clone(),
             db_client.clone(),
             symbol_id,
+            symbol_mgr,
             shutdown.clone(),
         );
 
@@ -818,6 +823,7 @@ impl SettlementService {
         stats: Arc<PipelineStats>,
         db_client: Option<Arc<crate::persistence::TDengineClient>>,
         _symbol_id: u32,
+        symbol_mgr: Arc<crate::symbol_manager::SymbolManager>,
         shutdown: Arc<ShutdownSignal>,
     ) -> tokio::task::JoinHandle<()> {
         const BATCH_SIZE: usize = 128;
@@ -870,6 +876,7 @@ impl SettlementService {
                                 trade_event,
                                 &trade_event.trade,
                                 symbol_id,
+                                &symbol_mgr,
                             );
                         }
 
@@ -905,7 +912,14 @@ impl SettlementService {
         trade_event: &TradeEvent,
         trade: &crate::models::Trade,
         symbol_id: u32,
+        symbol_mgr: &crate::symbol_manager::SymbolManager,
     ) {
+        // Get fee rates from SymbolManager
+        let symbol_info = symbol_mgr.get_symbol_info_by_id(symbol_id);
+        let (maker_fee_rate, taker_fee_rate) = symbol_info
+            .map(|s| (s.base_maker_fee, s.base_taker_fee))
+            .unwrap_or((1000, 2000)); // Default: 0.10%/0.20%
+
         // --- Taker Side ---
         let taker_status = if trade_event.taker_filled_qty >= trade_event.taker_order_qty {
             OrderStatus::FILLED
@@ -954,10 +968,32 @@ impl SettlementService {
                 avg_price: Some(trade.price),
             });
 
-        // Buyer trade
-        // Note: fee=0 here as placeholder. Real fee is in balance_events table.
-        // fee_asset for buyer = base_asset (they receive base)
+        // Calculate fees
+        // Buyer receives base_asset, fee deducted from base
+        // Seller receives quote_asset, fee deducted from quote
         let buyer_is_maker = trade_event.taker_side != Side::Buy;
+        let seller_is_maker = trade_event.taker_side != Side::Sell;
+
+        let buyer_fee_rate = if buyer_is_maker {
+            maker_fee_rate
+        } else {
+            taker_fee_rate
+        };
+        let seller_fee_rate = if seller_is_maker {
+            maker_fee_rate
+        } else {
+            taker_fee_rate
+        };
+
+        // Buyer's gain: trade.qty (base units), fee calculated on this
+        let buyer_fee = crate::fee::calculate_fee(trade.qty, buyer_fee_rate);
+
+        // Seller's gain: trade.price * trade.qty / qty_unit, fee calculated on this
+        let quote_amount =
+            (trade.price as u128 * trade.qty as u128 / trade_event.qty_unit as u128) as u64;
+        let seller_fee = crate::fee::calculate_fee(quote_amount, seller_fee_rate);
+
+        // Buyer trade
         let _ = queues
             .push_event_queue
             .push(crate::websocket::PushEvent::Trade {
@@ -968,14 +1004,12 @@ impl SettlementService {
                 side: Side::Buy,
                 price: trade.price,
                 qty: trade.qty,
-                fee: 0, // TODO: Calculate fee from SymbolManager
+                fee: buyer_fee,
                 fee_asset_id: trade_event.base_asset_id,
                 is_maker: buyer_is_maker,
             });
 
         // Seller trade
-        // fee_asset for seller = quote_asset (they receive quote)
-        let seller_is_maker = trade_event.taker_side != Side::Sell;
         let _ = queues
             .push_event_queue
             .push(crate::websocket::PushEvent::Trade {
@@ -986,7 +1020,7 @@ impl SettlementService {
                 side: Side::Sell,
                 price: trade.price,
                 qty: trade.qty,
-                fee: 0, // TODO: Calculate fee from SymbolManager
+                fee: seller_fee,
                 fee_asset_id: trade_event.quote_asset_id,
                 is_maker: seller_is_maker,
             });
