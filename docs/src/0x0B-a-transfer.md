@@ -502,7 +502,7 @@ WHERE state IN (0, 10, 20, 30, -20) -- INIT, SOURCE_PENDING, SOURCE_DONE, TARGET
 ```sql
 CREATE TABLE transfers_tb (
     transfer_id   BIGSERIAL PRIMARY KEY,
-    req_id        VARCHAR(64) UNIQUE NOT NULL,  -- Server-generated Unique ID (Snowflake)
+    req_id        VARCHAR(26) UNIQUE NOT NULL,  -- Server-generated Unique ID (ULID)
     cid           VARCHAR(64) UNIQUE,           -- Client Idempotency Key (Optional)
     user_id       BIGINT NOT NULL,
     asset_id      INTEGER NOT NULL,
@@ -554,7 +554,7 @@ Run periodically to detect data corruption:
 ```json
 {
   "transfer_id": 12345,
-  "req_id": "sr-1734912345678901234",  // Server-generated (Snowflake)
+  "req_id": "01JFVQ2X8Z0Y1M3N4P5R6S7T8U",  // Server-generated (ULID)
   "from": "SPOT",
   "to": "FUNDING",
   "state": "COMMITTED",  // or "PENDING" if async
@@ -656,7 +656,7 @@ function create_and_execute(request):
     ASSERT request.user_id > 0
     
     // Generate unique ID
-    req_id = snowflake.generate()
+    req_id = ulid.new()
     
     // Create transfer record (State = INIT)
     transfer = TransferRecord {
@@ -1473,7 +1473,7 @@ WHERE state IN (0, 10, 20, 30, -20) -- INIT, SOURCE_PENDING, SOURCE_DONE, TARGET
 ```sql
 CREATE TABLE transfers_tb (
     transfer_id   BIGSERIAL PRIMARY KEY,
-    req_id        VARCHAR(64) UNIQUE NOT NULL,  -- 服务端生成的唯一 ID (Snowflake)
+    req_id        VARCHAR(26) UNIQUE NOT NULL,  -- 服务端生成的唯一 ID (ULID)
     cid           VARCHAR(64) UNIQUE,           -- 客户端幂等键 (可选)
     user_id       BIGINT NOT NULL,
     asset_id      INTEGER NOT NULL,
@@ -1525,7 +1525,7 @@ CREATE INDEX idx_transfers_state ON transfers_tb(state) WHERE state NOT IN (40, 
 ```json
 {
   "transfer_id": 12345,
-  "req_id": "sr-1734912345678901234",  // 服务端生成 (Snowflake)
+  "req_id": "01JFVQ2X8Z0Y1M3N4P5R6S7T8U",  // 服务端生成 (ULID)
   "from": "SPOT",
   "to": "FUNDING",
   "state": "COMMITTED",  // 或 "PENDING" 如果异步
@@ -1627,7 +1627,7 @@ function create_and_execute(request):
     ASSERT request.user_id > 0
     
     // 生成唯一 ID
-    req_id = snowflake.generate()
+    req_id = ulid.new()
     
     // 创建转账记录 (State = INIT)
     transfer = TransferRecord {

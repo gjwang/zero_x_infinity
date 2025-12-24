@@ -144,7 +144,7 @@ fn process_single_transfer(
 ) -> TransferResponse {
     // Idempotency check
     if processed_set.contains(&req.req_id) {
-        debug!(req_id = req.req_id, op = ?req.op, "Transfer already processed");
+        debug!(req_id = %req.req_id, op = ?req.op, "Transfer already processed");
         // Return success for idempotent replay
         // TODO: Should return actual balance, but we don't track it
         return TransferResponse::Success {
@@ -164,7 +164,7 @@ fn process_single_transfer(
         Ok((avail, frozen)) => {
             processed_set.insert(req.req_id);
             debug!(
-                req_id = req.req_id,
+                req_id = %req.req_id,
                 op = ?req.op,
                 avail = avail,
                 frozen = frozen,
@@ -173,7 +173,7 @@ fn process_single_transfer(
             TransferResponse::Success { avail, frozen }
         }
         Err(e) => {
-            error!(req_id = req.req_id, op = ?req.op, error = e, "Transfer failed");
+            error!(req_id = %req.req_id, op = ?req.op, error = e, "Transfer failed");
             TransferResponse::Failed(e.to_string())
         }
     }
@@ -186,17 +186,21 @@ mod tests {
     #[tokio::test]
     async fn test_transfer_channel_send_receive() {
         let (sender, mut receiver) = transfer_channel(10);
+        let test_req_id = crate::transfer::RequestId::new();
 
         // Spawn sender task
-        let sender_task = tokio::spawn(async move {
-            sender
-                .send_request(12345, TransferOp::Deposit, 1, 1, 1000)
-                .await
+        let sender_task = tokio::spawn({
+            let req_id = test_req_id;
+            async move {
+                sender
+                    .send_request(req_id, TransferOp::Deposit, 1, 1, 1000)
+                    .await
+            }
         });
 
         // Receive and respond
         let req = receiver.recv().await.unwrap();
-        assert_eq!(req.req_id, 12345);
+        assert_eq!(req.req_id, test_req_id);
         assert_eq!(req.user_id, 1);
         assert_eq!(req.amount, 1000);
 

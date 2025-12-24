@@ -3,7 +3,7 @@
 //! Orchestrates the FSM-based transfer processing.
 //! This is the central component that drives state transitions.
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 
 use super::adapters::ServiceAdapter;
@@ -12,48 +12,11 @@ use super::error::TransferError;
 use super::state::TransferState;
 use super::types::{OpResult, RequestId, ServiceId, TransferRecord, TransferRequest};
 
-/// Snowflake ID generator for req_id
-///
-/// Simple implementation - in production, use a proper Snowflake library
-struct SnowflakeGenerator {
-    machine_id: u8,
-    sequence: u32,
-    last_timestamp: u64,
-}
-
-impl SnowflakeGenerator {
-    fn new(machine_id: u8) -> Self {
-        Self {
-            machine_id,
-            sequence: 0,
-            last_timestamp: 0,
-        }
-    }
-
-    fn generate(&mut self) -> u64 {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as u64;
-
-        if now == self.last_timestamp {
-            self.sequence += 1;
-        } else {
-            self.sequence = 0;
-            self.last_timestamp = now;
-        }
-
-        // Format: timestamp (41 bits) | machine_id (8 bits) | sequence (15 bits)
-        (now << 23) | ((self.machine_id as u64) << 15) | (self.sequence as u64 & 0x7FFF)
-    }
-}
-
 /// Transfer Coordinator - orchestrates FSM-based processing
 pub struct TransferCoordinator {
     db: Arc<TransferDb>,
     funding_adapter: Arc<dyn ServiceAdapter>,
     trading_adapter: Arc<dyn ServiceAdapter>,
-    id_gen: Mutex<SnowflakeGenerator>,
 }
 
 impl TransferCoordinator {
@@ -63,21 +26,10 @@ impl TransferCoordinator {
         funding_adapter: Arc<dyn ServiceAdapter>,
         trading_adapter: Arc<dyn ServiceAdapter>,
     ) -> Self {
-        Self::with_machine_id(db, funding_adapter, trading_adapter, 1)
-    }
-
-    /// Create coordinator with specific machine ID for distributed deployment
-    pub fn with_machine_id(
-        db: Arc<TransferDb>,
-        funding_adapter: Arc<dyn ServiceAdapter>,
-        trading_adapter: Arc<dyn ServiceAdapter>,
-        machine_id: u8,
-    ) -> Self {
         Self {
             db,
             funding_adapter,
             trading_adapter,
-            id_gen: Mutex::new(SnowflakeGenerator::new(machine_id)),
         }
     }
 
@@ -103,15 +55,12 @@ impl TransferCoordinator {
         if let Some(ref cid) = req.cid
             && let Some(existing) = self.db.get_by_cid(cid).await?
         {
-            debug!(cid = %cid, req_id = existing.req_id, "Duplicate cid found");
+            debug!(cid = %cid, req_id = %existing.req_id, "Duplicate cid found");
             return Ok(existing.req_id);
         }
 
-        // Generate RequestId using Snowflake
-        let req_id = {
-            let mut id_generator = self.id_gen.lock().unwrap();
-            id_generator.generate()
-        };
+        // Generate RequestId using ULID (no coordination needed)
+        let req_id = RequestId::new();
 
         // Create transfer record
         let record = TransferRecord::new(
@@ -126,7 +75,7 @@ impl TransferCoordinator {
 
         self.db.create(&record).await?;
         info!(
-            req_id = req_id,
+            req_id = %req_id,
             "Transfer created: {} -> {}", req.from, req.to
         );
 
@@ -192,7 +141,7 @@ impl TransferCoordinator {
 
             if state.is_terminal() {
                 debug!(
-                    req_id = req_id,
+                    req_id = %req_id,
                     state = %state,
                     iterations = i + 1,
                     "Transfer completed"
@@ -205,7 +154,7 @@ impl TransferCoordinator {
         }
 
         warn!(
-            req_id = req_id,
+            req_id = %req_id,
             state = %state,
             "Transfer did not complete within iteration limit"
         );
@@ -240,7 +189,7 @@ impl TransferCoordinator {
                 Some(r) => Ok(r.state),
                 None => {
                     error!(
-                        req_id = record.req_id,
+                        req_id = %record.req_id,
                         "Transfer not found after CAS failure (data corruption?)"
                     );
                     Err(TransferError::TransferNotFound(record.req_id.to_string()))
@@ -353,7 +302,7 @@ impl TransferCoordinator {
                 Some(r) => Ok(r.state),
                 None => {
                     error!(
-                        req_id = record.req_id,
+                        req_id = %record.req_id,
                         "Transfer not found after CAS failure"
                     );
                     Err(TransferError::TransferNotFound(record.req_id.to_string()))
@@ -387,7 +336,7 @@ impl TransferCoordinator {
                     )
                     .await?;
 
-                info!(req_id = record.req_id, "🔒 ATOMIC COMMIT SUCCESS");
+                info!(req_id = %record.req_id, "🔒 ATOMIC COMMIT SUCCESS");
                 Ok(TransferState::Committed)
             }
             OpResult::Failed(e) => {
@@ -397,7 +346,7 @@ impl TransferCoordinator {
                     // Trading withdrawals are immediately final.
                     // We MUST keep retrying target until it succeeds.
                     error!(
-                        req_id = record.req_id,
+                        req_id = %record.req_id,
                         error = %e,
                         "Target deposit failed but source is Trading (cannot rollback)! \
                          Staying in TargetPending to retry."
@@ -453,14 +402,14 @@ impl TransferCoordinator {
                     )
                     .await?;
 
-                info!(req_id = record.req_id, "🔒 ATOMIC COMMIT SUCCESS");
+                info!(req_id = %record.req_id, "🔒 ATOMIC COMMIT SUCCESS");
                 Ok(TransferState::Committed)
             }
             OpResult::Failed(e) => {
                 // CRITICAL check: Trading source CANNOT be rolled back
                 if record.source == ServiceId::Trading {
                     error!(
-                        req_id = record.req_id,
+                        req_id = %record.req_id,
                         error = %e,
                         "Target failed but Trading source cannot rollback! Infinite retry."
                     );
@@ -499,13 +448,13 @@ impl TransferCoordinator {
                     )
                     .await?;
 
-                info!(req_id = record.req_id, "Transfer rolled back");
+                info!(req_id = %record.req_id, "Transfer rolled back");
                 Ok(TransferState::RolledBack)
             }
             OpResult::Failed(e) => {
                 // Rollback failed - stay in Compensating, keep retrying
                 warn!(
-                    req_id = record.req_id,
+                    req_id = %record.req_id,
                     error = %e,
                     "Rollback failed (will retry)"
                 );
@@ -520,7 +469,7 @@ impl TransferCoordinator {
         let commit_result = source.commit(record.req_id).await;
         if let OpResult::Failed(e) = &commit_result {
             warn!(
-                req_id = record.req_id,
+                req_id = %record.req_id,
                 error = %e,
                 "Source commit failed (target already received funds)"
             );
@@ -567,13 +516,11 @@ mod tests {
     }
 
     #[test]
-    fn test_snowflake_generator() {
-        let mut id_generator = SnowflakeGenerator::new(1);
-        let id1 = id_generator.generate();
-        let id2 = id_generator.generate();
+    fn test_ulid_generation() {
+        let id1 = RequestId::new();
+        let id2 = RequestId::new();
 
-        assert_ne!(id1, id2);
-        assert!(id2 > id1); // Should be monotonically increasing
+        assert_ne!(id1, id2); // Should be unique
     }
 
     #[tokio::test]

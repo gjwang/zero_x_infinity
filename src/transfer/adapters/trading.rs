@@ -4,9 +4,10 @@
 //! Sends Deposit/Withdraw orders through the pipeline.
 
 use async_trait::async_trait;
+use sqlx::PgPool;
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
-use tracing::{debug, warn};
+use tracing::{debug, error, warn};
 
 use super::ServiceAdapter;
 use crate::transfer::channel::{TransferOp, TransferResponse, TransferSender};
@@ -33,6 +34,9 @@ pub struct TradingAdapter {
     /// Optional channel to UBSCore (None for tests, Some for production)
     channel: Option<TransferSender>,
 
+    /// PostgreSQL pool for querying transfer details during rollback
+    pool: Option<PgPool>,
+
     /// Simulated balances for testing (only used when channel is None)
     #[cfg(test)]
     test_balances: Arc<Mutex<std::collections::HashMap<(u64, u32), u64>>>,
@@ -44,6 +48,7 @@ impl TradingAdapter {
         Self {
             processed: Arc::new(Mutex::new(HashSet::new())),
             channel: None,
+            pool: None,
             #[cfg(test)]
             test_balances: Arc::new(Mutex::new(std::collections::HashMap::new())),
         }
@@ -54,6 +59,18 @@ impl TradingAdapter {
         Self {
             processed: Arc::new(Mutex::new(HashSet::new())),
             channel: Some(channel),
+            pool: None,
+            #[cfg(test)]
+            test_balances: Arc::new(Mutex::new(std::collections::HashMap::new())),
+        }
+    }
+
+    /// Create adapter with channel and DB pool (full production mode)
+    pub fn with_channel_and_pool(channel: TransferSender, pool: PgPool) -> Self {
+        Self {
+            processed: Arc::new(Mutex::new(HashSet::new())),
+            channel: Some(channel),
+            pool: Some(pool),
             #[cfg(test)]
             test_balances: Arc::new(Mutex::new(std::collections::HashMap::new())),
         }
@@ -64,6 +81,7 @@ impl TradingAdapter {
         Self {
             processed: Arc::new(Mutex::new(processed)),
             channel: None,
+            pool: None,
             #[cfg(test)]
             test_balances: Arc::new(Mutex::new(std::collections::HashMap::new())),
         }
@@ -123,7 +141,7 @@ impl ServiceAdapter for TradingAdapter {
         amount: u64,
     ) -> OpResult {
         debug!(
-            req_id = req_id,
+            req_id = %req_id,
             user_id = user_id,
             asset_id = asset_id,
             amount = amount,
@@ -132,7 +150,7 @@ impl ServiceAdapter for TradingAdapter {
 
         // Check idempotency (in RAM)
         if self.is_processed(req_id) {
-            debug!(req_id = req_id, "Trading withdraw already processed");
+            debug!(req_id = %req_id, "Trading withdraw already processed");
             return OpResult::Success;
         }
 
@@ -144,15 +162,15 @@ impl ServiceAdapter for TradingAdapter {
             {
                 Ok(TransferResponse::Success { .. }) => {
                     self.mark_processed(req_id);
-                    debug!(req_id = req_id, "Trading withdraw successful via channel");
+                    debug!(req_id = %req_id, "Trading withdraw successful via channel");
                     return OpResult::Success;
                 }
                 Ok(TransferResponse::Failed(e)) => {
-                    debug!(req_id = req_id, error = %e, "Trading withdraw failed via channel");
+                    debug!(req_id = %req_id, error = %e, "Trading withdraw failed via channel");
                     return OpResult::Failed(e);
                 }
                 Err(e) => {
-                    warn!(req_id = req_id, error = %e, "Trading channel error");
+                    warn!(req_id = %req_id, error = %e, "Trading channel error");
                     return OpResult::Pending;
                 }
             }
@@ -167,7 +185,7 @@ impl ServiceAdapter for TradingAdapter {
 
             if current < amount {
                 warn!(
-                    req_id = req_id,
+                    req_id = %req_id,
                     current = current,
                     requested = amount,
                     "Insufficient trading balance"
@@ -182,13 +200,13 @@ impl ServiceAdapter for TradingAdapter {
         {
             // No channel configured - warn and assume success for testing
             warn!(
-                req_id = req_id,
+                req_id = %req_id,
                 "Trading adapter not connected to UBSCore (no channel)"
             );
         }
 
         self.mark_processed(req_id);
-        debug!(req_id = req_id, "Trading withdraw successful");
+        debug!(req_id = %req_id, "Trading withdraw successful");
         OpResult::Success
     }
 
@@ -200,7 +218,7 @@ impl ServiceAdapter for TradingAdapter {
         amount: u64,
     ) -> OpResult {
         debug!(
-            req_id = req_id,
+            req_id = %req_id,
             user_id = user_id,
             asset_id = asset_id,
             amount = amount,
@@ -209,7 +227,7 @@ impl ServiceAdapter for TradingAdapter {
 
         // Check idempotency
         if self.is_processed(req_id) {
-            debug!(req_id = req_id, "Trading deposit already processed");
+            debug!(req_id = %req_id, "Trading deposit already processed");
             return OpResult::Success;
         }
 
@@ -221,15 +239,15 @@ impl ServiceAdapter for TradingAdapter {
             {
                 Ok(TransferResponse::Success { .. }) => {
                     self.mark_processed(req_id);
-                    debug!(req_id = req_id, "Trading deposit successful via channel");
+                    debug!(req_id = %req_id, "Trading deposit successful via channel");
                     return OpResult::Success;
                 }
                 Ok(TransferResponse::Failed(e)) => {
-                    debug!(req_id = req_id, error = %e, "Trading deposit failed via channel");
+                    debug!(req_id = %req_id, error = %e, "Trading deposit failed via channel");
                     return OpResult::Failed(e);
                 }
                 Err(e) => {
-                    warn!(req_id = req_id, error = %e, "Trading channel error");
+                    warn!(req_id = %req_id, error = %e, "Trading channel error");
                     return OpResult::Pending;
                 }
             }
@@ -248,42 +266,93 @@ impl ServiceAdapter for TradingAdapter {
         {
             // No channel configured - warn and assume success
             warn!(
-                req_id = req_id,
+                req_id = %req_id,
                 "Trading adapter not connected to UBSCore (no channel)"
             );
         }
 
         self.mark_processed(req_id);
-        debug!(req_id = req_id, "Trading deposit successful");
+        debug!(req_id = %req_id, "Trading deposit successful");
         OpResult::Success
     }
 
     async fn rollback(&self, req_id: RequestId) -> OpResult {
-        debug!(req_id = req_id, "Trading rollback");
+        debug!(req_id = %req_id, "Trading rollback");
 
         // CRITICAL: Trading rollback means re-crediting a previously withdrawn amount
         // This is only called when source was Trading and target deposit failed
 
         // Check if withdraw was even processed
         if !self.is_processed(req_id) {
-            debug!(req_id = req_id, "No withdraw to rollback");
+            debug!(req_id = %req_id, "No withdraw to rollback");
             return OpResult::Success;
         }
 
-        // TODO: In production, send refund Deposit order to UBSCore
-        // This needs the original transfer details (amount, user_id, asset_id)
+        // Query transfer details from DB
+        let pool = match &self.pool {
+            Some(p) => p,
+            None => {
+                error!(req_id = %req_id, "Trading rollback failed: no DB pool configured");
+                return OpResult::Failed("No DB pool for rollback query".to_string());
+            }
+        };
 
-        warn!(
-            req_id = req_id,
-            "Trading rollback - would need transfer details from DB"
-        );
+        // Get transfer record to know user_id, asset_id, amount
+        let record = match sqlx::query_as::<_, (i64, i32, rust_decimal::Decimal)>(
+            r#"
+            SELECT user_id, asset_id, amount
+            FROM fsm_transfers_tb
+            WHERE req_id = $1
+            "#,
+        )
+        .bind(req_id.to_string())
+        .fetch_optional(pool)
+        .await
+        {
+            Ok(Some(row)) => row,
+            Ok(None) => {
+                error!(req_id = %req_id, "Trading rollback: transfer record not found");
+                return OpResult::Failed("Transfer record not found".to_string());
+            }
+            Err(e) => {
+                error!(req_id = %req_id, error = %e, "Trading rollback: DB query failed");
+                return OpResult::Failed(format!("DB error: {}", e));
+            }
+        };
 
-        // For now, return success (actual implementation will query DB)
-        OpResult::Success
+        let user_id = record.0 as u64;
+        let asset_id = record.1 as u32;
+        use rust_decimal::prelude::ToPrimitive;
+        let amount = record.2.trunc().to_i64().unwrap_or(0) as u64;
+
+        // Send Deposit to restore the funds
+        if let Some(channel) = &self.channel {
+            match channel
+                .send_request(req_id, TransferOp::Deposit, user_id, asset_id, amount)
+                .await
+            {
+                Ok(TransferResponse::Success { .. }) => {
+                    debug!(req_id = %req_id, user_id, asset_id, amount, "Trading rollback deposit success");
+                    OpResult::Success
+                }
+                Ok(TransferResponse::Failed(msg)) => {
+                    error!(req_id = %req_id, error = %msg, "Trading rollback deposit failed");
+                    OpResult::Failed(msg)
+                }
+                Err(e) => {
+                    error!(req_id = %req_id, error = %e, "Trading rollback channel error");
+                    OpResult::Pending
+                }
+            }
+        } else {
+            // Test mode: simulate success
+            warn!(req_id = %req_id, "Trading rollback in test mode (no channel)");
+            OpResult::Success
+        }
     }
 
     async fn commit(&self, req_id: RequestId) -> OpResult {
-        debug!(req_id = req_id, "Trading commit");
+        debug!(req_id = %req_id, "Trading commit");
 
         // For Trading, commit is typically a no-op
         // The withdraw is already final when processed
@@ -301,7 +370,7 @@ mod tests {
         let adapter = TradingAdapter::new();
         adapter.set_test_balance(1001, 1, 10000);
 
-        let result = adapter.withdraw(123, 1001, 1, 5000).await;
+        let result = adapter.withdraw(RequestId::new(), 1001, 1, 5000).await;
         assert!(result.is_success());
         assert_eq!(adapter.get_test_balance(1001, 1), 5000);
     }
@@ -311,7 +380,7 @@ mod tests {
         let adapter = TradingAdapter::new();
         adapter.set_test_balance(1001, 1, 1000);
 
-        let result = adapter.withdraw(123, 1001, 1, 5000).await;
+        let result = adapter.withdraw(RequestId::new(), 1001, 1, 5000).await;
         assert!(result.is_explicit_fail());
         // Balance unchanged
         assert_eq!(adapter.get_test_balance(1001, 1), 1000);
@@ -322,7 +391,7 @@ mod tests {
         let adapter = TradingAdapter::new();
         adapter.set_test_balance(1001, 1, 5000);
 
-        let result = adapter.deposit(123, 1001, 1, 3000).await;
+        let result = adapter.deposit(RequestId::new(), 1001, 1, 3000).await;
         assert!(result.is_success());
         assert_eq!(adapter.get_test_balance(1001, 1), 8000);
     }
@@ -331,14 +400,15 @@ mod tests {
     async fn test_trading_idempotency() {
         let adapter = TradingAdapter::new();
         adapter.set_test_balance(1001, 1, 10000);
+        let req_id = RequestId::new();
 
         // First call
-        let result1 = adapter.withdraw(123, 1001, 1, 5000).await;
+        let result1 = adapter.withdraw(req_id, 1001, 1, 5000).await;
         assert!(result1.is_success());
         assert_eq!(adapter.get_test_balance(1001, 1), 5000);
 
         // Second call with same req_id - should be idempotent
-        let result2 = adapter.withdraw(123, 1001, 1, 5000).await;
+        let result2 = adapter.withdraw(req_id, 1001, 1, 5000).await;
         assert!(result2.is_success());
         // Balance should NOT change again
         assert_eq!(adapter.get_test_balance(1001, 1), 5000);
