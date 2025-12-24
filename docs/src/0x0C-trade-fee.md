@@ -289,17 +289,52 @@ Existing `Trade` struct already has:
 
 ### 3.4 Fee Record Storage
 
-手续费信息**已包含在 Trade 记录中**，无需单独的 fee_ledger 表：
+手续费信息**已包含在 Trade 记录中**：
 
 | 存储位置 | 内容 |
 |---------|------|
 | `trades_tb` (TDengine) | `fee`, `fee_asset`, `role` 字段 |
 | Trade Event | 实时推送给下游 (WS, Kafka) |
 
-> **Why 不用单独的 fee_ledger 表？**
-> - PostgreSQL 写入性能不满足交易频率
-> - TDengine 的 trades 表已经包含费用信息
-> - 对账时从 trades 表聚合即可
+### 3.5 Platform Revenue Account (资产可溯源)
+
+**设计原则**: 任何资产都必须可溯源 → Fee 必须流入 Revenue Account
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Fee Flow (Double-Entry)                          │
+├─────────────────────────────────────────────────────────────────────┤
+│  User debit fee ─────────────────────────▶ Revenue Account credit   │
+│                    (有借必有贷, 资产守恒)                            │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Revenue Account 设计**:
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `asset_id` | u32 PK | 资产 ID |
+| `balance` | u64 | 累计收入 (scaled) |
+| `last_updated` | TIMESTAMP | 最后更新时间 |
+
+**UBSCore 处理**:
+```
+Trade → UBSCore:
+  ① buyer.credit(net_amount)   // net = received - fee
+  ② seller.credit(net_amount)
+  ③ revenue[base_asset] += buyer_fee    // 平台收入
+  ④ revenue[quote_asset] += seller_fee
+```
+
+**可审计性**:
+```
+Σ(User Balances) + Σ(Revenue Balances) == Omnibus Balance (链上资产)
+```
+
+> **Why Revenue Account?**
+> - **资产可溯源**: 每一分 fee 都有去向
+> - **实时余额**: 无需聚合查询
+> - **审计友好**: 支持财务对账
 
 ---
 
