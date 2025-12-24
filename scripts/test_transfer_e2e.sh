@@ -9,7 +9,7 @@
 #   ./scripts/test_transfer_e2e.sh --no-gw   # Run against existing Gateway
 #
 # Prerequisites:
-#   - PostgreSQL running on port 5433
+#   - PostgreSQL running (port auto-detected via db_env.sh)
 #   - TDengine running on port 6041
 #   - Python with pynacl installed
 # =============================================================================
@@ -19,6 +19,9 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_DIR"
+
+# Source centralized DB configuration
+source "$SCRIPT_DIR/lib/db_env.sh"
 
 # Colors
 GREEN='\033[0;32m'
@@ -36,13 +39,13 @@ echo ""
 # =============================================================================
 echo -e "${YELLOW}[1/6] Checking prerequisites...${NC}"
 
-# Check PostgreSQL
-if ! PGPASSWORD=trading123 psql -h localhost -p 5433 -U trading -d exchange_info_db -c "SELECT 1" > /dev/null 2>&1; then
-    echo -e "${RED}❌ PostgreSQL not available on port 5433${NC}"
+# Check PostgreSQL (using port from db_env.sh)
+if ! PGPASSWORD="${PG_PASSWORD}" psql -h "${PG_HOST}" -p "${PG_PORT}" -U "${PG_USER}" -d "${PG_DB}" -c "SELECT 1" > /dev/null 2>&1; then
+    echo -e "${RED}❌ PostgreSQL not available on port ${PG_PORT}${NC}"
     echo "   Start with: docker start postgres"
     exit 1
 fi
-echo "  ✓ PostgreSQL connected"
+echo "  ✓ PostgreSQL connected (port ${PG_PORT})"
 
 # Check and ensure binary freshness
 if [ "$1" != "--no-gw" ]; then
