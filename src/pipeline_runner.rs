@@ -194,6 +194,7 @@ pub fn run_pipeline_single_thread(
                                     quote_id,
                                     qty_unit,
                                     ingested_at_ns,
+                                    active_symbol_id, // symbol_id for fee lookup
                                 );
 
                                 let pi = if valid_order.order.side == Side::Buy

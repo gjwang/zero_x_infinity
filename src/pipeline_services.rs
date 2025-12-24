@@ -479,6 +479,7 @@ impl MatchingService {
                                 self.market.quote_id,
                                 self.market.qty_unit,
                                 valid_order.ingested_at_ns,
+                                self.market.symbol_id, // symbol_id for fee lookup
                             );
 
                             // Collect for MEResult

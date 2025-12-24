@@ -67,6 +67,9 @@ pub mod funding;
 // Internal Transfer FSM (Phase 0x0B-a)
 pub mod internal_transfer;
 
+// Trade Fee System (Phase 0x0C)
+pub mod fee;
+
 // Convenient re-exports at crate root
 pub use balance::Balance;
 pub use core_types::{AssetId, OrderId, SeqNum, TradeId, UserId};

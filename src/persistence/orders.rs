@@ -387,6 +387,7 @@ mod tests {
             2,         // quote_asset_id
             1_000000,  // qty_unit
             0,         // taker_ingested_at_ns
+            1,         // symbol_id for fee lookup
         );
 
         // Create MEResults
