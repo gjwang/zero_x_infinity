@@ -29,6 +29,15 @@ log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
+RESET_MODE=false
+
+# Simple argument parsing
+for arg in "$@"; do
+    if [ "$arg" == "--reset" ]; then
+        RESET_MODE=true
+    fi
+done
+
 # =============================================================================
 # PostgreSQL Initialization
 # =============================================================================
@@ -49,6 +58,12 @@ init_postgres() {
             exit 1
         fi
     done
+
+    if [ "$RESET_MODE" == "true" ]; then
+        log_warn "RESET MODE: Dropping all tables in public schema..."
+        # Safely drop all tables by recreating the public schema
+        psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "$PG_DB" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO public; GRANT ALL ON SCHEMA public TO $PG_USER;" > /dev/null
+    fi
     
     # Run all migrations in order
     log_info "Running migrations..."
@@ -95,6 +110,11 @@ init_tdengine() {
             exit 1
         fi
     done
+
+    if [ "$RESET_MODE" == "true" ]; then
+        log_warn "RESET MODE: Dropping TDengine database ${TD_DB}..."
+        td_exec "DROP DATABASE IF EXISTS ${TD_DB}" > /dev/null
+    fi
     
     # Create database with correct precision
     log_info "Creating database with PRECISION 'us'..."
@@ -128,16 +148,20 @@ init_tdengine() {
 # Main
 # =============================================================================
 main() {
-    echo "======================================"
-    echo " Database Initialization"
-    echo "======================================"
-    echo ""
-    echo "Configuration:"
-    echo "  PG: ${PG_USER}@${PG_HOST}:${PG_PORT}/${PG_DB}"
-    echo "  TD: ${TD_USER}@${TD_HOST}:${TD_PORT_REST}/${TD_DB}"
+    # Print configuration at startup (from db_env.sh)
+    print_db_config
+    [ "$RESET_MODE" == "true" ] && echo "  MODE: RESET (Destructive)"
     echo ""
     
-    case "${1:-all}" in
+    # Get target from non-flag arguments
+    local target="all"
+    for arg in "$@"; do
+        if [[ "$arg" != --* ]]; then
+            target="$arg"
+        fi
+    done
+    
+    case "$target" in
         pg|postgres)
             init_postgres
             ;;

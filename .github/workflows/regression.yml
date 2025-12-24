@@ -1,0 +1,128 @@
+name: Full Regression
+
+on:
+  schedule:
+    - cron: '18 18 * * *'  # 02:18 Beijing Time (UTC+8)
+  workflow_dispatch:
+    inputs:
+      force_run:
+        description: 'Force run even if no changes'
+        required: false
+        default: 'false'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  CI: true
+
+jobs:
+  check-skip:
+    name: Check Smart Skip
+    runs-on: ubuntu-latest
+    outputs:
+      should_skip: ${{ steps.check.outputs.should_skip }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need history for SHA comparison
+      
+      - name: Check regression status
+        id: check
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.force_run }}" == "true" ]]; then
+            echo "should_skip=false" >> $GITHUB_OUTPUT
+            echo "Forcing run due to manual trigger."
+          else
+            chmod +x ./scripts/lib/check_regression_skip.sh
+            ./scripts/lib/check_regression_skip.sh | tee skip_results.txt
+            SKIP_VAL=$(grep "should_skip=" skip_results.txt | cut -d'=' -f2)
+            echo "should_skip=$SKIP_VAL" >> $GITHUB_OUTPUT
+          fi
+
+  full-regression:
+    name: Full Regression (1.3M)
+    needs: check-skip
+    if: needs.check-skip.outputs.should_skip != 'true'
+    runs-on: ubuntu-latest
+    services:
+      tdengine:
+        image: tdengine/tdengine:latest
+        ports:
+          - 6030:6030
+          - 6041:6041
+      postgres:
+        image: postgres:18
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_DB: exchange_info_db
+          POSTGRES_USER: trading
+          POSTGRES_PASSWORD: trading123
+        options: >-
+          --health-cmd "pg_isready -U trading -d exchange_info_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.92.0
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-regression-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install pandas taos-ws-py psycopg2-binary pynacl requests
+          sudo apt-get update && sudo apt-get install -y lsof
+
+      - name: Build Release
+        run: cargo build --release
+
+      - name: Initialize Databases
+        run: |
+          ./scripts/db/init.sh pg
+          ./scripts/db/init.sh td
+          sleep 5
+
+      - name: Run Full Regression
+        run: ./scripts/test_ci.sh --full
+        id: run-test
+        continue-on-error: true
+
+      - name: Dump Logs on Failure
+        if: steps.run-test.outcome == 'failure'
+        run: |
+          echo "=== Full Regression Log ==="
+          cat /tmp/integration_tests/*.log || true
+          exit 1
+
+      - name: Upload Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-regression-logs
+          path: |
+            /tmp/integration_tests/
+            test-reports/
+          retention-days: 14

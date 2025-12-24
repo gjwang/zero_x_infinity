@@ -340,10 +340,15 @@ clean_env() {
     echo ""
     echo "   [CI] Cleaning environment..."
     
-    # IMPORTANT: Do NOT use `pkill -f "zero_x_infinity"` - it matches command line args
-    # and will kill IDE's language_server which has project path in args!
-    # Use exact process name match instead:
+    # 1. Kill by process name
     pkill "^zero_x_infinity$" 2>/dev/null || true
+    
+    # 2. Kill by port (forceful cleanup)
+    local port_pids=$(lsof -Pi :8080 -sTCP:LISTEN -t 2>/dev/null)
+    if [ -n "$port_pids" ]; then
+        echo "   [CI] Killing processes on port 8080: $port_pids"
+        kill -9 $port_pids 2>/dev/null || true
+    fi
     
     if [ "$CI" = "true" ] && [ -f "scripts/ci_clean.py" ]; then
          python3 scripts/ci_clean.py || echo "   [WARN] DB cleanup script failed"
@@ -389,7 +394,6 @@ main() {
     fi
     
     # ========== Phase 2: Pipeline Correctness ==========
-    # Group with Unit tests for now, or require RUN_ALL
     if [ "$RUN_UNIT" = "true" ]; then
         echo ""
         echo "═══════════════════════════════════════════════════════════════"
@@ -398,7 +402,7 @@ main() {
         
         run_test_with_pattern "Pipeline_100K" "scripts/test_pipeline_compare.sh 100k" "ALL TESTS PASSED" 600
         
-        if [ "$QUICK_MODE" = true ]; then
+        if [ "$QUICK_MODE" = "true" ]; then
             log_test_start "Pipeline_1.3M"
             log_test_skip "(quick mode)"
         else
@@ -407,8 +411,7 @@ main() {
     fi
     
     # ========== Phase 3: Settlement Persistence ==========
-    # Only run if explicitly requested or part of full suite (not supported in CI yet)
-    if [ "$RUN_UNIT" = "true" ]; then
+    if [ "$RUN_GATEWAY" = "true" ]; then
         echo ""
         echo "═══════════════════════════════════════════════════════════════"
         echo "Phase 3: Settlement Persistence"
@@ -467,7 +470,7 @@ main() {
             if python3 -c "import psycopg2; psycopg2.connect(host='localhost', dbname='exchange_info_db', user='trading', password='trading123').close()" 2>/dev/null; then
                 POSTGRES_AVAILABLE=true
             fi
-        elif docker ps 2>/dev/null | grep -q postgres; then
+        elif docker ps --format '{{.Names}}' 2>/dev/null | grep -q "postgres"; then
             POSTGRES_AVAILABLE=true
         fi
         
