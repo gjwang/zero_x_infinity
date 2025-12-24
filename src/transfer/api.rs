@@ -34,7 +34,7 @@ pub struct TransferApiRequest {
 #[derive(Debug, Serialize)]
 pub struct TransferApiResponse {
     /// Unique request ID (Snowflake)
-    pub req_id: String,
+    pub transfer_id: String,
     /// Current transfer state
     pub status: String,
     /// Source account type
@@ -340,13 +340,13 @@ pub async fn create_transfer_fsm(
     core_req.cid = req.cid.clone();
 
     // 7. Submit to coordinator (§1.5.7 idempotency check happens here)
-    let req_id = coordinator.create(core_req).await.map_err(|e| {
+    let transfer_id = coordinator.create(core_req).await.map_err(|e| {
         let (status, code, msg) = map_error(&e);
         (status, ApiResponse::error(code, msg))
     })?;
 
     // 8. Execute transfer (run FSM to completion)
-    let state = coordinator.execute(req_id).await.map_err(|e| {
+    let state = coordinator.execute(transfer_id).await.map_err(|e| {
         let (status, code, msg) = map_error(&e);
         (status, ApiResponse::error(code, msg))
     })?;
@@ -358,7 +358,7 @@ pub async fn create_transfer_fsm(
         .as_millis() as i64;
 
     Ok(TransferApiResponse {
-        req_id: req_id.to_string(),
+        transfer_id: transfer_id.to_string(),
         status: state.to_string(),
         from: req.from,
         to: req.to,
@@ -372,11 +372,11 @@ pub async fn create_transfer_fsm(
 /// Get transfer status
 pub async fn get_transfer_status(
     coordinator: &TransferCoordinator,
-    req_id: InternalTransferId,
+    transfer_id: InternalTransferId,
     asset_decimals: u32,
 ) -> Result<TransferApiResponse, (StatusCode, ApiResponse<()>)> {
     let record = coordinator
-        .get(req_id)
+        .get(transfer_id)
         .await
         .map_err(|e| {
             let (status, code, msg) = map_error(&e);
@@ -390,7 +390,7 @@ pub async fn get_transfer_status(
         })?;
 
     Ok(TransferApiResponse {
-        req_id: record.req_id.to_string(),
+        transfer_id: record.transfer_id.to_string(),
         status: record.state.to_string(),
         from: record.source.to_string().to_lowercase(),
         to: record.target.to_string().to_lowercase(),

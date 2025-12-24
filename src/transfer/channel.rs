@@ -22,7 +22,7 @@ pub enum TransferOp {
 /// Transfer request to UBSCore
 #[derive(Debug)]
 pub struct TransferRequest {
-    pub req_id: InternalTransferId,
+    pub transfer_id: InternalTransferId,
     pub op: TransferOp,
     pub user_id: u64,
     pub asset_id: u32,
@@ -52,7 +52,7 @@ impl TransferSender {
     /// Send transfer request and wait for response
     pub async fn send_request(
         &self,
-        req_id: InternalTransferId,
+        transfer_id: InternalTransferId,
         op: TransferOp,
         user_id: u64,
         asset_id: u32,
@@ -61,7 +61,7 @@ impl TransferSender {
         let (response_tx, response_rx) = oneshot::channel();
 
         let request = TransferRequest {
-            req_id,
+            transfer_id,
             op,
             user_id,
             asset_id,
@@ -143,8 +143,8 @@ fn process_single_transfer(
     processed_set: &mut HashSet<InternalTransferId>,
 ) -> TransferResponse {
     // Idempotency check
-    if processed_set.contains(&req.req_id) {
-        debug!(req_id = %req.req_id, op = ?req.op, "Transfer already processed");
+    if processed_set.contains(&req.transfer_id) {
+        debug!(transfer_id = %req.transfer_id, op = ?req.op, "Transfer already processed");
         // Return success for idempotent replay
         // TODO: Should return actual balance, but we don't track it
         return TransferResponse::Success {
@@ -162,9 +162,9 @@ fn process_single_transfer(
 
     match result {
         Ok((avail, frozen)) => {
-            processed_set.insert(req.req_id);
+            processed_set.insert(req.transfer_id);
             debug!(
-                req_id = %req.req_id,
+                transfer_id = %req.transfer_id,
                 op = ?req.op,
                 avail = avail,
                 frozen = frozen,
@@ -173,7 +173,7 @@ fn process_single_transfer(
             TransferResponse::Success { avail, frozen }
         }
         Err(e) => {
-            error!(req_id = %req.req_id, op = ?req.op, error = e, "Transfer failed");
+            error!(transfer_id = %req.transfer_id, op = ?req.op, error = e, "Transfer failed");
             TransferResponse::Failed(e.to_string())
         }
     }
@@ -186,21 +186,21 @@ mod tests {
     #[tokio::test]
     async fn test_transfer_channel_send_receive() {
         let (sender, mut receiver) = transfer_channel(10);
-        let test_req_id = crate::transfer::InternalTransferId::new();
+        let test_transfer_id = crate::transfer::InternalTransferId::new();
 
         // Spawn sender task
         let sender_task = tokio::spawn({
-            let req_id = test_req_id;
+            let transfer_id = test_transfer_id;
             async move {
                 sender
-                    .send_request(req_id, TransferOp::Deposit, 1, 1, 1000)
+                    .send_request(transfer_id, TransferOp::Deposit, 1, 1, 1000)
                     .await
             }
         });
 
         // Receive and respond
         let req = receiver.recv().await.unwrap();
-        assert_eq!(req.req_id, test_req_id);
+        assert_eq!(req.transfer_id, test_transfer_id);
         assert_eq!(req.user_id, 1);
         assert_eq!(req.amount, 1000);
 

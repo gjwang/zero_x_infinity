@@ -55,16 +55,16 @@ impl TransferCoordinator {
         if let Some(ref cid) = req.cid
             && let Some(existing) = self.db.get_by_cid(cid).await?
         {
-            debug!(cid = %cid, req_id = %existing.req_id, "Duplicate cid found");
-            return Ok(existing.req_id);
+            debug!(cid = %cid, transfer_id = %existing.transfer_id, "Duplicate cid found");
+            return Ok(existing.transfer_id);
         }
 
         // Generate InternalTransferId using ULID (no coordination needed)
-        let req_id = InternalTransferId::new();
+        let transfer_id = InternalTransferId::new();
 
         // Create transfer record
         let record = TransferRecord::new(
-            req_id,
+            transfer_id,
             req.from,
             req.to,
             req.user_id,
@@ -75,23 +75,26 @@ impl TransferCoordinator {
 
         self.db.create(&record).await?;
         info!(
-            req_id = %req_id,
+            transfer_id = %transfer_id,
             "Transfer created: {} -> {}", req.from, req.to
         );
 
-        Ok(req_id)
+        Ok(transfer_id)
     }
 
     /// Execute one step of the FSM
     ///
     /// Returns the new state after processing.
     /// Call repeatedly until a terminal state is reached.
-    pub async fn step(&self, req_id: InternalTransferId) -> Result<TransferState, TransferError> {
+    pub async fn step(
+        &self,
+        transfer_id: InternalTransferId,
+    ) -> Result<TransferState, TransferError> {
         let record = self
             .db
-            .get(req_id)
+            .get(transfer_id)
             .await?
-            .ok_or_else(|| TransferError::TransferNotFound(req_id.to_string()))?;
+            .ok_or_else(|| TransferError::TransferNotFound(transfer_id.to_string()))?;
 
         // Already terminal - nothing to do
         if record.state.is_terminal() {
@@ -122,7 +125,7 @@ impl TransferCoordinator {
 
         // Increment retry count if no progress
         if !new_state.is_terminal() && new_state == record.state {
-            self.db.increment_retry(req_id).await?;
+            self.db.increment_retry(transfer_id).await?;
         }
 
         Ok(new_state)
@@ -134,17 +137,17 @@ impl TransferCoordinator {
     /// Returns the final state.
     pub async fn execute(
         &self,
-        req_id: InternalTransferId,
+        transfer_id: InternalTransferId,
     ) -> Result<TransferState, TransferError> {
         let mut state = TransferState::Init;
         let max_iterations = 100; // Safety limit
 
         for i in 0..max_iterations {
-            state = self.step(req_id).await?;
+            state = self.step(transfer_id).await?;
 
             if state.is_terminal() {
                 debug!(
-                    req_id = %req_id,
+                    transfer_id = %transfer_id,
                     state = %state,
                     iterations = i + 1,
                     "Transfer completed"
@@ -157,7 +160,7 @@ impl TransferCoordinator {
         }
 
         warn!(
-            req_id = %req_id,
+            transfer_id = %transfer_id,
             state = %state,
             "Transfer did not complete within iteration limit"
         );
@@ -181,21 +184,23 @@ impl TransferCoordinator {
         if !self
             .db
             .update_state_if(
-                record.req_id,
+                record.transfer_id,
                 TransferState::Init,
                 TransferState::SourcePending,
             )
             .await?
         {
             // Another worker already transitioned - get current state
-            return match self.db.get(record.req_id).await? {
+            return match self.db.get(record.transfer_id).await? {
                 Some(r) => Ok(r.state),
                 None => {
                     error!(
-                        req_id = %record.req_id,
+                        transfer_id = %record.transfer_id,
                         "Transfer not found after CAS failure (data corruption?)"
                     );
-                    Err(TransferError::TransferNotFound(record.req_id.to_string()))
+                    Err(TransferError::TransferNotFound(
+                        record.transfer_id.to_string(),
+                    ))
                 }
             };
         }
@@ -203,7 +208,7 @@ impl TransferCoordinator {
         // 2. Call source withdraw
         let result = source
             .withdraw(
-                record.req_id,
+                record.transfer_id,
                 record.user_id,
                 record.asset_id,
                 record.amount,
@@ -215,7 +220,7 @@ impl TransferCoordinator {
             OpResult::Success => {
                 self.db
                     .update_state_if(
-                        record.req_id,
+                        record.transfer_id,
                         TransferState::SourcePending,
                         TransferState::SourceDone,
                     )
@@ -225,7 +230,7 @@ impl TransferCoordinator {
             OpResult::Failed(e) => {
                 self.db
                     .update_state_with_error(
-                        record.req_id,
+                        record.transfer_id,
                         TransferState::SourcePending,
                         TransferState::Failed,
                         &e,
@@ -249,7 +254,7 @@ impl TransferCoordinator {
         // Query or re-call source (idempotent)
         let result = source
             .withdraw(
-                record.req_id,
+                record.transfer_id,
                 record.user_id,
                 record.asset_id,
                 record.amount,
@@ -260,7 +265,7 @@ impl TransferCoordinator {
             OpResult::Success => {
                 self.db
                     .update_state_if(
-                        record.req_id,
+                        record.transfer_id,
                         TransferState::SourcePending,
                         TransferState::SourceDone,
                     )
@@ -270,7 +275,7 @@ impl TransferCoordinator {
             OpResult::Failed(e) => {
                 self.db
                     .update_state_with_error(
-                        record.req_id,
+                        record.transfer_id,
                         TransferState::SourcePending,
                         TransferState::Failed,
                         &e,
@@ -295,20 +300,22 @@ impl TransferCoordinator {
         if !self
             .db
             .update_state_if(
-                record.req_id,
+                record.transfer_id,
                 TransferState::SourceDone,
                 TransferState::TargetPending,
             )
             .await?
         {
-            return match self.db.get(record.req_id).await? {
+            return match self.db.get(record.transfer_id).await? {
                 Some(r) => Ok(r.state),
                 None => {
                     error!(
-                        req_id = %record.req_id,
+                        transfer_id = %record.transfer_id,
                         "Transfer not found after CAS failure"
                     );
-                    Err(TransferError::TransferNotFound(record.req_id.to_string()))
+                    Err(TransferError::TransferNotFound(
+                        record.transfer_id.to_string(),
+                    ))
                 }
             };
         }
@@ -316,7 +323,7 @@ impl TransferCoordinator {
         // 2. Call target deposit
         let result = target
             .deposit(
-                record.req_id,
+                record.transfer_id,
                 record.user_id,
                 record.asset_id,
                 record.amount,
@@ -333,13 +340,13 @@ impl TransferCoordinator {
 
                 self.db
                     .update_state_if(
-                        record.req_id,
+                        record.transfer_id,
                         TransferState::TargetPending,
                         TransferState::Committed,
                     )
                     .await?;
 
-                info!(req_id = %record.req_id, "🔒 ATOMIC COMMIT SUCCESS");
+                info!(transfer_id = %record.transfer_id, "🔒 ATOMIC COMMIT SUCCESS");
                 Ok(TransferState::Committed)
             }
             OpResult::Failed(e) => {
@@ -349,7 +356,7 @@ impl TransferCoordinator {
                     // Trading withdrawals are immediately final.
                     // We MUST keep retrying target until it succeeds.
                     error!(
-                        req_id = %record.req_id,
+                        transfer_id = %record.transfer_id,
                         error = %e,
                         "Target deposit failed but source is Trading (cannot rollback)! \
                          Staying in TargetPending to retry."
@@ -360,7 +367,7 @@ impl TransferCoordinator {
                     // Source is Funding (can be rolled back)
                     self.db
                         .update_state_with_error(
-                            record.req_id,
+                            record.transfer_id,
                             TransferState::TargetPending,
                             TransferState::Compensating,
                             &e,
@@ -385,7 +392,7 @@ impl TransferCoordinator {
     ) -> Result<TransferState, TransferError> {
         let result = target
             .deposit(
-                record.req_id,
+                record.transfer_id,
                 record.user_id,
                 record.asset_id,
                 record.amount,
@@ -399,20 +406,20 @@ impl TransferCoordinator {
 
                 self.db
                     .update_state_if(
-                        record.req_id,
+                        record.transfer_id,
                         TransferState::TargetPending,
                         TransferState::Committed,
                     )
                     .await?;
 
-                info!(req_id = %record.req_id, "🔒 ATOMIC COMMIT SUCCESS");
+                info!(transfer_id = %record.transfer_id, "🔒 ATOMIC COMMIT SUCCESS");
                 Ok(TransferState::Committed)
             }
             OpResult::Failed(e) => {
                 // CRITICAL check: Trading source CANNOT be rolled back
                 if record.source == ServiceId::Trading {
                     error!(
-                        req_id = %record.req_id,
+                        transfer_id = %record.transfer_id,
                         error = %e,
                         "Target failed but Trading source cannot rollback! Infinite retry."
                     );
@@ -420,7 +427,7 @@ impl TransferCoordinator {
                 } else {
                     self.db
                         .update_state_with_error(
-                            record.req_id,
+                            record.transfer_id,
                             TransferState::TargetPending,
                             TransferState::Compensating,
                             &e,
@@ -439,25 +446,25 @@ impl TransferCoordinator {
         record: &TransferRecord,
         source: &dyn ServiceAdapter,
     ) -> Result<TransferState, TransferError> {
-        let result = source.rollback(record.req_id).await;
+        let result = source.rollback(record.transfer_id).await;
 
         match result {
             OpResult::Success => {
                 self.db
                     .update_state_if(
-                        record.req_id,
+                        record.transfer_id,
                         TransferState::Compensating,
                         TransferState::RolledBack,
                     )
                     .await?;
 
-                info!(req_id = %record.req_id, "Transfer rolled back");
+                info!(transfer_id = %record.transfer_id, "Transfer rolled back");
                 Ok(TransferState::RolledBack)
             }
             OpResult::Failed(e) => {
                 // Rollback failed - stay in Compensating, keep retrying
                 warn!(
-                    req_id = %record.req_id,
+                    transfer_id = %record.transfer_id,
                     error = %e,
                     "Rollback failed (will retry)"
                 );
@@ -469,10 +476,10 @@ impl TransferCoordinator {
 
     /// Helper: Finalize source commit after target success
     async fn finalize_source_commit(&self, record: &TransferRecord, source: &dyn ServiceAdapter) {
-        let commit_result = source.commit(record.req_id).await;
+        let commit_result = source.commit(record.transfer_id).await;
         if let OpResult::Failed(e) = &commit_result {
             warn!(
-                req_id = %record.req_id,
+                transfer_id = %record.transfer_id,
                 error = %e,
                 "Source commit failed (target already received funds)"
             );
@@ -483,17 +490,17 @@ impl TransferCoordinator {
     /// Get current state of a transfer
     pub async fn get_state(
         &self,
-        req_id: InternalTransferId,
+        transfer_id: InternalTransferId,
     ) -> Result<Option<TransferState>, TransferError> {
-        Ok(self.db.get(req_id).await?.map(|r| r.state))
+        Ok(self.db.get(transfer_id).await?.map(|r| r.state))
     }
 
     /// Get full transfer record
     pub async fn get(
         &self,
-        req_id: InternalTransferId,
+        transfer_id: InternalTransferId,
     ) -> Result<Option<TransferRecord>, TransferError> {
-        self.db.get(req_id).await
+        self.db.get(transfer_id).await
     }
 
     /// Access to DB for recovery worker

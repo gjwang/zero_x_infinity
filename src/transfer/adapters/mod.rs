@@ -1,7 +1,7 @@
 //! Service Adapters
 //!
 //! Adapters for interacting with different balance services (Funding, Trading).
-//! All adapters must be idempotent using req_id.
+//! All adapters must be idempotent using transfer_id.
 
 pub mod funding;
 pub mod trading;
@@ -16,7 +16,7 @@ use super::types::{InternalTransferId, OpResult};
 
 /// Service adapter trait for balance operations
 ///
-/// All methods MUST be idempotent - calling with the same req_id multiple times
+/// All methods MUST be idempotent - calling with the same transfer_id multiple times
 /// must have the same effect as calling once.
 #[async_trait]
 pub trait ServiceAdapter: Send + Sync {
@@ -26,10 +26,10 @@ pub trait ServiceAdapter: Send + Sync {
     /// Withdraw funds from this service (debit)
     ///
     /// # Idempotency
-    /// If already processed with this req_id, return the original result.
+    /// If already processed with this transfer_id, return the original result.
     async fn withdraw(
         &self,
-        req_id: InternalTransferId,
+        transfer_id: InternalTransferId,
         user_id: u64,
         asset_id: u32,
         amount: u64,
@@ -38,10 +38,10 @@ pub trait ServiceAdapter: Send + Sync {
     /// Deposit funds to this service (credit)
     ///
     /// # Idempotency
-    /// If already processed with this req_id, return the original result.
+    /// If already processed with this transfer_id, return the original result.
     async fn deposit(
         &self,
-        req_id: InternalTransferId,
+        transfer_id: InternalTransferId,
         user_id: u64,
         asset_id: u32,
         amount: u64,
@@ -50,12 +50,12 @@ pub trait ServiceAdapter: Send + Sync {
     /// Rollback a previous withdraw (refund)
     ///
     /// Only called during compensation phase when target deposit fails.
-    async fn rollback(&self, req_id: InternalTransferId) -> OpResult;
+    async fn rollback(&self, transfer_id: InternalTransferId) -> OpResult;
 
     /// Commit/finalize a transfer (cleanup any locks)
     ///
     /// Called after target deposit succeeds to release any holds.
-    async fn commit(&self, req_id: InternalTransferId) -> OpResult;
+    async fn commit(&self, transfer_id: InternalTransferId) -> OpResult;
 }
 
 /// Mock adapter for testing
@@ -127,7 +127,7 @@ pub mod mock {
 
         async fn withdraw(
             &self,
-            req_id: InternalTransferId,
+            transfer_id: InternalTransferId,
             _user_id: u64,
             _asset_id: u32,
             _amount: u64,
@@ -135,7 +135,9 @@ pub mod mock {
             self.withdraw_count.fetch_add(1, Ordering::SeqCst);
 
             let mut ops = self.operations.lock().unwrap();
-            ops.entry(req_id).or_default().push("withdraw".to_string());
+            ops.entry(transfer_id)
+                .or_default()
+                .push("withdraw".to_string());
 
             if *self.fail_withdraw.lock().unwrap() {
                 OpResult::Failed("Mock withdraw failure".to_string())
@@ -146,7 +148,7 @@ pub mod mock {
 
         async fn deposit(
             &self,
-            req_id: InternalTransferId,
+            transfer_id: InternalTransferId,
             _user_id: u64,
             _asset_id: u32,
             _amount: u64,
@@ -154,7 +156,9 @@ pub mod mock {
             self.deposit_count.fetch_add(1, Ordering::SeqCst);
 
             let mut ops = self.operations.lock().unwrap();
-            ops.entry(req_id).or_default().push("deposit".to_string());
+            ops.entry(transfer_id)
+                .or_default()
+                .push("deposit".to_string());
 
             if *self.pending_deposit.lock().unwrap() {
                 OpResult::Pending
@@ -165,18 +169,22 @@ pub mod mock {
             }
         }
 
-        async fn rollback(&self, req_id: InternalTransferId) -> OpResult {
+        async fn rollback(&self, transfer_id: InternalTransferId) -> OpResult {
             self.rollback_count.fetch_add(1, Ordering::SeqCst);
 
             let mut ops = self.operations.lock().unwrap();
-            ops.entry(req_id).or_default().push("rollback".to_string());
+            ops.entry(transfer_id)
+                .or_default()
+                .push("rollback".to_string());
 
             OpResult::Success
         }
 
-        async fn commit(&self, req_id: InternalTransferId) -> OpResult {
+        async fn commit(&self, transfer_id: InternalTransferId) -> OpResult {
             let mut ops = self.operations.lock().unwrap();
-            ops.entry(req_id).or_default().push("commit".to_string());
+            ops.entry(transfer_id)
+                .or_default()
+                .push("commit".to_string());
 
             OpResult::Success
         }

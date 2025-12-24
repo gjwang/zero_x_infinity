@@ -61,11 +61,11 @@ mod integration_tests {
         );
 
         // Create transfer
-        let req_id = harness.coordinator.create(req).await.unwrap();
+        let transfer_id = harness.coordinator.create(req).await.unwrap();
         // InternalTransferId is ULID, no comparison to 0 needed
 
         // Execute to completion
-        let final_state = harness.coordinator.execute(req_id).await.unwrap();
+        let final_state = harness.coordinator.execute(transfer_id).await.unwrap();
         assert_eq!(final_state, TransferState::Committed);
 
         // Verify adapter calls
@@ -88,8 +88,8 @@ mod integration_tests {
             50_000_000, // 0.5 BTC
         );
 
-        let req_id = harness.coordinator.create(req).await.unwrap();
-        let final_state = harness.coordinator.execute(req_id).await.unwrap();
+        let transfer_id = harness.coordinator.create(req).await.unwrap();
+        let final_state = harness.coordinator.execute(transfer_id).await.unwrap();
 
         assert_eq!(final_state, TransferState::Committed);
         assert_eq!(harness.trading.withdraw_count(), 1);
@@ -113,8 +113,8 @@ mod integration_tests {
         let req =
             TransferRequest::new(ServiceId::Funding, ServiceId::Trading, 1001, 1, 100_000_000);
 
-        let req_id = harness.coordinator.create(req).await.unwrap();
-        let final_state = harness.coordinator.execute(req_id).await.unwrap();
+        let transfer_id = harness.coordinator.create(req).await.unwrap();
+        let final_state = harness.coordinator.execute(transfer_id).await.unwrap();
 
         assert_eq!(final_state, TransferState::Failed);
 
@@ -143,8 +143,8 @@ mod integration_tests {
             100_000_000,
         );
 
-        let req_id = harness.coordinator.create(req).await.unwrap();
-        let final_state = harness.coordinator.execute(req_id).await.unwrap();
+        let transfer_id = harness.coordinator.create(req).await.unwrap();
+        let final_state = harness.coordinator.execute(transfer_id).await.unwrap();
 
         // Should rollback since source is Funding
         assert_eq!(final_state, TransferState::RolledBack);
@@ -173,12 +173,12 @@ mod integration_tests {
             100_000_000,
         );
 
-        let req_id = harness.coordinator.create(req).await.unwrap();
+        let transfer_id = harness.coordinator.create(req).await.unwrap();
 
         // Step manually to observe behavior (execute would loop forever)
-        let _ = harness.coordinator.step(req_id).await.unwrap(); // INIT → SOURCE_PENDING
-        let _ = harness.coordinator.step(req_id).await.unwrap(); // SOURCE_PENDING → SOURCE_DONE
-        let state = harness.coordinator.step(req_id).await.unwrap(); // Try target deposit → stays TARGET_PENDING
+        let _ = harness.coordinator.step(transfer_id).await.unwrap(); // INIT → SOURCE_PENDING
+        let _ = harness.coordinator.step(transfer_id).await.unwrap(); // SOURCE_PENDING → SOURCE_DONE
+        let state = harness.coordinator.step(transfer_id).await.unwrap(); // Try target deposit → stays TARGET_PENDING
 
         // Should stay in TARGET_PENDING (not compensating!)
         assert_eq!(state, TransferState::TargetPending);
@@ -191,7 +191,7 @@ mod integration_tests {
     // Idempotency Tests
     // ========================================================================
 
-    /// Test: Duplicate cid returns same req_id (idempotent create)
+    /// Test: Duplicate cid returns same transfer_id (idempotent create)
     #[tokio::test]
     #[ignore = "requires PostgreSQL database"]
     async fn test_duplicate_cid_idempotent() {
@@ -207,9 +207,9 @@ mod integration_tests {
             "client-idempotency-key-123".to_string(),
         );
 
-        let req_id1 = harness.coordinator.create(req1).await.unwrap();
+        let transfer_id1 = harness.coordinator.create(req1).await.unwrap();
 
-        // Second request with same cid should return same req_id
+        // Second request with same cid should return same transfer_id
         let req2 = TransferRequest::with_cid(
             ServiceId::Funding,
             ServiceId::Trading,
@@ -219,9 +219,9 @@ mod integration_tests {
             "client-idempotency-key-123".to_string(),
         );
 
-        let req_id2 = harness.coordinator.create(req2).await.unwrap();
+        let transfer_id2 = harness.coordinator.create(req2).await.unwrap();
 
-        assert_eq!(req_id1, req_id2);
+        assert_eq!(transfer_id1, transfer_id2);
     }
 
     // ========================================================================
