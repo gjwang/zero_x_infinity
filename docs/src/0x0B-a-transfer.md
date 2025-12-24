@@ -10,6 +10,8 @@
 
 ## 🇺🇸 English
 
+> **📦 Code Changes**: [View Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.9-f-integration-test...v0.0B-a)
+
 ---
 
 ## 1. Problem Statement
@@ -974,6 +976,8 @@ function withdraw(req_id, user_id, asset_id, amount):
 <div id="-chinese"></div>
 
 ## 🇨🇳 中文
+
+> **📦 代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.9-f-integration-test...v0.0B-a)
 
 ---
 
