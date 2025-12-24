@@ -153,6 +153,19 @@ services:
 - 本地跑测试前，始终观察脚本输出的 `Initialize database (reset + seed)` 步骤是否成功。
 - 在怀疑数据问题时，使用 `docker exec -it postgres psql -U trading -d exchange_info_db` 手动核查，或强制执行 `python3 scripts/db/manage_db.py init`。
 
+### 3. 工具链一致性 (Toolchain Parity)
+
+#### 问题描述
+- **Clippy 规则变迁**：Rust 不同版本（甚至是不同的稳定版）可能会引入新的 Clippy Lint 规则。例如 Rust 1.83+ 对 `Command::args()` 引入了不必要的引用检查。
+- **差异化崩溃**：如果本地使用旧版 Rust 而 CI 使用最新版，会导致本地通过的 Lint 检查在 CI 中报错，破坏流水线。
+
+#### 解决方案
+- **锁定版本**：项目根目录已添加 [`rust-toolchain.toml`](file:///Users/gjwang/eclipse-workspace/rust_source/zero_x_infinity_test/rust-toolchain.toml)，强制锁定 Rust 版本为 **`1.83.0`**。
+- **环境对齐**：
+  - 本地运行 `cargo` 命令时，Rustup 会自动切换到指定版本。
+  - CI 脚本 ([`ci.yml`](file:///Users/gjwang/eclipse-workspace/rust_source/zero_x_infinity_test/.github/workflows/ci.yml)) 显式指定了 `toolchain: 1.83.0`。
+- **处理建议**：如果遇到编译器或 Lint 相关的报错在本地复现不了，请检查本地 `rustc --version` 是否为 `1.83.0`。如果发生大版本升级需求，必须同步更新 `.toml` 和 `.yml` 文件。
+
 ---
 
-*最后更新：2025-12-23*
+*最后更新：2024-12-24*

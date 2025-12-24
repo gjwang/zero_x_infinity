@@ -2,7 +2,7 @@ use std::process::Command;
 
 fn main() {
     let output = Command::new("git")
-        .args(&["rev-parse", "--short", "HEAD"])
+        .args(["rev-parse", "--short", "HEAD"])
         .output()
         .ok();
 
@@ -11,7 +11,7 @@ fn main() {
             let hash = String::from_utf8_lossy(&o.stdout).trim().to_string();
             // Check for dirty state
             let dirty = Command::new("git")
-                .args(&["diff", "--quiet"])
+                .args(["diff", "--quiet"])
                 .output()
                 .map(|o| !o.status.success())
                 .unwrap_or(false);
