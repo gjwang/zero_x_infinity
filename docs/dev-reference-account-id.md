@@ -66,3 +66,27 @@ TAGS (user_id BIGINT, account_type TINYINT);
 
 - [ ] Rename `balances_tb` → `funding_balances_tb` for clarity
 - [ ] Add `account_type` column to distinguish in queries
+
+---
+
+## 💡 Future Consideration: System ID Range
+
+**Current**: System IDs use 0-1000, users start at 1001.
+
+**Problem**: Test data might accidentally use 1, 2, 3... which conflicts with system IDs.
+
+**Alternative**: Use `u64::MAX` downward for system accounts:
+```rust
+const REVENUE_ID: u64 = u64::MAX;        // 18446744073709551615
+const INSURANCE_ID: u64 = u64::MAX - 1;  // 18446744073709551614
+const SYSTEM_MIN: u64 = u64::MAX - 1000; // Boundary
+
+fn is_system_account(user_id: u64) -> bool {
+    user_id > SYSTEM_MIN
+}
+```
+
+**Benefits**:
+- ✅ Users can start from 1, more natural
+- ✅ Test data never conflicts with system IDs
+- ✅ Clear separation: low = users, high = system
