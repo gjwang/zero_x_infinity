@@ -1,8 +1,8 @@
 # 0x0D Service-Level WAL & Snapshot Design
 
-> **Status**: 📋 DRAFT  
+> **Status**: ✅ APPROVED  
 > **Author**: Architect Team  
-> **Date**: 2024-12-25  
+> **Date**: 2024-12-25 (Merged: 2025-12-26)  
 > **Parent**: [0x0D WAL Rotation Design](./0x0D-wal-rotation-design.md)
 
 ---
