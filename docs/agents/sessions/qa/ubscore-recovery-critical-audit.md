@@ -3,7 +3,7 @@
 > **Severity**: 🔴 **CRITICAL** (Production Blocking)  
 > **Date**: 2025-12-26  
 > **Auditor**: AI QA Engineer  
-> **Status**: ✅ **INDEPENDENTLY VERIFIED**
+> **Status**: ⚠️ **RE-VERIFICATION: STILL FAILING**
 
 ---
 
@@ -11,15 +11,25 @@
 
 UBSCore is the **Single Source of Truth for Balances**. 
 
-### 🔴 VERIFIED VIA INDEPENDENT TESTING
+### 🔴 RE-VERIFICATION (Post Developer Fix)
 
-| Finding | Test Method | Result |
-|---------|-------------|--------|
-| **No UBSCore WAL at Runtime** | `audit_ubscore_adversarial.sh` | ⚠️ CONFIRMED |
-| **Balance State Lost on Crash** | SIGKILL + Restart | ⚠️ CONFIRMED |
-| **No Config Option** | `grep ubscore_persistence config.rs` | ⚠️ CONFIRMED |
+| Finding | Before Fix | After Fix | Status |
+|---------|------------|-----------|--------|
+| `ubscore_persistence` config | ❌ Missing | ✅ Added | FIXED |
+| UBSCore WAL at runtime | ❌ None | ❌ **Still None** | 🔴 FAIL |
+| Persistence LOG | ❌ No log | ❌ **No log** | 🔴 FAIL |
+| `./data/audit_ubscore/` | ❌ Empty | ❌ **Still Empty** | 🔴 FAIL |
 
-**Consequence**: After a crash, **ALL FROZEN BALANCES ARE LOST**. Orders in Matching Engine may still exist, but funds are not locked → **DOUBLE SPEND RISK**.
+### Evidence from Logs
+
+```
+[Persistence] Disabled
+[ME] Persistence enabled: dir=./data/audit_ubscore_me  ✅
+[Settlement] Persistence enabled: ...                   ✅
+# NO "[UBSCore] Persistence enabled" LOG!               ❌
+```
+
+**Conclusion**: Config option added but **code path not wired**. UBSCore persistence initialization is NOT being called.
 
 ---
 
