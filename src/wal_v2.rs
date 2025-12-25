@@ -34,27 +34,33 @@ pub const WAL_HEADER_SIZE: usize = 20;
 // WAL HEADER (20 bytes)
 // ============================================================
 
-/// Universal WAL header (20 bytes, naturally aligned)
+/// Universal WAL header
 ///
-/// Field order is optimized for natural alignment (no padding):
-/// - seq_id (u64) = 8 bytes (8-byte aligned)
-/// - epoch (u32) + checksum (u32) = 8 bytes (4-byte aligned)  
-/// - payload_len (u16) + entry_type (u8) + version (u8) = 4 bytes
-/// Total = 20 bytes with #[repr(C, packed)]
-#[repr(C, packed)]
+/// **In-memory struct** uses natural Rust alignment (may be > 20 bytes).
+/// **Wire format** is exactly 20 bytes, defined by `to_bytes()`/`from_bytes()`.
+///
+/// Wire format layout (20 bytes):
+/// ```text
+/// [0..8]   seq_id      u64 LE
+/// [8..12]  epoch       u32 LE  
+/// [12..16] checksum    u32 LE
+/// [16..18] payload_len u16 LE
+/// [18]     entry_type  u8
+/// [19]     version     u8
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WalHeader {
-    /// Monotonic sequence within EPOCH (8 bytes)
+    /// Monotonic sequence within EPOCH
     pub seq_id: u64,
-    /// EPOCH number (increments on recovery from gap) (4 bytes)
+    /// EPOCH number (increments on recovery from gap)
     pub epoch: u32,
-    /// CRC32 checksum of payload (4 bytes)
+    /// CRC32 checksum of payload
     pub checksum: u32,
-    /// Payload size in bytes (max 64KB) (2 bytes)
+    /// Payload size in bytes (max 64KB)
     pub payload_len: u16,
-    /// Entry type (see WalEntryType enum) (1 byte)
+    /// Entry type (see WalEntryType enum)
     pub entry_type: u8,
-    /// Payload format version (0-255) (1 byte)
+    /// Payload format version (0-255)
     pub version: u8,
 }
 
@@ -329,15 +335,22 @@ mod tests {
     use std::io::Cursor;
 
     // --------------------------------------------------------
-    // TDD Test 1: Header size must be exactly 20 bytes
+    // TDD Test 1: Wire format must be exactly 20 bytes
     // --------------------------------------------------------
     #[test]
     fn test_wal_header_size_20_bytes() {
+        // Wire format size (what goes on disk) must be exactly 20 bytes
+        let payload = b"test";
+        let header = WalHeader::new(WalEntryType::Order, 1, 1, payload);
+        let bytes = header.to_bytes();
         assert_eq!(
-            std::mem::size_of::<WalHeader>(),
+            bytes.len(),
             WAL_HEADER_SIZE,
-            "WalHeader must be exactly 20 bytes"
+            "WalHeader wire format must be exactly 20 bytes"
         );
+
+        // Also verify WAL_HEADER_SIZE constant
+        assert_eq!(WAL_HEADER_SIZE, 20);
     }
 
     // --------------------------------------------------------
