@@ -30,5 +30,8 @@ jobs:
       - name: Run tests
         run: cargo test
       
+      - name: WAL v2 E2E Test (Phase 0x0D)
+        run: ./scripts/test_wal_v2_e2e.sh
+
       - name: Clippy
         run: cargo clippy -- -D warnings -A clippy::too_many_arguments -A clippy::collapsible_if -A clippy::unwrap_or_default -A clippy::doc_lazy_continuation -A clippy::manual_is_multiple_of -A clippy::implicit_saturating_sub -A clippy::redundant_pattern_matching -A clippy::derivable_impls
