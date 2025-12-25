@@ -244,7 +244,7 @@ funding_change = funding_after - funding_before
 # Check funding change
 if abs(funding_change - expected_funding_change) < 0.01:
     print(f"    ✓ Funding: {funding_before:.2f} → {funding_after:.2f} (Δ{funding_change:+.2f})")
-    tests_failed += 1
+    tests_passed += 1
 
 # ============================================================
 # P0 ERROR HANDLING TESTS
