@@ -7,7 +7,53 @@
 
 ---
 
-## 1. Design Goals
+## 1. Architecture Principles (Producer-Consumer WAL Model)
+
+### 1.1 核心原则
+
+**生产者写 WAL，消费者按需重放**
+
+```
+┌──────────────┐                     ┌──────────────┐                    
+│   UBSCore    │                     │   Matching   │                    
+│  (唯一源)    │                     │   Engine     │                    
+│              │                     │              │                    
+│  Order WAL   │  ──重放请求───▶     │  (不写 Order │                    
+│  (必须写)    │  ◀───重放───        │   WAL)       │                    
+│              │                     │              │                    
+│  BalanceEvent│                     │  Trade WAL   │                    
+│  WAL (可选)  │──▶下游重放          │  (可选)      │──▶ Settlement      
+└──────────────┘                     └──────────────┘    (可请求重放)    
+```
+
+### 1.2 WAL 职责划分
+
+| 服务 | WAL 类型 | 必须/可选 | 用途 |
+|------|----------|-----------|------|
+| **UBSCore** | Order WAL | **必须** | 唯一源 (SSOT)，全系统恢复起点 |
+| **UBSCore** | BalanceEvent WAL | 可选 | 下游重启后请求重放 |
+| **Matching** | Order WAL | ❌ 不写 | 从 UBSCore 请求重放 |
+| **Matching** | Trade WAL | 可选 | 下游 (Settlement) 请求重放 |
+| **Settlement** | 输入 WAL | ❌ 不写 | 从 ME 请求重放 |
+| **Settlement** | 状态 WAL | 可选 | 记录 last_processed_seq |
+
+### 1.3 恢复流程
+
+```
+ME 重启：
+  1. 读取最后处理的 order_seq
+  2. 向 UBSCore 请求: "从 seq=X 开始重放 Order WAL"
+  3. 重建 OrderBook 状态
+
+Settlement 重启：
+  1. 读取 last_processed_trade_seq
+  2. 向 ME 请求: "从 trade_seq=Y 开始重放 Trade WAL"
+  3. 继续结算流程
+```
+
+---
+
+## 2. Design Goals
 
 | 目标 | 说明 |
 |------|------|
@@ -18,7 +64,7 @@
 
 ---
 
-## 2. WAL 文件命名
+## 3. WAL 文件命名
 
 ```
 {service_data_dir}/wal/
@@ -34,9 +80,9 @@
 
 ---
 
-## 3. Rotation 触发策略
+## 4. Rotation 触发策略
 
-### 3.1 主要触发条件
+### 4.1 主要触发条件
 
 ```rust
 pub struct RotationConfig {
@@ -54,7 +100,7 @@ pub struct RotationConfig {
 }
 ```
 
-### 3.2 触发判断
+### 4.2 触发判断
 
 ```rust
 fn should_rotate(&self) -> bool {
@@ -66,7 +112,7 @@ fn should_rotate(&self) -> bool {
 
 ---
 
-## 4. Rotation 流程
+## 5. Rotation 流程
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -118,9 +164,9 @@ pub fn rotate(&mut self) -> io::Result<PathBuf> {
 
 ---
 
-## 5. 与 Snapshot 协同
+## 6. 与 Snapshot 协同
 
-### 5.1 Snapshot 时强制 Rotate
+### 6.1 Snapshot 时强制 Rotate
 
 ```
 Before Snapshot:
@@ -141,7 +187,7 @@ After Snapshot:
       └── latest → snapshot-250/
 ```
 
-### 5.2 恢复时只需
+### 6.2 恢复时只需
 
 ```rust
 fn recover() {
@@ -153,7 +199,7 @@ fn recover() {
 
 ---
 
-## 6. 保留策略
+## 7. 保留策略
 
 ```rust
 pub struct RetentionConfig {
@@ -193,7 +239,7 @@ fn cleanup_old_wal_files(&mut self) -> io::Result<()> {
 
 ---
 
-## 7. 默认配置建议
+## 8. 默认配置建议
 
 | 场景 | max_file_size | max_duration | max_entries |
 |------|---------------|--------------|-------------|
@@ -203,7 +249,7 @@ fn cleanup_old_wal_files(&mut self) -> io::Result<()> {
 
 ---
 
-## 8. 服务隔离存储（必须）
+## 9. 服务隔离存储（必须）
 
 `data/` 是公共可配置的根目录，每个服务在其下创建自己的子目录：
 
@@ -232,7 +278,7 @@ data/                              # 公共根目录 (可配置)
         └── ...
 ```
 
-### 8.1 配置
+### 9.1 配置
 
 ```yaml
 # 全局配置
@@ -243,7 +289,7 @@ data:
 # 例如: /var/lib/zero_x/data/ubscore-service/
 ```
 
-### 8.2 代码
+### 9.2 代码
 
 ```rust
 pub struct ServiceConfig {
@@ -262,7 +308,7 @@ impl ServiceConfig {
 }
 ```
 
-### 8.3 服务与数据归档策略
+### 9.3 服务与数据归档策略
 
 | 服务 | Entry Types | 归档策略 |
 |------|-------------|----------|

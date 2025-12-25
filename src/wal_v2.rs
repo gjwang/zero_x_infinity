@@ -1,12 +1,12 @@
 //! Universal WAL Format v2 (Phase 0x0D)
 //!
 //! A type-extensible, binary WAL format with:
-//! - 20-byte naturally aligned header
+//! - 20-byte header (wire format)
 //! - CRC32 checksum for integrity
 //! - Epoch-based gap recovery
 //! - bincode serialization for payloads
 //!
-//! # Header Layout (20 bytes)
+//! # Header Wire Format (20 bytes)
 //!
 //! ```text
 //! ┌────────────┬───────────┬────────────────────────────────────┐
@@ -41,12 +41,12 @@ pub const WAL_HEADER_SIZE: usize = 20;
 ///
 /// Wire format layout (20 bytes):
 /// ```text
-/// [0..8]   seq_id      u64 LE
-/// [8..12]  epoch       u32 LE  
-/// [12..16] checksum    u32 LE
-/// [16..18] payload_len u16 LE
-/// [18]     entry_type  u8
-/// [19]     version     u8
+/// [0..2]   payload_len u16 LE
+/// [2]      entry_type  u8
+/// [3]      version     u8
+/// [4..8]   epoch       u32 LE
+/// [8..16]  seq_id      u64 LE
+/// [16..20] checksum    u32 LE
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WalHeader {
@@ -653,7 +653,8 @@ mod tests {
             );
         }
 
-        // Clean up
-        let _ = fs::remove_file(&test_path);
+        // Note: Keep WAL file for Python E2E verification (verify_wal.py)
+        // Clean up happens when test runs again or manually
+        // let _ = fs::remove_file(&test_path);
     }
 }
