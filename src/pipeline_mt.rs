@@ -97,6 +97,7 @@ pub struct MarketContext {
 /// - Thread 4: Settlement (Persist Trade/Order/Ledger)
 ///
 /// Fan-out: ME sends Trade Events to both Settlement and UBSCore in parallel.
+#[allow(clippy::too_many_arguments)]
 pub fn run_pipeline_multi_thread(
     orders: Vec<InputOrder>,
     services: MultiThreadServices,
@@ -107,6 +108,8 @@ pub fn run_pipeline_multi_thread(
     db_client: Option<Arc<crate::persistence::TDengineClient>>,
     // Optional: Internal transfer channel (Phase 0x0B-a)
     transfer_receiver: Option<TransferReceiver>,
+    // Optional: Matching Service Persistence Config (Phase 0x0D)
+    matching_persistence_config: Option<crate::config::MatchingPersistenceConfig>,
 ) -> MultiThreadPipelineResult {
     tracing::info!(
         "[TRACE] Starting Multi-Thread Pipeline with {} orders...",
@@ -174,13 +177,59 @@ pub fn run_pipeline_multi_thread(
     };
 
     let t3_me = {
-        let mut service = crate::pipeline_services::MatchingService::new(
-            services.book,
-            queues.clone(),
-            stats.clone(),
-            market,
-            100, // depth_update_interval_ms: 100ms
-        );
+        // Phase 0x0D: Conditionally enable persistence based on config
+        let mut service = if let Some(ref mp_config) = matching_persistence_config {
+            if mp_config.enabled {
+                tracing::info!(
+                    "[ME] Persistence enabled: dir={}, snapshot_interval={}",
+                    mp_config.data_dir,
+                    mp_config.snapshot_interval_trades
+                );
+
+                match crate::pipeline_services::MatchingService::new_with_persistence(
+                    &mp_config.data_dir,
+                    queues.clone(),
+                    stats.clone(),
+                    market,
+                    100, // depth_update_interval_ms: 100ms
+                    mp_config.snapshot_interval_trades,
+                ) {
+                    Ok(svc) => {
+                        tracing::info!("[ME] Persistence initialized successfully");
+                        svc
+                    }
+                    Err(e) => {
+                        tracing::error!("[ME] Failed to initialize persistence: {}", e);
+                        tracing::warn!("[ME] Falling back to non-persistent mode");
+                        crate::pipeline_services::MatchingService::new(
+                            services.book,
+                            queues.clone(),
+                            stats.clone(),
+                            market,
+                            100,
+                        )
+                    }
+                }
+            } else {
+                tracing::info!("[ME] Persistence disabled by config");
+                crate::pipeline_services::MatchingService::new(
+                    services.book,
+                    queues.clone(),
+                    stats.clone(),
+                    market,
+                    100,
+                )
+            }
+        } else {
+            tracing::info!("[ME] No persistence config provided");
+            crate::pipeline_services::MatchingService::new(
+                services.book,
+                queues.clone(),
+                stats.clone(),
+                market,
+                100,
+            )
+        };
         let s = shutdown.clone();
         thread::spawn(move || {
             service.run(&s);
