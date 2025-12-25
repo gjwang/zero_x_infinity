@@ -27,7 +27,7 @@ pub enum OrderType {
 /// one of these terminal states (never disappear or become unknown).
 ///
 /// Reference: Binance API order status enums (SCREAMING_CASE for API compatibility)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[allow(clippy::upper_case_acronyms)]
 #[allow(non_camel_case_types)]
 pub enum OrderStatus {
@@ -51,7 +51,7 @@ pub enum OrderStatus {
 ///
 /// "Internal" = trusted, from Gateway (already validated and scaled)
 /// price and qty are raw u64 (already scaled by Gateway)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InternalOrder {
     pub order_id: OrderId,
     pub user_id: UserId,
