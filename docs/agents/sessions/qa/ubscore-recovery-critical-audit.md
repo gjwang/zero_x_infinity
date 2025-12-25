@@ -2,17 +2,24 @@
 
 > **Severity**: 🔴 **CRITICAL** (Production Blocking)  
 > **Date**: 2025-12-26  
-> **Auditor**: AI QA Engineer
+> **Auditor**: AI QA Engineer  
+> **Status**: ✅ **INDEPENDENTLY VERIFIED**
 
 ---
 
 ## TL;DR
 
-UBSCore is the **Single Source of Truth for Balances**. A failure to recover correctly can result in:
-- **Double Spend** - If balance state is lost after successful WAL updates
-- **User Fund Loss** - If deposits in WAL are not replayed after snapshot corruption
+UBSCore is the **Single Source of Truth for Balances**. 
 
-The current `UBSCoreRecovery` implementation has **critical gaps** compared to the architectural specification and the `SettlementRecovery` implementation.
+### 🔴 VERIFIED VIA INDEPENDENT TESTING
+
+| Finding | Test Method | Result |
+|---------|-------------|--------|
+| **No UBSCore WAL at Runtime** | `audit_ubscore_adversarial.sh` | ⚠️ CONFIRMED |
+| **Balance State Lost on Crash** | SIGKILL + Restart | ⚠️ CONFIRMED |
+| **No Config Option** | `grep ubscore_persistence config.rs` | ⚠️ CONFIRMED |
+
+**Consequence**: After a crash, **ALL FROZEN BALANCES ARE LOST**. Orders in Matching Engine may still exist, but funds are not locked → **DOUBLE SPEND RISK**.
 
 ---
 
