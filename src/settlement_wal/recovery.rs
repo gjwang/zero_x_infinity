@@ -71,7 +71,7 @@ impl SettlementRecovery {
     /// - `Err` if snapshot/WAL is corrupted
     pub fn recover(&self) -> io::Result<RecoveryResult> {
         let snapshot_dir = self.data_dir.join("snapshots");
-        let wal_path = self.data_dir.join("wal").join("checkpoint.wal");
+        let wal_path = self.data_dir.join("wal").join("current.wal");
 
         // 1. Try to load latest snapshot
         let snapshotter = SettlementSnapshotter::new(&snapshot_dir);
@@ -227,7 +227,7 @@ mod tests {
         // Create WAL with newer checkpoint at 7000
         let wal_dir = dir.join("wal");
         fs::create_dir_all(&wal_dir).unwrap();
-        let wal_path = wal_dir.join("checkpoint.wal");
+        let wal_path = wal_dir.join("current.wal");
         {
             let mut writer = SettlementWalWriter::new(&wal_path, 1, 1).unwrap();
             writer.append_checkpoint(6000).unwrap();
