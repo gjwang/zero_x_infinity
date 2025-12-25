@@ -940,8 +940,10 @@ pub struct SettlementService {
     symbol_id: u32,
     symbol_mgr: Arc<crate::symbol_manager::SymbolManager>,
     // Phase 0x0D Persistence (optional)
-    #[allow(dead_code)]
     persistence_config: Option<SettlementPersistenceConfig>,
+    wal_writer: Option<Arc<std::sync::Mutex<crate::settlement_wal::wal::SettlementWalWriter>>>,
+    snapshotter: Option<Arc<crate::settlement_wal::snapshot::SettlementSnapshotter>>,
+    last_trade_id_shared: Arc<std::sync::atomic::AtomicU64>,
 }
 
 /// Settlement persistence configuration
@@ -974,6 +976,9 @@ impl SettlementService {
             symbol_id,
             symbol_mgr,
             persistence_config: None,
+            wal_writer: None,
+            snapshotter: None,
+            last_trade_id_shared: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
     }
 
@@ -1040,6 +1045,15 @@ impl SettlementService {
             snapshot_interval,
         };
 
+        let wal_dir = data_dir.as_ref().join("wal");
+        let wal_path = wal_dir.join("current.wal");
+        // Start fresh WAL after recovery, starting at seq_id 1
+        let wal_writer = crate::settlement_wal::wal::SettlementWalWriter::new(&wal_path, 1, 1)?;
+
+        let snapshotter = crate::settlement_wal::snapshot::SettlementSnapshotter::new(
+            data_dir.as_ref().join("snapshots"),
+        );
+
         Ok(Self {
             ledger,
             queues,
@@ -1048,6 +1062,9 @@ impl SettlementService {
             symbol_id,
             symbol_mgr,
             persistence_config: Some(config),
+            wal_writer: Some(Arc::new(std::sync::Mutex::new(wal_writer))),
+            snapshotter: Some(Arc::new(snapshotter)),
+            last_trade_id_shared: Arc::new(std::sync::atomic::AtomicU64::new(result.last_trade_id)),
         })
     }
 
@@ -1081,8 +1098,12 @@ impl SettlementService {
             stats.clone(),
             db_client.clone(),
             symbol_id,
-            symbol_mgr,
+            symbol_mgr.clone(),
             shutdown.clone(),
+            self.wal_writer.clone(),
+            self.snapshotter.clone(),
+            self.last_trade_id_shared.clone(),
+            self.persistence_config.clone(),
         );
 
         // Wait for both to complete
@@ -1178,6 +1199,7 @@ impl SettlementService {
     }
 
     /// Spawn async trade processor (zero block_on overhead)
+    #[allow(clippy::too_many_arguments)]
     fn spawn_trade_processor_async(
         queues: Arc<MultiThreadQueues>,
         stats: Arc<PipelineStats>,
@@ -1185,9 +1207,16 @@ impl SettlementService {
         _symbol_id: u32,
         symbol_mgr: Arc<crate::symbol_manager::SymbolManager>,
         shutdown: Arc<ShutdownSignal>,
+        wal_writer: Option<Arc<std::sync::Mutex<crate::settlement_wal::wal::SettlementWalWriter>>>,
+        snapshotter: Option<Arc<crate::settlement_wal::snapshot::SettlementSnapshotter>>,
+        last_trade_id_shared: Arc<std::sync::atomic::AtomicU64>,
+        persistence_config: Option<SettlementPersistenceConfig>,
     ) -> tokio::task::JoinHandle<()> {
         const BATCH_SIZE: usize = 128;
         const POLL_INTERVAL_MS: u64 = 1;
+
+        let mut processed_trades_since_checkpoint = 0u64;
+        let mut processed_trades_since_snapshot = 0u64;
 
         tokio::spawn(async move {
             let mut batch: Vec<crate::messages::MEResult> = Vec::with_capacity(BATCH_SIZE);
@@ -1205,6 +1234,10 @@ impl SettlementService {
                 }
 
                 if !batch.is_empty() {
+                    tracing::trace!(
+                        "[SETTLEMENT] Processing batch of {} ME results",
+                        batch.len()
+                    );
                     // TDengine: batch persist (direct await, no block_on!)
                     if let Some(ref db) = db_client {
                         let start = std::time::Instant::now();
@@ -1255,6 +1288,69 @@ impl SettlementService {
                     }
 
                     stats.add_event_log_time(0);
+
+                    // 0x0D: Runtime Persistence
+                    let mut max_trade_id = 0u64;
+                    let mut trades_in_batch = 0u64;
+                    for res in &batch {
+                        for trade in &res.trades {
+                            max_trade_id = max_trade_id.max(trade.trade.trade_id);
+                            trades_in_batch += 1;
+                        }
+                    }
+
+                    if max_trade_id > 0 {
+                        // Update shared state
+                        last_trade_id_shared
+                            .store(max_trade_id, std::sync::atomic::Ordering::Relaxed);
+
+                        processed_trades_since_checkpoint += trades_in_batch;
+                        processed_trades_since_snapshot += trades_in_batch;
+
+                        if let Some(config) = &persistence_config {
+                            // Checkpoint
+                            if processed_trades_since_checkpoint >= config.checkpoint_interval {
+                                if let Some(ref writer_mutex) = wal_writer
+                                    && let Ok(mut writer) = writer_mutex.lock()
+                                {
+                                    if let Err(e) = writer.append_checkpoint(max_trade_id) {
+                                        tracing::error!(
+                                            "[SETTLEMENT] Failed to write checkpoint: {}",
+                                            e
+                                        );
+                                    } else {
+                                        let _ = writer.flush();
+                                        tracing::debug!(
+                                            "[SETTLEMENT] Checkpoint recorded: {}",
+                                            max_trade_id
+                                        );
+                                    }
+                                }
+                                processed_trades_since_checkpoint = 0;
+                            }
+
+                            // Snapshot
+                            if processed_trades_since_snapshot >= config.snapshot_interval {
+                                if let Some(ref snp) = snapshotter {
+                                    let snp = snp.clone();
+                                    tokio::task::spawn_blocking(move || {
+                                        if let Err(e) = snp.create_snapshot(max_trade_id) {
+                                            tracing::error!(
+                                                "[SETTLEMENT] Failed to create snapshot: {}",
+                                                e
+                                            );
+                                        } else {
+                                            tracing::info!(
+                                                "[SETTLEMENT] Snapshot created: {}",
+                                                max_trade_id
+                                            );
+                                        }
+                                    });
+                                }
+                                processed_trades_since_snapshot = 0;
+                            }
+                        }
+                    }
                 } else {
                     if shutdown.is_shutdown_requested() {
                         break;

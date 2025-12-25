@@ -30,6 +30,7 @@ Before making any changes, AI agents MUST read:
 | [API Conventions](./docs/standards/api-conventions.md) | REST API standards |
 | [ID Specification](./docs/src/0x0A-b-id-specification.md) | Identity addressing rules |
 | [Development Guidelines](./docs/standards/development-guidelines.md) | Coding standards |
+| [Testing Pitfalls](./docs/src/testing-pitfalls.md) | Common traps and best practices |
 
 ---
 
@@ -240,6 +241,7 @@ graph TD
 
 ### DO NOT
 
+- ❌ Use `pkill -f "zero_x_infinity"` (Causes IDE crash! See [Testing Pitfalls](./docs/src/testing-pitfalls.md))
 - ❌ Modify code during planning phase (Specification Mode)
 - ❌ Use `f64` for financial calculations (use `u64` with 10^6 precision)
 - ❌ Use `docker exec` in CI scripts (use REST API instead)
@@ -253,6 +255,7 @@ graph TD
 - ✅ Run `./scripts/pre-commit.sh` before committing
 - ✅ Source `scripts/lib/db_env.sh` in test scripts
 - ✅ Follow [Pre-merge Checklist](./docs/src/standards/pre-merge-checklist.md)
+- ✅ **Review [Testing Pitfalls](./docs/src/testing-pitfalls.md) before running E2E tests**
 
 ---
 
@@ -277,6 +280,7 @@ graph TD
 - [Development Guidelines](./docs/standards/development-guidelines.md)
 - [API Conventions](./docs/standards/api-conventions.md)
 - [CI Pitfalls](./docs/src/standards/ci-pitfalls.md)
+- [Testing Pitfalls](./docs/src/testing-pitfalls.md)
 - [Pre-merge Checklist](./docs/src/standards/pre-merge-checklist.md)
 
 ### Technical Documentation
