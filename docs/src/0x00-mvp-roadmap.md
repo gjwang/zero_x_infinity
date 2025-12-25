@@ -44,11 +44,11 @@ This project documents the complete journey of building a **1.3M orders/sec** ma
 
 ## 🔶 Phase III: Resilience & Funding
 
-*Status: **In Progress***
+*Status: **In Progress** (0x0D Complete)*
 
 | Chapter | Title | Description |
 |---------|-------|-------------|
-| 0x0D | [Snapshot & Recovery](./0x0D-snapshot-recovery.md) | State snapshot, crash recovery |
+| 0x0D | [Snapshot & Recovery](./0x0D-snapshot-recovery.md) | ✅ State snapshot, crash recovery |
 | 0x0E | Deposit & Withdraw | Blockchain integration (planned) |
 | 0x0F | Frontend | Trading UI (planned) |
 
@@ -75,6 +75,7 @@ This project documents the complete journey of building a **1.3M orders/sec** ma
 | `v0.10-b-api-auth` | 0x0A | Ed25519 authentication |
 | `v0.0B-a-transfer-fsm` | 0x0B | ULID-based FSM transfer |
 | `v0.0C-trade-fee` | 0x0C | Maker/Taker fee system |
+| `v0.0D-persistence` | 0x0D | Universal WAL & Snapshot persistence |
 
 ---
 
