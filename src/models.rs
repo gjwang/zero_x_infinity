@@ -11,6 +11,17 @@ pub enum Side {
     Sell,
 }
 
+impl TryFrom<u8> for Side {
+    type Error = ();
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Side::Buy),
+            1 => Ok(Side::Sell),
+            _ => Err(()),
+        }
+    }
+}
+
 /// Order type
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -19,6 +30,19 @@ pub enum OrderType {
     Market,   // Market order: execute at best avail price
     Deposit,  // Internal Transfer: Funding -> Spot
     Withdraw, // Internal Transfer: Spot -> Funding
+}
+
+impl TryFrom<u8> for OrderType {
+    type Error = ();
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(OrderType::Limit),
+            1 => Ok(OrderType::Market),
+            2 => Ok(OrderType::Deposit),
+            3 => Ok(OrderType::Withdraw),
+            _ => Err(()),
+        }
+    }
 }
 
 /// Order status - all possible terminal states for a persisted order

@@ -140,7 +140,9 @@ pub fn run_pipeline_multi_thread(
 
     let _start_time = Instant::now();
 
-    // The execution setup is now much clearer - spawn each processing stage
+    // --- PHASE 0x0D: Synchronized Recovery Sequence ---
+
+    // 1. Initialize Ingestion
     let t1_ingestion = {
         let mut service = crate::pipeline_services::IngestionService::new(
             orders,
@@ -153,77 +155,27 @@ pub fn run_pipeline_multi_thread(
         thread::spawn(move || service.run(&s))
     };
 
-    let t2_ubscore = {
-        // Use transfer channel if provided (Phase 0x0B-a)
-        let mut service = if let Some(transfer_rx) = transfer_receiver {
-            crate::pipeline_services::UBSCoreService::with_transfer_channel(
-                services.ubscore,
+    // 2. Initialize ME Service (Blocking Recovery + UBSCore Replay)
+    let mut me_service = if let Some(ref mp_config) = matching_persistence_config {
+        if mp_config.enabled {
+            tracing::info!(
+                "[ME] Persistence enabled: dir={}, snapshot_interval={}",
+                mp_config.data_dir,
+                mp_config.snapshot_interval_trades
+            );
+
+            crate::pipeline_services::MatchingService::new_with_persistence(
+                &mp_config.data_dir,
                 queues.clone(),
                 stats.clone(),
-                _start_time,
-                transfer_rx,
+                market,
+                100, // depth_update_interval_ms: 100ms
+                mp_config.snapshot_interval_trades,
+                Some(&services.ubscore), // Pass UBSCore for replay (ISSUE-002)
             )
+            .expect("[ME] Failed to initialize persistence")
         } else {
-            crate::pipeline_services::UBSCoreService::new(
-                services.ubscore,
-                queues.clone(),
-                stats.clone(),
-                _start_time,
-            )
-        };
-        let s = shutdown.clone();
-        thread::spawn(move || {
-            service.run(&s);
-            service.into_inner()
-        })
-    };
-
-    let t3_me = {
-        // Phase 0x0D: Conditionally enable persistence based on config
-        let mut service = if let Some(ref mp_config) = matching_persistence_config {
-            if mp_config.enabled {
-                tracing::info!(
-                    "[ME] Persistence enabled: dir={}, snapshot_interval={}",
-                    mp_config.data_dir,
-                    mp_config.snapshot_interval_trades
-                );
-
-                match crate::pipeline_services::MatchingService::new_with_persistence(
-                    &mp_config.data_dir,
-                    queues.clone(),
-                    stats.clone(),
-                    market,
-                    100, // depth_update_interval_ms: 100ms
-                    mp_config.snapshot_interval_trades,
-                ) {
-                    Ok(svc) => {
-                        tracing::info!("[ME] Persistence initialized successfully");
-                        svc
-                    }
-                    Err(e) => {
-                        tracing::error!("[ME] Failed to initialize persistence: {}", e);
-                        tracing::warn!("[ME] Falling back to non-persistent mode");
-                        crate::pipeline_services::MatchingService::new(
-                            services.book,
-                            queues.clone(),
-                            stats.clone(),
-                            market,
-                            100,
-                        )
-                    }
-                }
-            } else {
-                tracing::info!("[ME] Persistence disabled by config");
-                crate::pipeline_services::MatchingService::new(
-                    services.book,
-                    queues.clone(),
-                    stats.clone(),
-                    market,
-                    100,
-                )
-            }
-        } else {
-            tracing::info!("[ME] No persistence config provided");
+            tracing::info!("[ME] Persistence disabled by config");
             crate::pipeline_services::MatchingService::new(
                 services.book,
                 queues.clone(),
@@ -231,50 +183,43 @@ pub fn run_pipeline_multi_thread(
                 market,
                 100,
             )
-        };
-        let s = shutdown.clone();
-        thread::spawn(move || {
-            service.run(&s);
-            service.into_inner()
-        })
+        }
+    } else {
+        tracing::info!("[ME] No persistence config provided");
+        crate::pipeline_services::MatchingService::new(
+            services.book,
+            queues.clone(),
+            stats.clone(),
+            market,
+            100,
+        )
     };
 
-    let t4_settlement = {
-        // Phase 0x0D: Conditionally enable persistence based on config
-        let service = if let Some(ref sp_config) = settlement_persistence_config {
-            if sp_config.enabled {
-                tracing::info!(
-                    "[Settlement] Persistence enabled: dir={}, checkpoint_interval={}, snapshot_interval={}",
-                    sp_config.data_dir,
-                    sp_config.checkpoint_interval,
-                    sp_config.snapshot_interval
-                );
+    // 3. Initialize Settlement Service (Blocking Recovery + Matching Replay)
+    let settlement_service = if let Some(ref sp_config) = settlement_persistence_config {
+        if sp_config.enabled {
+            tracing::info!(
+                "[Settlement] Persistence enabled: dir={}, checkpoint_interval={}, snapshot_interval={}",
+                sp_config.data_dir,
+                sp_config.checkpoint_interval,
+                sp_config.snapshot_interval
+            );
 
-                crate::pipeline_services::SettlementService::new_with_persistence(
-                    services.ledger,
-                    queues.clone(),
-                    stats.clone(),
-                    db_client.clone(),
-                    active_symbol_id,
-                    Arc::new(config.symbol_mgr.clone()),
-                    &sp_config.data_dir,
-                    sp_config.checkpoint_interval,
-                    sp_config.snapshot_interval,
-                )
-                .expect("[Settlement] Failed to initialize persistence - this is critical for crash recovery")
-            } else {
-                tracing::info!("[Settlement] Persistence disabled by config");
-                crate::pipeline_services::SettlementService::new(
-                    services.ledger,
-                    queues.clone(),
-                    stats.clone(),
-                    db_client.clone(),
-                    active_symbol_id,
-                    Arc::new(config.symbol_mgr.clone()),
-                )
-            }
+            crate::pipeline_services::SettlementService::new_with_persistence(
+                services.ledger,
+                queues.clone(),
+                stats.clone(),
+                db_client.clone(),
+                active_symbol_id,
+                Arc::new(config.symbol_mgr.clone()),
+                &sp_config.data_dir,
+                sp_config.checkpoint_interval,
+                sp_config.snapshot_interval,
+                Some(&me_service), // Pass MatchingService for replay (ISSUE-003c)
+            )
+            .expect("[Settlement] Failed to initialize persistence")
         } else {
-            tracing::info!("[Settlement] No persistence config provided");
+            tracing::info!("[Settlement] Persistence disabled by config");
             crate::pipeline_services::SettlementService::new(
                 services.ledger,
                 queues.clone(),
@@ -283,15 +228,55 @@ pub fn run_pipeline_multi_thread(
                 active_symbol_id,
                 Arc::new(config.symbol_mgr.clone()),
             )
-        };
-        let s = shutdown.clone();
-
-        // Always use async mode with dedicated runtime
-        thread::spawn(move || {
-            let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
-            rt.block_on(service.run_async(s));
-        })
+        }
+    } else {
+        tracing::info!("[Settlement] No persistence config provided");
+        crate::pipeline_services::SettlementService::new(
+            services.ledger,
+            queues.clone(),
+            stats.clone(),
+            db_client.clone(),
+            active_symbol_id,
+            Arc::new(config.symbol_mgr.clone()),
+        )
     };
+
+    // 4. Initialize UBSCore Service (takes ownership of services.ubscore)
+    let mut ubscore_service = if let Some(transfer_rx) = transfer_receiver {
+        crate::pipeline_services::UBSCoreService::with_transfer_channel(
+            services.ubscore,
+            queues.clone(),
+            stats.clone(),
+            _start_time,
+            transfer_rx,
+        )
+    } else {
+        crate::pipeline_services::UBSCoreService::new(
+            services.ubscore,
+            queues.clone(),
+            stats.clone(),
+            _start_time,
+        )
+    };
+
+    // 5. Spawn threads for MT execution
+    let s2 = shutdown.clone();
+    let t2_ubscore = thread::spawn(move || {
+        ubscore_service.run(&s2);
+        ubscore_service.into_inner()
+    });
+
+    let s3 = shutdown.clone();
+    let t3_me = thread::spawn(move || {
+        me_service.run(&s3);
+        me_service.into_inner()
+    });
+
+    let s4 = shutdown.clone();
+    let t4_settlement = thread::spawn(move || {
+        let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+        rt.block_on(settlement_service.run_async(s4));
+    });
     // Wait for completion
     // ================================================================
 

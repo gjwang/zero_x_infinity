@@ -3,7 +3,9 @@
 //! Handles cold/hot start recovery from Snapshot + WAL
 
 use super::snapshot::UBSCoreSnapshotter;
-use super::wal::UBSCoreWalReader;
+use super::wal::{CancelPayload, OrderPayload, UBSCoreWalReader};
+use crate::models::Side;
+use crate::symbol_manager::SymbolManager;
 use crate::user_account::UserAccount;
 use crate::wal_v2::WalEntryType;
 use rustc_hash::FxHashMap;
@@ -43,7 +45,7 @@ impl UBSCoreRecovery {
     /// 3. If not: cold start with empty state, snapshot_seq = 0
     /// 4. Replay WAL from snapshot_seq + 1
     /// 5. Return recovered state
-    pub fn recover(&self) -> io::Result<RecoveryState> {
+    pub fn recover(&self, manager: &SymbolManager) -> io::Result<RecoveryState> {
         let snapshot_dir = self.data_dir.join("snapshots");
         let wal_dir = self.data_dir.join("wal");
 
@@ -76,10 +78,44 @@ impl UBSCoreRecovery {
                 // Replay entry to update accounts
                 match WalEntryType::try_from(entry.header.entry_type) {
                     Ok(WalEntryType::Order) => {
-                        // For now, just track seq progression
+                        // Deserialize and apply lock
+                        if let Ok(payload) = bincode::deserialize::<OrderPayload>(&entry.payload) {
+                            let symbol_info = manager.get_symbol_info_by_id(payload.symbol_id);
+                            let qty_unit = symbol_info.map(|s| s.qty_unit()).unwrap_or(100_000_000);
+
+                            // Calculate lock asset and amount
+                            let side = Side::try_from(payload.side).unwrap_or(Side::Buy);
+                            let lock_asset = match (side, symbol_info) {
+                                (Side::Buy, Some(s)) => s.quote_asset_id,
+                                (Side::Sell, Some(s)) => s.base_asset_id,
+                                _ => 0,
+                            };
+
+                            // Re-calculate cost (lock amount)
+                            let lock_amount = if payload.order_type == 0 {
+                                // Limit
+                                payload.price * payload.qty / qty_unit
+                            } else {
+                                0 // Market orders handled by UBSCore business logic
+                            };
+
+                            if lock_amount > 0 && lock_asset > 0 {
+                                let account = accounts
+                                    .entry(payload.user_id)
+                                    .or_insert_with(|| UserAccount::new(payload.user_id));
+                                if let Ok(balance) = account.get_balance_mut(lock_asset) {
+                                    let _ = balance.lock(lock_amount);
+                                }
+                            }
+                        }
                         next_seq_id = entry.header.seq_id + 1;
                     }
                     Ok(WalEntryType::Cancel) => {
+                        // NOTE: Cancellations often involve unlocking, but since we don't know
+                        // the original unlock_amount from the WAL entry (it only has order_id),
+                        // this confirms the need for Phase 4 Replay Protocol where ME tells USBC.
+                        // For RECOVERY however, we usually only recover to the point of durable LOCKS.
+                        // ME will re-request cancels upon its own recovery.
                         next_seq_id = entry.header.seq_id + 1;
                     }
                     Ok(WalEntryType::Deposit) => {
@@ -95,9 +131,16 @@ impl UBSCoreRecovery {
                         next_seq_id = entry.header.seq_id + 1;
                     }
                     Ok(WalEntryType::Withdraw) => {
-                        // NOTE: UserAccount doesn't have withdraw() method
-                        // Withdrawals are handled through UBSCore business logic
-                        // For recovery, we just track seq progression
+                        if let Ok(payload) =
+                            bincode::deserialize::<crate::wal_v2::FundingPayload>(&entry.payload)
+                        {
+                            let account = accounts
+                                .entry(payload.user_id)
+                                .or_insert_with(|| UserAccount::new(payload.user_id));
+                            if let Ok(balance) = account.get_balance_mut(payload.asset_id) {
+                                let _ = balance.withdraw(payload.amount);
+                            }
+                        }
                         next_seq_id = entry.header.seq_id + 1;
                     }
                     _ => {
@@ -145,7 +188,8 @@ mod tests {
         let _ = fs::remove_dir_all(&temp_dir);
 
         let recovery = UBSCoreRecovery::new(&temp_dir);
-        let state = recovery.recover().unwrap();
+        let manager = SymbolManager::new();
+        let state = recovery.recover(&manager).unwrap();
 
         assert_eq!(state.accounts.len(), 0);
         assert_eq!(state.next_seq_id, 1);
@@ -179,7 +223,8 @@ mod tests {
 
         // Recover
         let recovery = UBSCoreRecovery::new(&temp_dir);
-        let state = recovery.recover().unwrap();
+        let manager = SymbolManager::new();
+        let state = recovery.recover(&manager).unwrap();
 
         assert_eq!(state.accounts.len(), 5);
         assert_eq!(state.next_seq_id, 101); // snapshot_seq + 1
@@ -234,7 +279,10 @@ mod tests {
 
         // Recover
         let recovery = UBSCoreRecovery::new(&temp_dir);
-        let state = recovery.recover().unwrap();
+        let mut manager = SymbolManager::new();
+        // Asset 0 is needed for the test
+        manager.add_asset(0, 8, 6, "BTC");
+        let state = recovery.recover(&manager).unwrap();
 
         assert_eq!(state.next_seq_id, 13); // last WAL seq + 1
 
@@ -288,7 +336,8 @@ mod tests {
 
         // Recover - should detect corruption
         let recovery = UBSCoreRecovery::new(&temp_dir);
-        let result = recovery.recover();
+        let manager = SymbolManager::new();
+        let result = recovery.recover(&manager);
 
         // Should fail with checksum error
         assert!(result.is_err());
@@ -328,7 +377,8 @@ mod tests {
 
         // Recover - should succeed with snapshot data only
         let recovery = UBSCoreRecovery::new(&temp_dir);
-        let state = recovery.recover().unwrap();
+        let manager = SymbolManager::new();
+        let state = recovery.recover(&manager).unwrap();
 
         assert_eq!(state.next_seq_id, 11);
         assert_eq!(state.accounts.len(), 1);
@@ -378,7 +428,10 @@ mod tests {
 
         // Recover
         let recovery = UBSCoreRecovery::new(&temp_dir);
-        let state = recovery.recover().unwrap();
+        let mut manager = SymbolManager::new();
+        // Asset 0 is needed for the test
+        manager.add_asset(0, 8, 6, "BTC");
+        let state = recovery.recover(&manager).unwrap();
 
         assert_eq!(state.accounts.len(), 5); // 3 from snapshot + 2 from WAL
 

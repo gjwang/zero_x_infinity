@@ -15,10 +15,18 @@ use std::time::Instant;
 use crate::ledger::LedgerWriter;
 
 use crate::csv_io::{ACTION_CANCEL, ACTION_PLACE, InputOrder};
-use crate::models::{InternalOrder, OrderStatus};
+use crate::engine::MatchingEngine;
+use crate::messages::TradeEvent;
+use crate::models::{InternalOrder, OrderStatus, OrderType, Side};
 use crate::pipeline::{
-    MultiThreadQueues, OrderAction, PipelineStats, SequencedOrder, ShutdownSignal,
+    BalanceUpdateRequest, MultiThreadQueues, OrderAction, PipelineStats, PriceImprovement,
+    SequencedOrder, ShutdownSignal, ValidAction,
 };
+use crate::ubscore::UBSCore;
+
+// Thread timing constants
+const IDLE_SPIN_LIMIT: u32 = 1000;
+const IDLE_SLEEP_US: std::time::Duration = std::time::Duration::from_micros(100);
 
 // ============================================================
 // INGESTION SERVICE
@@ -122,18 +130,13 @@ impl IngestionService {
 // UBSCORE SERVICE
 // ============================================================
 
-use std::time::Duration;
-
+// Duration not needed here - IDLE_SLEEP_US is defined at top of file
 use crate::internal_transfer::channel::{
     TransferReceiver, TransferSender, process_transfer_requests,
 };
 use crate::internal_transfer::types::InternalTransferId;
 use crate::messages::BalanceEvent;
-use crate::pipeline::ValidAction;
-use crate::ubscore::UBSCore;
-
-const IDLE_SPIN_LIMIT: u32 = 1000;
-const IDLE_SLEEP_US: Duration = Duration::from_micros(100);
+// ValidAction and UBSCore already imported at top of file
 const UBSC_SETTLE_BATCH: usize = 128;
 const UBSC_ORDER_BATCH: usize = 16;
 const UBSC_TRANSFER_BATCH: usize = 16;
@@ -360,14 +363,11 @@ impl UBSCoreService {
 // MATCHING SERVICE
 // ============================================================
 
-use crate::engine::MatchingEngine;
+// MatchingEngine, TradeEvent, OrderType, Side, BalanceUpdateRequest, PriceImprovement already imported at top of file
 use crate::matching_wal::{
     MatchingRecovery, MatchingSnapshotter, MatchingWalWriter, RecoveryState,
 };
-use crate::messages::TradeEvent;
-use crate::models::{OrderType, Side};
 use crate::orderbook::OrderBook;
-use crate::pipeline::{BalanceUpdateRequest, PriceImprovement};
 use crate::pipeline_mt::MarketContext;
 use std::path::{Path, PathBuf};
 
@@ -529,6 +529,7 @@ impl MatchingService {
         market: MarketContext,
         depth_update_interval_ms: u64,
         snapshot_interval_trades: u64,
+        ubscore: Option<&UBSCore>,
     ) -> std::io::Result<Self> {
         use std::fs;
 
@@ -559,7 +560,7 @@ impl MatchingService {
             snapshot_interval: snapshot_interval_trades,
         };
 
-        Ok(Self {
+        let mut service = Self {
             book: orderbook,
             queues,
             stats,
@@ -571,7 +572,13 @@ impl MatchingService {
             trade_wal_writer: Some(wal_writer),
             snapshot_trigger: Some(snapshot_trigger),
             data_dir: Some(data_dir.as_ref().to_path_buf()),
-        })
+        };
+
+        if let Some(core) = ubscore {
+            service.synchronize(core, next_seq_id)?;
+        }
+
+        Ok(service)
     }
 
     /// Run the matching service (MT blocking mode)
@@ -583,235 +590,7 @@ impl MatchingService {
 
             if let Some(action) = self.queues.action_queue.pop() {
                 did_work = true;
-                let task_start = Instant::now();
-
-                match action {
-                    ValidAction::Order(valid_order) => {
-                        let span =
-                            p_span!(TARGET_ME, LOG_ORDER, order_id = valid_order.order.order_id);
-                        let _enter = span.enter();
-
-                        // Match order
-                        let result = MatchingEngine::process_order(
-                            &mut self.book,
-                            valid_order.order.clone(),
-                        );
-
-                        tracing::info!(
-                            "[TRACE] Order {}: Matching Engine Processed (Trades: {})",
-                            valid_order.order.order_id,
-                            result.trades.len()
-                        );
-
-                        p_info!(
-                            TARGET_ME,
-                            trades = result.trades.len(),
-                            "Matching completed"
-                        );
-
-                        // Collect all TradeEvents for this order
-                        let mut trade_events = Vec::with_capacity(result.trades.len());
-
-                        // Fan-out: Send Trade Events to BOTH Settlement AND UBSCore
-                        for trade in &result.trades {
-                            // Determine taker and maker order IDs based on taker side
-                            let (taker_id, maker_id) = if valid_order.order.side == Side::Buy {
-                                (trade.buyer_order_id, trade.seller_order_id)
-                            } else {
-                                (trade.seller_order_id, trade.buyer_order_id)
-                            };
-
-                            let trade_event = TradeEvent::new(
-                                trade.clone(),
-                                taker_id,
-                                maker_id,
-                                valid_order.order.side,
-                                // Taker order state (from result.order)
-                                result.order.qty,
-                                result.order.filled_qty,
-                                // Maker order state (TODO: get from book or track separately)
-                                0, // maker_order_qty - placeholder
-                                0, // maker_filled_qty - placeholder
-                                self.market.base_id,
-                                self.market.quote_id,
-                                self.market.qty_unit,
-                                valid_order.ingested_at_ns,
-                                self.market.symbol_id, // symbol_id for fee lookup
-                            );
-
-                            // Collect for MEResult
-                            trade_events.push(trade_event.clone());
-
-                            // Calculate price improvement for buy orders
-                            let price_improvement = if valid_order.order.side == Side::Buy
-                                && valid_order.order.order_type == OrderType::Limit
-                                && valid_order.order.price > trade.price
-                            {
-                                let diff = valid_order.order.price - trade.price;
-                                let refund = diff * trade.qty / self.market.qty_unit;
-                                if refund > 0 {
-                                    Some(PriceImprovement {
-                                        user_id: valid_order.order.user_id,
-                                        asset_id: self.market.quote_id,
-                                        amount: refund,
-                                    })
-                                } else {
-                                    None
-                                }
-                            } else {
-                                None
-                            };
-
-                            // Send to UBSCore (for balance update) - balance_update_queue
-                            let balance_update = BalanceUpdateRequest::Trade {
-                                trade_event,
-                                price_improvement,
-                            };
-                            loop {
-                                match self
-                                    .queues
-                                    .balance_update_queue
-                                    .push(balance_update.clone())
-                                {
-                                    Ok(()) => break,
-                                    Err(_) => {
-                                        self.stats.incr_backpressure("balance_update_queue");
-                                        std::thread::sleep(IDLE_SLEEP_US);
-                                    }
-                                }
-                            }
-
-                            self.stats.add_trades(1);
-                            self.stats.record_trades(1);
-                        }
-
-                        // [ATOMIC] Push MEResult to Settlement (order + all trades bundled)
-                        let me_result = crate::messages::MEResult {
-                            order: result.order.clone(),
-                            trades: trade_events,
-                            maker_updates: result.maker_orders,
-                            final_status: result.order.status,
-                            symbol_id: valid_order.order.symbol_id,
-                        };
-                        loop {
-                            match self.queues.me_result_queue.push(me_result.clone()) {
-                                Ok(()) => break,
-                                Err(_) => {
-                                    self.stats.incr_backpressure("me_result_queue");
-                                    std::thread::sleep(IDLE_SLEEP_US);
-                                }
-                            }
-                        }
-
-                        self.depth_dirty = true; // Mark depth as changed
-
-                        // [PERSISTENCE] Phase 2.4: Write trades to WAL and trigger snapshots
-                        if let Some(ref mut wal_writer) = self.trade_wal_writer {
-                            // Write all trades to WAL
-                            for trade in &result.trades {
-                                if let Err(e) =
-                                    wal_writer.append_trade(trade, valid_order.order.symbol_id)
-                                {
-                                    tracing::error!("Failed to write trade to WAL: {}", e);
-                                }
-                            }
-
-                            // Flush WAL to disk
-                            if let Err(e) = wal_writer.flush() {
-                                tracing::error!("Failed to flush WAL: {}", e);
-                            }
-
-                            // Check snapshot trigger
-                            if let Some(ref mut trigger) = self.snapshot_trigger {
-                                trigger.trade_counter += result.trades.len() as u64;
-
-                                if trigger.trade_counter >= trigger.snapshot_interval {
-                                    let wal_seq = wal_writer.current_seq() - 1; // Last written seq
-
-                                    if let Err(e) =
-                                        trigger.snapshotter.create_snapshot(&self.book, wal_seq)
-                                    {
-                                        tracing::error!("Failed to create snapshot: {}", e);
-                                    } else {
-                                        tracing::info!(
-                                            "Created snapshot at seq {}, resetting counter",
-                                            wal_seq
-                                        );
-                                        trigger.trade_counter = 0; // Reset counter
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    ValidAction::Cancel {
-                        order_id,
-                        user_id,
-                        ingested_at_ns,
-                    } => {
-                        let span = p_span!(
-                            TARGET_ME,
-                            LOG_CANCEL,
-                            order_id = order_id,
-                            user_id = user_id
-                        );
-                        let _enter = span.enter();
-                        // Cancel order: remove from book
-                        if let Some(mut cancelled_order) = self.book.remove_order_by_id(order_id) {
-                            cancelled_order.status = OrderStatus::CANCELED;
-                            let remaining_qty = cancelled_order.remaining_qty();
-
-                            if remaining_qty > 0 {
-                                // Calculate unlock amount
-                                let mut temp_order = cancelled_order.clone();
-                                temp_order.qty = remaining_qty;
-                                let unlock_amount =
-                                    temp_order.calculate_cost(self.market.qty_unit).unwrap_or(0);
-                                let lock_asset_id = match cancelled_order.side {
-                                    Side::Buy => self.market.quote_id,
-                                    Side::Sell => self.market.base_id,
-                                };
-
-                                // Send cancel result to UBSCore for unlock
-                                let cancel_update = BalanceUpdateRequest::Cancel {
-                                    order_id,
-                                    user_id,
-                                    asset_id: lock_asset_id,
-                                    unlock_amount,
-                                    ingested_at_ns,
-                                };
-                                loop {
-                                    match self
-                                        .queues
-                                        .balance_update_queue
-                                        .push(cancel_update.clone())
-                                    {
-                                        Ok(()) => break,
-                                        Err(_) => {
-                                            self.stats.incr_backpressure("depth_event_queue");
-                                            // std::hint::spin_loop();
-                                            std::thread::sleep(IDLE_SLEEP_US);
-                                        }
-                                    }
-                                }
-
-                                // [PUSH] Notify client of cancellation
-                                let _ = self.queues.push_event_queue.push(
-                                    crate::websocket::PushEvent::OrderUpdate {
-                                        user_id,
-                                        order_id,
-                                        symbol_id: cancelled_order.symbol_id,
-                                        status: OrderStatus::CANCELED,
-                                        filled_qty: cancelled_order.filled_qty,
-                                        avg_price: None, // Could calculate if partially filled, but omitting for now
-                                    },
-                                );
-                            }
-                        }
-                        self.depth_dirty = true; // Mark depth as changed
-                    }
-                }
-                self.stats
-                    .add_matching_time(task_start.elapsed().as_nanos() as u64);
+                self.handle_action(action);
             }
 
             // [DEPTH] Periodic snapshot update (if dirty and interval elapsed)
@@ -849,6 +628,242 @@ impl MatchingService {
         }
     }
 
+    /// Synchronize state with UBSCore (Phase 0x0D - ISSUE-002)
+    ///
+    /// Replays orders from UBSCore that happened after the last ME snapshot.
+    pub fn synchronize(&mut self, ubscore: &UBSCore, from_seq: u64) -> std::io::Result<()> {
+        tracing::info!(from_seq, "ME Synchronization starting");
+        ubscore.replay_output(from_seq, |action| {
+            self.handle_action(action);
+            Ok(true)
+        })?;
+        tracing::info!("ME Synchronization complete");
+        Ok(())
+    }
+
+    /// Handle a valid action (Order or Cancel)
+    pub fn handle_action(&mut self, action: ValidAction) {
+        let task_start = Instant::now();
+        match action {
+            ValidAction::Order(valid_order) => {
+                let span = p_span!(TARGET_ME, LOG_ORDER, order_id = valid_order.order.order_id);
+                let _enter = span.enter();
+
+                // Match order
+                let result =
+                    MatchingEngine::process_order(&mut self.book, valid_order.order.clone());
+
+                tracing::info!(
+                    "[TRACE] Order {}: Matching Engine Processed (Trades: {})",
+                    valid_order.order.order_id,
+                    result.trades.len()
+                );
+
+                p_info!(
+                    TARGET_ME,
+                    trades = result.trades.len(),
+                    "Matching completed"
+                );
+
+                // Collect all TradeEvents for this order
+                let mut trade_events = Vec::with_capacity(result.trades.len());
+
+                // Fan-out: Send Trade Events to BOTH Settlement AND UBSCore
+                for trade in &result.trades {
+                    // Determine taker and maker order IDs based on taker side
+                    let (taker_id, maker_id) = if valid_order.order.side == Side::Buy {
+                        (trade.buyer_order_id, trade.seller_order_id)
+                    } else {
+                        (trade.seller_order_id, trade.buyer_order_id)
+                    };
+
+                    let trade_event = TradeEvent::new(
+                        trade.clone(),
+                        taker_id,
+                        maker_id,
+                        valid_order.order.side,
+                        // Taker order state (from result.order)
+                        result.order.qty,
+                        result.order.filled_qty,
+                        // Maker order state (TODO: get from book or track separately)
+                        0, // maker_order_qty - placeholder
+                        0, // maker_filled_qty - placeholder
+                        self.market.base_id,
+                        self.market.quote_id,
+                        self.market.qty_unit,
+                        valid_order.ingested_at_ns,
+                        self.market.symbol_id, // symbol_id for fee lookup
+                    );
+
+                    // Collect for MEResult
+                    trade_events.push(trade_event.clone());
+
+                    // Calculate price improvement for buy orders
+                    let price_improvement = if valid_order.order.side == Side::Buy
+                        && valid_order.order.order_type == OrderType::Limit
+                        && valid_order.order.price > trade.price
+                    {
+                        let diff = valid_order.order.price - trade.price;
+                        let refund = diff * trade.qty / self.market.qty_unit;
+                        if refund > 0 {
+                            Some(PriceImprovement {
+                                user_id: valid_order.order.user_id,
+                                asset_id: self.market.quote_id,
+                                amount: refund,
+                            })
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+
+                    // Send to UBSCore (for balance update) - balance_update_queue
+                    let balance_update = BalanceUpdateRequest::Trade {
+                        trade_event,
+                        price_improvement,
+                    };
+                    loop {
+                        match self
+                            .queues
+                            .balance_update_queue
+                            .push(balance_update.clone())
+                        {
+                            Ok(()) => break,
+                            Err(_) => {
+                                self.stats.incr_backpressure("balance_update_queue");
+                                std::thread::sleep(IDLE_SLEEP_US);
+                            }
+                        }
+                    }
+
+                    self.stats.add_trades(1);
+                    self.stats.record_trades(1);
+                }
+
+                // [ATOMIC] Push MEResult to Settlement (order + all trades bundled)
+                let me_result = crate::messages::MEResult {
+                    order: result.order.clone(),
+                    trades: trade_events,
+                    maker_updates: result.maker_orders,
+                    final_status: result.order.status,
+                    symbol_id: valid_order.order.symbol_id,
+                };
+                loop {
+                    match self.queues.me_result_queue.push(me_result.clone()) {
+                        Ok(()) => break,
+                        Err(_) => {
+                            self.stats.incr_backpressure("me_result_queue");
+                            std::thread::sleep(IDLE_SLEEP_US);
+                        }
+                    }
+                }
+
+                self.depth_dirty = true; // Mark depth as changed
+
+                // [PERSISTENCE] Phase 2.4: Write trades to WAL and trigger snapshots
+                if let Option::Some(ref mut wal_writer) = self.trade_wal_writer {
+                    // Write all trades to WAL
+                    for trade in &result.trades {
+                        if let Err(e) = wal_writer.append_trade(trade, valid_order.order.symbol_id)
+                        {
+                            tracing::error!("Failed to write trade to WAL: {}", e);
+                        }
+                    }
+
+                    // Flush WAL to disk
+                    if let Err(e) = wal_writer.flush() {
+                        tracing::error!("Failed to flush WAL: {}", e);
+                    }
+
+                    // Check snapshot trigger
+                    if let Option::Some(ref mut trigger) = self.snapshot_trigger {
+                        trigger.trade_counter += result.trades.len() as u64;
+
+                        if trigger.trade_counter >= trigger.snapshot_interval {
+                            let wal_seq = wal_writer.current_seq() - 1; // Last written seq
+
+                            if let Err(e) = trigger.snapshotter.create_snapshot(&self.book, wal_seq)
+                            {
+                                tracing::error!("Failed to create snapshot: {}", e);
+                            } else {
+                                tracing::info!(
+                                    "Created snapshot at seq {}, resetting counter",
+                                    wal_seq
+                                );
+                                trigger.trade_counter = 0; // Reset counter
+                            }
+                        }
+                    }
+                }
+            }
+            ValidAction::Cancel {
+                order_id,
+                user_id,
+                ingested_at_ns,
+            } => {
+                let span = p_span!(
+                    TARGET_ME,
+                    LOG_CANCEL,
+                    order_id = order_id,
+                    user_id = user_id
+                );
+                let _enter = span.enter();
+                // Cancel order: remove from book
+                if let Some(mut cancelled_order) = self.book.remove_order_by_id(order_id) {
+                    cancelled_order.status = OrderStatus::CANCELED;
+                    let remaining_qty = cancelled_order.remaining_qty();
+
+                    if remaining_qty > 0 {
+                        // Calculate unlock amount
+                        let mut temp_order = cancelled_order.clone();
+                        temp_order.qty = remaining_qty;
+                        let unlock_amount =
+                            temp_order.calculate_cost(self.market.qty_unit).unwrap_or(0);
+                        let lock_asset_id = match cancelled_order.side {
+                            Side::Buy => self.market.quote_id,
+                            Side::Sell => self.market.base_id,
+                        };
+
+                        // Send cancel result to UBSCore for unlock
+                        let cancel_update = BalanceUpdateRequest::Cancel {
+                            order_id,
+                            user_id,
+                            asset_id: lock_asset_id,
+                            unlock_amount,
+                            ingested_at_ns,
+                        };
+                        loop {
+                            match self.queues.balance_update_queue.push(cancel_update.clone()) {
+                                Ok(()) => break,
+                                Err(_) => {
+                                    self.stats.incr_backpressure("depth_event_queue");
+                                    // std::hint::spin_loop();
+                                    std::thread::sleep(IDLE_SLEEP_US);
+                                }
+                            }
+                        }
+
+                        // [PUSH] Notify client of cancellation
+                        let _ = self.queues.push_event_queue.push(
+                            crate::websocket::PushEvent::OrderUpdate {
+                                user_id,
+                                order_id,
+                                symbol_id: cancelled_order.symbol_id,
+                                status: OrderStatus::CANCELED,
+                                filled_qty: cancelled_order.filled_qty,
+                                avg_price: None, // Could calculate if partially filled, but omitting for now
+                            },
+                        );
+                    }
+                }
+                self.depth_dirty = true; // Mark depth as changed
+            }
+        }
+        self.stats
+            .add_matching_time(task_start.elapsed().as_nanos() as u64);
+    }
+
     /// Get a reference to the inner OrderBook (for testing)
     #[cfg(test)]
     pub fn book(&self) -> &OrderBook {
@@ -859,60 +874,46 @@ impl MatchingService {
     pub fn into_inner(self) -> OrderBook {
         self.book
     }
-
-    /// Replay trades from WAL for downstream service recovery
+    /// Replay trades from WAL (Phase 0x0D - ISSUE-003b)
     ///
-    /// # Arguments
-    /// - `from_seq`: First seq_id to return (inclusive)
-    /// - `callback`: Called for each trade, return false to stop
-    ///
-    /// # Returns
-    /// Number of trades replayed
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// matching.replay_trades(last_trade_id + 1, |seq, trade| {
-    ///     settlement.process_trade(trade)?;
-    ///     Ok(true) // continue
-    /// })?;
-    /// ```
-    pub fn replay_trades<F>(&self, from_seq: u64, mut callback: F) -> std::io::Result<u64>
+    /// Used by Settlement service to synchronize state.
+    pub fn replay_output<F>(&self, from_id: u64, mut callback: F) -> std::io::Result<()>
     where
-        F: FnMut(u64, &crate::matching_wal::TradePayload) -> std::io::Result<bool>,
+        F: FnMut(crate::models::Trade) -> std::io::Result<bool>,
     {
-        use crate::matching_wal::MatchingWalReader;
+        use crate::matching_wal::wal::{MatchingWalReader, TradePayload};
+        use crate::models::Trade;
 
-        let data_dir = match &self.data_dir {
-            Some(dir) => dir,
-            None => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    "MatchingService has no persistence configured",
-                ));
-            }
-        };
-
-        let wal_path = data_dir.join("wal").join("trades.wal");
-        if !wal_path.exists() {
-            // No WAL file = cold start, nothing to replay
-            return Ok(0);
-        }
-
-        let mut reader = MatchingWalReader::open(&wal_path)?;
-        let mut count = 0u64;
-
-        reader.replay(from_seq, |seq, trade| {
-            count += 1;
-            callback(seq, trade)
+        let data_dir = self.data_dir.as_ref().ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "MatchingService has no data_dir",
+            )
         })?;
 
-        tracing::info!(
-            from_seq = from_seq,
-            trades_replayed = count,
-            "MatchingService replay_trades complete"
-        );
+        let wal_file = data_dir.join("wal/trades.wal");
+        if !wal_file.exists() {
+            return Ok(());
+        }
 
-        Ok(count)
+        let mut reader = MatchingWalReader::open(&wal_file)?;
+        reader.replay(1, |_, payload: &TradePayload| {
+            // Filter by trade_id >= from_id
+            if payload.trade_id >= from_id {
+                let trade = Trade {
+                    trade_id: payload.trade_id,
+                    buyer_order_id: payload.buyer_order_id,
+                    seller_order_id: payload.seller_order_id,
+                    buyer_user_id: payload.buyer_user_id,
+                    seller_user_id: payload.seller_user_id,
+                    price: payload.price,
+                    qty: payload.qty,
+                };
+                callback(trade)
+            } else {
+                Ok(true)
+            }
+        })
     }
 }
 
@@ -1024,6 +1025,7 @@ impl SettlementService {
         data_dir: impl AsRef<std::path::Path>,
         checkpoint_interval: u64,
         snapshot_interval: u64,
+        matching: Option<&MatchingService>,
     ) -> std::io::Result<Self> {
         use crate::settlement_wal::SettlementRecovery;
 
@@ -1054,7 +1056,7 @@ impl SettlementService {
             data_dir.as_ref().join("snapshots"),
         );
 
-        Ok(Self {
+        let mut service = Self {
             ledger,
             queues,
             stats,
@@ -1065,7 +1067,48 @@ impl SettlementService {
             wal_writer: Some(Arc::new(std::sync::Mutex::new(wal_writer))),
             snapshotter: Some(Arc::new(snapshotter)),
             last_trade_id_shared: Arc::new(std::sync::atomic::AtomicU64::new(result.last_trade_id)),
-        })
+        };
+
+        if let Some(me) = matching {
+            service.synchronize(me)?;
+        }
+
+        Ok(service)
+    }
+
+    /// Synchronize trades with Matching Service (Phase 0x0D - ISSUE-003c)
+    pub fn synchronize(&mut self, matching: &MatchingService) -> std::io::Result<()> {
+        let last_trade_id = self
+            .persistence_config
+            .as_ref()
+            .map(|c| c.last_trade_id)
+            .unwrap_or(0);
+        tracing::info!(last_trade_id, "Settlement Synchronization starting");
+
+        let mut replayed_trades = Vec::new();
+        matching.replay_output(last_trade_id + 1, |trade| {
+            replayed_trades.push(trade);
+            Ok(true)
+        })?;
+
+        if !replayed_trades.is_empty() {
+            tracing::info!("Replaying {} trades from Matching", replayed_trades.len());
+            // TODO: Process replayed trades (Ledger + Balance Updates)
+            // For now we just update last_trade_id
+            let max_id = replayed_trades
+                .iter()
+                .map(|t| t.trade_id)
+                .max()
+                .unwrap_or(last_trade_id);
+            if let Some(ref mut config) = self.persistence_config {
+                config.last_trade_id = max_id;
+            }
+            self.last_trade_id_shared
+                .store(max_id, std::sync::atomic::Ordering::Relaxed);
+        }
+
+        tracing::info!("Settlement Synchronization complete");
+        Ok(())
     }
 
     /// Get the last recovered trade_id (for testing/debugging)

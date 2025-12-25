@@ -58,12 +58,21 @@ pub struct UBSCore {
     manager: SymbolManager,
     /// Next WAL sequence ID
     next_seq_id: u64,
+    /// Data directory for WAL replay
+    data_dir: std::path::PathBuf,
 }
 
 impl UBSCore {
     /// Create a new UBSCore with given symbol manager (legacy WAL)
     pub fn new(manager: SymbolManager, wal_config: WalConfig) -> io::Result<Self> {
+        let wal_path = wal_config.path.clone();
         let wal = WalWriter::new(wal_config)?;
+
+        // Extract directory from WAL path for data_dir
+        let data_dir = std::path::Path::new(&wal_path)
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| std::path::PathBuf::from("."));
 
         Ok(Self {
             accounts: FxHashMap::default(),
@@ -71,6 +80,7 @@ impl UBSCore {
             wal_v2: None,
             manager,
             next_seq_id: 1,
+            data_dir,
         })
     }
 
@@ -78,7 +88,7 @@ impl UBSCore {
     pub fn new_with_recovery(manager: SymbolManager, config: UBSCoreConfig) -> io::Result<Self> {
         // 1. Recover state from snapshot + WAL
         let recovery = UBSCoreRecovery::new(&config.data_dir);
-        let state = recovery.recover()?;
+        let state = recovery.recover(&manager)?;
 
         // 2. Create new WAL writer
         std::fs::create_dir_all(&config.wal_dir)?;
@@ -91,6 +101,75 @@ impl UBSCore {
             wal_v2: Some(wal_v2),
             manager,
             next_seq_id: state.next_seq_id,
+            data_dir: config.data_dir,
+        })
+    }
+    /// Replay actions from WAL (Phase 0x0D - ISSUE-003)
+    ///
+    /// Used by downstream services (ME, Settlement) to synchronize state.
+    /// Replays both Order and Cancel actions as ValidAction objects.
+    pub fn replay_output<F>(&self, from_seq: u64, mut callback: F) -> io::Result<()>
+    where
+        F: FnMut(crate::pipeline::ValidAction) -> io::Result<bool>,
+    {
+        use crate::messages::ValidOrder;
+        use crate::pipeline::ValidAction;
+        use crate::ubscore_wal::wal::{CancelPayload, OrderPayload, UBSCoreWalReader};
+
+        let wal_file = self.data_dir.join("wal/current.wal");
+        if !wal_file.exists() {
+            return Ok(());
+        }
+
+        let mut reader = UBSCoreWalReader::open(&wal_file)?;
+        reader.replay(from_seq, |entry| {
+            match entry
+                .header
+                .entry_type
+                .try_into()
+                .map_err(|e: io::Error| e)?
+            {
+                crate::wal_v2::WalEntryType::Order => {
+                    let payload: OrderPayload = bincode::deserialize(&entry.payload)
+                        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+
+                    let side = crate::models::Side::try_from(payload.side)
+                        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Invalid side"))?;
+
+                    // Reconstruct InternalOrder
+                    let order = crate::models::InternalOrder {
+                        order_id: payload.order_id,
+                        user_id: payload.user_id,
+                        symbol_id: payload.symbol_id,
+                        price: payload.price,
+                        qty: payload.qty,
+                        filled_qty: 0,
+                        side,
+                        order_type: crate::models::OrderType::try_from(payload.order_type)
+                            .unwrap_or(crate::models::OrderType::Limit),
+                        status: crate::models::OrderStatus::NEW,
+                        lock_version: 0,
+                        seq_id: entry.header.seq_id,
+                        ingested_at_ns: payload.ingested_at_ns,
+                        cid: None,
+                    };
+
+                    let valid_order =
+                        ValidOrder::new(entry.header.seq_id, order, payload.ingested_at_ns);
+                    callback(ValidAction::Order(valid_order))
+                }
+                crate::wal_v2::WalEntryType::Cancel => {
+                    let payload: CancelPayload = bincode::deserialize(&entry.payload)
+                        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+
+                    callback(ValidAction::Cancel {
+                        order_id: payload.order_id,
+                        user_id: payload.user_id,
+                        ingested_at_ns: 0, // In WAL v2 we don't store ingest time for cancel yet
+                    })
+                }
+                _ => Ok(true), // Skip other types (Deposit/Withdraw aren't needed by ME)
+            }
         })
     }
 
