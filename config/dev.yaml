@@ -15,11 +15,25 @@ persistence:
   enabled: true  # TDengine is running
   tdengine_dsn: "taos+ws://root:taosdata@localhost:6041"
 
+# UBSCore Service Persistence (Phase 0x0D)
+ubscore_persistence:
+  enabled: true
+  data_dir: "./data/ubscore"
+  wal_dir: "./data/ubscore/wal"
+  snapshot_interval_orders: 5000
+
 # Matching Service Persistence (Phase 0x0D)
 matching_persistence:
   enabled: true
   data_dir: "./data/matching"
   snapshot_interval_trades: 1000  # Create snapshot every 1000 trades
+
+# Settlement Service Persistence (Phase 0x0D)
+settlement_persistence:
+  enabled: true
+  data_dir: "./data/settlement"
+  checkpoint_interval: 1000
+  snapshot_interval: 10000
 
 # PostgreSQL for account management (Phase 0x0A)
 postgres_url: "postgresql://trading:trading123@localhost:5433/exchange_info_db"

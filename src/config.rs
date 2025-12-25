@@ -13,6 +13,9 @@ pub struct AppConfig {
     pub gateway: GatewayConfig,
     #[serde(default)]
     pub persistence: PersistenceConfig,
+    /// UBSCore Service Persistence (Phase 0x0D)
+    #[serde(default)]
+    pub ubscore_persistence: UBSCorePersistenceConfig,
     /// Matching Service Persistence (Phase 0x0D)
     #[serde(default)]
     pub matching_persistence: MatchingPersistenceConfig,
@@ -60,6 +63,26 @@ impl Default for MatchingPersistenceConfig {
             enabled: false,
             data_dir: "./data/matching-service".to_string(),
             snapshot_interval_trades: 1000,
+        }
+    }
+}
+
+/// UBSCore Service Persistence Configuration (Phase 0x0D)
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct UBSCorePersistenceConfig {
+    pub enabled: bool,
+    pub data_dir: String,
+    pub wal_dir: String,
+    pub snapshot_interval_orders: u64,
+}
+
+impl Default for UBSCorePersistenceConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            data_dir: "./data/ubscore".to_string(),
+            wal_dir: "./data/ubscore/wal".to_string(),
+            snapshot_interval_orders: 5000,
         }
     }
 }
