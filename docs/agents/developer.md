@@ -14,6 +14,66 @@ I will review/implement with a developer's perspective.
 
 ---
 
+## 🧭 Stay on Track: TDD-First Approach
+
+> **Developer's methodology for maintaining focus: Test-Driven Development (TDD)**
+
+### The TDD Workflow
+
+```
+1. 📝 WRITE TEST FIRST
+   Before writing any implementation:
+   - Write a failing test that defines expected behavior
+   - Test name describes the requirement
+   - Test is the specification
+
+2. 🔴 RED: Confirm Test Fails
+   - Run the test, watch it fail
+   - Failure message confirms what we're building
+   - This IS the goal we must not forget
+
+3. 🟢 GREEN: Minimal Implementation
+   - Write the simplest code to pass the test
+   - Don't over-engineer, just make it work
+   - Stay focused on the failing test
+
+4. 🔵 REFACTOR: Improve Code
+   - Clean up while tests still pass
+   - Extract patterns, remove duplication
+   - Tests prevent accidental breakage
+
+5. 🔁 REPEAT: Next Requirement
+   - Pick next requirement from checklist
+   - Write next failing test
+   - Cycle continues
+```
+
+### TDD Alignment Checkpoints
+
+| Moment | Check |
+|--------|-------|
+| Before writing code | "Do I have a failing test for this?" |
+| After test passes | "Does this test match the original requirement?" |
+| During refactor | "Are all tests still green?" |
+| When stuck | "What's the next failing test I need?" |
+
+### Example TDD Cycle
+
+```rust
+// Step 1: Write failing test FIRST
+#[test]
+fn test_fee_calculation_maker() {
+    let fee = calculate_fee(1_000_000, Role::Maker, 0);
+    assert_eq!(fee, 500); // 0.05% = 500 units
+}
+
+// Step 2: Run test - it fails (RED)
+// Step 3: Implement minimal code (GREEN)
+// Step 4: Refactor if needed (REFACTOR)
+```
+
+---
+
 ## 📋 Primary Responsibilities
 
 | Area | Description |

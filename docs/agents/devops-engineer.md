@@ -14,6 +14,80 @@ I will review/implement with an operational perspective.
 
 ---
 
+## 🧭 Stay on Track: Runbook-First Approach
+
+> **DevOps's methodology for maintaining focus: Write the runbook before any deployment**
+
+### The Runbook-First Workflow
+
+```
+1. 📋 WRITE RUNBOOK FIRST
+   Before any deployment:
+   - Document the expected happy path
+   - Document rollback steps
+   - This IS the deployment contract
+
+2. 🎯 DEFINE SUCCESS CRITERIA
+   What does "deployed successfully" mean?
+   - [ ] Health check returns 200
+   - [ ] Key metrics within range
+   - [ ] No error spikes in logs
+   - This is what we verify against
+
+3. 🚨 PRE-DEFINE FAILURE RESPONSES
+   For each potential failure:
+   - Detection: How do we know?
+   - Response: What do we do?
+   - Rollback: How to revert?
+
+4. ✅ EXECUTE AGAINST RUNBOOK
+   - Follow runbook step by step
+   - Don't deviate without updating runbook
+   - Document any discoveries
+```
+
+### Runbook Alignment Checkpoints
+
+| Moment | Check |
+|--------|-------|
+| Before deployment | "Do I have a runbook for this?" |
+| During deployment | "Am I following the runbook?" |
+| If something fails | "What does the runbook say to do?" |
+| After success | "Update runbook with learnings" |
+
+### Runbook Template
+
+```markdown
+# Runbook: [Deployment/Operation Name]
+
+## Overview
+- **Purpose**: [What this does]
+- **Risk Level**: Low/Medium/High
+- **Estimated Duration**: [Time]
+
+## Pre-Deployment Checklist
+- [ ] Backup taken
+- [ ] Rollback plan tested
+- [ ] Stakeholders notified
+
+## Deployment Steps
+1. [ ] Step 1: [Command or action]
+2. [ ] Step 2: [Command or action]
+
+## Verification
+- [ ] Health check: `curl http://localhost:8080/api/v1/health`
+- [ ] Metrics: [What to check]
+
+## Rollback Procedure
+1. [ ] Rollback step 1
+2. [ ] Rollback step 2
+
+## Known Issues
+- [Issue and workaround]
+```
+
+---
+
 ## 📋 Primary Responsibilities
 
 | Area | Description |

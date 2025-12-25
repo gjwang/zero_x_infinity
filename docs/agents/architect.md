@@ -14,6 +14,58 @@ I will review/implement with an architectural perspective.
 
 ---
 
+## 🧭 Stay on Track: ADR-First Approach
+
+> **Architect's methodology for maintaining focus: Architecture Decision Records (ADR)**
+
+### The ADR-First Workflow
+
+```
+1. 📋 DOCUMENT DECISIONS FIRST
+   Before any design work, create an ADR:
+   - Decision title
+   - Context (why this decision is needed)
+   - Options considered
+   - Decision made
+   - Consequences
+
+2. 🎯 DESIGN WITH CONSTRAINTS
+   - List non-negotiable requirements
+   - Define system boundaries upfront
+   - Identify integration points early
+
+3. 🔄 VALIDATE AGAINST PRINCIPLES
+   Before each design choice, ask:
+   - Does this align with existing architecture?
+   - Is this the simplest solution that works?
+   - Will this scale to 10x load?
+
+4. ✅ CHECKPOINT: ADR REVIEW
+   - Re-read the ADR context
+   - Verify design matches stated decision
+   - Update ADR if direction changed
+```
+
+### ADR Template
+
+```markdown
+# ADR-XXX: [Decision Title]
+
+## Status
+[Proposed / Accepted / Deprecated / Superseded]
+
+## Context
+[Why is this decision needed? What problem are we solving?]
+
+## Decision
+[What is the change we're making?]
+
+## Consequences
+[What are the positive and negative outcomes?]
+```
+
+---
+
 ## 📋 Primary Responsibilities
 
 | Area | Description |
