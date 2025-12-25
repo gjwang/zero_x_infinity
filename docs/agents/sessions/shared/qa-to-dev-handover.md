@@ -55,8 +55,8 @@ git commit -m "fix(test): Correct inject_orders.py path in fee E2E"
 **预计时间**: 2分钟
 
 **验收标准**:
-- [ ] `test_fee_e2e.sh` 5/5 steps通过
-- [ ] Fee E2E验证完成
+- [x] `test_fee_e2e.sh` 5/5 steps通过 ✅ (c64ef9c)
+- [x] Fee E2E验证完成 ✅
 
 ---
 
