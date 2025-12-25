@@ -267,6 +267,12 @@ graph TD
 - [Role: Security Reviewer](./docs/agents/security-reviewer.md)
 - [Role: DevOps Engineer](./docs/agents/devops-engineer.md)
 
+### Collaboration Workflows
+- [Architect → Developer Handover](./docs/agents/workflows/arch-to-dev-handover.md)
+- [Architect → QA Handover](./docs/agents/workflows/arch-to-qa-handover.md)
+- [Developer → QA Handover](./docs/agents/workflows/dev-to-qa-handover.md)
+- [Sessions README](./docs/agents/sessions/README.md)
+
 ### Project Standards
 - [Development Guidelines](./docs/standards/development-guidelines.md)
 - [API Conventions](./docs/standards/api-conventions.md)
