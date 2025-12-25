@@ -22,33 +22,44 @@
 
 ---
 
-## 2. WAL Header (16 bytes)
+## 2. WAL Header (20 bytes)
 
 ```
 ┌────────────┬───────────┬────────────────────────────────────┐
-│ entry_type │ 1 byte    │ Event type (Order/Cancel/...)      │
-│ version    │ 1 byte    │ Payload format version (0-255)     │
 │ payload_len│ 2 bytes   │ Payload size (max 64KB)            │
-│ seq_id     │ 8 bytes   │ Monotonic sequence number          │
+│ entry_type │ 1 byte    │ Event type (Order/Trade/...)       │
+│ version    │ 1 byte    │ Payload format version (0-255)     │
+│ epoch      │ 4 bytes   │ EPOCH (restarts from new epoch)    │
+│ seq_id     │ 8 bytes   │ Monotonic sequence within EPOCH    │
 │ checksum   │ 4 bytes   │ CRC32 of payload                   │
 └────────────┴───────────┴────────────────────────────────────┘
-Total: 16 bytes
+Total: 20 bytes
+```
+
+### EPOCH Concept
+
+当重启恢复时发现 WAL 有 gap 无法对齐，从最后可对齐点开始，使用新 EPOCH：
+
+```
+EPOCH=1: seq 1,2,3,4,[损坏],7,8   ← 无法确定 5,6
+EPOCH=2: seq 1,2,3...             ← 从快照恢复，新 EPOCH
 ```
 
 ### Rust 定义
 
 ```rust
-/// Universal WAL header (16 bytes, cache-line friendly)
-#[repr(C, packed)]
+/// Universal WAL header (20 bytes)
+#[repr(C)]
 pub struct WalHeader {
-    pub entry_type: u8,      // WalEntryType enum
-    pub version: u8,         // Payload format version
-    pub payload_len: u16,    // Payload size in bytes
-    pub seq_id: u64,         // Monotonic sequence
-    pub checksum: u32,       // CRC32 of payload
+    pub payload_len: u16,    // 2: Payload size
+    pub entry_type: u8,      // 1: WalEntryType enum
+    pub version: u8,         // 1: Payload format version
+    pub epoch: u32,          // 4: EPOCH number
+    pub seq_id: u64,         // 8: Monotonic sequence
+    pub checksum: u32,       // 4: CRC32 of payload
 }
 
-const WAL_HEADER_SIZE: usize = 16;
+const WAL_HEADER_SIZE: usize = 20;
 ```
 
 ---
