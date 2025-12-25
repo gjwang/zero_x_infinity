@@ -518,4 +518,142 @@ mod tests {
             );
         }
     }
+
+    // --------------------------------------------------------
+    // TDD Test 8: Real file I/O verification
+    // --------------------------------------------------------
+    #[test]
+    fn test_real_file_io() {
+        use std::fs::{self, File};
+        use std::io::BufWriter;
+
+        let test_path = format!("target/test_wal_v2_{}.wal", std::process::id());
+
+        // Clean up from previous runs
+        let _ = fs::remove_file(&test_path);
+
+        // Write entries to real file
+        {
+            let file = File::create(&test_path).unwrap();
+            let buf_writer = BufWriter::new(file);
+            let mut writer = WalWriterV2::new(buf_writer, 1, 1);
+
+            // Write Order entry
+            let order_payload = bincode::serialize(&OrderPayload {
+                order_id: 12345,
+                user_id: 100,
+                symbol_id: 1,
+                price: 50000_000000, // $50000.00
+                qty: 1_000000,       // 1.0
+                side: 0,             // Buy
+                order_type: 0,       // Limit
+                ingested_at_ns: 1703500000000000000,
+            })
+            .unwrap();
+            writer
+                .write_entry(WalEntryType::Order, &order_payload)
+                .unwrap();
+
+            // Write Cancel entry
+            let cancel_payload = bincode::serialize(&CancelPayload {
+                order_id: 12345,
+                user_id: 100,
+            })
+            .unwrap();
+            writer
+                .write_entry(WalEntryType::Cancel, &cancel_payload)
+                .unwrap();
+
+            // Write Deposit entry
+            let deposit_payload = bincode::serialize(&FundingPayload {
+                user_id: 100,
+                asset_id: 0,
+                amount: 1000_000000, // 1000 units
+                request_id: 9999,
+            })
+            .unwrap();
+            writer
+                .write_entry(WalEntryType::Deposit, &deposit_payload)
+                .unwrap();
+
+            writer.flush().unwrap();
+        }
+
+        // Read and verify from real file
+        {
+            let file = File::open(&test_path).unwrap();
+            let mut reader = WalReaderV2::new(file);
+
+            // Entry 1: Order
+            let entry1 = reader.read_entry().unwrap().expect("should have entry 1");
+            assert_eq!(entry1.header.seq_id, 1);
+            assert_eq!(entry1.header.epoch, 1);
+            assert_eq!(entry1.header.entry_type, WalEntryType::Order as u8);
+            let order: OrderPayload = bincode::deserialize(&entry1.payload).unwrap();
+            assert_eq!(order.order_id, 12345);
+            assert_eq!(order.price, 50000_000000);
+
+            // Entry 2: Cancel
+            let entry2 = reader.read_entry().unwrap().expect("should have entry 2");
+            assert_eq!(entry2.header.seq_id, 2);
+            assert_eq!(entry2.header.entry_type, WalEntryType::Cancel as u8);
+            let cancel: CancelPayload = bincode::deserialize(&entry2.payload).unwrap();
+            assert_eq!(cancel.order_id, 12345);
+
+            // Entry 3: Deposit
+            let entry3 = reader.read_entry().unwrap().expect("should have entry 3");
+            assert_eq!(entry3.header.seq_id, 3);
+            assert_eq!(entry3.header.entry_type, WalEntryType::Deposit as u8);
+            let deposit: FundingPayload = bincode::deserialize(&entry3.payload).unwrap();
+            assert_eq!(deposit.amount, 1000_000000);
+
+            // EOF
+            assert!(reader.read_entry().unwrap().is_none());
+        }
+
+        // Verify file size matches expected
+        {
+            let metadata = fs::metadata(&test_path).unwrap();
+            let file_size = metadata.len();
+
+            // Calculate expected size
+            let order_payload_size = bincode::serialized_size(&OrderPayload {
+                order_id: 0,
+                user_id: 0,
+                symbol_id: 0,
+                price: 0,
+                qty: 0,
+                side: 0,
+                order_type: 0,
+                ingested_at_ns: 0,
+            })
+            .unwrap() as u64;
+            let cancel_payload_size = bincode::serialized_size(&CancelPayload {
+                order_id: 0,
+                user_id: 0,
+            })
+            .unwrap() as u64;
+            let deposit_payload_size = bincode::serialized_size(&FundingPayload {
+                user_id: 0,
+                asset_id: 0,
+                amount: 0,
+                request_id: 0,
+            })
+            .unwrap() as u64;
+
+            let expected_size = (WAL_HEADER_SIZE as u64 * 3)
+                + order_payload_size
+                + cancel_payload_size
+                + deposit_payload_size;
+
+            assert_eq!(
+                file_size, expected_size,
+                "File size mismatch: got {}, expected {}",
+                file_size, expected_size
+            );
+        }
+
+        // Clean up
+        let _ = fs::remove_file(&test_path);
+    }
 }
