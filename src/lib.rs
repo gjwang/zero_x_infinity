@@ -35,6 +35,7 @@ pub mod gateway;
 pub mod ledger;
 pub mod logging;
 pub mod market; // Market data services (depth, etc.)
+pub mod matching_wal; // Phase 0x0D Matching Service WAL
 pub mod messages;
 pub mod models;
 pub mod orderbook;
