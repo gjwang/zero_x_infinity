@@ -31,6 +31,7 @@ use zero_x_infinity::perf::PerfMetrics;
 use zero_x_infinity::pipeline_mt::run_pipeline_multi_thread;
 use zero_x_infinity::pipeline_runner::run_pipeline_single_thread;
 use zero_x_infinity::ubscore::UBSCore;
+use zero_x_infinity::ubscore_wal::UBSCoreConfig;
 use zero_x_infinity::wal::WalConfig;
 
 // ============================================================
@@ -319,8 +320,18 @@ fn main() {
             sync_on_flush: false,
         };
 
-        let mut ubscore =
-            UBSCore::new((*symbol_mgr).clone(), wal_config).expect("Failed to create UBSCore");
+        // Phase 0x0D: Use WAL v2 with recovery if enabled
+        let mut ubscore = if app_config.ubscore_persistence.enabled {
+            tracing::info!(
+                "[UBSCore] Persistence enabled: data_dir={}",
+                app_config.ubscore_persistence.data_dir
+            );
+            let ubscore_config = UBSCoreConfig::new(&app_config.ubscore_persistence.data_dir);
+            UBSCore::new_with_recovery((*symbol_mgr).clone(), ubscore_config)
+                .expect("Failed to create UBSCore with recovery")
+        } else {
+            UBSCore::new((*symbol_mgr).clone(), wal_config).expect("Failed to create UBSCore")
+        };
 
         // Transfer initial balances to UBSCore and pre-create TDengine tables
         let symbol_info = symbol_mgr.get_symbol_info_by_id(active_symbol_id).unwrap();
