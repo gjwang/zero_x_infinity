@@ -63,12 +63,24 @@
 
 # Reference
 
-- [开发规范 (Development Guidelines)](../standards/development-guidelines.md)
-- [API 规范 (API Conventions)](../standards/api-conventions.md)
-- [ID 规范 (ID Specification)](../standards/id-specification.md)
-- [命名规范 (Naming Convention)](../standards/naming-convention.md)
-- [CI 常见坑与解决方案 (CI Pitfalls)](./standards/ci-pitfalls.md)
-- [AI Review Roles (AI 评审角色)](./standards/ai-review-roles.md)
-- [Specification Mode (规格模式)](./standards/specification-mode.md)
-- [Agent 测试注意事项 (Agent Testing Notes)](./agent-testing-notes.md)
-- [Database Selection: TDengine | 数据库选型: TDengine](./database-selection-tdengine.md)
+## 🤖 AI Agent System
+
+- [AGENTS.md (Entry Point)](../../AGENTS.md)
+- [Specification Mode (规格模式)](../agents/specification-mode.md)
+- [🏛️ Architect Role](../agents/architect.md)
+- [💻 Developer Role](../agents/developer.md)
+- [🧪 QA Engineer Role](../agents/qa-engineer.md)
+- [🔒 Security Reviewer Role](../agents/security-reviewer.md)
+- [🔧 DevOps Engineer Role](../agents/devops-engineer.md)
+
+## 📚 Development Standards
+
+- [Development Guidelines](../standards/development-guidelines.md)
+- [API Conventions](../standards/api-conventions.md)
+- [ID Specification](../standards/id-specification.md)
+- [Naming Convention](../standards/naming-convention.md)
+- [CI Pitfalls](./standards/ci-pitfalls.md)
+- [Pre-merge Checklist](./standards/pre-merge-checklist.md)
+- [Agent Testing Notes](./agent-testing-notes.md)
+- [Database Selection: TDengine](./database-selection-tdengine.md)
+
