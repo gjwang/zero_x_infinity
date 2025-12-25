@@ -174,8 +174,8 @@ matching_persistence:
 settlement_persistence:
   enabled: true
   data_dir: "$SETTLEMENT_DATA_DIR"
-  checkpoint_interval: 20
-  snapshot_interval: 50
+  checkpoint_interval: 5
+  snapshot_interval: 10
 
 postgres_url: "postgresql://trading:trading123@localhost:5433/exchange_info_db"
 EOF
@@ -207,9 +207,9 @@ STEP=6
 echo ""
 echo "[Step $STEP] Injecting orders (must have >0 accepted)..."
 
-# Use first 30 orders only (users 1-1000 have balances)
+# Use 100 orders to ensure we get plenty of trades
 INJECT_RESULT=$(GATEWAY_URL="http://localhost:$PORT" python3 "${SCRIPT_DIR}/inject_orders.py" \
-    --input fixtures/orders.csv --limit 30 2>&1) || true
+    --input fixtures/orders.csv --limit 100 2>&1) || true
 
 # Extract accepted count from output (format: "Accepted:      30")
 ACCEPTED=$(echo "$INJECT_RESULT" | grep 'Accepted:' | awk '{print $2}')
@@ -246,6 +246,32 @@ if [ "$MATCHING_WAL_SIZE" -lt 100 ]; then
 fi
 
 pass_step "Matching WAL: $MATCHING_WAL_SIZE bytes"
+
+# Check settlement WAL
+SETTLEMENT_WAL=$(find "$SETTLEMENT_DATA_DIR" -name "*.wal" -type f 2>/dev/null | head -1)
+if [ -z "$SETTLEMENT_WAL" ]; then
+    fail_at_step "No settlement WAL file found"
+fi
+
+SETTLEMENT_WAL_SIZE=$(stat -f%z "$SETTLEMENT_WAL" 2>/dev/null || stat -c%s "$SETTLEMENT_WAL" 2>/dev/null || echo "0")
+if [ "$SETTLEMENT_WAL_SIZE" -lt 30 ]; then
+    fail_at_step "Settlement WAL file too small: $SETTLEMENT_WAL_SIZE bytes (Checkpoints not written?)"
+fi
+
+# Verify SettlementCheckpoint entry type (0x10) exists in WAL
+# Entry Type is at offset 2 in each 20-byte header.
+if ! od -An -j2 -N1 -t x1 "$SETTLEMENT_WAL" | grep -q "10"; then
+    fail_at_step "Settlement WAL does not contain SettlementCheckpoint (0x10) entries"
+fi
+
+pass_step "Settlement WAL: $SETTLEMENT_WAL_SIZE bytes (0x10 entries confirmed)"
+
+# Check settlement Snapshot
+SETTLEMENT_SNAPSHOT=$(find "$SETTLEMENT_DATA_DIR/snapshots" -name "snapshot-*" -type d 2>/dev/null | head -1)
+if [ -z "$SETTLEMENT_SNAPSHOT" ]; then
+    fail_at_step "No settlement snapshot found (Expected at 50 trades)"
+fi
+pass_step "Settlement Snapshot: $(basename "$SETTLEMENT_SNAPSHOT")"
 
 # ============================================================================
 # Step 8: Record state before crash

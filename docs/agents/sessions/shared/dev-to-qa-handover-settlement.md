@@ -1,9 +1,21 @@
 # Developer → QA: 0x0D Settlement WAL & Snapshot (Phase 3 & 4)
 
 > **Developer**: AI Agent  
-> **Date**: 2025-12-26 03:15  
-> **Status**: ✅ **Ready for QA Verification**  
+> **Date**: 2025-12-26 03:45  
+> **Status**: ✅ **Bugs Fixed - Ready for QA Re-Verification**  
 > **Phase**: 0x0D-wal-snapshot-design (Settlement Persistence)
+
+---
+
+## ⚡ Bug Fix Summary (New)
+
+针对 QA 发现的 BUG-001 和 BUG-002，已在 commit `166b803` 中完成修复：
+
+| Bug ID | 描述 | 修复方案 | 状态 |
+|--------|------|----------|------|
+| **BUG-001** | `inject_orders.py` 端口硬编码 8080 | 动态解析 `GATEWAY_URL` 端口 | ✅ 已修复 |
+| **BUG-002** | E2E 脚本空值变量比较报错 | 增加 `awk` 提取与 `${VAR:-0}` 默认值 | ✅ 已修复 |
+| **BPR-001** | 目录命名不符合架构标准 | 已统一为 `-service` 后缀 (e.g. `matching-service`) | ✅ 已修复 |
 
 ---
 
