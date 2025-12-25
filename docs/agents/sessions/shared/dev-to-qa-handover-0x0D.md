@@ -38,7 +38,7 @@
 
 ```bash
 # 1. 拉取最新代码
-cd /Users/gjwang/eclipse-workspace/rust_source/zero_x_infinity
+cd ./zero_x_infinity
 git checkout 0x0D-wal-snapshot-design
 git pull origin 0x0D-wal-snapshot-design
 
@@ -383,7 +383,7 @@ git show 1fae424 --stat
 ## 📚 相关文档
 
 ### 设计文档
-- [`docs/src/0x0D-matching-wal-snapshot.md`](file:///Users/gjwang/eclipse-workspace/rust_source/zero_x_infinity/docs/src/0x0D-matching-wal-snapshot.md)
+- [`docs/src/0x0D-matching-wal-snapshot.md`](./docs/src/0x0D-matching-wal-snapshot.md)
   - Section 3: Trade WAL Format
   - Section 4: OrderBook Snapshot Format
   - Section 5: Recovery Protocol
@@ -394,9 +394,9 @@ git show 1fae424 --stat
   - 统计数据和成就
 
 ### QA原始报告
-- [`qa/0x0D-phase1-test-report.md`](file:///Users/gjwang/eclipse-workspace/rust_source/zero_x_infinity/docs/agents/sessions/qa/0x0D-phase1-test-report.md)
+- [`qa/0x0D-phase1-test-report.md`](./docs/agents/sessions/qa/0x0D-phase1-test-report.md)
   - Phase 1 WAL测试报告 (11/11通过)
-- [`qa/0x0D-retest-report.md`](file:///Users/gjwang/eclipse-workspace/rust_source/zero_x_infinity/docs/agents/sessions/qa/0x0D-retest-report.md)
+- [`qa/0x0D-retest-report.md`](./docs/agents/sessions/qa/0x0D-retest-report.md)
   - Re-test报告
 
 ---
@@ -452,4 +452,4 @@ QA的测试checklist是在Phase 2开始前创建的，只包含Phase 1 (WAL Writ
 ---
 
 *Handover Document for 0x0D Phase 2.4 & 2.5*  
-*遵循: [`docs/agents/workflows/dev-to-qa-handover.md`](file:///Users/gjwang/eclipse-workspace/rust_source/zero_x_infinity/docs/agents/workflows/dev-to-qa-handover.md)*
+*遵循: [`docs/agents/workflows/dev-to-qa-handover.md`](./docs/agents/workflows/dev-to-qa-handover.md)*

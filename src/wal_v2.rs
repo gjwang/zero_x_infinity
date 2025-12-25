@@ -125,6 +125,8 @@ pub enum WalEntryType {
     Deposit = 5,
     Withdraw = 6,
     SnapshotMarker = 7,
+    /// Settlement checkpoint - records last processed trade_id
+    SettlementCheckpoint = 0x10,
 }
 
 impl TryFrom<u8> for WalEntryType {
@@ -139,6 +141,7 @@ impl TryFrom<u8> for WalEntryType {
             5 => Ok(Self::Deposit),
             6 => Ok(Self::Withdraw),
             7 => Ok(Self::SnapshotMarker),
+            0x10 => Ok(Self::SettlementCheckpoint),
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("Unknown WalEntryType: {}", value),

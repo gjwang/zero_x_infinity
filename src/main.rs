@@ -451,6 +451,7 @@ fn main() {
             db_client_for_pipeline, // db_client for SettlementService TDengine
             Some(transfer_receiver), // Connect UBSCore to receive internal transfer commands
             Some(app_config.matching_persistence), // Phase 0x0D: Enable matching persistence
+            Some(app_config.settlement_persistence), // Phase 0x0D: Enable settlement persistence
         );
 
         // Wait for gateway thread
@@ -586,6 +587,7 @@ fn main() {
             None, // db_client
             None, // transfer_receiver: not used in non-gateway mode
             None, // matching_persistence: not enabled in non-gateway mode
+            None, // settlement_persistence: not enabled in non-gateway mode
         );
 
         // Print stats (use snapshot to get place/cancel counts)

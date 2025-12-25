@@ -16,6 +16,9 @@ pub struct AppConfig {
     /// Matching Service Persistence (Phase 0x0D)
     #[serde(default)]
     pub matching_persistence: MatchingPersistenceConfig,
+    /// Settlement Service Persistence (Phase 0x0D)
+    #[serde(default)]
+    pub settlement_persistence: SettlementPersistenceConfig,
     /// PostgreSQL connection URL for account management (Phase 0x0A)
     #[serde(default)]
     pub postgres_url: Option<String>,
@@ -57,6 +60,26 @@ impl Default for MatchingPersistenceConfig {
             enabled: false,
             data_dir: "./data/matching".to_string(),
             snapshot_interval_trades: 1000,
+        }
+    }
+}
+
+/// Settlement Service Persistence Configuration (Phase 0x0D)
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SettlementPersistenceConfig {
+    pub enabled: bool,
+    pub data_dir: String,
+    pub checkpoint_interval: u64,
+    pub snapshot_interval: u64,
+}
+
+impl Default for SettlementPersistenceConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            data_dir: "./data/settlement".to_string(),
+            checkpoint_interval: 1000,
+            snapshot_interval: 10000,
         }
     }
 }
