@@ -33,5 +33,18 @@ jobs:
       - name: WAL v2 E2E Test (Phase 0x0D)
         run: ./scripts/test_wal_v2_e2e.sh
 
+      # Phase 0x0D Persistence Layer Unit Tests (QA Verified)
+      - name: Settlement Recovery Tests
+        run: cargo test settlement_wal::recovery --lib -- --nocapture
+
+      - name: Matching Snapshot Tests
+        run: cargo test matching_wal::snapshot --lib -- --nocapture
+
+      - name: UBSCore Recovery Tests
+        run: cargo test ubscore_wal::recovery --lib -- --nocapture
+
+      - name: UBSCore Snapshot Tests
+        run: cargo test ubscore_wal::snapshot --lib -- --nocapture
+
       - name: Clippy
         run: cargo clippy -- -D warnings -A clippy::too_many_arguments -A clippy::collapsible_if -A clippy::unwrap_or_default -A clippy::doc_lazy_continuation -A clippy::manual_is_multiple_of -A clippy::implicit_saturating_sub -A clippy::redundant_pattern_matching -A clippy::derivable_impls
