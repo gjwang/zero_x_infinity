@@ -142,6 +142,8 @@ pub fn replay_trades(&self, from_trade_id: u64, callback: impl FnMut(Trade))
 
 ## 3. Settlement Service
 
+> 📖 **详细设计**: [Settlement Service WAL & Snapshot 详细设计](./0x0D-settlement-wal-snapshot.md)
+
 ### 3.1 状态概述
 
 | 状态 | 数据结构 | 说明 |
