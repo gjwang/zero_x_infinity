@@ -29,4 +29,17 @@ When making a decision that impacts other roles:
 
 ---
 
+### 2025-12-26 - Phase 0x0D Persistence Layer Merged
+
+- **Decided by**: Architect (AI Agent)
+- **Decision**: Merge `0x0D-wal-snapshot-design` to `main` with tag `v0.0D-persistence`
+- **Rationale**: QA approved all 3 services (UBSCore, Matching, Settlement). 289 tests pass. Adversarial audit verified crash recovery, zombie detection, corruption fallback.
+- **Impact on other roles**: Phase 0x0E (Deposit/Withdraw) can now begin
+- **Key commits**:
+  - `a976c51` - Merge Phase 0x0D with CI tests
+  - `cd1b5c6` - CI: add Phase 0x0D persistence layer unit tests
+- **Tag**: `v0.0D-persistence`
+
+---
+
 <!-- Add new decisions above this line -->
