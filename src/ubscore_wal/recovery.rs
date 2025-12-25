@@ -3,7 +3,7 @@
 //! Handles cold/hot start recovery from Snapshot + WAL
 
 use super::snapshot::UBSCoreSnapshotter;
-use super::wal::{CancelPayload, OrderPayload, UBSCoreWalReader};
+use super::wal::{OrderPayload, UBSCoreWalReader};
 use crate::models::Side;
 use crate::symbol_manager::SymbolManager;
 use crate::user_account::UserAccount;
@@ -72,91 +72,120 @@ impl UBSCoreRecovery {
 
         let wal_file = wal_dir.join("current.wal");
         if wal_file.exists() {
-            let mut reader = UBSCoreWalReader::open(&wal_file)?;
+            match UBSCoreWalReader::open(&wal_file) {
+                Ok(mut reader) => {
+                    // UBSC-GAP-01: Wrap replay in match to degrade gracefully on corruption
+                    match reader.replay(next_seq_id, |entry| {
+                        // UBSC-GAP-04: Replay Order Lock events
+                        match WalEntryType::try_from(entry.header.entry_type) {
+                            Ok(WalEntryType::Order) => {
+                                // Deserialize and apply lock
+                                if let Ok(payload) =
+                                    bincode::deserialize::<OrderPayload>(&entry.payload)
+                                {
+                                    let symbol_info =
+                                        manager.get_symbol_info_by_id(payload.symbol_id);
+                                    let qty_unit =
+                                        symbol_info.map(|s| s.qty_unit()).unwrap_or(100_000_000);
 
-            reader.replay(next_seq_id, |entry| {
-                // Replay entry to update accounts
-                match WalEntryType::try_from(entry.header.entry_type) {
-                    Ok(WalEntryType::Order) => {
-                        // Deserialize and apply lock
-                        if let Ok(payload) = bincode::deserialize::<OrderPayload>(&entry.payload) {
-                            let symbol_info = manager.get_symbol_info_by_id(payload.symbol_id);
-                            let qty_unit = symbol_info.map(|s| s.qty_unit()).unwrap_or(100_000_000);
+                                    // Calculate lock asset and amount
+                                    let side = Side::try_from(payload.side).unwrap_or(Side::Buy);
+                                    let lock_asset = match (side, symbol_info) {
+                                        (Side::Buy, Some(s)) => s.quote_asset_id,
+                                        (Side::Sell, Some(s)) => s.base_asset_id,
+                                        _ => 0,
+                                    };
 
-                            // Calculate lock asset and amount
-                            let side = Side::try_from(payload.side).unwrap_or(Side::Buy);
-                            let lock_asset = match (side, symbol_info) {
-                                (Side::Buy, Some(s)) => s.quote_asset_id,
-                                (Side::Sell, Some(s)) => s.base_asset_id,
-                                _ => 0,
-                            };
+                                    // Re-calculate cost (lock amount)
+                                    let lock_amount = if payload.order_type == 0 {
+                                        // Limit
+                                        payload.price * payload.qty / qty_unit
+                                    } else {
+                                        0 // Market orders handled by UBSCore business logic
+                                    };
 
-                            // Re-calculate cost (lock amount)
-                            let lock_amount = if payload.order_type == 0 {
-                                // Limit
-                                payload.price * payload.qty / qty_unit
-                            } else {
-                                0 // Market orders handled by UBSCore business logic
-                            };
-
-                            if lock_amount > 0 && lock_asset > 0 {
-                                let account = accounts
-                                    .entry(payload.user_id)
-                                    .or_insert_with(|| UserAccount::new(payload.user_id));
-                                if let Ok(balance) = account.get_balance_mut(lock_asset) {
-                                    let _ = balance.lock(lock_amount);
+                                    if lock_amount > 0 && lock_asset > 0 {
+                                        let account = accounts
+                                            .entry(payload.user_id)
+                                            .or_insert_with(|| UserAccount::new(payload.user_id));
+                                        if let Ok(balance) = account.get_balance_mut(lock_asset) {
+                                            let _ = balance.lock(lock_amount);
+                                        }
+                                    }
                                 }
+                                next_seq_id = entry.header.seq_id + 1;
+                            }
+                            Ok(WalEntryType::Cancel) => {
+                                // NOTE: Cancellations often involve unlocking, but since we don't know
+                                // the original unlock_amount from the WAL entry (it only has order_id),
+                                // this confirms the need for Phase 4 Replay Protocol where ME tells USBC.
+                                // For RECOVERY however, we usually only recover to the point of durable LOCKS.
+                                // ME will re-request cancels upon its own recovery.
+                                next_seq_id = entry.header.seq_id + 1;
+                            }
+                            Ok(WalEntryType::Deposit) => {
+                                // Deserialize and apply deposit
+                                if let Ok(payload) =
+                                    bincode::deserialize::<crate::wal_v2::FundingPayload>(
+                                        &entry.payload,
+                                    )
+                                {
+                                    let account = accounts
+                                        .entry(payload.user_id)
+                                        .or_insert_with(|| UserAccount::new(payload.user_id));
+                                    let _ = account.deposit(payload.asset_id, payload.amount);
+                                }
+                                next_seq_id = entry.header.seq_id + 1;
+                            }
+                            Ok(WalEntryType::Withdraw) => {
+                                if let Ok(payload) =
+                                    bincode::deserialize::<crate::wal_v2::FundingPayload>(
+                                        &entry.payload,
+                                    )
+                                {
+                                    let account = accounts
+                                        .entry(payload.user_id)
+                                        .or_insert_with(|| UserAccount::new(payload.user_id));
+                                    if let Ok(balance) = account.get_balance_mut(payload.asset_id) {
+                                        let _ = balance.withdraw(payload.amount);
+                                    }
+                                }
+                                next_seq_id = entry.header.seq_id + 1;
+                            }
+                            _ => {
+                                // Unknown type, skip
+                                next_seq_id = entry.header.seq_id + 1;
                             }
                         }
-                        next_seq_id = entry.header.seq_id + 1;
-                    }
-                    Ok(WalEntryType::Cancel) => {
-                        // NOTE: Cancellations often involve unlocking, but since we don't know
-                        // the original unlock_amount from the WAL entry (it only has order_id),
-                        // this confirms the need for Phase 4 Replay Protocol where ME tells USBC.
-                        // For RECOVERY however, we usually only recover to the point of durable LOCKS.
-                        // ME will re-request cancels upon its own recovery.
-                        next_seq_id = entry.header.seq_id + 1;
-                    }
-                    Ok(WalEntryType::Deposit) => {
-                        // Deserialize and apply deposit
-                        if let Ok(payload) =
-                            bincode::deserialize::<crate::wal_v2::FundingPayload>(&entry.payload)
-                        {
-                            let account = accounts
-                                .entry(payload.user_id)
-                                .or_insert_with(|| UserAccount::new(payload.user_id));
-                            let _ = account.deposit(payload.asset_id, payload.amount);
+
+                        Ok(true) // Continue replay
+                    }) {
+                        Ok(()) => {
+                            tracing::info!(
+                                from_seq = snapshot_seq + 1,
+                                to_seq = next_seq_id - 1,
+                                "Replayed WAL"
+                            );
                         }
-                        next_seq_id = entry.header.seq_id + 1;
-                    }
-                    Ok(WalEntryType::Withdraw) => {
-                        if let Ok(payload) =
-                            bincode::deserialize::<crate::wal_v2::FundingPayload>(&entry.payload)
-                        {
-                            let account = accounts
-                                .entry(payload.user_id)
-                                .or_insert_with(|| UserAccount::new(payload.user_id));
-                            if let Ok(balance) = account.get_balance_mut(payload.asset_id) {
-                                let _ = balance.withdraw(payload.amount);
-                            }
+                        Err(e) => {
+                            // UBSC-GAP-01: WAL corruption - log warning and continue with snapshot only
+                            tracing::warn!(
+                                error = %e,
+                                "WAL replay failed, using snapshot only (degraded recovery)"
+                            );
+                            // Reset next_seq_id to snapshot + 1 since WAL replay failed
+                            next_seq_id = snapshot_seq + 1;
                         }
-                        next_seq_id = entry.header.seq_id + 1;
-                    }
-                    _ => {
-                        // Unknown type, skip
-                        next_seq_id = entry.header.seq_id + 1;
                     }
                 }
-
-                Ok(true) // Continue replay
-            })?;
-
-            tracing::info!(
-                from_seq = snapshot_seq + 1,
-                to_seq = next_seq_id - 1,
-                "Replayed WAL"
-            );
+                Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                    tracing::debug!("No WAL file found");
+                }
+                Err(e) => {
+                    // UBSC-GAP-01: Failed to open WAL - log warning and continue with snapshot
+                    tracing::warn!(error = %e, "Failed to open WAL, using snapshot only");
+                }
+            }
         } else {
             tracing::info!("No WAL file found");
         }
@@ -296,7 +325,7 @@ mod tests {
     }
 
     // --------------------------------------------------------
-    // TDD Test 4: Corrupted WAL detection
+    // TDD Test 4: Corrupted WAL detection → graceful degradation
     // --------------------------------------------------------
     #[test]
     fn test_corrupted_wal_detection() {
@@ -334,13 +363,23 @@ mod tests {
             file.write_all(b"CORRUPTED").unwrap();
         }
 
-        // Recover - should detect corruption
+        // UBSC-GAP-01: Recover should succeed with snapshot-only state (graceful degradation)
         let recovery = UBSCoreRecovery::new(&temp_dir);
         let manager = SymbolManager::new();
         let result = recovery.recover(&manager);
 
-        // Should fail with checksum error
-        assert!(result.is_err());
+        // Should succeed with degraded state (snapshot only, WAL skipped)
+        assert!(
+            result.is_ok(),
+            "Recovery should succeed with graceful degradation"
+        );
+        let state = result.unwrap();
+
+        // Verify state is from snapshot only (1000), not including corrupted WAL entry (+500)
+        assert_eq!(state.next_seq_id, 11); // snapshot_seq + 1
+        let account = &state.accounts[&1];
+        let balance = account.get_balance(0).unwrap();
+        assert_eq!(balance.avail(), 1000_000000); // Snapshot balance only
 
         // Cleanup
         let _ = fs::remove_dir_all(&temp_dir);

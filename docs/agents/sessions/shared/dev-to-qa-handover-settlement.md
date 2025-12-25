@@ -1,21 +1,20 @@
-# Developer → QA: 0x0D Settlement WAL & Snapshot (Phase 3 & 4)
+# Developer → QA: 0x0D Settlement WAL & Snapshot (Phase 3, 4 & 5)
 
 > **Developer**: AI Agent  
-> **Date**: 2025-12-26 03:45  
-> **Status**: ✅ **Bugs Fixed - Ready for QA Re-Verification**  
-> **Phase**: 0x0D-wal-snapshot-design (Settlement Persistence)
+> **Date**: 2025-12-26 04:05  
+> **Status**: ✅ **Phase 5 Integrated - Ready for Final QA Acceptance**  
+> **Phase**: 0x0D-wal-snapshot-design (Full Persistence Cycle)
 
 ---
 
 ## ⚡ Bug Fix Summary (New)
-
-针对 QA 发现的 BUG-001 和 BUG-002，已在 commit `166b803` 中完成修复：
 
 | Bug ID | 描述 | 修复方案 | 状态 |
 |--------|------|----------|------|
 | **BUG-001** | `inject_orders.py` 端口硬编码 8080 | 动态解析 `GATEWAY_URL` 端口 | ✅ 已修复 |
 | **BUG-002** | E2E 脚本空值变量比较报错 | 增加 `awk` 提取与 `${VAR:-0}` 默认值 | ✅ 已修复 |
 | **BPR-001** | 目录命名不符合架构标准 | 已统一为 `-service` 后缀 (e.g. `matching-service`) | ✅ 已修复 |
+| **PHASE-5** | 运行时未写入 Checkpoint | 已集成 `WalWriter` 到异步处理循环，并支持后台 Snapshots | ✅ 已完成 |
 
 ---
 
@@ -25,9 +24,10 @@
 
 | Phase | 描述 | 状态 |
 |-------|------|------|
-| Phase 3 | Settlement WAL & Snapshot | ✅ |
-| Phase 4 | Replay Protocol | ✅ |
-| E2E Test | Crash Recovery Verification | ✅ |
+| Phase 3 | Settlement WAL & Snapshot (Infrastructure) | ✅ |
+| Phase 4 | Replay Protocol (Cross-Service) | ✅ |
+| Phase 5 | Runtime Checkpointing & Snapshots | ✅ |
+| E2E | 16-Step Crash Recovery Audit v3 | ✅ |
 
 ### 代码变更
 
@@ -98,45 +98,29 @@ cargo test --lib
 # 预期: 286 passed; 0 failed
 ```
 
-### 验证3: E2E 崩溃恢复测试 (核心验证)
+### 验证3: E2E 崩溃恢复测试 (核心验证 v3)
 
 ```bash
 ./scripts/test_settlement_recovery_e2e.sh
 
 # 预期输出:
-# ╔════════════════════════════════════════════════════════════╗
-# ║   Settlement Service Crash Recovery E2E Test (v2)        ║
-# ║   With Data Integrity Validation                          ║
-# ╚════════════════════════════════════════════════════════════╝
-#
-# [Step 1] ✓ All prerequisites available
-# [Step 2] ✓ Build successful
-# [Step 3] ✓ Persistence directories cleaned
-# [Step 4] ✓ Test config created
-# [Step 5] ✓ Gateway running (cold start)
-# [Step 6] ✓ Orders injected: 30 accepted
-# [Step 7] ✓ Matching WAL: XXX bytes
-# [Step 8] ✓ Pre-crash trade count
-# [Step 9] ✓ Gateway killed successfully
-# [Step 10] ✓ Gateway restarted
+# [Step 6] ✓ Orders injected: 100 accepted
+# [Step 7] ✓ Matching WAL: 3440 bytes
+#           ✓ Settlement WAL: 252 bytes (0x10 entries confirmed)  ← Phase 5!
+#           ✓ Settlement Snapshot: snapshot-22                    ← Phase 5!
 # [Step 11] ✓ Matching recovery confirmed in logs
-#           ✓ Settlement recovery confirmed in logs  ← 关键!
-# [Step 12] ✓ Post-recovery orders accepted: 10
-# [Step 13] ✓ System healthy after all operations
+#           ✓ Settlement recovery confirmed in logs
 #
-# test result: 14 passed; 0 failed; 0 skipped
+# test result: 16 passed; 0 failed; 0 skipped
 # ╔════════════════════════════════════════════════════════════╗
 # ║  ✅ SETTLEMENT RECOVERY E2E TEST PASSED (v2)               ║
 # ╚════════════════════════════════════════════════════════════╝
 ```
 
 **关键验收点**:
-- ✅ 订单注入成功 (30 accepted)
-- ✅ WAL 文件有效内容 (>100 bytes)
-- ✅ SIGKILL 崩溃模拟
-- ✅ **Settlement recovery confirmed in logs**
-- ✅ **Matching recovery confirmed in logs**
-- ✅ 恢复后系统继续接受订单
+- ✅ 运行时写入 WAL Checkpoint (Entry Type 0x10)
+- ✅ 运行时后台创建 Snapshot
+- ✅ 极速恢复与数据一致性
 
 ### 验证4: 代码质量
 
@@ -183,9 +167,8 @@ Settlement recovery complete last_trade_id=12345 is_cold_start=false
 
 ## ⚠️ 已知限制
 
-1. **Checkpoint 写入未实现**: WAL/Snapshot 初始化完成，但运行时 checkpoint 写入需要在 `spawn_trade_processor_async` 中集成
-2. **PostgreSQL 要求**: E2E 测试需要 PostgreSQL (port 5433) 运行
-3. **TDengine 禁用**: E2E 测试禁用 TDengine 以聚焦 persistence 测试
+1. **PostgreSQL 要求**: E2E 测试需要 PostgreSQL (port 5433) 运行
+2. **TDengine 禁用**: E2E 测试禁用 TDengine 以聚焦 persistence 测试
 
 ---
 
@@ -195,7 +178,7 @@ Settlement recovery complete last_trade_id=12345 is_cold_start=false
 |------|------|------|
 | settlement_wal 单元测试 | 9 | ✅ |
 | 全量单元测试 | 286 | ✅ |
-| E2E 崩溃恢复 | 14 步 | ✅ |
+| E2E 崩溃恢复 (Audit v3) | 16 步 | ✅ |
 | Clippy | 0 warnings | ✅ |
 | Fmt | clean | ✅ |
 
