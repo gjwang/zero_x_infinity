@@ -449,7 +449,79 @@ impl MatchingService {
 
     /// Create a new matching service with persistence (Phase 2.4)
     ///
-    /// Performs recovery on startup and enables Trade WAL + periodic snapshots.
+    /// Enables crash recovery with automatic OrderBook restoration and trade audit trail.
+    ///
+    /// # Recovery Behavior
+    ///
+    /// **Cold Start** (no snapshot exists):
+    /// - Starts with empty OrderBook
+    /// - WAL seq_id starts at 1
+    /// - First snapshot created after `snapshot_interval_trades` trades
+    ///
+    /// **Hot Start** (snapshot exists):
+    /// - Loads latest OrderBook snapshot
+    /// - Resumes WAL writing from snapshot seq_id + 1
+    /// - Maintains continuous trade history
+    ///
+    /// # Persistence Strategy
+    ///
+    /// - **Trade WAL**: Append-only log of all trades (for audit compliance)
+    /// - **Snapshots**: Periodic OrderBook checkpoints (for fast recovery)
+    /// - **Atomic operations**: Snapshots use temp-dir + atomic-rename pattern
+    /// - **Integrity**: CRC64 checksums on snapshots, CRC32 on WAL entries
+    ///
+    /// # Arguments
+    ///
+    /// * `data_dir` - Root directory for persistence (e.g., `"data/matching/symbol_0"`)
+    ///   - Creates `{data_dir}/wal/trades.wal`
+    ///   - Creates `{data_dir}/snapshots/snapshot-{seq}/`
+    /// * `snapshot_interval_trades` - Create snapshot every N trades
+    ///   - Recommended: 500-5000 for production
+    ///   - Lower = faster recovery, more I/O overhead
+    ///   - Higher = slower recovery, less I/O overhead
+    ///
+    /// # Multi-Symbol Usage
+    ///
+    /// Use separate data directories per symbol:
+    /// ```rust,ignore
+    /// let btc_service = MatchingService::new_with_persistence(
+    ///     "data/matching/symbol_0", // BTC/USDT
+    ///     queues, stats, btc_market, 1000, 1000
+    /// )?;
+    ///
+    /// let eth_service = MatchingService::new_with_persistence(
+    ///     "data/matching/symbol_1", // ETH/USDT
+    ///     queues, stats, eth_market, 1000, 1000
+    /// )?;
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns `io::Error` if:
+    /// - Cannot create data directories
+    /// - Cannot read/write WAL or snapshot files
+    /// - Snapshot corruption detected (CRC mismatch)
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use zero_x_infinity::pipeline_services::MatchingService;
+    ///
+    /// // Create service with persistence
+    /// let service = MatchingService::new_with_persistence(
+    ///     "data/matching/btcusdt",
+    ///     queues,
+    ///     stats,
+    ///     market_context,
+    ///     1000,  // Depth updates every 1000ms
+    ///     500,   // Snapshot every 500 trades
+    /// )?;
+    ///
+    /// // Run service (handles WAL + snapshots automatically)
+    /// service.run(&shutdown_signal);
+    ///
+    /// // On restart, OrderBook state is automatically recovered!
+    /// ```
     pub fn new_with_persistence(
         data_dir: impl AsRef<Path>,
         queues: Arc<MultiThreadQueues>,
