@@ -1,7 +1,7 @@
 # 0x0D WAL Rotation Mechanism Design
 
 > **Status**: 📋 DRAFT  
-> **Author**: Architect (AI)  
+> **Author**: Architect Team  
 > **Date**: 2024-12-25  
 > **Parent**: [0x0D WAL Format Spec](./0x0D-wal-format-spec.md)
 
