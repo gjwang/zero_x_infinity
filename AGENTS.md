@@ -33,6 +33,93 @@ Before making any changes, AI agents MUST read:
 
 ---
 
+## 🧭 Core Principle: Stay on Track
+
+> **AI agents easily lose direction during complex tasks. To prevent this, ALL non-trivial work MUST follow the blueprint-first approach.**
+
+### The Problem
+
+During complex tasks, AI agents tend to:
+- Forget the original goal mid-execution
+- Go down rabbit holes on tangential issues
+- Make changes that drift from the specification
+- Lose context after multiple iterations
+
+### The Solution: Blueprint-First Execution
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    BLUEPRINT-FIRST EXECUTION                       │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  1. 📋 WRITE BLUEPRINT FIRST                                       │
+│     - Define the goal in 1-2 sentences                             │
+│     - List all sub-tasks as checklist                              │
+│     - Identify success criteria                                    │
+│                                                                     │
+│  2. ✅ CREATE PROGRESS CHECKLIST                                   │
+│     - [ ] Task 1: ...                                              │
+│     - [ ] Task 2: ...                                              │
+│     - [ ] Task N: ...                                              │
+│                                                                     │
+│  3. 🔄 EXECUTE WITH CONTINUOUS ALIGNMENT                           │
+│     - Before each action: "Does this serve the original goal?"     │
+│     - After each step: Check off completed items                   │
+│     - If drifting: STOP, re-read blueprint, realign               │
+│                                                                     │
+│  4. 🎯 FINAL VERIFICATION                                         │
+│     - Compare result against original goal                         │
+│     - Verify all checklist items completed                         │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Alignment Checkpoints
+
+At these moments, STOP and verify alignment with original goal:
+
+| Checkpoint | Action |
+|------------|--------|
+| **Before starting** | Re-read the user's original request |
+| **After each sub-task** | Check: "Did this move toward the goal?" |
+| **When encountering blockers** | Ask: "Is this blocker on the critical path?" |
+| **Before making new decisions** | Verify: "Is this decision in scope?" |
+| **Before completing** | Confirm: "Did I achieve what was originally asked?" |
+
+### Task Complexity Threshold
+
+| Complexity | Blueprint Required? | Example |
+|------------|---------------------|---------|
+| **Simple** (1-2 files, <30 min) | Optional | Fix typo, add log line |
+| **Medium** (3-10 files, 1-2 hrs) | **Required** | New API endpoint, refactor module |
+| **Complex** (>10 files, >2 hrs) | **Mandatory + Review** | New feature, architectural change |
+
+### Blueprint Template
+
+```markdown
+## Task: [Original User Request - verbatim or summary]
+
+### Goal (1-2 sentences)
+[What success looks like]
+
+### Success Criteria
+- [ ] Criterion 1
+- [ ] Criterion 2
+
+### Progress Checklist
+- [ ] Step 1: ...
+- [ ] Step 2: ...
+- [ ] Step 3: ...
+
+### Out of Scope (explicitly)
+- [Things NOT to do]
+
+### Alignment Notes
+- [Key constraints to remember]
+```
+
+---
+
 ## 🎭 AI Role System
 
 This project uses a **Multi-Role AI Review System**. Each role has specific responsibilities and review focus areas.
