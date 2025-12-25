@@ -63,18 +63,6 @@
 
 # Reference
 
-## 🤖 AI Agent System
-
-- [AGENTS.md (Entry Point)](../../AGENTS.md)
-- [Specification Mode (规格模式)](../agents/specification-mode.md)
-- [🏛️ Architect Role](../agents/architect.md)
-- [💻 Developer Role](../agents/developer.md)
-- [🧪 QA Engineer Role](../agents/qa-engineer.md)
-- [🔒 Security Reviewer Role](../agents/security-reviewer.md)
-- [🔧 DevOps Engineer Role](../agents/devops-engineer.md)
-
-## 📚 Development Standards
-
 - [Development Guidelines](../standards/development-guidelines.md)
 - [API Conventions](../standards/api-conventions.md)
 - [ID Specification](../standards/id-specification.md)
@@ -83,4 +71,3 @@
 - [Pre-merge Checklist](./standards/pre-merge-checklist.md)
 - [Agent Testing Notes](./agent-testing-notes.md)
 - [Database Selection: TDengine](./database-selection-tdengine.md)
-

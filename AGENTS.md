@@ -142,6 +142,24 @@ My primary focus is [FOCUS AREA].
 I will review/implement with [ROLE]'s perspective.
 ```
 
+### Session Working Directories
+
+Each role maintains its own working documents for handover and parallel work:
+
+```
+docs/agents/sessions/
+├── shared/             # 🔗 Cross-role coordination
+│   ├── decisions.md    # Shared decisions log
+│   └── blockers.md     # Active blockers
+├── architect/          # 🏛️ Architect's current task
+├── developer/          # 💻 Developer's current task
+├── qa/                 # 🧪 QA's current task
+├── security/           # 🔒 Security's current task
+└── devops/             # 🔧 DevOps's current task
+```
+
+See: [Sessions README](./docs/agents/sessions/README.md)
+
 ---
 
 ## 🔄 Workflow: Specification Mode
