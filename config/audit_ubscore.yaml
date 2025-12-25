@@ -15,6 +15,13 @@ persistence:
   enabled: false
   tdengine_dsn: "taos://root:taosdata@localhost:6030"
 
+# UBSCore Service Persistence (Phase 0x0D)
+ubscore_persistence:
+  enabled: true
+  data_dir: "./data/audit_ubscore"
+  wal_dir: "./data/audit_ubscore/wal"
+  snapshot_interval_orders: 20
+
 matching_persistence:
   enabled: true
   data_dir: "./data/audit_ubscore_me"
