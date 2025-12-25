@@ -173,7 +173,7 @@ fn process_single_transfer(
             TransferResponse::Success { avail, frozen }
         }
         Err(e) => {
-            error!(transfer_id = %req.transfer_id, op = ?req.op, error = e, "Transfer failed");
+            error!(transfer_id = %req.transfer_id, op = ?req.op, error = %e, "Transfer failed");
             TransferResponse::Failed(e.to_string())
         }
     }

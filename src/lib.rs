@@ -45,6 +45,7 @@ pub mod pipeline_mt;
 pub mod pipeline_runner;
 pub mod pipeline_services;
 pub mod ubscore;
+pub mod ubscore_wal; // Phase 0x0D UBSCore WAL
 pub mod user_account;
 pub mod wal;
 pub mod wal_v2; // Phase 0x0D Universal WAL Format
