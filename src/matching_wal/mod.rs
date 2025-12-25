@@ -2,6 +2,8 @@
 //!
 //! Business-layer WAL operations for Matching Service trades.
 
+#[cfg(test)]
+mod integration_tests;
 pub mod recovery;
 pub mod snapshot;
 pub mod wal;
