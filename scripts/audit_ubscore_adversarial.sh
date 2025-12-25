@@ -113,8 +113,38 @@ echo -e "${YELLOW}Test 1: UBSCore Persistence Configuration Check (GAP-00)${NC}"
 if grep -q "ubscore_persistence" src/config.rs 2>/dev/null; then
     pass_step "ubscore_persistence config exists in code"
 else
-    warn_step "NO ubscore_persistence config found in config.rs - UBSCore may not have runtime persistence!"
+    fail_audit "NO ubscore_persistence config found in config.rs"
 fi
+
+# ============================================================================
+# TEST 1b: UBSCore Persistence Log Check (RUNTIME WIRING)
+# ============================================================================
+echo -e "${YELLOW}Test 1b: UBSCore Persistence Runtime Wiring Check${NC}"
+
+# Start Gateway briefly to check logs
+./target/release/zero_x_infinity --gateway --env audit_ubscore --port $PORT > "$GW_LOG" 2>&1 &
+wait_for_gw || fail_audit "Gateway failed to start for persistence check"
+sleep 2
+
+# Check for UBSCore persistence enabled log
+if grep -q "\[UBSCore\] Persistence enabled" "$GW_LOG"; then
+    pass_step "UBSCore persistence initialized at runtime"
+else
+    echo -e "${RED}UBSCore persistence NOT initialized!${NC}"
+    echo "Expected: [UBSCore] Persistence enabled: data_dir=..."
+    grep "Persistence" "$GW_LOG" | head -5
+    fail_audit "UBSCore persistence not wired in gateway mode (check pipeline_mt.rs)"
+fi
+
+# Check for UBSCore WAL file
+if find "$DATA_DIR" -name "*.wal" 2>/dev/null | grep -q .; then
+    pass_step "UBSCore WAL file created"
+else
+    fail_audit "UBSCore WAL file NOT created at $DATA_DIR/wal/"
+fi
+
+pkill -f "zero_x_infinity.*--port.*$PORT"
+sleep 1
 
 # ============================================================================
 # TEST 2: Balance State Before/After Crash (UBSC-GAP-04 Verification)
