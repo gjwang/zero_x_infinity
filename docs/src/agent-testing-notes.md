@@ -96,32 +96,7 @@ services:
 
 ### 4. 禁止使用 `docker exec` 操作服务容器
 
-#### 问题描述
-在 GitHub Actions 中，`services:` 定义的容器（如 TDengine、PostgreSQL）是由 GitHub 托管的**服务容器**，而非本地 Docker 容器。这意味着：
-- **无法使用 `docker exec`**：服务容器的名称和 ID 在 runner 环境中不可见
-- **只能通过 `localhost` 网络连接**：服务容器通过端口映射暴露给 runner
-
-#### 典型报错
-```bash
-# 脚本中使用：
-docker exec tdengine taos -s "DROP DATABASE IF EXISTS trading"
-# CI 中报错：
-Error: No such container: tdengine
-```
-
-#### 解决方案
-使用服务的 REST API 或网络协议，而非 `docker exec`：
-
-```bash
-# ❌ 错误：使用 docker exec（CI 中不工作）
-docker exec tdengine taos -s "DROP DATABASE IF EXISTS trading"
-
-# ✅ 正确：使用 REST API（本地和 CI 都工作）
-curl -sf -u root:taosdata -d "DROP DATABASE IF EXISTS trading" http://localhost:6041/rest/sql
-
-# ✅ 正确：PostgreSQL 使用 psql 客户端连接
-PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -c "DROP TABLE IF EXISTS foo"
-```
+> 详见 [CI 常见坑与解决方案](./standards/ci-pitfalls.md#11-禁止使用-docker-exec)
 
 ---
 
