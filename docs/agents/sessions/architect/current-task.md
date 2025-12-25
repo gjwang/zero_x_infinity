@@ -3,27 +3,58 @@
 ## Session Info
 - **Date**: 2024-12-25
 - **Role**: Architect
-- **Task**: Initial setup - No active task
+- **Task**: 0x0D Snapshot & Recovery Architecture Design
 
 ## Original Goal
-*No active task assigned.*
+Design the Snapshot & Recovery architecture for Zero X Infinity matching engine to enable:
+1. Graceful shutdown with state persistence
+2. Fast restart with state recovery  
+3. Minimal data loss (near-zero RTO/RPO)
 
-## Progress Checklist
-- [ ] *Pending task assignment*
+## ✅ Acceptance Criteria (before starting)
+- [ ] Define what state needs to be snapshotted
+- [ ] Design snapshot trigger mechanism
+- [ ] Design recovery flow (Snapshot + WAL replay)
+- [ ] Define data consistency guarantees
+- [ ] Address graceful shutdown scenario
+- [ ] Address crash recovery scenario
+- [ ] Generate test acceptance checklist
 
-## Key Decisions Made
-*No decisions yet in this session.*
+## 📋 Progress Tracking (during execution)
+- [x] Analyzed existing codebase structure
+- [x] Identified stateful components (UBSCore, OrderBook, WAL)
+- [ ] Creating architecture design document ←
+- [ ] Define snapshot format
+- [ ] Design recovery protocol
+- [ ] Document edge cases
 
-## Blockers / Dependencies
-*No blockers.*
+## ❌ Out of Scope
+- Implementation code changes
+- Performance benchmarking
+- Blockchain integration
 
-## Handover Notes
-**System Ready**: The AI Agent system has been set up with:
-- Role definitions in `docs/agents/architect.md`
-- Working directory at `docs/agents/sessions/architect/`
-- Shared coordination via `docs/agents/sessions/shared/`
+## Key Findings from Codebase Analysis
 
-**Next Steps**: Await task assignment. When assigned:
-1. Read the user's request carefully
-2. Create a blueprint with goals and checklist
-3. Begin architectural analysis
+### Existing Infrastructure
+| Component | File | State Type |
+|-----------|------|------------|
+| **WAL** | `wal.rs` | Already implemented (CSV format, single-threaded) |
+| **UBSCore** | `ubscore.rs` | Balance state (`FxHashMap<UserId, UserAccount>`) |
+| **OrderBook** | `orderbook.rs` | Order book state (`BTreeMap<Price, VecDeque<Order>>`) |
+| **Balance** | `balance.rs` | Per-asset balance (avail, frozen, versions) |
+
+### Current WAL Design
+- `WalWriter`: Appends orders to WAL file
+- `WalReader`: Replays WAL entries for recovery
+- Format: CSV (for development readability)
+- Single-threaded (UBSCore thread)
+
+### State to Snapshot
+1. **Balances**: All user balances (avail, frozen, versions)
+2. **OrderBook**: All resting orders (price levels, order queue)
+3. **Sequence Numbers**: WAL seq, trade_id, order counters
+4. **Symbol Config**: Symbol definitions (loaded from DB, can reconstruct)
+
+---
+
+*In Progress: Creating architecture design document*
