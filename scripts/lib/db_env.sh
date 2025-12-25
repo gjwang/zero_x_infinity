@@ -15,8 +15,8 @@
 # Read port from config files to avoid hardcoding
 # CI uses config/ci.yaml (port 5432), Local uses config/dev.yaml (port 5433)
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+_DB_ENV_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$_DB_ENV_DIR/../.." && pwd)"
 
 if [ "$CI" = "true" ]; then
     CONFIG_FILE="$PROJECT_ROOT/config/ci.yaml"
