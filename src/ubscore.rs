@@ -32,6 +32,8 @@ use crate::pipeline::{BalanceUpdateRequest, OrderAction, ValidAction};
 use crate::symbol_manager::SymbolManager;
 use crate::user_account::UserAccount;
 use crate::wal::{WalConfig, WalWriter};
+// Phase 0x0D: New WAL + Snapshot
+use crate::ubscore_wal::{UBSCoreConfig, UBSCoreRecovery, UBSCoreWalWriter};
 
 use rustc_hash::FxHashMap;
 use std::io;
@@ -47,28 +49,61 @@ use std::io;
 pub struct UBSCore {
     /// User accounts - the authoritative balance state
     accounts: FxHashMap<UserId, UserAccount>,
-    /// Write-Ahead Log for order persistence
-    wal: WalWriter,
+    /// Write-Ahead Log for order persistence (OLD - for backward compat)
+    #[allow(dead_code)]
+    wal: Option<WalWriter>,
+    /// New WAL writer (Phase 0x0D)
+    wal_v2: Option<UBSCoreWalWriter>,
     /// Symbol manager for symbol → asset lookup
     manager: SymbolManager,
+    /// Next WAL sequence ID
+    next_seq_id: u64,
 }
 
 impl UBSCore {
-    /// Create a new UBSCore with given symbol manager
+    /// Create a new UBSCore with given symbol manager (legacy WAL)
     pub fn new(manager: SymbolManager, wal_config: WalConfig) -> io::Result<Self> {
         let wal = WalWriter::new(wal_config)?;
 
         Ok(Self {
             accounts: FxHashMap::default(),
-            wal,
+            wal: Some(wal),
+            wal_v2: None,
             manager,
+            next_seq_id: 1,
+        })
+    }
+
+    /// Create a new UBSCore with recovery (Phase 0x0D)
+    pub fn new_with_recovery(manager: SymbolManager, config: UBSCoreConfig) -> io::Result<Self> {
+        // 1. Recover state from snapshot + WAL
+        let recovery = UBSCoreRecovery::new(&config.data_dir);
+        let state = recovery.recover()?;
+
+        // 2. Create new WAL writer
+        std::fs::create_dir_all(&config.wal_dir)?;
+        let wal_file = config.wal_dir.join("current.wal");
+        let wal_v2 = UBSCoreWalWriter::new(wal_file, 1, state.next_seq_id)?;
+
+        Ok(Self {
+            accounts: state.accounts,
+            wal: None,
+            wal_v2: Some(wal_v2),
+            manager,
+            next_seq_id: state.next_seq_id,
         })
     }
 
     /// Commit: Flush WAL to disk for durability.
     /// Caller should only release results collected from methods after this succeeds.
     pub fn commit(&mut self) -> io::Result<()> {
-        self.wal.flush()
+        if let Some(ref mut wal) = self.wal {
+            wal.flush()?;
+        }
+        if let Some(ref mut wal) = self.wal_v2 {
+            wal.flush()?;
+        }
+        Ok(())
     }
 
     // ============================================================
@@ -104,7 +139,11 @@ impl UBSCore {
 
     /// Get current WAL sequence number
     pub fn current_seq(&self) -> SeqNum {
-        self.wal.current_seq()
+        if let Some(ref wal) = self.wal {
+            wal.current_seq()
+        } else {
+            self.next_seq_id
+        }
     }
 
     // ============================================================
@@ -210,10 +249,16 @@ impl UBSCore {
         let lock_amount = order.calculate_cost(qty_unit).unwrap_or(0);
 
         // 2. Persist to WAL FIRST
-        let seq_id = self
-            .wal
-            .append(&order)
-            .map_err(|_| RejectReason::SystemBusy)?;
+        let seq_id = if let Some(ref mut wal) = self.wal {
+            wal.append(&order).map_err(|_| RejectReason::SystemBusy)?
+        } else if let Some(ref mut wal) = self.wal_v2 {
+            wal.append_order(&order)
+                .map_err(|_| RejectReason::SystemBusy)?
+        } else {
+            let seq = self.next_seq_id;
+            self.next_seq_id += 1;
+            seq
+        };
 
         let mut final_order = order;
         final_order.seq_id = seq_id;
@@ -617,12 +662,22 @@ impl UBSCore {
 
     /// Flush WAL to disk
     pub fn flush_wal(&mut self) -> io::Result<()> {
-        self.wal.flush()
+        if let Some(ref mut wal) = self.wal {
+            wal.flush()?;
+        }
+        if let Some(ref mut wal) = self.wal_v2 {
+            wal.flush()?;
+        }
+        Ok(())
     }
 
     /// Get WAL statistics
     pub fn wal_stats(&self) -> (u64, u64) {
-        (self.wal.total_entries(), self.wal.total_bytes())
+        if let Some(ref wal) = self.wal {
+            (wal.total_entries(), wal.total_bytes())
+        } else {
+            (self.next_seq_id - 1, 0)
+        }
     }
 }
 
