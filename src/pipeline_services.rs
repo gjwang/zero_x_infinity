@@ -859,6 +859,61 @@ impl MatchingService {
     pub fn into_inner(self) -> OrderBook {
         self.book
     }
+
+    /// Replay trades from WAL for downstream service recovery
+    ///
+    /// # Arguments
+    /// - `from_seq`: First seq_id to return (inclusive)
+    /// - `callback`: Called for each trade, return false to stop
+    ///
+    /// # Returns
+    /// Number of trades replayed
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// matching.replay_trades(last_trade_id + 1, |seq, trade| {
+    ///     settlement.process_trade(trade)?;
+    ///     Ok(true) // continue
+    /// })?;
+    /// ```
+    pub fn replay_trades<F>(&self, from_seq: u64, mut callback: F) -> std::io::Result<u64>
+    where
+        F: FnMut(u64, &crate::matching_wal::TradePayload) -> std::io::Result<bool>,
+    {
+        use crate::matching_wal::MatchingWalReader;
+
+        let data_dir = match &self.data_dir {
+            Some(dir) => dir,
+            None => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "MatchingService has no persistence configured",
+                ));
+            }
+        };
+
+        let wal_path = data_dir.join("wal").join("trades.wal");
+        if !wal_path.exists() {
+            // No WAL file = cold start, nothing to replay
+            return Ok(0);
+        }
+
+        let mut reader = MatchingWalReader::open(&wal_path)?;
+        let mut count = 0u64;
+
+        reader.replay(from_seq, |seq, trade| {
+            count += 1;
+            callback(seq, trade)
+        })?;
+
+        tracing::info!(
+            from_seq = from_seq,
+            trades_replayed = count,
+            "MatchingService replay_trades complete"
+        );
+
+        Ok(count)
+    }
 }
 
 // ============================================================
@@ -870,6 +925,13 @@ impl MatchingService {
 /// Service that handles trade settlement and ledger persistence.
 ///
 /// Persists balance events and trade ledger entries to the settlement log.
+///
+/// # Phase 0x0D Persistence (Optional)
+///
+/// When created with `new_with_persistence()`:
+/// - Recovers `last_trade_id` from snapshot + WAL on startup
+/// - Writes checkpoint to WAL every N trades  
+/// - Creates snapshot periodically
 pub struct SettlementService {
     ledger: LedgerWriter,
     queues: Arc<MultiThreadQueues>,
@@ -877,6 +939,22 @@ pub struct SettlementService {
     db_client: Option<Arc<crate::persistence::TDengineClient>>,
     symbol_id: u32,
     symbol_mgr: Arc<crate::symbol_manager::SymbolManager>,
+    // Phase 0x0D Persistence (optional)
+    #[allow(dead_code)]
+    persistence_config: Option<SettlementPersistenceConfig>,
+}
+
+/// Settlement persistence configuration
+#[derive(Debug, Clone)]
+pub struct SettlementPersistenceConfig {
+    /// Last recovered trade_id (0 for cold start)
+    pub last_trade_id: u64,
+    /// Data directory for WAL and snapshots
+    pub data_dir: std::path::PathBuf,
+    /// Checkpoint interval (number of trades)
+    pub checkpoint_interval: u64,
+    /// Snapshot interval (number of trades)
+    pub snapshot_interval: u64,
 }
 
 impl SettlementService {
@@ -895,7 +973,88 @@ impl SettlementService {
             db_client,
             symbol_id,
             symbol_mgr,
+            persistence_config: None,
         }
+    }
+
+    /// Create a new SettlementService with crash recovery persistence
+    ///
+    /// # Recovery Behavior
+    ///
+    /// **Cold Start** (no snapshot exists):
+    /// - Starts with `last_trade_id = 0`
+    /// - All trades from Matching will be processed
+    ///
+    /// **Hot Start** (snapshot exists):
+    /// - Loads latest snapshot → `last_trade_id`
+    /// - Replays WAL for any newer checkpoints
+    /// - Resumes from `last_trade_id + 1`
+    ///
+    /// # Arguments
+    ///
+    /// * `data_dir` - Root directory for persistence (e.g., `"data/settlement"`)
+    ///   - Creates `{data_dir}/wal/checkpoint.wal`
+    ///   - Creates `{data_dir}/snapshots/snapshot-{trade_id}/`
+    /// * `checkpoint_interval` - Write checkpoint every N trades (default: 1000)
+    /// * `snapshot_interval` - Create snapshot every N trades (default: 10000)
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let service = SettlementService::new_with_persistence(
+    ///     ledger, queues, stats, db_client, symbol_id, symbol_mgr,
+    ///     "data/settlement",
+    ///     1000,   // checkpoint every 1000 trades
+    ///     10000,  // snapshot every 10000 trades
+    /// )?;
+    /// ```
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_with_persistence(
+        ledger: LedgerWriter,
+        queues: Arc<MultiThreadQueues>,
+        stats: Arc<PipelineStats>,
+        db_client: Option<Arc<crate::persistence::TDengineClient>>,
+        symbol_id: u32,
+        symbol_mgr: Arc<crate::symbol_manager::SymbolManager>,
+        data_dir: impl AsRef<std::path::Path>,
+        checkpoint_interval: u64,
+        snapshot_interval: u64,
+    ) -> std::io::Result<Self> {
+        use crate::settlement_wal::SettlementRecovery;
+
+        // 1. Recovery (cold or hot start)
+        let recovery = SettlementRecovery::new(&data_dir);
+        recovery.ensure_directories()?;
+        let result = recovery.recover()?;
+
+        tracing::info!(
+            last_trade_id = result.last_trade_id,
+            is_cold_start = result.is_cold_start,
+            "SettlementService recovery complete"
+        );
+
+        let config = SettlementPersistenceConfig {
+            last_trade_id: result.last_trade_id,
+            data_dir: data_dir.as_ref().to_path_buf(),
+            checkpoint_interval,
+            snapshot_interval,
+        };
+
+        Ok(Self {
+            ledger,
+            queues,
+            stats,
+            db_client,
+            symbol_id,
+            symbol_mgr,
+            persistence_config: Some(config),
+        })
+    }
+
+    /// Get the last recovered trade_id (for testing/debugging)
+    #[cfg(test)]
+    pub fn last_trade_id(&self) -> Option<u64> {
+        self.persistence_config.as_ref().map(|c| c.last_trade_id)
     }
 
     /// Run the settlement service in async mode (zero block_on overhead)

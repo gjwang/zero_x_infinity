@@ -45,6 +45,7 @@ pub mod pipeline;
 pub mod pipeline_mt;
 pub mod pipeline_runner;
 pub mod pipeline_services;
+pub mod settlement_wal; // Phase 0x0D Settlement Service WAL
 pub mod ubscore;
 pub mod ubscore_wal; // Phase 0x0D UBSCore WAL
 pub mod user_account;

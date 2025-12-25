@@ -110,6 +110,8 @@ pub fn run_pipeline_multi_thread(
     transfer_receiver: Option<TransferReceiver>,
     // Optional: Matching Service Persistence Config (Phase 0x0D)
     matching_persistence_config: Option<crate::config::MatchingPersistenceConfig>,
+    // Optional: Settlement Service Persistence Config (Phase 0x0D)
+    settlement_persistence_config: Option<crate::config::SettlementPersistenceConfig>,
 ) -> MultiThreadPipelineResult {
     tracing::info!(
         "[TRACE] Starting Multi-Thread Pipeline with {} orders...",
@@ -238,14 +240,50 @@ pub fn run_pipeline_multi_thread(
     };
 
     let t4_settlement = {
-        let service = crate::pipeline_services::SettlementService::new(
-            services.ledger,
-            queues.clone(),
-            stats.clone(),
-            db_client.clone(),
-            active_symbol_id,
-            Arc::new(config.symbol_mgr.clone()),
-        );
+        // Phase 0x0D: Conditionally enable persistence based on config
+        let service = if let Some(ref sp_config) = settlement_persistence_config {
+            if sp_config.enabled {
+                tracing::info!(
+                    "[Settlement] Persistence enabled: dir={}, checkpoint_interval={}, snapshot_interval={}",
+                    sp_config.data_dir,
+                    sp_config.checkpoint_interval,
+                    sp_config.snapshot_interval
+                );
+
+                crate::pipeline_services::SettlementService::new_with_persistence(
+                    services.ledger,
+                    queues.clone(),
+                    stats.clone(),
+                    db_client.clone(),
+                    active_symbol_id,
+                    Arc::new(config.symbol_mgr.clone()),
+                    &sp_config.data_dir,
+                    sp_config.checkpoint_interval,
+                    sp_config.snapshot_interval,
+                )
+                .expect("[Settlement] Failed to initialize persistence - this is critical for crash recovery")
+            } else {
+                tracing::info!("[Settlement] Persistence disabled by config");
+                crate::pipeline_services::SettlementService::new(
+                    services.ledger,
+                    queues.clone(),
+                    stats.clone(),
+                    db_client.clone(),
+                    active_symbol_id,
+                    Arc::new(config.symbol_mgr.clone()),
+                )
+            }
+        } else {
+            tracing::info!("[Settlement] No persistence config provided");
+            crate::pipeline_services::SettlementService::new(
+                services.ledger,
+                queues.clone(),
+                stats.clone(),
+                db_client.clone(),
+                active_symbol_id,
+                Arc::new(config.symbol_mgr.clone()),
+            )
+        };
         let s = shutdown.clone();
 
         // Always use async mode with dedicated runtime
