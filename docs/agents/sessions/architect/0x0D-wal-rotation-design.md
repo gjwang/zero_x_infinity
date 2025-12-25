@@ -201,65 +201,83 @@ fn cleanup_old_wal_files(&mut self) -> io::Result<()> {
 
 ---
 
-## 8. 分离存储（必须）
+## 8. 服务隔离存储（必须）
 
-按服务类型分离 WAL 存储：
+每个服务有**独立的 data 目录**，不同服务的数据完全隔离：
 
 ```
-data/
-├── ubscore/                        # UBSCore 服务
-│   ├── wal/
-│   │   ├── current.wal
-│   │   └── wal-00001-0000001000.wal
-│   └── snapshots/
-│       └── latest -> snapshot-1000/
-│
-├── matching/                       # 撮合引擎
-│   ├── wal/
-│   │   ├── current.wal
-│   │   └── wal-00001-0000500000.wal
-│   └── orderbooks/                 # OrderBook 快照
-│
-├── settlement/                     # 结算服务
-│   └── wal/
-│       ├── current.wal
-│       └── wal-00001-0000100000.wal
-│
-└── trades/                         # 成交记录（永久保留）
+# 每个服务配置自己的 data_dir (可配置)
+
+ubscore-service/
+└── data/                          # UBSCore 的 data_dir
+    ├── wal/
+    │   ├── current.wal
+    │   └── wal-00001-0000001000.wal
+    └── snapshots/
+        └── latest -> snapshot-1000/
+
+matching-service/
+└── data/                          # Matching Engine 的 data_dir
+    ├── wal/
+    │   ├── current.wal
+    │   └── wal-00001-0000500000.wal
+    └── orderbooks/
+
+settlement-service/
+└── data/                          # Settlement 的 data_dir
+    └── wal/
+        ├── current.wal
+        └── wal-00001-0000100000.wal
+
+trade-audit-service/
+└── data/                          # 审计服务的 data_dir
     └── wal/
         └── ...
 ```
 
-### 8.1 服务与 Entry Type 映射
+### 8.1 服务配置
 
-| 服务目录 | Entry Types | 归档策略 |
-|----------|-------------|----------|
-| `ubscore/` | Order, Deposit, Withdraw | Snapshot 后可删 |
-| `matching/` | Order, Cancel | Snapshot 后可删 |
-| `settlement/` | Trade, BalanceSettle | 永久保留 |
-| `trades/` | Trade | 永久保留 (审计) |
+每个服务通过配置文件或环境变量指定自己的 `data_dir`：
 
-### 8.2 配置
+```yaml
+# ubscore-service config.yaml
+service:
+  name: "ubscore"
+  data_dir: "/var/lib/zero_x/ubscore/data"  # 可配置
+
+# matching-service config.yaml
+service:
+  name: "matching"
+  data_dir: "/var/lib/zero_x/matching/data"
+```
+
+### 8.2 配置代码
 
 ```rust
-pub struct DataConfig {
-    pub base_dir: PathBuf,  // data/
+pub struct ServiceConfig {
+    pub name: String,
+    pub data_dir: PathBuf,  // 每个服务独立配置
 }
 
-impl DataConfig {
-    pub fn ubscore_wal(&self) -> PathBuf {
-        self.base_dir.join("ubscore/wal")
+impl ServiceConfig {
+    pub fn wal_dir(&self) -> PathBuf {
+        self.data_dir.join("wal")
     }
     
-    pub fn matching_wal(&self) -> PathBuf {
-        self.base_dir.join("matching/wal")
-    }
-    
-    pub fn settlement_wal(&self) -> PathBuf {
-        self.base_dir.join("settlement/wal")
+    pub fn snapshots_dir(&self) -> PathBuf {
+        self.data_dir.join("snapshots")
     }
 }
 ```
+
+### 8.3 服务与数据归档策略
+
+| 服务 | Entry Types | 归档策略 |
+|------|-------------|----------|
+| ubscore | Order, Deposit, Withdraw | Snapshot 后可删 |
+| matching | Order, Cancel | Snapshot 后可删 |
+| settlement | Trade, BalanceSettle | 永久保留 |
+| trade-audit | Trade | 永久保留 (合规) |
 
 ---
 
