@@ -9,6 +9,8 @@
 
 ## 1. UBSCore Service
 
+> 📖 **详细设计**: [UBSCore WAL & Snapshot 详细设计](./0x0D-ubscore-wal-snapshot.md)
+
 ### 1.1 状态概述
 
 | 状态 | 数据结构 | 说明 |
