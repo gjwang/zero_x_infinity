@@ -12,7 +12,8 @@
 | 状态 | 类型 | 说明 |
 |------|------|------|
 | **last_trade_id** | `u64` | 最后处理的成交 ID |
-| **pending_settlements** | `Vec<Settlement>` | 待处理结算队列 |
+
+> **无状态设计**: Settlement 直接处理不缓存，依赖幂等性和 TDengine 持久化
 
 ---
 
