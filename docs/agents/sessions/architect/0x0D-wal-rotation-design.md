@@ -7,48 +7,59 @@
 
 ---
 
-## 1. Architecture Principles (Producer-Consumer WAL Model)
+## 1. Architecture Principles
 
 ### 1.1 核心原则
 
-**生产者写 WAL，消费者按需重放**
+**每个有状态服务必须有自己的 Snapshot + WAL**
+
+- WAL 由**服务自己消费**（备份机制除外）
+- 下游恢复时**请求上游重放输出**，不直接读上游 WAL
 
 ```
-┌──────────────┐                     ┌──────────────┐                    
-│   UBSCore    │                     │   Matching   │                    
-│  (唯一源)    │                     │   Engine     │                    
-│              │                     │              │                    
-│  Order WAL   │  ──重放请求───▶     │  (不写 Order │                    
-│  (必须写)    │  ◀───重放───        │   WAL)       │                    
-│              │                     │              │                    
-│  BalanceEvent│                     │  Trade WAL   │                    
-│  WAL (可选)  │──▶下游重放          │  (可选)      │──▶ Settlement      
-└──────────────┘                     └──────────────┘    (可请求重放)    
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                    每个服务独立 Snapshot + WAL                               │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌──────────────┐           ┌──────────────┐           ┌──────────────┐     │
+│  │   UBSCore    │           │   Matching   │           │  Settlement  │     │
+│  │              │           │   Engine     │           │              │     │
+│  │ ┌──────────┐ │  重放输出  │ ┌──────────┐ │  重放输出  │ ┌──────────┐ │     │
+│  │ │ Snapshot │ │ ◀─请求──  │ │ Snapshot │ │ ◀─请求──  │ │ Snapshot │ │     │
+│  │ │ (余额)   │ │           │ │(OrderBook)│ │           │ │ (状态)   │ │     │
+│  │ └──────────┘ │           │ └──────────┘ │           │ └──────────┘ │     │
+│  │              │           │              │           │              │     │
+│  │ ┌──────────┐ │           │ ┌──────────┐ │           │ ┌──────────┐ │     │
+│  │ │Order WAL │ │──输出重放▶│ │Trade WAL │ │──输出重放▶│ │状态 WAL  │ │     │
+│  │ │(自己消费)│ │  给 ME    │ │(自己消费) │ │ 给结算    │ │(自己消费)│ │     │
+│  │ └──────────┘ │           │ └──────────┘ │           │ └──────────┘ │     │
+│  └──────────────┘           └──────────────┘           └──────────────┘     │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 1.2 WAL 职责划分
+### 1.2 WAL 职责
 
-| 服务 | WAL 类型 | 必须/可选 | 用途 |
-|------|----------|-----------|------|
-| **UBSCore** | Order WAL | **必须** | 唯一源 (SSOT)，全系统恢复起点 |
-| **UBSCore** | BalanceEvent WAL | 可选 | 下游重启后请求重放 |
-| **Matching** | Order WAL | ❌ 不写 | 从 UBSCore 请求重放 |
-| **Matching** | Trade WAL | 可选 | 下游 (Settlement) 请求重放 |
-| **Settlement** | 输入 WAL | ❌ 不写 | 从 ME 请求重放 |
-| **Settlement** | 状态 WAL | 可选 | 记录 last_processed_seq |
+| 服务 | Snapshot | WAL | WAL 消费者 | 输出 (给下游重放) |
+|------|----------|-----|------------|------------------|
+| **UBSCore** | ✅ 必须 (余额) | Order WAL | **自己** | 重放 ValidOrder 给 ME |
+| **Matching** | ✅ 必须 (OrderBook) | Trade WAL | **自己** | 重放 Trade 给 Settlement |
+| **Settlement** | ✅ 必须 (状态) | 状态 WAL | **自己** | N/A |
 
 ### 1.3 恢复流程
 
 ```
 ME 重启：
-  1. 读取最后处理的 order_seq
-  2. 向 UBSCore 请求: "从 seq=X 开始重放 Order WAL"
-  3. 重建 OrderBook 状态
+  1. 加载 ME 自己的 Snapshot (OrderBook @ seq=X)
+  2. 请求 UBSCore: "请重放 seq > X 的输出"
+  3. UBSCore 从自己的 WAL 读取并重放给 ME
+  4. ME 追上实时状态
 
 Settlement 重启：
-  1. 读取 last_processed_trade_seq
-  2. 向 ME 请求: "从 trade_seq=Y 开始重放 Trade WAL"
-  3. 继续结算流程
+  1. 加载 Settlement 自己的 Snapshot (状态 @ seq=Y)
+  2. 请求 ME: "请重放 trade_seq > Y 的输出"
+  3. ME 从自己的 WAL 读取并重放给 Settlement
+  4. Settlement 追上实时状态
 ```
 
 ---
