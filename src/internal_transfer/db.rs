@@ -22,7 +22,35 @@ impl TransferDb {
     }
 
     /// Create a new transfer record in INIT state
+    ///
+    /// This function is idempotent: if a transfer with the same cid already exists,
+    /// it returns the existing transfer's database id instead of creating a new one.
+    /// This prevents double-spend vulnerabilities from duplicate requests.
     pub async fn create(&self, record: &TransferRecord) -> Result<i64, TransferError> {
+        // IDEMPOTENCY CHECK: If cid provided, check if transfer already exists
+        #[allow(clippy::collapsible_if)]
+        if let Some(cid) = &record.cid {
+            if let Some(existing) = self.get_by_cid(cid).await? {
+                // Found existing transfer with same cid - return its id (idempotent)
+                tracing::info!(
+                    transfer_id = %existing.transfer_id,
+                    cid = %cid,
+                    "Transfer with cid already exists - returning existing record (idempotent)"
+                );
+
+                // Get database id for the existing transfer
+                let db_id = sqlx::query_scalar::<_, i64>(
+                    "SELECT id FROM fsm_transfers_tb WHERE transfer_id = $1",
+                )
+                .bind(existing.transfer_id.to_string())
+                .fetch_one(&self.pool)
+                .await?;
+
+                return Ok(db_id);
+            }
+        }
+
+        // No existing transfer found - create new one
         let id = sqlx::query_scalar::<_, i64>(
             r#"
             INSERT INTO fsm_transfers_tb 
