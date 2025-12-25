@@ -423,9 +423,12 @@ def main():
     # Check Gateway is reachable (use OPTIONS on root or try create_order endpoint)
     try:
         import socket
+        from urllib.parse import urlparse
+        parsed = urlparse(GATEWAY_URL)
+        gw_port = parsed.port or 8080
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(2)
-        result = sock.connect_ex(('localhost', 8080))
+        result = sock.connect_ex(('localhost', gw_port))
         sock.close()
         if result == 0:
             print(f"✓ Gateway reachable at {GATEWAY_URL}")

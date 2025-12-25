@@ -58,7 +58,7 @@ impl Default for MatchingPersistenceConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            data_dir: "./data/matching".to_string(),
+            data_dir: "./data/matching-service".to_string(),
             snapshot_interval_trades: 1000,
         }
     }
@@ -77,7 +77,7 @@ impl Default for SettlementPersistenceConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            data_dir: "./data/settlement".to_string(),
+            data_dir: "./data/settlement-service".to_string(),
             checkpoint_interval: 1000,
             snapshot_interval: 10000,
         }
