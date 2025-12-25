@@ -596,7 +596,7 @@ jobs:
         if: steps.run-test.outcome == 'failure'
         run: |
           echo "=== Fee E2E Log ==="
-          cat /tmp/gw_test.log || true
+          cat /tmp/gateway_fee_e2e.log || true
           exit 1
 
       - name: Upload Logs
@@ -605,7 +605,7 @@ jobs:
         with:
           name: logs-fee-e2e
           path: |
-            /tmp/gw_test.log
+            /tmp/gateway_fee_e2e.log
           retention-days: 7
 
       - name: Report Success
