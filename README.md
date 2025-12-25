@@ -66,6 +66,8 @@ graph TD
 
 **📖 [Read the Book Online →](https://gjwang.github.io/zero_x_infinity/)**
 
+**📊 [Project Roadmap →](./docs/src/0x00-mvp-roadmap.md)**
+
 ### Chapters
 
 | Stage | Title | Description |
@@ -232,6 +234,8 @@ graph TD
 ## 🚀 学习之旅
 
 **📖 [在线阅读完整教程 →](https://gjwang.github.io/zero_x_infinity/)**
+
+**📊 [项目路线图 →](./docs/src/0x00-mvp-roadmap.md)**
 
 ### 章节索引
 
