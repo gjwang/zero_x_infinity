@@ -180,6 +180,10 @@ fn foo(x: Option<i32>) -> Result<i32, Error> {
 - [Development Guidelines](../standards/development-guidelines.md) - Coding standards
 - [API Conventions](../standards/api-conventions.md) - API standards
 
+### Collaboration Workflows
+- [Architect → Developer Handover](./workflows/arch-to-dev-handover.md) - Receive design from Architect
+- [Developer → QA Handover](./workflows/dev-to-qa-handover.md) - Deliver to QA
+
 ---
 
 ## 📚 Project-Specific Context

@@ -180,6 +180,10 @@ Watch for these testing gaps:
 - [Integration Test Guide](../src/0x09-f-integration-test.md) - E2E testing patterns
 - [CI Pitfalls](../src/standards/ci-pitfalls.md) - CI testing issues
 
+### Collaboration Workflows
+- [Architect → QA Handover](./workflows/arch-to-qa-handover.md) - Receive test requirements from Architect
+- [Developer → QA Handover](./workflows/dev-to-qa-handover.md) - Receive deliverables from Developer
+
 ---
 
 ## 📚 Project-Specific Context
