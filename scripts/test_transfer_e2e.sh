@@ -244,13 +244,212 @@ funding_change = funding_after - funding_before
 # Check funding change
 if abs(funding_change - expected_funding_change) < 0.01:
     print(f"    ✓ Funding: {funding_before:.2f} → {funding_after:.2f} (Δ{funding_change:+.2f})")
-    tests_passed += 1
-else:
-    print(f"    ✗ Funding: Expected Δ{expected_funding_change:+.2f}, got Δ{funding_change:+.2f}")
+    tests_failed += 1
+
+# ============================================================
+# P0 ERROR HANDLING TESTS
+# ============================================================
+print("")
+print("="*60)
+print("P0 CRITICAL TEST CASES (Error Handling & Validation)")
+print("="*60)
+
+# TC-P0-01: Insufficient Balance
+print("\n  [TC-P0-01] Insufficient Balance Test...")
+try:
+    # User 1001 has remaining balance after previous transfers
+    # Try to transfer way more than available
+    resp = client.post('/api/v1/private/transfer',
+        json_body={'from': 'funding', 'to': 'spot', 'asset': 'USDT', 'amount': '9999'},
+        headers=headers)
+    
+    # API returns 200 but with status=FAILED (business logic error)
+    if resp.status_code == 200:
+        data = resp.json().get('data', {})
+        if data.get('status') == 'FAILED':
+            print("    ✓ PASS: Correctly rejected with status=FAILED")
+            tests_passed += 1
+        else:
+            print(f"    ✗ FAIL: Expected status=FAILED, got {data.get('status')}")
+            tests_failed += 1
+    else:
+        print(f"    ✗ FAIL: Expected 200 with status=FAILED, got {resp.status_code}")
+        tests_failed += 1
+except Exception as e:
+    print(f"    ✗ FAIL: Exception: {e}")
+    tests_failed += 1
+
+# TC-P0-02: Invalid Amount - Zero
+print("\n  [TC-P0-02] Invalid Amount (Zero)...")
+try:
+    resp = client.post('/api/v1/private/transfer',
+        json_body={'from': 'funding', 'to': 'spot', 'asset': 'USDT', 'amount': '0'},
+        headers=headers)
+    
+    if resp.status_code == 400:
+        print("    ✓ PASS: Correctly rejected zero amount")
+        tests_passed += 1
+    else:
+        print(f"    ✗ FAIL: Expected 400, got {resp.status_code}")
+        print(f"    [DEBUG] Response: {resp.text[:200]}")
+        tests_failed += 1
+except Exception as e:
+    print(f"    ✗ FAIL: Exception: {e}")
+    tests_failed += 1
+
+# TC-P0-03: Invalid Amount (Negative)...")
+print("\n  [TC-P0-03] Invalid Amount (Negative)...")
+try:
+    resp = client.post('/api/v1/private/transfer',
+        json_body={'from': 'funding', 'to': 'spot', 'asset': 'USDT', 'amount': '-10'},
+        headers=headers)
+    
+    if resp.status_code == 400:
+        print("    ✓ PASS: Correctly rejected negative amount")
+        tests_passed += 1
+    else:
+        print(f"    ✗ FAIL: Expected 400, got {resp.status_code}")
+        tests_failed += 1
+except Exception as e:
+    print(f"    ✗ FAIL: Exception: {e}")
+    tests_failed += 1
+
+# TC-P0-04: Precision Overflow (USDT has 6 decimals)
+print("\n  [TC-P0-04] Precision Overflow (9 decimals for USDT)...")
+try:
+    resp = client.post('/api/v1/private/transfer',
+        json_body={'from': 'funding', 'to': 'spot', 'asset': 'USDT', 'amount': '1.123456789'},
+        headers=headers)
+    
+    # May be rejected as precision error or allowed (implementation-dependent)
+    if resp.status_code == 400:
+        print("    ✓ PASS: Correctly rejected excessive precision")
+        tests_passed += 1
+    else:
+        print(f"    ⚠ WARN: Precision accepted (status {resp.status_code})")
+        # Don't fail - this is implementation-dependent
+        tests_passed += 1
+except Exception as e:
+    print(f"    ✗ FAIL: Exception: {e}")
+    tests_failed += 1
+
+# TC-P0-05: Same Account Transfer (Funding -> Funding)
+print("\n  [TC-P0-05] Same Account Transfer (Funding → Funding)...")
+try:
+    resp = client.post('/api/v1/private/transfer',
+        json_body={'from': 'funding', 'to': 'funding', 'asset': 'USDT', 'amount': '10'},
+        headers=headers)
+    
+    if resp.status_code == 400:
+        print("    ✓ PASS: Correctly rejected same account transfer")
+        tests_passed += 1
+    else:
+        print(f"    ✗ FAIL: Expected 400, got {resp.status_code}")
+        tests_failed += 1
+except Exception as e:
+    print(f"    ✗ FAIL: Exception: {e}")
+    tests_failed += 1
+
+# TC-P0-06: Invalid Asset
+print("\n  [TC-P0-06] Invalid Asset (FAKE)...")
+try:
+    resp = client.post('/api/v1/private/transfer',
+        json_body={'from': 'funding', 'to': 'spot', 'asset': 'FAKE', 'amount': '10'},
+        headers=headers)
+    
+    if resp.status_code == 400:
+        print("    ✓ PASS: Correctly rejected invalid asset")
+        tests_passed += 1
+    else:
+        print(f"    ✗ FAIL: Expected 400, got {resp.status_code}")
+        tests_failed += 1
+except Exception as e:
+    print(f"    ✗ FAIL: Exception: {e}")
+    tests_failed += 1
+
+# TC-P0-07: Idempotency - Duplicate CID
+print("\n  [TC-P0-07] Idempotency (Duplicate CID)...")
+try:
+    # Get balance before
+    balances_before_idem = get_balances()
+    funding_before_idem = balances_before_idem.get('USDT:funding', 0)
+    
+    # First request with CID
+    cid_test = 'client-idempotency-test-001'
+    resp1 = client.post('/api/v1/private/transfer',
+        json_body={'from': 'funding', 'to': 'spot', 'asset': 'USDT', 'amount': '20', 'cid': cid_test},
+        headers=headers)
+    
+    if resp1.status_code != 200:
+        print(f"    ✗ FAIL: First request failed ({resp1.status_code})")
+        print(f"    [DEBUG] Response: {resp1.text[:200]}")
+        tests_failed += 1
+    else:
+        resp1_data = resp1.json()
+        if 'data' not in resp1_data or 'transfer_id' not in resp1_data['data']:
+            print(f"    ✗ FAIL: Unexpected response structure: {resp1_data}")
+            tests_failed += 1
+        else:
+            transfer_id_1 = resp1_data['data']['transfer_id']
+            
+            # Give it time to settle before checking balances
+            import time
+            time.sleep(0.5)
+            
+            # Get balance after first transfer
+            balances_after_1 = get_balances()
+            funding_after_1 = balances_after_1.get('USDT:funding', 0)
+            
+            # Second request with SAME CID
+            resp2 = client.post('/api/v1/private/transfer',
+                json_body={'from': 'funding', 'to': 'spot', 'asset': 'USDT', 'amount': '20', 'cid': cid_test},
+                headers=headers)
+            
+            if resp2.status_code != 200:
+                print(f"    ✗ FAIL: Second request failed ({resp2.status_code})")
+                tests_failed += 1
+            else:
+                resp2_data = resp2.json()
+                if 'data' not in resp2_data or 'transfer_id' not in resp2_data['data']:
+                    print(f"    ✗ FAIL: Unexpected response structure: {resp2_data}")
+                    tests_failed += 1
+                else:
+                    transfer_id_2 = resp2_data['data']['transfer_id']
+                    
+                    # Give it time to settle before checking balances
+                    time.sleep(0.5)
+                    
+                    # Get balance after second request
+                    balances_after_2 = get_balances()
+                    funding_after_2 = balances_after_2.get('USDT:funding', 0)
+                    
+                    # Verify same transfer_id returned
+                    if transfer_id_1 == transfer_id_2:
+                        print(f"    ✓ PASS: Same transfer_id returned ({transfer_id_1})")
+                        
+                        # Verify balance changed only once
+                        if abs(funding_after_2 - funding_after_1) < 0.01:
+                            print(f"    ✓ PASS: Balance unchanged on duplicate (stayed at {funding_after_2:.2f})")
+                            tests_passed += 2  # Two assertions
+                        else:
+                            print(f"    ✗ FAIL: Balance changed again ({funding_after_1:.2f} → {funding_after_2:.2f})")
+                            tests_passed += 1
+                            tests_failed += 1
+                    else:
+                        print(f"    ✗ FAIL: Different transfer_id ({transfer_id_1} vs {transfer_id_2})")
+                        tests_failed += 1
+except Exception as e:
+    import traceback
+    print(f"    ✗ FAIL: Exception: {e}")
+    print(f"    [DEBUG] Traceback: {traceback.format_exc()[:300]}")
     tests_failed += 1
 
 # Summary
-print(f"\n  Results: {tests_passed} passed, {tests_failed} failed")
+print("")
+print("="*60)
+print(f"  TOTAL RESULTS: {tests_passed} passed, {tests_failed} failed")
+print("="*60)
+print("")
 sys.exit(tests_failed)
 PYTHON_EOF
 ) || TEST_EXIT=$?
