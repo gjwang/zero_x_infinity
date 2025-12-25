@@ -136,7 +136,16 @@ fn parse_amount(s: &str, decimals: u32) -> Result<u64, TransferError> {
     // Parse whole part
     let whole_num: u64 = whole.parse().map_err(|_| TransferError::InvalidAmount)?;
 
-    // Parse fractional part (pad or truncate to decimals)
+    // **PRECISION VALIDATION**: Check if fractional part exceeds asset decimals
+    // QA TC-P0-04: Reject amounts with excessive precision instead of truncating
+    if frac.len() > decimals as usize {
+        return Err(TransferError::PrecisionOverflow {
+            provided: frac.len() as u32,
+            max: decimals,
+        });
+    }
+
+    // Parse fractional part (pad to decimals)
     let frac_str = format!("{:0<width$}", frac, width = decimals as usize);
     let frac_num: u64 = frac_str[..decimals as usize]
         .parse()
@@ -520,15 +529,18 @@ mod tests {
     /// ATK-005: Precision overflow attack
     #[test]
     fn test_attack_precision_overflow() {
-        // More decimals than allowed should be truncated, not overflow
+        // QA TC-P0-04: More decimals than allowed should be REJECTED, not truncated
         let result = parse_amount("1.000000001", 8); // 9 decimals
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), 100_000_000); // Truncated to 8 decimals
+        assert!(result.is_err()); // Should reject (changed from is_ok)
 
         // Very long fractional part
         let result = parse_amount("0.123456789012345", 8);
+        assert!(result.is_err()); // Should reject (changed from is_ok)
+
+        // Exact precision should be OK
+        let result = parse_amount("1.12345678", 8); // Exactly 8 decimals
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), 12_345_678); // First 8 digits only
+        assert_eq!(result.unwrap(), 112_345_678);
     }
 
     /// ATK-006: Integer overflow attack
