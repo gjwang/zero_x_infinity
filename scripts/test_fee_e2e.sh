@@ -49,8 +49,17 @@ echo ""
 STEP=1
 echo "[Step $STEP] Checking prerequisites..."
 
-if ! docker ps | grep -q tdengine; then
-    fail_at_step "TDengine not running. Start with: docker start tdengine"
+# Check TDengine (works both locally with docker and in CI with service container)
+if [ -n "$CI" ]; then
+    # In CI: use REST API to check TDengine
+    if ! curl -sf -u root:taosdata -d "SHOW DATABASES" http://localhost:6041/rest/sql > /dev/null 2>&1; then
+        fail_at_step "TDengine not responding on localhost:6041"
+    fi
+else
+    # Local: check docker container
+    if ! docker ps | grep -q tdengine; then
+        fail_at_step "TDengine not running. Start with: docker start tdengine"
+    fi
 fi
 echo -e "    ${GREEN}✓${NC} TDengine running"
 
@@ -66,7 +75,8 @@ STEP=2
 echo ""
 echo "[Step $STEP] Clearing TDengine database..."
 
-docker exec tdengine taos -s "DROP DATABASE IF EXISTS trading" 2>&1 | grep -v "^taos>" || true
+# Use REST API (works in both local and CI environments)
+curl -sf -u root:taosdata -d "DROP DATABASE IF EXISTS trading" http://localhost:6041/rest/sql > /dev/null 2>&1 || true
 sleep 2
 echo -e "    ${GREEN}✓${NC} Database cleared"
 
