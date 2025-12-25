@@ -319,7 +319,7 @@ async fn create_transfer_fsm_handler(
         to: req.to.clone(),
         asset: req.asset.clone(),
         amount: req.amount.clone(),
-        cid: None, // Legacy API doesn't have cid
+        cid: req.cid.clone(), // Pass through client idempotency key
     };
 
     // Lookup asset and create validation info

@@ -23,6 +23,8 @@ pub struct TransferRequest {
     pub to: String,
     pub asset: String,
     pub amount: String, // String to avoid float precision issues JSON
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cid: Option<String>, // Client idempotency key (optional)
 }
 
 #[derive(Debug, Serialize)]

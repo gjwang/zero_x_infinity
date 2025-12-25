@@ -33,9 +33,7 @@ impl TransferCoordinator {
         }
     }
 
-    /// Create a new transfer record
-    ///
-    /// # Validation (Defense Layer 2: Coordinator)
+    ///  /// # Validation (Defense Layer 2: Coordinator)
     /// Re-validates critical parameters to prevent internal calls bypassing API.
     pub async fn create(&self, req: TransferRequest) -> Result<InternalTransferId, TransferError> {
         // === Defense-in-Depth Layer 2: Coordinator Validation ===
@@ -52,10 +50,11 @@ impl TransferCoordinator {
         }
 
         // Check for duplicate cid
+        debug!("Coordinator: Checking cid: {:?}", req.cid);
         if let Some(ref cid) = req.cid
             && let Some(existing) = self.db.get_by_cid(cid).await?
         {
-            debug!(cid = %cid, transfer_id = %existing.transfer_id, "Duplicate cid found");
+            info!(cid = %cid, transfer_id = %existing.transfer_id, "🔄 IDEMPOTENCY: Duplicate cid found in coordinator");
             return Ok(existing.transfer_id);
         }
 
@@ -73,6 +72,10 @@ impl TransferCoordinator {
             req.cid,
         );
 
+        debug!(
+            "Coordinator: Calling db.create() for transfer_id={}, cid={:?}",
+            transfer_id, record.cid
+        );
         self.db.create(&record).await?;
         info!(
             transfer_id = %transfer_id,
