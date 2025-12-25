@@ -31,8 +31,8 @@ NC='\033[0m'
 STEP=0
 PASSED=0
 FAILED=0
-SETTLEMENT_DATA_DIR="./data/test_settlement_recovery"
-MATCHING_DATA_DIR="./data/test_settlement_matching"
+SETTLEMENT_DATA_DIR="./data/test_settlement-service"
+MATCHING_DATA_DIR="./data/test_matching-service"
 PORT=18082
 GW_LOG="/tmp/settlement_recovery_e2e.log"
 
@@ -211,8 +211,10 @@ echo "[Step $STEP] Injecting orders (must have >0 accepted)..."
 INJECT_RESULT=$(GATEWAY_URL="http://localhost:$PORT" python3 "${SCRIPT_DIR}/inject_orders.py" \
     --input fixtures/orders.csv --limit 30 2>&1) || true
 
-# Extract accepted count from output
-ACCEPTED=$(echo "$INJECT_RESULT" | grep -o 'Accepted:.*' | sed 's/Accepted:[[:space:]]*//' | tr -d ' ' || echo "0")
+# Extract accepted count from output (format: "Accepted:      30")
+ACCEPTED=$(echo "$INJECT_RESULT" | grep 'Accepted:' | awk '{print $2}')
+# Default to 0 if extraction failed
+ACCEPTED=${ACCEPTED:-0}
 
 if [ "$ACCEPTED" -eq 0 ]; then
     echo "$INJECT_RESULT"
@@ -332,7 +334,10 @@ echo "[Step $STEP] Testing post-recovery functionality..."
 POST_INJECT=$(GATEWAY_URL="http://localhost:$PORT" python3 "${SCRIPT_DIR}/inject_orders.py" \
     --input fixtures/orders.csv --limit 10 2>&1) || true
 
-POST_ACCEPTED=$(echo "$POST_INJECT" | grep -o 'Accepted:.*' | sed 's/Accepted:[[:space:]]*//' | tr -d ' ' || echo "0")
+# Extract accepted count from output (format: "Accepted:      10")
+POST_ACCEPTED=$(echo "$POST_INJECT" | grep 'Accepted:' | awk '{print $2}')
+# Default to 0 if extraction failed
+POST_ACCEPTED=${POST_ACCEPTED:-0}
 
 if [ "$POST_ACCEPTED" -eq 0 ]; then
     echo "$POST_INJECT"
