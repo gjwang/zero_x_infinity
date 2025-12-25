@@ -101,6 +101,166 @@ When given a feature request (4-6 sentences of natural language), the agent must
 
 ---
 
+## 🎭 Multi-Role Specification Review
+
+Each specification must be reviewed through **5 distinct perspectives** before approval:
+
+### Role Review Flow
+
+```
+Specification ──► 🏛️ Architect ──► 💻 Developer ──► 🧪 QA ──► 🔒 Security ──► 🔧 DevOps ──► ✅ Approved
+     │                 │               │              │            │             │
+     ▼                 ▼               ▼              ▼            ▼             ▼
+   Draft          Design OK?      Feasible?     Testable?     Secure?      Deployable?
+```
+
+---
+
+### 🏛️ Architect Review Focus
+
+| Focus Area | Key Questions |
+|------------|---------------|
+| **System Boundaries** | Does this fit within existing architecture? |
+| **Component Coupling** | Will this create tight coupling? |
+| **Scalability** | Can this scale to 10x load? |
+| **Data Flow** | Is data flow clear and efficient? |
+| **Technical Debt** | Does this add or reduce debt? |
+
+**Specification Section to Review**: Implementation Plan, File Breakdown
+
+**Output**:
+```markdown
+### 🏛️ Architect Sign-off
+- [ ] Architecture alignment verified
+- [ ] No new anti-patterns introduced
+- [ ] Scalability considered
+- Concerns: [if any]
+```
+
+---
+
+### 💻 Developer Review Focus
+
+| Focus Area | Key Questions |
+|------------|---------------|
+| **Implementation Feasibility** | Can this be built as specified? |
+| **Effort Estimation** | Is LOC estimate realistic? |
+| **Edge Cases** | Are all edge cases identified? |
+| **Error Handling** | Is error handling specified? |
+| **Dependencies** | Are all dependencies identified? |
+
+**Specification Section to Review**: Implementation Plan, File Breakdown, Acceptance Criteria
+
+**Output**:
+```markdown
+### 💻 Developer Sign-off
+- [ ] Implementation approach validated
+- [ ] Effort estimate confirmed (~X hours)
+- [ ] Edge cases documented
+- Concerns: [if any]
+```
+
+---
+
+### 🧪 QA Engineer Review Focus
+
+| Focus Area | Key Questions |
+|------------|---------------|
+| **Test Coverage** | Are all acceptance criteria testable? |
+| **Edge Cases** | Are boundary conditions covered? |
+| **Regression Risk** | What existing tests might break? |
+| **E2E Scenarios** | Is the happy path fully testable? |
+| **Performance Tests** | Are load tests needed? |
+
+**Specification Section to Review**: Acceptance Criteria, Test Strategy
+
+**Output**:
+```markdown
+### 🧪 QA Sign-off
+- [ ] All acceptance criteria testable
+- [ ] Edge cases covered in test plan
+- [ ] Regression test scope defined
+- Missing tests: [if any]
+```
+
+---
+
+### 🔒 Security Reviewer Focus
+
+| Focus Area | Key Questions |
+|------------|---------------|
+| **Authentication** | Are auth requirements specified? |
+| **Authorization** | Are permissions checked correctly? |
+| **Input Validation** | Is all input validated? |
+| **Data Protection** | Is sensitive data protected? |
+| **Audit Logging** | Are security events logged? |
+
+**Specification Section to Review**: Security Checklist, API Endpoints
+
+**Output**:
+```markdown
+### 🔒 Security Sign-off
+- [ ] No obvious vulnerabilities
+- [ ] Auth/authz requirements clear
+- [ ] Input validation specified
+- Vulnerabilities found: [if any]
+```
+
+---
+
+### 🔧 DevOps Engineer Review Focus
+
+| Focus Area | Key Questions |
+|------------|---------------|
+| **Deployment Impact** | Can this be deployed with zero downtime? |
+| **Configuration** | Are new configs documented? |
+| **Monitoring** | Are new metrics needed? |
+| **Rollback** | What's the rollback plan? |
+| **Resource Requirements** | Memory/CPU/storage impact? |
+
+**Specification Section to Review**: File Breakdown, Dependencies
+
+**Output**:
+```markdown
+### 🔧 DevOps Sign-off
+- [ ] Deployment strategy clear
+- [ ] Rollback plan defined
+- [ ] Monitoring requirements identified
+- Operational risks: [if any]
+```
+
+---
+
+## ✅ Consolidated Approval Template
+
+```markdown
+# Specification Approval: [Feature Name]
+
+## Review Status
+
+| Role | Reviewer | Status | Notes |
+|------|----------|--------|-------|
+| 🏛️ Architect | [name/AI] | ✅/⚠️/❌ | [notes] |
+| 💻 Developer | [name/AI] | ✅/⚠️/❌ | [notes] |
+| 🧪 QA | [name/AI] | ✅/⚠️/❌ | [notes] |
+| 🔒 Security | [name/AI] | ✅/⚠️/❌ | [notes] |
+| 🔧 DevOps | [name/AI] | ✅/⚠️/❌ | [notes] |
+
+## Decision
+
+- [ ] **APPROVED** - Proceed to execution
+- [ ] **CONDITIONALLY APPROVED** - Address concerns first
+- [ ] **REJECTED** - Requires redesign
+
+## Execution Level Selected
+
+- [ ] Low (confirm each change)
+- [ ] Medium (batch confirm by phase)
+- [ ] High (auto-execute with checkpoints)
+```
+
+---
+
 ## 🎮 Execution Control Levels
 
 After specification approval, choose execution autonomy level:
@@ -123,34 +283,40 @@ Is this a critical system (auth, payments, data)?
 
 ---
 
-## 🔄 Workflow Summary
+## 🔄 Complete Workflow
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    SPECIFICATION MODE                          │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  Step 1: User provides 4-6 sentence feature request            │
-│          ↓                                                      │
-│  Step 2: Agent enters READ-ONLY mode                           │
-│          - Analyze codebase                                     │
-│          - Check AGENTS.md / conventions                        │
-│          - NO code modifications                                │
-│          ↓                                                      │
-│  Step 3: Agent generates Specification                         │
-│          - Acceptance Criteria                                  │
-│          - Implementation Plan                                  │
-│          - File Breakdown                                       │
-│          - Test Strategy                                        │
-│          - Security Checklist                                   │
-│          ↓                                                      │
-│  Step 4: User reviews and approves specification               │
-│          ↓                                                      │
-│  Step 5: User selects execution level (Low/Medium/High)        │
-│          ↓                                                      │
-│  Step 6: Agent executes with selected autonomy level           │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                    SPECIFICATION MODE WORKFLOW                      │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  Step 1: User provides 4-6 sentence feature request                │
+│          ↓                                                          │
+│  Step 2: Agent enters READ-ONLY mode                               │
+│          - Analyze codebase                                         │
+│          - Check AGENTS.md / conventions                            │
+│          - NO code modifications                                    │
+│          ↓                                                          │
+│  Step 3: Agent generates Specification                             │
+│          - Feature Summary                                          │
+│          - Acceptance Criteria                                      │
+│          - Implementation Plan                                      │
+│          - File Breakdown                                           │
+│          - Test Strategy                                            │
+│          - Security Checklist                                       │
+│          ↓                                                          │
+│  Step 4: Multi-Role Review                                         │
+│          🏛️ Architect → 💻 Developer → 🧪 QA → 🔒 Security → 🔧 DevOps │
+│          ↓                                                          │
+│  Step 5: Consolidated Approval                                     │
+│          - All roles sign off                                       │
+│          - Select execution level                                   │
+│          ↓                                                          │
+│  Step 6: Agent executes with selected autonomy level               │
+│          - Commits at checkpoints                                   │
+│          - Tests run after each phase                               │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -159,61 +325,36 @@ Is this a critical system (auth, payments, data)?
 
 | Benefit | Description |
 |---------|-------------|
-| **Architectural Integrity** | Design reviewed before implementation |
-| **Code Quality** | Complete test coverage planned upfront |
-| **Security Assurance** | Vulnerabilities caught in planning |
+| **Architectural Integrity** | Design reviewed by Architect role before implementation |
+| **Code Quality** | Developer role validates feasibility and edge cases |
+| **Test Coverage** | QA role ensures complete test strategy |
+| **Security Assurance** | Security role catches vulnerabilities in planning |
+| **Operational Readiness** | DevOps role ensures deployability |
 | **Controlled Execution** | No surprise file modifications |
-| **Audit Trail** | Full documentation of intent and changes |
-| **Scalability** | Works for large, complex agent projects |
+| **Audit Trail** | Full documentation with role sign-offs |
 
 ---
 
-## 📝 Example: Feature Request → Specification
+## 📝 Quick Reference Card
 
-### Input (4-6 sentences)
-```
-Add user login system with OAuth (Google, GitHub) and email/password 
-authentication. Include email verification for new signups. Users should 
-be able to reset their password via email. Store sessions securely and 
-support "remember me" functionality.
-```
-
-### Output (Specification Summary)
-
-**Acceptance Criteria:**
-- [ ] User can sign up with email/password
-- [ ] User receives verification email with unique link
-- [ ] User can login with Google OAuth
-- [ ] User can login with GitHub OAuth
-- [ ] User can reset password via email
-- [ ] Session persists for 30 days with "remember me"
-- [ ] Invalid credentials return 401 with rate limiting
-
-**File Changes:**
-| Action | File | LOC Est. |
-|--------|------|----------|
-| NEW | `src/auth/mod.rs` | ~50 |
-| NEW | `src/auth/oauth.rs` | ~150 |
-| NEW | `src/auth/email.rs` | ~100 |
-| NEW | `src/auth/session.rs` | ~80 |
-| MODIFY | `src/routes.rs` | ~30 |
-| NEW | `tests/auth_test.rs` | ~200 |
-
-**Security Checklist:**
-- [ ] Password hashed with Argon2
-- [ ] OAuth tokens never logged
-- [ ] Session tokens are cryptographically random
-- [ ] Rate limiting on login attempts (5/min)
-- [ ] CSRF protection on OAuth flow
+| Phase | Actions | Roles Involved |
+|-------|---------|----------------|
+| **Request** | User describes feature (4-6 sentences) | User |
+| **Analysis** | Agent reads codebase (NO writes) | Agent (Read-Only) |
+| **Specification** | Generate detailed spec | Agent |
+| **Review** | Multi-role sign-off | 5 AI Roles |
+| **Approval** | Consolidated decision | User |
+| **Execution** | Implement with controls | Agent (Level-based) |
 
 ---
 
 ## 🔗 Related Documents
 
-- [AI Review Roles](./ai-review-roles.md) - Multi-persona review system
+- [AI Review Roles](./ai-review-roles.md) - Detailed persona definitions
 - [Pre-merge Checklist](./pre-merge-checklist.md) - Quality gates
 - [Development Guidelines](../../standards/development-guidelines.md) - Coding standards
 
 ---
 
-*This workflow ensures engineering rigor in AI-assisted development.*
+*This workflow ensures engineering rigor in AI-assisted development through multi-perspective review.*
+
