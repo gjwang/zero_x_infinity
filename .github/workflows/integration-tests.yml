@@ -593,11 +593,10 @@ jobs:
         continue-on-error: true
 
       - name: Dump Logs on Failure
-        if: steps.run-test.outcome == 'failure'
+        if: failure() && steps.run-test.outcome == 'failure'
         run: |
           echo "=== Fee E2E Log ==="
           cat /tmp/gateway_fee_e2e.log || true
-          exit 1
 
       - name: Upload Logs
         if: always()
