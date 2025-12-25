@@ -4463,6 +4463,7 @@ dependencies = [
  "axum",
  "bincode",
  "chrono",
+ "crc",
  "crc32fast",
  "crossbeam-queue",
  "crossterm 0.29.0",
