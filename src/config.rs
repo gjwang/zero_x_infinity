@@ -13,6 +13,9 @@ pub struct AppConfig {
     pub gateway: GatewayConfig,
     #[serde(default)]
     pub persistence: PersistenceConfig,
+    /// Matching Service Persistence (Phase 0x0D)
+    #[serde(default)]
+    pub matching_persistence: MatchingPersistenceConfig,
     /// PostgreSQL connection URL for account management (Phase 0x0A)
     #[serde(default)]
     pub postgres_url: Option<String>,
@@ -36,6 +39,24 @@ impl Default for PersistenceConfig {
         Self {
             enabled: false,
             tdengine_dsn: "taos://root:taosdata@localhost:6030".to_string(),
+        }
+    }
+}
+
+/// Matching Service Persistence Configuration (Phase 0x0D)
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct MatchingPersistenceConfig {
+    pub enabled: bool,
+    pub data_dir: String,
+    pub snapshot_interval_trades: u64,
+}
+
+impl Default for MatchingPersistenceConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            data_dir: "./data/matching".to_string(),
+            snapshot_interval_trades: 1000,
         }
     }
 }

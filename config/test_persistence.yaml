@@ -1,0 +1,21 @@
+log_level: "info"
+log_dir: "./logs"
+log_file: "test_persistence.log"
+use_json: false
+rotation: "daily"
+sample_rate: 1
+enable_tracing: false
+
+gateway:
+  host: "0.0.0.0"
+  port: 18080
+  queue_size: 10000
+
+persistence:
+  enabled: false  # Disable TDengine for this test
+  tdengine_dsn: "taos://root:taosdata@localhost:6030"
+
+matching_persistence:
+  enabled: true
+  data_dir: "./data/test_matching_persistence"
+  snapshot_interval_trades: 50  # Small interval for testing

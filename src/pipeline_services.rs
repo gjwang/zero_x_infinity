@@ -849,6 +849,12 @@ impl MatchingService {
         }
     }
 
+    /// Get a reference to the inner OrderBook (for testing)
+    #[cfg(test)]
+    pub fn book(&self) -> &OrderBook {
+        &self.book
+    }
+
     /// Consume the service and return the inner OrderBook
     pub fn into_inner(self) -> OrderBook {
         self.book
