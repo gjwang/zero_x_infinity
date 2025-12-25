@@ -1,5 +1,9 @@
 # Summary
 
+- [📊 MVP Roadmap | MVP 路线图](./0x00-mvp-roadmap.md)
+
+---
+
 ## 🛠️ 第一阶段：核心匹配引擎 (Core Engine)
 
 - [0x01 Genesis | 创世纪](./0x01-genesis.md)
