@@ -21,13 +21,15 @@
 ## 2. WAL 文件命名
 
 ```
-data/wal/
+{service_data_dir}/wal/
 ├── current.wal                 # 当前活跃 WAL
 ├── wal-00001-0000000100.wal    # EPOCH-1, seq 100 结束
 ├── wal-00001-0000000200.wal    # EPOCH-1, seq 200 结束
 └── wal-00002-0000000050.wal    # EPOCH-2, seq 50 结束
 
 命名格式: wal-{EPOCH:05d}-{END_SEQ:010d}.wal
+
+例如: data/ubscore-service/wal/wal-00001-0000001000.wal
 ```
 
 ---
