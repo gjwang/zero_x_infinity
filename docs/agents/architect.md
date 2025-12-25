@@ -369,6 +369,10 @@ A → B → C → A  ❌
 - [Specification Mode](./specification-mode.md) - Planning workflow
 - [Project Roadmap](../src/0x00-mvp-roadmap.md) - Current architecture status
 
+### Collaboration Workflows
+- [Architect → Developer Handover](./workflows/arch-to-dev-handover.md)
+- [Architect → QA Handover](./workflows/arch-to-qa-handover.md)
+
 ---
 
 ## 📚 Project-Specific Context
