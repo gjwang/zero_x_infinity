@@ -1,6 +1,6 @@
 # Developer → Architect: Phase 0x0D Progress Report
 
-> **Date**: 2025-12-26 04:55  
+> **Date**: 2025-12-26 05:06  
 > **Developer**: AI Agent  
 > **Branch**: `0x0D-wal-snapshot-design`
 
@@ -12,7 +12,7 @@
 |-----------|--------|---------|
 | Cross-Service Sync | ✅ Complete | `1466c06` |
 | UBSC-GAP-01 (WAL降级) | ✅ Complete | `385d17f` |
-| UBSCore Runtime Persistence | ✅ Complete | `a6042af`, `181a820` |
+| UBSCore Runtime Persistence | ✅ Complete | `a6042af`, `181a820`, `b1014fe` |
 | QA Handover Docs | ✅ Updated | `39adce5` |
 
 **Tests**: 289 passed ✅
@@ -40,7 +40,7 @@
 - `src/config.rs`: Added `UBSCorePersistenceConfig`
 - `src/main.rs`: Conditional `new_with_recovery()` in gateway mode
 - `config/dev.yaml`: Added `ubscore_persistence` section
-- `config/audit_ubscore.yaml`: Added missing config section
+- `scripts/audit_ubscore_adversarial.sh`: Fixed dynamic config generation
 
 ### 3. UBSC-GAP-01 Fix
 **Purpose**: Graceful degradation on WAL corruption (matching SettlementRecovery behavior).
@@ -60,19 +60,18 @@
 
 ---
 
-## ⚠️ Pending QA Re-Verification
+## ⚠️ QA Re-Verification (Pending)
 
-**Issue**: QA's initial re-verification failed because `config/audit_ubscore.yaml` was missing `ubscore_persistence` section.
+**最新修复 (b1014fe)**: 审计脚本动态生成config时未包含 `ubscore_persistence`
 
-**Fix**: Commit `181a820` adds the missing config.
-
-**Action**: QA to re-run `./scripts/audit_ubscore_adversarial.sh`
+**等待 QA 运行**: `./scripts/audit_ubscore_adversarial.sh`
 
 ---
 
 ## 📁 Key Commits (Latest First)
 
 ```
+b1014fe fix(audit): add ubscore_persistence to audit script generated config
 181a820 fix(config): add missing ubscore_persistence to audit config
 39adce5 docs: update QA handover with UBSCore audit fixes
 a6042af feat(0x0D): integrate UBSCore WAL v2 at runtime
@@ -94,12 +93,5 @@ All implementations follow the 0x0D design specifications:
 
 ---
 
-## 📋 Next Steps
+*Report generated: 2025-12-26 05:06*
 
-1. **QA**: Re-verify UBSCore persistence with updated config
-2. **Arch**: Review cross-service sync design for completeness
-3. **Dev**: Address any additional QA findings
-
----
-
-*Report generated: 2025-12-26 04:55*
