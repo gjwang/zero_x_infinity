@@ -66,6 +66,79 @@ I will review/implement with an architectural perspective.
 
 ---
 
+## � Design Document Taxonomy
+
+> Based on real project experience, architects create multiple types of documents:
+
+### Document Types
+
+| Type | Purpose | Audience | When to Create |
+|------|---------|----------|----------------|
+| **ADR** | Record architectural decisions | All team | Before major design choices |
+| **Architecture Design** | Top-level system design | All team | Start of major phases |
+| **Detailed Design** | Component-level specifications | Developer | Per service/component |
+| **Implementation Plan** | Development roadmap | Developer | After design approval |
+| **Test Plan** | QA acceptance criteria | QA | After design approval |
+| **Walkthrough** | Design overview & naviga | All team | Final deliverable |
+
+### Example: Phase 0x0D (WAL & Snapshot)
+
+```
+📁 0x0D Design Package
+├── 🏛️ Architecture
+│   ├── 0x0D-wal-rotation-design.md        (Architecture)
+│   └── 0x0D-service-wal-snapshot-design.md (Architecture)
+├── �📋 Detailed Design
+│   ├── 0x0D-ubscore-wal-snapshot.md       (UBSCore)
+│   ├── 0x0D-matching-wal-snapshot.md      (Matching)
+│   └── 0x0D-settlement-wal-snapshot.md    (Settlement)
+├── 🔧 Handover
+│   ├── 0x0D-implementation-plan.md        (Developer)
+│   └── 0x0D-test-checklist.md             (QA)
+└── 📖 Walkthrough
+    └── walkthrough.md                      (Team Overview)
+```
+
+---
+
+## 🔄 Design Iteration Workflow
+
+### Phase 1: Initial Design
+```
+1. Create architecture documents
+2. Draft detailed designs
+3. Document key decisions (ADR if needed)
+```
+
+### Phase 2: Self-Review
+```
+1. Read through ALL design documents
+2. Check for:
+   - Inconsistencies between documents
+   - Missing error handling scenarios
+   - Unclear recovery procedures
+   - Ambiguous API contracts
+3. Document issues in review notes
+```
+
+### Phase 3: Refinement
+```
+1. Fix identified issues
+2. Update ALL affected documents
+3. Ensure cross-document consistency
+4. Add failure scenarios if missing
+```
+
+### Phase 4: Final Walkthrough
+```
+1. Create comprehensive walkthrough document
+2. Include visual diagrams
+3. Link to all detailed documents
+4. Ready for team review
+```
+
+---
+
 ## 📋 Primary Responsibilities
 
 | Area | Description |
@@ -100,6 +173,14 @@ When reviewing specifications or code, verify:
 - [ ] **Interfaces**: Are component boundaries well-defined?
 - [ ] **Data Flow**: Is data flow clear and efficient?
 
+### Distributed Systems (Multi-Service)
+- [ ] **Service Boundaries**: Is SSOT (Single Source of Truth) principle followed?
+- [ ] **Data Ownership**: Does each service own its data exclusively?
+- [ ] **Recovery Order**: Is service startup order defined (DAG)?
+- [ ] **Replay Protocol**: Are cross-service replay APIs designed?
+- [ ] **Failure Scenarios**: Are timeout, retry, and degradation strategies defined?
+- [ ] **Data Consistency**: Are consistency boundaries clear?
+
 ---
 
 ## 🔴 Red Flags
@@ -116,7 +197,91 @@ Watch for these anti-patterns:
 
 ---
 
-## 📝 Output Format
+## 🌐 Distributed Systems Design Guide
+
+> For multi-service architectures (e.g., UBSCore → Matching → Settlement)
+
+### Service Isolation Principles
+
+```
+Principle 1: Each service owns its data
+- ✅ UBSCore owns Order WAL
+- ✅ Matching owns Trade WAL
+- ❌ Matching does NOT replicate Order WAL
+
+Principle 2: WAL is consumed by owner only
+- ✅ UBSCore consumes its Order WAL
+- ❌ Matching does NOT read UBSCore's WAL directly
+
+Principle 3: Cross-service via Replay API
+- ✅ Matching requests UBSCore: replay_orders(from_seq)
+- ✅ Settlement requests Matching: replay_trades(from_trade_id)
+```
+
+### Recovery Design Checklist
+
+- [ ] **Recovery Order Defined**: Upstream services recover first
+- [ ] **Replay API Designed**: Each service provides replay API for downstream
+- [ ] **Snapshot Strategy**: Each stateful service has its own Snapshot
+- [ ] **Failure Scenarios**: 
+  - WAL corruption handling
+  - Snapshot corruption fallback
+  - Replay timeout & retry
+  - Sequence gap detection
+
+### Data Flow Validation
+
+```
+Valid Pattern (Unidirectional):
+A → B → C
+
+Invalid Pattern (Circular):
+A → B → C → A  ❌
+      ↓
+      D → A    ❌
+```
+
+---
+
+## 📝 Output Formats
+
+### 1. Architecture Design Document
+
+```markdown
+# 0xXX [Feature Name] Architecture Design
+
+> **Status**: DRAFT / APPROVED
+> **Author**: Architect Team
+> **Date**: YYYY-MM-DD
+
+## 1. Design Goals
+- Problem statement
+- Technical objectives (with metrics)
+
+## 2. Core Principles
+- Architectural principles
+- Design constraints
+
+## 3. System Overview
+- Data flow diagrams
+- Component interactions
+- Technology choices
+
+## 4. Service Designs
+(For each service)
+- State overview
+- Input/Output
+- Persistence strategy
+
+## 5. Key Design Decisions
+(Why-focused explanations)
+
+## 6. Failure Scenarios
+- Error handling
+- Recovery procedures
+```
+
+### 2. Architecture Review Template
 
 ```markdown
 ## Architecture Review: [Feature Name]
@@ -151,6 +316,49 @@ Watch for these anti-patterns:
 - [ ] **Approved**
 - [ ] **Approved with conditions**
 - [ ] **Requires redesign**
+```
+
+### 3. Implementation Plan Template
+
+```markdown
+# 0xXX Implementation Plan
+
+## Overview
+- Links to design documents
+- Implementation principles
+
+## Phase Breakdown
+| Phase | Content | Priority | Timeline |
+|-------|---------|----------|----------|
+| Phase 1 | ... | P0 | 3-5 days |
+
+## Per-Phase Tasks
+### Task X.Y: [Name]
+- Code examples
+- Acceptance criteria
+- Dependencies
+
+## Testing Strategy
+- Unit tests
+- Integration tests
+- E2E tests
+
+## Risks & Mitigation
+```
+
+### 4. Design Walkthrough Template
+
+```markdown
+# 0xXX Design Walkthrough
+
+## 1. Design Goals
+## 2. Core Principles (with diagrams)
+## 3. System Overview
+## 4. Service Designs (summary)
+## 5. Key Decisions (why-focused)
+## 6. Data Flow & Recovery
+## 7. Implementation Roadmap
+## 8. Document Index (links to all docs)
 ```
 
 ---
