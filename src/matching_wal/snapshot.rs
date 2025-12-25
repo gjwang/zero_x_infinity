@@ -417,4 +417,37 @@ mod tests {
         // Cleanup
         let _ = fs::remove_dir_all(&temp_dir);
     }
+
+    // --------------------------------------------------------
+    // TDD Test 5: Zombie snapshot (missing COMPLETE marker) → Error
+    // --------------------------------------------------------
+    #[test]
+    fn test_snapshot_zombie_detection() {
+        let temp_dir = format!("target/test_snapshot_zombie_{}", std::process::id());
+        let _ = fs::remove_dir_all(&temp_dir);
+
+        let snapshotter = MatchingSnapshotter::new(&temp_dir);
+        let mut orderbook = OrderBook::new();
+        orderbook.rest_order(make_order(1, 100, 10, Side::Buy));
+
+        // Create snapshot
+        snapshotter.create_snapshot(&orderbook, 12345).unwrap();
+
+        // Remove COMPLETE marker to simulate zombie
+        let complete_path = PathBuf::from(&temp_dir).join("latest/COMPLETE");
+        fs::remove_file(&complete_path).unwrap();
+
+        // Try to load - should error on missing COMPLETE
+        let result = snapshotter.load_latest_snapshot();
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Incomplete snapshot")
+        );
+
+        // Cleanup
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
 }

@@ -244,4 +244,88 @@ mod tests {
 
         cleanup(&dir);
     }
+
+    // --------------------------------------------------------
+    // TDD Test 4: WAL corruption → fallback to snapshot (BUG-003 regression)
+    // --------------------------------------------------------
+    #[test]
+    fn test_recovery_wal_corruption_fallback() {
+        let dir = test_dir().join("wal_corruption");
+        cleanup(&dir);
+
+        // Create snapshot at trade 5000
+        let snapshot_dir = dir.join("snapshots");
+        let snapshotter = SettlementSnapshotter::new(&snapshot_dir);
+        snapshotter.create_snapshot(5000).unwrap();
+
+        // Create WAL with valid entry, then corrupt it
+        let wal_dir = dir.join("wal");
+        fs::create_dir_all(&wal_dir).unwrap();
+        let wal_path = wal_dir.join("current.wal");
+        {
+            let mut writer = SettlementWalWriter::new(&wal_path, 1, 1).unwrap();
+            writer.append_checkpoint(6000).unwrap();
+            writer.flush().unwrap();
+        }
+
+        // Corrupt WAL payload (byte 25 is inside payload)
+        {
+            use std::io::{Seek, SeekFrom, Write};
+            let mut file = fs::OpenOptions::new().write(true).open(&wal_path).unwrap();
+            file.seek(SeekFrom::Start(25)).unwrap();
+            file.write_all(b"CORRUPTED").unwrap();
+        }
+
+        // Recover - should detect corruption and fallback to snapshot (5000)
+        let recovery = SettlementRecovery::new(&dir);
+        let result = recovery.recover().unwrap();
+
+        // Should use snapshot value since WAL is corrupted
+        assert!(!result.is_cold_start);
+        assert_eq!(result.last_trade_id, 5000); // Fell back to snapshot
+
+        cleanup(&dir);
+    }
+
+    // --------------------------------------------------------
+    // TDD Test 5: Zombie snapshot (missing COMPLETE marker) → cold start
+    // --------------------------------------------------------
+    #[test]
+    fn test_recovery_zombie_snapshot_ignored() {
+        let dir = test_dir().join("zombie_snapshot");
+        cleanup(&dir);
+
+        // Create snapshot manually without COMPLETE marker
+        let snapshot_dir = dir.join("snapshots");
+        let snapshot_subdir = snapshot_dir.join("snapshot-5000");
+        fs::create_dir_all(&snapshot_subdir).unwrap();
+
+        // Write metadata.json
+        let metadata = serde_json::json!({
+            "last_trade_id": 5000,
+            "created_at_ns": 0
+        });
+        fs::write(
+            snapshot_subdir.join("metadata.json"),
+            serde_json::to_string(&metadata).unwrap(),
+        )
+        .unwrap();
+
+        // Create "latest" symlink (but NO COMPLETE marker!)
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+            symlink("snapshot-5000", snapshot_dir.join("latest")).unwrap();
+        }
+
+        // Recover - should detect zombie and treat as cold start
+        let recovery = SettlementRecovery::new(&dir);
+        let result = recovery.recover().unwrap();
+
+        // Zombie snapshot ignored → cold start
+        assert!(result.is_cold_start);
+        assert_eq!(result.last_trade_id, 0);
+
+        cleanup(&dir);
+    }
 }
