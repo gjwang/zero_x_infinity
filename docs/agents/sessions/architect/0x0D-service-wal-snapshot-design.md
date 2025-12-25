@@ -73,6 +73,8 @@ pub fn replay_orders(&self, from_seq: u64, callback: impl FnMut(ValidOrder))
 
 ## 2. Matching Service
 
+> 📖 **详细设计**: [Matching Service WAL & Snapshot 详细设计](./0x0D-matching-wal-snapshot.md)
+
 ### 2.1 状态概述
 
 | 状态 | 数据结构 | 说明 |
