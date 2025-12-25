@@ -194,4 +194,110 @@ pub struct SnapshotMarkerPayload {
 
 ---
 
-*Document created: 2024-12-25*
+## 8. Merkle Checkpoint Extension (Phase 2)
+
+### 8.1 概述
+
+周期性生成 Merkle Root，用于防篡改验证和轻客户端证明。
+
+### 8.2 高效实现：复用 CRC32
+
+**核心优化**：不重复 hash 整个 payload，复用已计算的 checksum。
+
+```
+叶子节点 = xxhash64(seq_id || checksum)
+         = 8 bytes seq_id + 4 bytes crc32 → 8 bytes hash
+         
+开销：~5ns per entry (vs ~100ns hash full payload)
+```
+
+### 8.3 Entry Types 扩展
+
+```rust
+#[repr(u8)]
+pub enum WalEntryType {
+    Order = 1,
+    Cancel = 2,
+    Trade = 3,
+    BalanceSettle = 4,
+    Deposit = 5,
+    Withdraw = 6,
+    SnapshotMarker = 7,
+    MerkleCheckpoint = 8,  // ← 新增
+}
+```
+
+### 8.4 MerkleCheckpoint Payload
+
+```rust
+#[derive(Serialize, Deserialize)]
+pub struct MerkleCheckpointPayload {
+    pub start_seq: u64,      // 起始 seq_id
+    pub end_seq: u64,        // 结束 seq_id
+    pub merkle_root: u64,    // xxhash64 root (8 bytes)
+    pub entry_count: u32,    // 条目数
+}
+// 28 bytes
+```
+
+### 8.5 实现
+
+```rust
+use xxhash_rust::xxh3::xxh3_64;
+
+const CHECKPOINT_INTERVAL: usize = 1024;
+
+struct MerkleAccumulator {
+    hashes: Vec<u64>,
+    start_seq: u64,
+}
+
+impl MerkleAccumulator {
+    /// 每条 entry 调用，传入 header 中已有的 seq_id 和 checksum
+    #[inline]
+    fn append(&mut self, seq_id: u64, checksum: u32) {
+        let mut buf = [0u8; 12];
+        buf[0..8].copy_from_slice(&seq_id.to_le_bytes());
+        buf[8..12].copy_from_slice(&checksum.to_le_bytes());
+        self.hashes.push(xxh3_64(&buf));
+    }
+
+    #[inline]
+    fn should_checkpoint(&self) -> bool {
+        self.hashes.len() >= CHECKPOINT_INTERVAL
+    }
+
+    fn compute_root(&self) -> u64 {
+        let mut level = self.hashes.clone();
+        while level.len() > 1 {
+            let mut next = Vec::with_capacity((level.len() + 1) / 2);
+            for chunk in level.chunks(2) {
+                let hash = if chunk.len() == 2 {
+                    xxh3_64(&[chunk[0].to_le_bytes(), chunk[1].to_le_bytes()].concat())
+                } else {
+                    chunk[0]
+                };
+                next.push(hash);
+            }
+            level = next;
+        }
+        level.first().copied().unwrap_or(0)
+    }
+}
+```
+
+### 8.6 安全模式（可选）
+
+如需抵抗恶意攻击，替换哈希算法：
+
+| 模式 | 叶子计算 | 每条开销 |
+|------|----------|----------|
+| **Fast (默认)** | `xxh3_64(seq_id \|\| crc32)` | ~5ns |
+| **Secure** | `sha256(seq_id \|\| sha256(payload))[0..8]` | ~500ns |
+
+安全模式需将 header 中的 `checksum` 改为 `sha256(payload)[0..4]`。
+
+---
+
+*Document updated: 2024-12-25*
+
