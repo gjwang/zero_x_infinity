@@ -33,6 +33,19 @@ UBSCore is the **Single Source of Truth for Balances**.
 
 ---
 
+## 🔍 ROOT CAUSE (QA Finding)
+
+| 文件 | `ubscore_persistence` 引用 | 被使用 |
+|------|---------------------------|--------|
+| `main.rs:324` | ✅ 存在 | 直接模式 |
+| `pipeline_mt.rs` | ❌ **不存在** | **--gateway 模式** |
+
+**问题**: 审计使用 `--gateway` 模式，走 `pipeline_mt.rs` 但该文件未读取 `ubscore_persistence`。
+
+**修复**: 在 `pipeline_mt.rs` 中添加与 `main.rs:324-329` 相同的逻辑。
+
+---
+
 ## Identified Gaps (vs Arch Spec & Settlement)
 
 | ID | Gap | Settlement Behavior | UBSCore Behavior | Risk |
