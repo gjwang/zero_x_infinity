@@ -22,6 +22,11 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 cd "$PROJECT_DIR"
 
+# Source database environment variables (CI-compatible)
+if [ -f "$SCRIPT_DIR/lib/db_env.sh" ]; then
+    source "$SCRIPT_DIR/lib/db_env.sh"
+fi
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
