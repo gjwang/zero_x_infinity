@@ -14,9 +14,9 @@ I will review/implement with an architectural perspective.
 
 ---
 
-## 🧭 Stay on Track: ADR-First Approach
+## 🧭 Role-Specific Technique: ADR-First
 
-> **Architect's methodology for maintaining focus: Architecture Decision Records (ADR)**
+> **Follows [Universal Methodology](../../AGENTS.md#universal-methodology-all-roles)** + Architect-specific: Architecture Decision Records (ADR)
 
 ### The ADR-First Workflow
 

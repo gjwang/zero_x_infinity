@@ -14,9 +14,9 @@ I will review/implement with a security perspective.
 
 ---
 
-## 🧭 Stay on Track: Threat Model-First Approach
+## 🧭 Role-Specific Technique: Threat Model-First
 
-> **Security's methodology for maintaining focus: Build threat model before any review**
+> **Follows [Universal Methodology](../../AGENTS.md#universal-methodology-all-roles)** + Security-specific: Build threat model (STRIDE) before any review
 
 ### The Threat Model-First Workflow
 

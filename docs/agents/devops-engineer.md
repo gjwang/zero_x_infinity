@@ -14,9 +14,9 @@ I will review/implement with an operational perspective.
 
 ---
 
-## 🧭 Stay on Track: Runbook-First Approach
+## 🧭 Role-Specific Technique: Runbook-First
 
-> **DevOps's methodology for maintaining focus: Write the runbook before any deployment**
+> **Follows [Universal Methodology](../../AGENTS.md#universal-methodology-all-roles)** + DevOps-specific: Write the runbook before any deployment
 
 ### The Runbook-First Workflow
 
