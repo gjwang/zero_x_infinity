@@ -1,7 +1,7 @@
 # 0x0D Universal WAL Format Specification
 
 > **Status**: 📋 DRAFT  
-> **Author**: Architect (AI)  
+> **Author**: Architect Team  
 > **Date**: 2024-12-25  
 > **Parent**: [0x0D Architecture Design](./0x0D-architecture-design.md)
 

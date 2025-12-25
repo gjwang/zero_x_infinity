@@ -1,7 +1,7 @@
 # 0x0D Snapshot & Recovery Architecture Design
 
 > **Status**: 📋 DRAFT - Awaiting Review  
-> **Author**: Architect (AI)  
+> **Author**: Architect Team  
 > **Date**: 2024-12-25
 
 ---
