@@ -35,6 +35,7 @@ We are building a **production-grade** crypto trading engine that handles **1.3M
 *   **Determinism**: Event Sourcing architecture ensures 100% reproduceability.
 *   **Safety**: Ed25519 Authentication & Type-safe Asset handling.
 *   **Persistence**: TDengine (Time-Series Database) for high-speed audit logging.
+*   **Crash Recovery**: Universal WAL & Snapshot for bit-perfect state reconstruction.
 
 ## 🏗️ Architecture
 
@@ -101,6 +102,8 @@ graph TD
 | 0x0B | [Funding & Transfer](./docs/src/0x0B-funding.md) | Funding System Architecture |
 | 0x0B-a | [Internal Transfer](./docs/src/0x0B-a-transfer.md) | FSM-based 2PC Transfer |
 | 0x0C | [Trade Fee](./docs/src/0x0C-trade-fee.md) | Maker/Taker Fee System |
+| **Part III** | **Resilience** | |
+| 0x0D | [Snapshot & Recovery](./docs/src/0x0D-snapshot-recovery.md) | Universal WAL & Snapshot Persistence |
 
 ---
 
@@ -202,6 +205,7 @@ SELECT * FROM orders LIMIT 10;
 *   **确定性 (Determinism)**: 事件溯源架构，确保 100% 可重现性。
 *   **安全性 (Safety)**: Ed25519 非对称鉴权 & 类型安全的资产处理。
 *   **持久化 (Persistence)**: 集成 TDengine 时序数据库，实现极速审计日志。
+*   **崩溃恢复 (Crash Recovery)**: 通用 WAL & 快照，实现比特级精确状态重建。
 
 ---
 
@@ -270,6 +274,8 @@ graph TD
 | 0x0B | [Funding & Transfer](./docs/src/0x0B-funding.md) | 资金体系架构 |
 | 0x0B-a | [Internal Transfer](./docs/src/0x0B-a-transfer.md) | FSM 内部转账 |
 | 0x0C | [Trade Fee](./docs/src/0x0C-trade-fee.md) | Maker/Taker 手续费系统 |
+| **Part III** | **鲁棒性阶段 (Resilience)** | |
+| 0x0D | [Snapshot & Recovery](./docs/src/0x0D-snapshot-recovery.md) | 通用 WAL & 快照持久化 |
 
 ---
 
