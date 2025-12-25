@@ -201,24 +201,67 @@ fn cleanup_old_wal_files(&mut self) -> io::Result<()> {
 
 ---
 
-## 8. Entry Type 特殊处理
+## 8. 分离存储（必须）
 
-| Entry Type | 归档策略 |
-|------------|----------|
-| Order | Snapshot 后可删除 |
-| Trade | 永久保留 (审计) |
-| BalanceSettle | 永久保留 (审计) |
-| SnapshotMarker | 永久保留 |
-
-### 分离存储（可选 Phase 3）
+按服务类型分离 WAL 存储：
 
 ```
-data/wal/
-├── orders/       # Order WAL (可归档)
-├── trades/       # Trade WAL (永久保留)
-└── settlements/  # Settlement WAL (永久保留)
+data/
+├── ubscore/                        # UBSCore 服务
+│   ├── wal/
+│   │   ├── current.wal
+│   │   └── wal-00001-0000001000.wal
+│   └── snapshots/
+│       └── latest -> snapshot-1000/
+│
+├── matching/                       # 撮合引擎
+│   ├── wal/
+│   │   ├── current.wal
+│   │   └── wal-00001-0000500000.wal
+│   └── orderbooks/                 # OrderBook 快照
+│
+├── settlement/                     # 结算服务
+│   └── wal/
+│       ├── current.wal
+│       └── wal-00001-0000100000.wal
+│
+└── trades/                         # 成交记录（永久保留）
+    └── wal/
+        └── ...
+```
+
+### 8.1 服务与 Entry Type 映射
+
+| 服务目录 | Entry Types | 归档策略 |
+|----------|-------------|----------|
+| `ubscore/` | Order, Deposit, Withdraw | Snapshot 后可删 |
+| `matching/` | Order, Cancel | Snapshot 后可删 |
+| `settlement/` | Trade, BalanceSettle | 永久保留 |
+| `trades/` | Trade | 永久保留 (审计) |
+
+### 8.2 配置
+
+```rust
+pub struct DataConfig {
+    pub base_dir: PathBuf,  // data/
+}
+
+impl DataConfig {
+    pub fn ubscore_wal(&self) -> PathBuf {
+        self.base_dir.join("ubscore/wal")
+    }
+    
+    pub fn matching_wal(&self) -> PathBuf {
+        self.base_dir.join("matching/wal")
+    }
+    
+    pub fn settlement_wal(&self) -> PathBuf {
+        self.base_dir.join("settlement/wal")
+    }
+}
 ```
 
 ---
 
-*Document created: 2024-12-25*
+*Document updated: 2024-12-25*
+
