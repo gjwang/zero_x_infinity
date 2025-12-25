@@ -68,5 +68,6 @@
 - [ID 规范 (ID Specification)](../standards/id-specification.md)
 - [命名规范 (Naming Convention)](../standards/naming-convention.md)
 - [CI 常见坑与解决方案 (CI Pitfalls)](./standards/ci-pitfalls.md)
+- [AI Review Roles (AI 评审角色)](./standards/ai-review-roles.md)
 - [Agent 测试注意事项 (Agent Testing Notes)](./agent-testing-notes.md)
 - [Database Selection: TDengine | 数据库选型: TDengine](./database-selection-tdengine.md)
