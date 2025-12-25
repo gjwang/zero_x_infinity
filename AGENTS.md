@@ -35,88 +35,109 @@ Before making any changes, AI agents MUST read:
 
 ## 🧭 Core Principle: Stay on Track
 
-> **AI agents easily lose direction during complex tasks. To prevent this, ALL non-trivial work MUST follow the blueprint-first approach.**
+> **AI agents easily lose direction during complex tasks. To prevent this, ALL work MUST follow the universal methodology below, plus role-specific techniques.**
 
-### The Problem
+---
 
-During complex tasks, AI agents tend to:
-- Forget the original goal mid-execution
-- Go down rabbit holes on tangential issues
-- Make changes that drift from the specification
-- Lose context after multiple iterations
+### Universal Methodology (ALL Roles)
 
-### The Solution: Blueprint-First Execution
+Every AI agent, regardless of role, follows this pattern:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    BLUEPRINT-FIRST EXECUTION                       │
+│               UNIVERSAL WORK METHODOLOGY                            │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
-│  1. 📋 WRITE BLUEPRINT FIRST                                       │
-│     - Define the goal in 1-2 sentences                             │
-│     - List all sub-tasks as checklist                              │
-│     - Identify success criteria                                    │
+│  PHASE 1: TOP VIEW (Before ANY work)                               │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │ • State the goal in ONE sentence                            │   │
+│  │ • Define what "DONE" looks like                             │   │
+│  │ • List acceptance criteria as checkboxes                    │   │
+│  └─────────────────────────────────────────────────────────────┘   │
 │                                                                     │
-│  2. ✅ CREATE PROGRESS CHECKLIST                                   │
-│     - [ ] Task 1: ...                                              │
-│     - [ ] Task 2: ...                                              │
-│     - [ ] Task N: ...                                              │
+│  PHASE 2: ACCEPTANCE CHECKLIST (Before execution)                  │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │ - [ ] Criterion 1: [specific, measurable]                   │   │
+│  │ - [ ] Criterion 2: [specific, measurable]                   │   │
+│  │ - [ ] Criterion N: [specific, measurable]                   │   │
+│  └─────────────────────────────────────────────────────────────┘   │
 │                                                                     │
-│  3. 🔄 EXECUTE WITH CONTINUOUS ALIGNMENT                           │
-│     - Before each action: "Does this serve the original goal?"     │
-│     - After each step: Check off completed items                   │
-│     - If drifting: STOP, re-read blueprint, realign               │
+│  PHASE 3: EXECUTE (With continuous alignment)                      │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │ • Before each action: "Does this serve the goal?"           │   │
+│  │ • After each step: Update checklist                         │   │
+│  │ • If drifting: STOP → Re-read goal → Realign                │   │
+│  └─────────────────────────────────────────────────────────────┘   │
 │                                                                     │
-│  4. 🎯 FINAL VERIFICATION                                         │
-│     - Compare result against original goal                         │
-│     - Verify all checklist items completed                         │
+│  PHASE 4: VERIFY (Before delivery)                                 │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │ • Check EVERY acceptance criterion: ✅ or ❌                 │   │
+│  │ • If ❌: Fix or document exception                          │   │
+│  │ • Compare result against original goal                      │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+│                                                                     │
+│  PHASE 5: DELIVER (Complete handover)                              │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │ • Delivery summary: What was done                           │   │
+│  │ • Acceptance status: All criteria passed?                   │   │
+│  │ • Handover notes: What next session needs to know           │   │
+│  └─────────────────────────────────────────────────────────────┘   │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### Alignment Checkpoints
-
-At these moments, STOP and verify alignment with original goal:
-
-| Checkpoint | Action |
-|------------|--------|
-| **Before starting** | Re-read the user's original request |
-| **After each sub-task** | Check: "Did this move toward the goal?" |
-| **When encountering blockers** | Ask: "Is this blocker on the critical path?" |
-| **Before making new decisions** | Verify: "Is this decision in scope?" |
-| **Before completing** | Confirm: "Did I achieve what was originally asked?" |
-
-### Task Complexity Threshold
-
-| Complexity | Blueprint Required? | Example |
-|------------|---------------------|---------|
-| **Simple** (1-2 files, <30 min) | Optional | Fix typo, add log line |
-| **Medium** (3-10 files, 1-2 hrs) | **Required** | New API endpoint, refactor module |
-| **Complex** (>10 files, >2 hrs) | **Mandatory + Review** | New feature, architectural change |
-
-### Blueprint Template
+### Universal Checklist Template
 
 ```markdown
-## Task: [Original User Request - verbatim or summary]
+## Task: [Original Request]
 
-### Goal (1-2 sentences)
+### 🎯 Goal (ONE sentence)
 [What success looks like]
 
-### Success Criteria
-- [ ] Criterion 1
-- [ ] Criterion 2
+### ✅ Acceptance Criteria (before starting)
+- [ ] [Criterion 1]
+- [ ] [Criterion 2]
+- [ ] [Criterion 3]
 
-### Progress Checklist
-- [ ] Step 1: ...
-- [ ] Step 2: ...
-- [ ] Step 3: ...
+### 📋 Progress Tracking (during execution)
+- [x] Completed step
+- [ ] Current step ← 
+- [ ] Pending step
 
-### Out of Scope (explicitly)
-- [Things NOT to do]
+### ❌ Out of Scope
+- [Explicitly excluded]
 
-### Alignment Notes
-- [Key constraints to remember]
+### 📦 Delivery Summary (after completion)
+- **Status**: [All criteria met / Partial / Blocked]
+- **Result**: [What was delivered]
+- **Handover**: [What next session needs to know]
 ```
+
+---
+
+### Role-Specific Techniques
+
+Each role adds **specialized techniques** on top of the universal methodology:
+
+| Role | Technique | Artifact Created |
+|------|-----------|------------------|
+| 🏛️ Architect | **ADR-First** | Architecture Decision Record |
+| 💻 Developer | **TDD-First** | Failing test before code |
+| 🧪 QA | **Test Plan-First** | Test case matrix |
+| 🔒 Security | **Threat Model-First** | STRIDE threat analysis |
+| 🔧 DevOps | **Runbook-First** | Deployment runbook |
+
+> **See each role's definition file for detailed techniques** → [Role Files](#available-roles)
+
+---
+
+### Task Complexity Guide
+
+| Complexity | Acceptance Criteria | Role Technique |
+|------------|---------------------|----------------|
+| **Simple** (<30 min) | 1-2 criteria | Optional |
+| **Medium** (1-2 hrs) | 3-5 criteria | **Required** |
+| **Complex** (>2 hrs) | 5+ criteria + Review | **Mandatory** |
 
 ---
 

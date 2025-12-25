@@ -14,9 +14,9 @@ I will review/implement with a testing perspective.
 
 ---
 
-## 🧭 Stay on Track: Test Plan-First Approach
+## 🧭 Role-Specific Technique: Test Plan-First
 
-> **QA's methodology for maintaining focus: Write the test plan before any testing**
+> **Follows [Universal Methodology](../../AGENTS.md#universal-methodology-all-roles)** + QA-specific: Write the test plan before any testing
 
 ### The Test Plan-First Workflow
 

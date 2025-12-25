@@ -14,9 +14,9 @@ I will review/implement with a developer's perspective.
 
 ---
 
-## 🧭 Stay on Track: TDD-First Approach
+## 🧭 Role-Specific Technique: TDD-First
 
-> **Developer's methodology for maintaining focus: Test-Driven Development (TDD)**
+> **Follows [Universal Methodology](../../AGENTS.md#universal-methodology-all-roles)** + Developer-specific: Test-Driven Development (TDD)
 
 ### The TDD Workflow
 
