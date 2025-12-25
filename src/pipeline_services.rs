@@ -361,11 +361,15 @@ impl UBSCoreService {
 // ============================================================
 
 use crate::engine::MatchingEngine;
+use crate::matching_wal::{
+    MatchingRecovery, MatchingSnapshotter, MatchingWalWriter, RecoveryState,
+};
 use crate::messages::TradeEvent;
 use crate::models::{OrderType, Side};
 use crate::orderbook::OrderBook;
 use crate::pipeline::{BalanceUpdateRequest, PriceImprovement};
 use crate::pipeline_mt::MarketContext;
+use std::path::{Path, PathBuf};
 
 // Logging macros (matching pipeline_mt.rs)
 const TARGET_ME: &str = "0XINFI::ME";
@@ -384,9 +388,25 @@ macro_rules! p_span {
     }
 }
 
+// ============================================================
+// Snapshot Trigger Helper
+// ============================================================
+
+struct SnapshotTrigger {
+    snapshotter: MatchingSnapshotter,
+    trade_counter: u64,
+    snapshot_interval: u64, // Snapshot every N trades
+}
+
+// ============================================================
+// Matching Service
+// ============================================================
+
 /// Service that handles matching engine processing.
 ///
 /// Processes valid orders through the matching engine and generates trades.
+///
+/// Optionally supports persistence (WAL + snapshots) via `new_with_persistence()`.
 pub struct MatchingService {
     book: OrderBook,
     queues: Arc<MultiThreadQueues>,
@@ -396,9 +416,15 @@ pub struct MatchingService {
     depth_dirty: bool,
     last_depth_update: std::time::Instant,
     depth_update_interval_ms: u64,
+    // Optional persistence (Phase 2.4)
+    trade_wal_writer: Option<MatchingWalWriter>,
+    snapshot_trigger: Option<SnapshotTrigger>,
+    #[allow(dead_code)] // Reserved for future use
+    data_dir: Option<PathBuf>,
 }
 
 impl MatchingService {
+    /// Create a new matching service without persistence (backward compatible)
     pub fn new(
         book: OrderBook,
         queues: Arc<MultiThreadQueues>,
@@ -414,7 +440,66 @@ impl MatchingService {
             depth_dirty: false,
             last_depth_update: std::time::Instant::now(),
             depth_update_interval_ms,
+            // Persistence disabled
+            trade_wal_writer: None,
+            snapshot_trigger: None,
+            data_dir: None,
         }
+    }
+
+    /// Create a new matching service with persistence (Phase 2.4)
+    ///
+    /// Performs recovery on startup and enables Trade WAL + periodic snapshots.
+    pub fn new_with_persistence(
+        data_dir: impl AsRef<Path>,
+        queues: Arc<MultiThreadQueues>,
+        stats: Arc<PipelineStats>,
+        market: MarketContext,
+        depth_update_interval_ms: u64,
+        snapshot_interval_trades: u64,
+    ) -> std::io::Result<Self> {
+        use std::fs;
+
+        // 1. Recovery (cold or hot start)
+        let recovery = MatchingRecovery::new(&data_dir);
+        let RecoveryState {
+            orderbook,
+            next_seq_id,
+        } = recovery.recover()?;
+
+        tracing::info!(
+            "MatchingService recovery complete: next_seq_id={}",
+            next_seq_id
+        );
+
+        // 2. Initialize WAL writer
+        let wal_dir = data_dir.as_ref().join("wal");
+        fs::create_dir_all(&wal_dir)?;
+        let wal_path = wal_dir.join("trades.wal");
+        let wal_writer = MatchingWalWriter::new(&wal_path, 1, next_seq_id)?;
+
+        // 3. Initialize snapshot trigger
+        let snapshot_dir = data_dir.as_ref().join("snapshots");
+        let snapshotter = MatchingSnapshotter::new(&snapshot_dir);
+        let snapshot_trigger = SnapshotTrigger {
+            snapshotter,
+            trade_counter: 0,
+            snapshot_interval: snapshot_interval_trades,
+        };
+
+        Ok(Self {
+            book: orderbook,
+            queues,
+            stats,
+            market,
+            depth_dirty: false,
+            last_depth_update: std::time::Instant::now(),
+            depth_update_interval_ms,
+            // Persistence enabled
+            trade_wal_writer: Some(wal_writer),
+            snapshot_trigger: Some(snapshot_trigger),
+            data_dir: Some(data_dir.as_ref().to_path_buf()),
+        })
     }
 
     /// Run the matching service (MT blocking mode)
@@ -547,6 +632,44 @@ impl MatchingService {
                         }
 
                         self.depth_dirty = true; // Mark depth as changed
+
+                        // [PERSISTENCE] Phase 2.4: Write trades to WAL and trigger snapshots
+                        if let Some(ref mut wal_writer) = self.trade_wal_writer {
+                            // Write all trades to WAL
+                            for trade in &result.trades {
+                                if let Err(e) =
+                                    wal_writer.append_trade(trade, valid_order.order.symbol_id)
+                                {
+                                    tracing::error!("Failed to write trade to WAL: {}", e);
+                                }
+                            }
+
+                            // Flush WAL to disk
+                            if let Err(e) = wal_writer.flush() {
+                                tracing::error!("Failed to flush WAL: {}", e);
+                            }
+
+                            // Check snapshot trigger
+                            if let Some(ref mut trigger) = self.snapshot_trigger {
+                                trigger.trade_counter += result.trades.len() as u64;
+
+                                if trigger.trade_counter >= trigger.snapshot_interval {
+                                    let wal_seq = wal_writer.current_seq() - 1; // Last written seq
+
+                                    if let Err(e) =
+                                        trigger.snapshotter.create_snapshot(&self.book, wal_seq)
+                                    {
+                                        tracing::error!("Failed to create snapshot: {}", e);
+                                    } else {
+                                        tracing::info!(
+                                            "Created snapshot at seq {}, resetting counter",
+                                            wal_seq
+                                        );
+                                        trigger.trade_counter = 0; // Reset counter
+                                    }
+                                }
+                            }
+                        }
                     }
                     ValidAction::Cancel {
                         order_id,
