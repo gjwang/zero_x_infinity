@@ -62,8 +62,7 @@ mkdir -p "$DATA_DIR" "$MATCHING_DATA_DIR" "$SETTLEMENT_DATA_DIR"
 
 trap cleanup EXIT
 
-# Create test config with UBSCore persistence disabled (we're testing ME/Settlement for now)
-# Note: UBSCore persistence is NOT enabled via config yet - this is a finding itself
+# Create test config with ALL persistence enabled (testing full recovery chain)
 cat > config/audit_ubscore.yaml <<EOF
 log_level: "info"
 log_dir: "./logs"
@@ -81,6 +80,13 @@ gateway:
 persistence:
   enabled: false
   tdengine_dsn: "taos://root:taosdata@localhost:6030"
+
+# UBSCore persistence (Phase 0x0D) - KEY AUDIT TARGET
+ubscore_persistence:
+  enabled: true
+  data_dir: "$DATA_DIR"
+  wal_dir: "$DATA_DIR/wal"
+  snapshot_interval_orders: 20
 
 matching_persistence:
   enabled: true
