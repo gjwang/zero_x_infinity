@@ -203,55 +203,45 @@ fn cleanup_old_wal_files(&mut self) -> io::Result<()> {
 
 ## 8. 服务隔离存储（必须）
 
-每个服务有**独立的 data 目录**，不同服务的数据完全隔离：
+`data/` 是公共可配置的根目录，每个服务在其下创建自己的子目录：
 
 ```
-# 每个服务配置自己的 data_dir (可配置)
-
-ubscore-service/
-└── data/                          # UBSCore 的 data_dir
-    ├── wal/
-    │   ├── current.wal
-    │   └── wal-00001-0000001000.wal
-    └── snapshots/
-        └── latest -> snapshot-1000/
-
-matching-service/
-└── data/                          # Matching Engine 的 data_dir
-    ├── wal/
-    │   ├── current.wal
-    │   └── wal-00001-0000500000.wal
-    └── orderbooks/
-
-settlement-service/
-└── data/                          # Settlement 的 data_dir
-    └── wal/
-        ├── current.wal
-        └── wal-00001-0000100000.wal
-
-trade-audit-service/
-└── data/                          # 审计服务的 data_dir
+data/                              # 公共根目录 (可配置)
+├── ubscore-service/               # UBSCore 服务
+│   ├── wal/
+│   │   ├── current.wal
+│   │   └── wal-00001-0000001000.wal
+│   └── snapshots/
+│       └── latest -> snapshot-1000/
+│
+├── matching-service/              # 撮合引擎
+│   ├── wal/
+│   │   ├── current.wal
+│   │   └── wal-00001-0000500000.wal
+│   └── orderbooks/
+│
+├── settlement-service/            # 结算服务
+│   └── wal/
+│       ├── current.wal
+│       └── wal-00001-0000100000.wal
+│
+└── trade-audit-service/           # 审计服务
     └── wal/
         └── ...
 ```
 
-### 8.1 服务配置
-
-每个服务通过配置文件或环境变量指定自己的 `data_dir`：
+### 8.1 配置
 
 ```yaml
-# ubscore-service config.yaml
-service:
-  name: "ubscore"
-  data_dir: "/var/lib/zero_x/ubscore/data"  # 可配置
+# 全局配置
+data:
+  base_dir: "/var/lib/zero_x/data"  # 公共根目录
 
-# matching-service config.yaml
-service:
-  name: "matching"
-  data_dir: "/var/lib/zero_x/matching/data"
+# 各服务会自动在 base_dir 下创建自己的目录
+# 例如: /var/lib/zero_x/data/ubscore-service/
 ```
 
-### 8.2 配置代码
+### 8.2 代码
 
 ```rust
 pub struct ServiceConfig {
