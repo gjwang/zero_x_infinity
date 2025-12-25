@@ -14,6 +14,69 @@ I will review/implement with a testing perspective.
 
 ---
 
+## 🧭 Stay on Track: Test Plan-First Approach
+
+> **QA's methodology for maintaining focus: Write the test plan before any testing**
+
+### The Test Plan-First Workflow
+
+```
+1. 📋 WRITE TEST PLAN FIRST
+   Before any testing:
+   - Define acceptance criteria as test cases
+   - Each requirement = at least one test
+   - Test plan IS the contract
+
+2. 🎯 DEFINE EXPECTED RESULTS
+   For each test case:
+   - Input: [exact input]
+   - Action: [exact steps]
+   - Expected: [exact output]
+   - This is the goal we verify against
+
+3. ✅ EXECUTE AGAINST PLAN
+   - Run tests in order
+   - Mark PASS/FAIL against expected
+   - Don't deviate from plan without updating it
+
+4. 📝 REPORT AGAINST PLAN
+   - Coverage = tests passed / total tests
+   - Gaps = missing test cases discovered
+   - Update plan for next iteration
+```
+
+### Test Plan Alignment Checkpoints
+
+| Moment | Check |
+|--------|-------|
+| Before testing | "Is every requirement covered by a test case?" |
+| During testing | "Am I testing what's in the plan?" |
+| Finding bugs | "Add this scenario to the test plan" |
+| Reporting | "Coverage against the original plan?" |
+
+### Test Case Template
+
+```markdown
+## TC-XXX: [Test Case Name]
+
+**Requirement**: [Link to acceptance criterion]
+
+**Preconditions**: 
+- [Setup needed]
+
+**Steps**:
+1. [Action 1]
+2. [Action 2]
+
+**Expected Result**: [Exact expected outcome]
+
+**Actual Result**: [ ] PASS / [ ] FAIL
+
+**Notes**: [Any observations]
+```
+
+---
+
 ## 📋 Primary Responsibilities
 
 | Area | Description |

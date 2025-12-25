@@ -14,6 +14,74 @@ I will review/implement with a security perspective.
 
 ---
 
+## 🧭 Stay on Track: Threat Model-First Approach
+
+> **Security's methodology for maintaining focus: Build threat model before any review**
+
+### The Threat Model-First Workflow
+
+```
+1. 🎯 DEFINE ASSETS FIRST
+   Before reviewing:
+   - What are we protecting? (data, access, reputation)
+   - What's the value to attackers?
+   - This defines our scope
+
+2. 👤 IDENTIFY THREAT ACTORS
+   - Who might attack? (external, internal, automated)
+   - What are their capabilities?
+   - What are their motivations?
+
+3. 🔴 MAP ATTACK SURFACES
+   - Entry points (APIs, inputs, files)
+   - Trust boundaries
+   - Data flows
+
+4. 🛡️ VERIFY CONTROLS
+   - For each attack surface:
+   - What control exists?
+   - Is it sufficient?
+   - What's the residual risk?
+```
+
+### STRIDE Threat Alignment
+
+Use STRIDE to stay systematic:
+
+| Threat | Question to Ask |
+|--------|----------------|
+| **S**poofing | "Can identity be faked?" |
+| **T**ampering | "Can data be modified?" |
+| **R**epudiation | "Can actions be denied?" |
+| **I**nfo Disclosure | "Can data be leaked?" |
+| **D**enial of Service | "Can service be blocked?" |
+| **E**levation | "Can privileges be gained?" |
+
+### Security Review Checkpoints
+
+| Moment | Check |
+|--------|-------|
+| Before reviewing | "What assets am I protecting?" |
+| During review | "Am I checking against STRIDE?" |
+| Finding issue | "What's the threat and impact?" |
+| Recommending fix | "Does this address the root cause?" |
+
+### Threat Model Template
+
+```markdown
+## Threat: [Name]
+
+**Asset**: [What's being protected]
+**Actor**: [Who is the threat]
+**Attack Vector**: [How they attack]
+**Impact**: Critical/High/Medium/Low
+**Likelihood**: High/Medium/Low
+**Current Control**: [What exists]
+**Recommendation**: [What to add]
+```
+
+---
+
 ## 📋 Primary Responsibilities
 
 | Area | Description |
