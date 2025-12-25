@@ -28,8 +28,8 @@ pub enum TransferError {
     #[error("Amount must be greater than zero")]
     InvalidAmount,
 
-    #[error("Amount precision exceeds asset limit")]
-    PrecisionOverflow,
+    #[error("Amount precision exceeds asset limit (provided: {provided} decimals, max: {max})")]
+    PrecisionOverflow { provided: u32, max: u32 },
 
     #[error("Amount is too small (below minimum)")]
     AmountTooSmall,
@@ -97,7 +97,7 @@ impl TransferError {
             TransferError::InvalidAccountType(_) => "INVALID_ACCOUNT_TYPE",
             TransferError::UnsupportedAccountType(_) => "UNSUPPORTED_ACCOUNT_TYPE",
             TransferError::InvalidAmount => "INVALID_AMOUNT",
-            TransferError::PrecisionOverflow => "PRECISION_OVERFLOW",
+            TransferError::PrecisionOverflow { .. } => "PRECISION_OVERFLOW",
             TransferError::AmountTooSmall => "AMOUNT_TOO_SMALL",
             TransferError::AmountTooLarge => "AMOUNT_TOO_LARGE",
             TransferError::Overflow => "OVERFLOW",
@@ -127,7 +127,7 @@ impl TransferError {
             | TransferError::InvalidAccountType(_)
             | TransferError::UnsupportedAccountType(_)
             | TransferError::InvalidAmount
-            | TransferError::PrecisionOverflow
+            | TransferError::PrecisionOverflow { .. }
             | TransferError::AmountTooSmall
             | TransferError::AmountTooLarge
             | TransferError::Overflow
