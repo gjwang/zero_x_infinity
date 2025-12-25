@@ -47,6 +47,7 @@ pub mod pipeline_services;
 pub mod ubscore;
 pub mod user_account;
 pub mod wal;
+pub mod wal_v2; // Phase 0x0D Universal WAL Format
 pub mod websocket;
 
 // Database infrastructure (Phase 0x0A)
