@@ -1,0 +1,29 @@
+log_level: "info"
+log_dir: "./logs"
+log_file: "audit_ubscore.log"
+use_json: false
+rotation: "daily"
+sample_rate: 1
+enable_tracing: false
+
+gateway:
+  host: "0.0.0.0"
+  port: 18084
+  queue_size: 10000
+
+persistence:
+  enabled: false
+  tdengine_dsn: "taos://root:taosdata@localhost:6030"
+
+matching_persistence:
+  enabled: true
+  data_dir: "./data/audit_ubscore_me"
+  snapshot_interval_trades: 20
+
+settlement_persistence:
+  enabled: true
+  data_dir: "./data/audit_ubscore_settle"
+  checkpoint_interval: 5
+  snapshot_interval: 10
+
+postgres_url: "postgresql://trading:trading123@localhost:5433/exchange_info_db"
