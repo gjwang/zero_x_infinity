@@ -115,15 +115,35 @@ pip install fastapi-amis-admin fastapi-user-auth sqlalchemy asyncpg
 #### Acceptance Criteria
 
 | ID | Criteria | Verify |
-|----|---------|--------|
+|----|----------|--------|
 | AC-01 | Admin 可登录 `http://localhost:8001/admin` | 浏览器访问 |
-| AC-02 | 可新增 Asset (name, symbol, decimals) | UI 操作 + DB 验证 |
-| AC-03 | 可编辑 Asset | UI 操作 + DB 验证 |
-| AC-04 | Gateway 热加载 Asset 配置 | 无需重启验证 |
-| AC-05 | 可新增 Symbol (base, quote, fees) | UI 操作 + DB 验证 |
-| AC-06 | 可编辑 Symbol | UI 操作 + DB 验证 |
-| AC-07 | Gateway 热加载 Symbol 配置 | 无需重启验证 |
-| AC-08 | 可新增/编辑 VIP Level | UI 操作 + DB 验证 |
+| AC-02 | 可新增 Asset (name, symbol, decimals) | UI + DB |
+| AC-03 | 可编辑 Asset | UI + DB |
+| AC-04 | Gateway 热加载 Asset 配置 | 无需重启 |
+| AC-05 | 可新增 Symbol (base, quote, fees) | UI + DB |
+| AC-06 | 可编辑 Symbol | UI + DB |
+| AC-07 | Gateway 热加载 Symbol 配置 | 无需重启 |
+| AC-08 | 可新增/编辑 VIP Level | UI + DB |
+| **AC-09** | **非法输入拒绝** (decimals<0, fee>100%) | 边界测试 |
+| **AC-10** | **VIP 默认 Normal (level=0, 100% fee)** | 初始化数据 |
+
+#### Input Validation Rules
+
+| Field | Rule |
+|-------|------|
+| `decimals` | 0-18, 必须为整数 |
+| `fee_rate` | 0-100%, 不超过 10000 bps |
+| `symbol` | 唯一，大写字母+下划线 |
+| `base_asset` / `quote_asset` | 必须已存在 |
+
+#### 未来优化 (P2)
+
+> **关键配置双确认流程**:
+> 1. **预览** - 配置变更预览
+> 2. **二次确认** - 另一管理员审批
+> 3. **生效** - 确认后才应用
+>
+> 适用于：Symbol 下架、Asset 禁用等不可撤销操作
 
 ---
 
