@@ -648,6 +648,11 @@ jobs:
       - name: Initialize DB
         run: ./scripts/db/init.sh pg
 
+      - name: Seed Test Data
+        run: |
+          PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -f fixtures/seed_data.sql
+          echo "✅ Test data seeded"
+
       - name: Initialize TDengine
         run: ./scripts/db/init.sh td && sleep 5
 
