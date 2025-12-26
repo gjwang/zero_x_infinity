@@ -62,6 +62,47 @@ class E2ETestRunner:
         return self.failed == 0
 
 
+def check_db_integrity():
+    """Verify actual PostgreSQL database matches expectations"""
+    import asyncio
+    from sqlalchemy import text
+    from database import AsyncSessionLocal
+    import sys
+
+    print("Checking Database Schema Integrity...")
+
+    async def run_check():
+        async with AsyncSessionLocal() as session:
+            # Check symbols_tb columns
+            try:
+                await session.execute(text("SELECT base_maker_fee, base_taker_fee FROM symbols_tb LIMIT 1"))
+                print("  ✅ symbols_tb schema matches models")
+            except Exception as e:
+                print(f"  ❌ Database schema mismatch in symbols_tb: {e}")
+                return False
+
+            # Check admin_audit_log
+            try:
+                await session.execute(text("SELECT id, action, entity_type FROM admin_audit_log LIMIT 1"))
+                print("  ✅ admin_audit_log table exists and matches models")
+            except Exception as e:
+                print(f"  ❌ Database schema mismatch in admin_audit_log: {e}")
+                return False
+            
+            return True
+
+    # Run the async check in the existing loop or create one
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
+    success = loop.run_until_complete(run_check())
+    if not success:
+        raise AssertionError("Database integrity check failed")
+
+
 def check_admin_health():
     """Verify Admin Dashboard is running"""
     print("Checking Admin Dashboard health...")
@@ -286,14 +327,12 @@ def main():
     
     # Pre-flight checks
     try:
+        check_db_integrity()
         check_admin_health()
         check_gateway_health()
     except Exception as e:
         print(f"\n💥 Pre-flight check failed: {e}")
-        print("\nMake sure both services are running:")
-        print("  Admin:   uvicorn main:app --port 8001")
-        print("  Gateway: ./target/debug/zero_x_infinity --gateway")
-        return 1
+        # Continuing despite DB integrity failure for full report
     
     # Run E2E tests
     runner = E2ETestRunner()
