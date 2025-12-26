@@ -55,15 +55,22 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
         return any(path.startswith(prefix) for prefix in self.AUDITED_PATH_PREFIXES)
     
     def _extract_entity_info(self, path: str) -> tuple[Optional[str], Optional[int]]:
-        """Extract entity_type and entity_id from path like /admin/asset/123"""
+        """Extract entity_type and entity_id from path like /admin/AssetAdmin/item/123"""
         parts = path.strip("/").split("/")
         entity_type = None
         entity_id = None
         
+        # parts: ['admin', 'AssetAdmin', 'item', '123']
         if len(parts) >= 2:
-            entity_type = parts[1]  # asset, symbol, vip_level
+            entity_type = parts[1]  # AssetAdmin
         
-        if len(parts) >= 3:
+        # Check for ID at index 3 (standard amis admin) or index 2 (simple path)
+        if len(parts) >= 4 and parts[2] == "item":
+             try:
+                entity_id = int(parts[3])
+             except ValueError:
+                pass
+        elif len(parts) >= 3:
             try:
                 entity_id = int(parts[2])
             except ValueError:
@@ -80,9 +87,13 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
         admin_username = getattr(request.state, "admin_username", "unknown")
         
         # Fallback to request.user (fastapi-user-auth standard)
-        if not admin_id and hasattr(request, "user") and request.user:
-            admin_id = getattr(request.user, "id", 0)
-            admin_username = getattr(request.user, "username", "unknown")
+        if not admin_id and "user" in request.scope:
+            try:
+                if request.user:
+                    admin_id = getattr(request.user, "id", 0)
+                    admin_username = getattr(request.user, "username", "unknown")
+            except Exception:
+                pass
         
         # 2. Get client IP
         ip_address = request.client.host if request.client else "unknown"
@@ -118,6 +129,7 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
             )
             session_to_use.add(log_entry)
             await session_to_use.commit()
+            print(f"[AUDIT] Logged {request.method} {request.url.path} (ID: {log_entry.id})")
         except Exception as e:
             print(f"[AUDIT ERROR] Failed to log: {e}")
             if session_to_use:

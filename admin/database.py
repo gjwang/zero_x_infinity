@@ -30,7 +30,7 @@ async def init_db(database_url: str):
     
     engine = create_async_engine(
         database_url,
-        echo=False,
+        echo=True,
         pool_size=20,
         max_overflow=40,
         pool_pre_ping=True,

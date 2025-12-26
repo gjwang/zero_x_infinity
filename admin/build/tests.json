@@ -1,0 +1,13 @@
+{
+  "contracts": {},
+  "tests": {
+    "tests/e2e/test_asset_lifecycle.py": {
+      "coverage": false,
+      "isolated": false,
+      "results": "ssss",
+      "sha1": "8acfbbb437883cc92fe8bd1840ca558daea48195",
+      "txhash": []
+    }
+  },
+  "tx": {}
+}

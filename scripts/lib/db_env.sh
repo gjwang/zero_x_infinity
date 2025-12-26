@@ -26,8 +26,14 @@ fi
 
 # Extract port from postgres_url in config file (e.g., localhost:5432)
 if [ -f "$CONFIG_FILE" ]; then
-    PG_URL_FROM_CONFIG=$(grep "postgres_url:" "$CONFIG_FILE" | head -1 | sed 's/.*localhost:\([0-9]*\).*/\1/')
-    DEFAULT_PG_PORT="${PG_URL_FROM_CONFIG:-5432}"
+    # Extract port generic regex (matches last :PORT/ pattern)
+    PG_URL_FROM_CONFIG=$(grep "postgres_url:" "$CONFIG_FILE" | head -1 | sed 's/.*:\([0-9]*\)\/.*/\1/')
+    # Validate if it's actually a number, else default
+    if [[ "$PG_URL_FROM_CONFIG" =~ ^[0-9]+$ ]]; then
+        DEFAULT_PG_PORT="$PG_URL_FROM_CONFIG"
+    else
+        DEFAULT_PG_PORT="5432"
+    fi
 else
     # Fallback if config file is missing
     DEFAULT_PG_PORT="5432"

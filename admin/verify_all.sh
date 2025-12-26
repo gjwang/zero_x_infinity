@@ -27,12 +27,16 @@ else
 fi
 
 # 2. Unit Tests
+# 2. Unit Tests
 echo -e "\n[1/3] Running Unit Tests (Schemas & Logic)..."
-pytest tests/ -m "not e2e" -q --tb=short
+pytest tests/ -m "not e2e" --ignore=tests/e2e -q --tb=short
 
 # 3. DB Integrity & E2E
 echo -e "\n[2/3] Checking DB Schema & Propagation..."
 # Start server in background
+echo "Cleaning up any stale test data..."
+python cleanup_test_data.py
+
 uvicorn main:app --host 127.0.0.1 --port 8001 > /tmp/admin_verified.log 2>&1 &
 ADMIN_PID=$!
 
@@ -40,16 +44,21 @@ ADMIN_PID=$!
 trap "kill $ADMIN_PID" EXIT
 
 echo "Waiting for Admin Dashboard to start..."
-sleep 3
+sleep 5
+
+# Run Pytest E2E Suite (QA New Scripts)
+echo -e "\n[3/3] Running QA E2E Suite..."
+pytest tests/e2e/ -v
+PYTEST_E2E=$?
 
 # Run the real E2E verifies
 python test_admin_gateway_e2e.py
 E2E_RESULT=$?
 
-if [ $E2E_RESULT -eq 0 ]; then
-    echo -e "\n${GREEN}✅ VERIFICATION SUCCESSFUL${NC}"
-else
+if [ $PYTEST_E2E -ne 0 ] || [ $E2E_RESULT -ne 0 ]; then
     echo -e "\n${RED}❌ VERIFICATION FAILED${NC}"
+    echo "Pytest E2E: $PYTEST_E2E"
+    echo "Legacy E2E: $E2E_RESULT"
     echo "Check /tmp/admin_verified.log for details"
     exit 1
 fi
