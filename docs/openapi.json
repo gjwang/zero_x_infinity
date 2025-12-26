@@ -1,0 +1,1025 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Zero X Infinity Exchange API",
+    "description": "High-performance cryptocurrency exchange API achieving 1.3M orders/sec on a single core.",
+    "contact": {
+      "name": "API Support",
+      "url": "https://github.com/gjwang/zero_x_infinity"
+    },
+    "license": {
+      "name": "MIT"
+    },
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "Development"
+    }
+  ],
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Health check endpoint",
+        "description": "Returns service health status with server timestamp.\nInternally checks all dependencies (TDengine, etc.) but does NOT\nexpose any internal details in the response.\n\n- Healthy: 200 OK + {code: 0, data: {timestamp_ms}}\n- Unhealthy: 503 Service Unavailable + {code: 503, msg: \"unavailable\"}\nHealth check endpoint\n\nReturns service health status with server timestamp.\nInternally checks all dependencies (TDengine, etc.) but does NOT\nexpose any internal details in the response.\n\n- Healthy: 200 OK + {code: 0, data: {timestamp_ms}}\n- Unhealthy: 503 Service Unavailable + {code: 503, msg: \"unavailable\"}",
+        "operationId": "health_check",
+        "responses": {
+          "200": {
+            "description": "Service healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/private/balances": {
+      "get": {
+        "tags": [
+          "Account"
+        ],
+        "summary": "Get user balance",
+        "description": "GET /api/v1/private/balances?asset_id=1",
+        "operationId": "get_balances",
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "query",
+            "description": "Asset ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Balance details",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "Missing asset_id"
+          },
+          "404": {
+            "description": "Balance not found"
+          },
+          "503": {
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "ed25519_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/private/balances/all": {
+      "get": {
+        "tags": [
+          "Account"
+        ],
+        "summary": "Get all user balances (all account types: Spot, Funding)",
+        "description": "GET /api/v1/private/balances/all\nReturns balances from PostgreSQL (real source of truth)",
+        "operationId": "get_all_balances",
+        "responses": {
+          "200": {
+            "description": "All user balances",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "503": {
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "ed25519_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/private/cancel": {
+      "post": {
+        "tags": [
+          "Trading"
+        ],
+        "summary": "Cancel order endpoint",
+        "description": "POST /api/v1/private/cancel",
+        "operationId": "cancel_order",
+        "requestBody": {
+          "description": "Cancel request with order_id",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Cancel request accepted",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "Invalid order ID"
+          },
+          "401": {
+            "description": "Authentication failed"
+          },
+          "503": {
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "ed25519_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/private/order": {
+      "post": {
+        "tags": [
+          "Trading"
+        ],
+        "summary": "Create order endpoint",
+        "description": "POST /api/v1/private/order",
+        "operationId": "create_order",
+        "requestBody": {
+          "description": "Order request JSON",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Order accepted",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "Invalid parameters"
+          },
+          "401": {
+            "description": "Authentication failed"
+          },
+          "503": {
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "ed25519_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/private/order/{order_id}": {
+      "get": {
+        "tags": [
+          "Account"
+        ],
+        "summary": "Get single order by ID",
+        "description": "GET /api/v1/private/order/{order_id}",
+        "operationId": "get_order",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "description": "Order ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order details",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "404": {
+            "description": "Order not found"
+          },
+          "503": {
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "ed25519_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/private/orders": {
+      "get": {
+        "tags": [
+          "Account"
+        ],
+        "summary": "Get orders list",
+        "description": "GET /api/v1/private/orders?limit=10",
+        "operationId": "get_orders",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Number of orders (default: 10)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of user orders",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "503": {
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "ed25519_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/private/trades": {
+      "get": {
+        "tags": [
+          "Account"
+        ],
+        "summary": "Get trades list",
+        "description": "GET /api/v1/private/trades?limit=100",
+        "operationId": "get_trades",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Number of trades (default: 100)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of trades",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "503": {
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "ed25519_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/private/transfer": {
+      "post": {
+        "tags": [
+          "Transfer"
+        ],
+        "summary": "Create internal transfer endpoint",
+        "description": "POST /api/v1/private/transfer\n\nUses FSM-based transfer when coordinator is available, otherwise falls back to legacy.",
+        "operationId": "create_transfer",
+        "requestBody": {
+          "description": "Transfer request: from, to, asset, amount",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Transfer completed",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "Invalid parameters or insufficient balance"
+          },
+          "401": {
+            "description": "Authentication failed"
+          },
+          "503": {
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "ed25519_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/private/transfer/{req_id}": {
+      "get": {
+        "tags": [
+          "Transfer"
+        ],
+        "summary": "Get transfer status endpoint",
+        "description": "GET /api/v1/private/transfer/{req_id}",
+        "operationId": "get_transfer",
+        "parameters": [
+          {
+            "name": "req_id",
+            "in": "path",
+            "description": "Transfer request ID (ULID format)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Transfer status",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "Invalid request ID format"
+          },
+          "404": {
+            "description": "Transfer not found"
+          },
+          "503": {
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "ed25519_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/public/assets": {
+      "get": {
+        "tags": [
+          "Market Data"
+        ],
+        "summary": "Get all assets",
+        "description": "GET /api/v1/assets",
+        "operationId": "get_assets",
+        "responses": {
+          "200": {
+            "description": "List of all assets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Vec_AssetApiData"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/depth": {
+      "get": {
+        "tags": [
+          "Market Data"
+        ],
+        "summary": "Get order book depth",
+        "description": "GET /api/v1/depth?symbol=BTC_USDT&limit=20",
+        "operationId": "get_depth",
+        "parameters": [
+          {
+            "name": "symbol",
+            "in": "query",
+            "description": "Trading pair (e.g., BTC_USDT)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Depth levels (default: 20, max: 100)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order book depth",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DepthApiData"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/public/exchange_info": {
+      "get": {
+        "tags": [
+          "Market Data"
+        ],
+        "summary": "Get exchange info (combined assets and symbols)",
+        "description": "GET /api/v1/exchange_info\nReturns all assets and symbols in a single response.\nGet exchange info (combined assets and symbols)\n\nGET /api/v1/exchange_info\nReturns all assets and symbols in a single response.",
+        "operationId": "get_exchange_info",
+        "responses": {
+          "200": {
+            "description": "Exchange metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ExchangeInfoData"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/klines": {
+      "get": {
+        "tags": [
+          "Market Data"
+        ],
+        "summary": "Get K-Line data",
+        "description": "GET /api/v1/klines?interval=1m&limit=100",
+        "operationId": "get_klines",
+        "parameters": [
+          {
+            "name": "interval",
+            "in": "query",
+            "description": "K-line interval: 1m, 5m, 15m, 30m, 1h, 1d",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Number of K-lines (default: 100, max: 1000)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "K-line candlestick data",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "400": {
+            "description": "Invalid interval parameter"
+          },
+          "503": {
+            "description": "Service unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/public/symbols": {
+      "get": {
+        "tags": [
+          "Market Data"
+        ],
+        "summary": "Get all symbols (trading pairs)",
+        "description": "GET /api/v1/symbols",
+        "operationId": "get_symbols",
+        "responses": {
+          "200": {
+            "description": "List of all trading pairs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Vec_SymbolApiData"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiResponse_ExchangeInfoData": {
+        "type": "object",
+        "description": "Unified API response wrapper\n\nAll API responses follow this structure:\n- code: 0 = success, non-zero = error code\n- msg: short message description\n- data: actual data (success) or null (error)",
+        "required": [
+          "code",
+          "msg"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Response code: 0 for success, non-zero for errors",
+            "example": 0
+          },
+          "data": {
+            "type": "object",
+            "description": "Exchange info response data",
+            "required": [
+              "assets",
+              "symbols",
+              "server_time"
+            ],
+            "properties": {
+              "assets": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AssetApiData"
+                },
+                "description": "All available assets"
+              },
+              "server_time": {
+                "type": "integer",
+                "format": "int64",
+                "description": "Server timestamp in milliseconds",
+                "example": 1703494800000,
+                "minimum": 0
+              },
+              "symbols": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/SymbolApiData"
+                },
+                "description": "All trading pairs"
+              }
+            }
+          },
+          "msg": {
+            "type": "string",
+            "description": "Response message",
+            "example": "ok"
+          }
+        }
+      },
+      "ApiResponse_Vec_AssetApiData": {
+        "type": "object",
+        "description": "Unified API response wrapper\n\nAll API responses follow this structure:\n- code: 0 = success, non-zero = error code\n- msg: short message description\n- data: actual data (success) or null (error)",
+        "required": [
+          "code",
+          "msg"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Response code: 0 for success, non-zero for errors",
+            "example": 0
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "Asset API response data",
+              "required": [
+                "asset_id",
+                "asset",
+                "name",
+                "decimals",
+                "can_deposit",
+                "can_withdraw",
+                "can_trade"
+              ],
+              "properties": {
+                "asset": {
+                  "type": "string",
+                  "description": "Asset symbol (e.g., BTC)",
+                  "example": "BTC"
+                },
+                "asset_id": {
+                  "type": "integer",
+                  "format": "int32",
+                  "description": "Asset ID",
+                  "example": 1
+                },
+                "can_deposit": {
+                  "type": "boolean",
+                  "description": "Can deposit"
+                },
+                "can_trade": {
+                  "type": "boolean",
+                  "description": "Can trade"
+                },
+                "can_withdraw": {
+                  "type": "boolean",
+                  "description": "Can withdraw"
+                },
+                "decimals": {
+                  "type": "integer",
+                  "format": "int32",
+                  "description": "Decimal precision",
+                  "example": 8
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Asset full name",
+                  "example": "Bitcoin"
+                }
+              }
+            }
+          },
+          "msg": {
+            "type": "string",
+            "description": "Response message",
+            "example": "ok"
+          }
+        }
+      },
+      "ApiResponse_Vec_SymbolApiData": {
+        "type": "object",
+        "description": "Unified API response wrapper\n\nAll API responses follow this structure:\n- code: 0 = success, non-zero = error code\n- msg: short message description\n- data: actual data (success) or null (error)",
+        "required": [
+          "code",
+          "msg"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Response code: 0 for success, non-zero for errors",
+            "example": 0
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "Symbol API response data",
+              "required": [
+                "symbol_id",
+                "symbol",
+                "base_asset",
+                "quote_asset",
+                "price_decimals",
+                "qty_decimals",
+                "is_tradable",
+                "is_visible"
+              ],
+              "properties": {
+                "base_asset": {
+                  "type": "string",
+                  "description": "Base asset symbol",
+                  "example": "BTC"
+                },
+                "is_tradable": {
+                  "type": "boolean",
+                  "description": "Is trading enabled"
+                },
+                "is_visible": {
+                  "type": "boolean",
+                  "description": "Is visible in UI"
+                },
+                "price_decimals": {
+                  "type": "integer",
+                  "format": "int32",
+                  "description": "Price decimal precision"
+                },
+                "qty_decimals": {
+                  "type": "integer",
+                  "format": "int32",
+                  "description": "Quantity decimal precision"
+                },
+                "quote_asset": {
+                  "type": "string",
+                  "description": "Quote asset symbol",
+                  "example": "USDT"
+                },
+                "symbol": {
+                  "type": "string",
+                  "description": "Symbol name (e.g., BTC_USDT)",
+                  "example": "BTC_USDT"
+                },
+                "symbol_id": {
+                  "type": "integer",
+                  "format": "int32",
+                  "description": "Symbol ID",
+                  "example": 1
+                }
+              }
+            }
+          },
+          "msg": {
+            "type": "string",
+            "description": "Response message",
+            "example": "ok"
+          }
+        }
+      },
+      "AssetApiData": {
+        "type": "object",
+        "description": "Asset API response data",
+        "required": [
+          "asset_id",
+          "asset",
+          "name",
+          "decimals",
+          "can_deposit",
+          "can_withdraw",
+          "can_trade"
+        ],
+        "properties": {
+          "asset": {
+            "type": "string",
+            "description": "Asset symbol (e.g., BTC)",
+            "example": "BTC"
+          },
+          "asset_id": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Asset ID",
+            "example": 1
+          },
+          "can_deposit": {
+            "type": "boolean",
+            "description": "Can deposit"
+          },
+          "can_trade": {
+            "type": "boolean",
+            "description": "Can trade"
+          },
+          "can_withdraw": {
+            "type": "boolean",
+            "description": "Can withdraw"
+          },
+          "decimals": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Decimal precision",
+            "example": 8
+          },
+          "name": {
+            "type": "string",
+            "description": "Asset full name",
+            "example": "Bitcoin"
+          }
+        }
+      },
+      "DepthApiData": {
+        "type": "object",
+        "description": "Market depth API response data",
+        "required": [
+          "symbol",
+          "bids",
+          "asks",
+          "last_update_id"
+        ],
+        "properties": {
+          "asks": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "description": "Ask levels [[price, qty], ...]",
+            "example": [
+              [
+                "85001.00",
+                "0.3"
+              ],
+              [
+                "85002.00",
+                "0.8"
+              ]
+            ]
+          },
+          "bids": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "description": "Bid levels [[price, qty], ...]",
+            "example": [
+              [
+                "85000.00",
+                "0.5"
+              ],
+              [
+                "84999.00",
+                "1.2"
+              ]
+            ]
+          },
+          "last_update_id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Last update sequence ID",
+            "example": 12345,
+            "minimum": 0
+          },
+          "symbol": {
+            "type": "string",
+            "description": "Trading symbol name",
+            "example": "BTC_USDT"
+          }
+        }
+      },
+      "ExchangeInfoData": {
+        "type": "object",
+        "description": "Exchange info response data",
+        "required": [
+          "assets",
+          "symbols",
+          "server_time"
+        ],
+        "properties": {
+          "assets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssetApiData"
+            },
+            "description": "All available assets"
+          },
+          "server_time": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Server timestamp in milliseconds",
+            "example": 1703494800000,
+            "minimum": 0
+          },
+          "symbols": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SymbolApiData"
+            },
+            "description": "All trading pairs"
+          }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "description": "Health check response data",
+        "required": [
+          "timestamp_ms"
+        ],
+        "properties": {
+          "timestamp_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Server timestamp in milliseconds",
+            "example": 1703494800000,
+            "minimum": 0
+          }
+        }
+      },
+      "SymbolApiData": {
+        "type": "object",
+        "description": "Symbol API response data",
+        "required": [
+          "symbol_id",
+          "symbol",
+          "base_asset",
+          "quote_asset",
+          "price_decimals",
+          "qty_decimals",
+          "is_tradable",
+          "is_visible"
+        ],
+        "properties": {
+          "base_asset": {
+            "type": "string",
+            "description": "Base asset symbol",
+            "example": "BTC"
+          },
+          "is_tradable": {
+            "type": "boolean",
+            "description": "Is trading enabled"
+          },
+          "is_visible": {
+            "type": "boolean",
+            "description": "Is visible in UI"
+          },
+          "price_decimals": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Price decimal precision"
+          },
+          "qty_decimals": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Quantity decimal precision"
+          },
+          "quote_asset": {
+            "type": "string",
+            "description": "Quote asset symbol",
+            "example": "USDT"
+          },
+          "symbol": {
+            "type": "string",
+            "description": "Symbol name (e.g., BTC_USDT)",
+            "example": "BTC_USDT"
+          },
+          "symbol_id": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Symbol ID",
+            "example": 1
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "ed25519_auth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Authorization",
+        "description": "Ed25519 signature auth: Bearer {api_key}:{timestamp_nonce}:{signature}\n\nSignature payload format:\n- POST: {method}\\n{path}\\n{timestamp_nonce}\\n{sha256(body)}\n- GET: {method}\\n{path}\\n{timestamp_nonce}\\n\n\nExample: Bearer abc123:1703494800000_r1:base64_signature"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Market Data",
+      "description": "Public market data endpoints (no auth required)"
+    },
+    {
+      "name": "Trading",
+      "description": "Order placement and management (auth required)"
+    },
+    {
+      "name": "Account",
+      "description": "Balance and account queries (auth required)"
+    },
+    {
+      "name": "Transfer",
+      "description": "Internal fund transfers (auth required)"
+    },
+    {
+      "name": "System",
+      "description": "Health checks and system info"
+    }
+  ]
+}

@@ -42,4 +42,19 @@ When making a decision that impacts other roles:
 
 ---
 
+### 2025-12-26 - 0x0E OpenAPI Integration Assigned to Developer
+
+- **Decided by**: Architect (AI Agent)
+- **Decision**: Assign 0x0E OpenAPI documentation implementation to Developer role
+- **Rationale**: Production API missing formal documentation; blocks SDK generation and external integration
+- **Impact on other roles**: 
+  - Developer: New task (4 phases, ~5 days)
+  - QA: Will need to verify Swagger UI accessibility + SDK generation
+- **Key documents**:
+  - Design: `docs/src/0x0E-openapi-integration.md`
+  - Implementation Plan: `docs/agents/sessions/developer/0x0E-openapi-implementation-plan.md`
+- **Technology**: utoipa v5.3 + utoipa-swagger-ui v8.0
+
+---
+
 <!-- Add new decisions above this line -->

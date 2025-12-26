@@ -1,4 +1,5 @@
 pub mod handlers;
+pub mod openapi;
 pub mod state;
 pub mod types;
 
@@ -13,6 +14,10 @@ use axum::{
 };
 use std::sync::Arc;
 use tokio::net::TcpListener;
+
+// Phase 0x0E: OpenAPI / Swagger UI
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 use crate::market::depth_service::DepthService;
 use crate::symbol_manager::SymbolManager;
@@ -257,7 +262,9 @@ pub async fn run_server(
         // API Routes
         .nest("/api/v1/public", public_routes)
         .nest("/api/v1/private", private_routes)
-        .with_state(state);
+        .with_state(state)
+        // Phase 0x0E: OpenAPI / Swagger UI (stateless, added after with_state)
+        .merge(SwaggerUi::new("/docs").url("/api-docs/openapi.json", openapi::ApiDoc::openapi()));
 
     // Bind address
     let addr = format!("0.0.0.0:{}", port);
@@ -275,8 +282,9 @@ pub async fn run_server(
 
     println!("🚀 Gateway listening on http://{}", addr);
     println!("📡 WebSocket endpoint: ws://{}/ws", addr);
+    println!("📖 API Docs: http://{}/docs", addr);
     println!("📂 Public API:  /api/v1/public/*");
-    println!("🔒 Private API: /api/v1/private/* (auth pending)");
+    println!("🔒 Private API: /api/v1/private/* (auth required)");
 
     // Start server
     if let Err(e) = axum::serve(listener, app).await {

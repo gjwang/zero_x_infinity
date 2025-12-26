@@ -1,5 +1,6 @@
 use rust_decimal::prelude::*;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use crate::models::{InternalOrder, OrderStatus, OrderType, Side};
 use crate::symbol_manager::SymbolManager;
@@ -186,10 +187,15 @@ pub struct CancelOrderRequest {
 /// - code: 0 = success, non-zero = error code
 /// - msg: short message description
 /// - data: actual data (success) or null (error)
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct ApiResponse<T> {
+    /// Response code: 0 for success, non-zero for errors
+    #[schema(example = 0)]
     pub code: i32,
+    /// Response message
+    #[schema(example = "ok")]
     pub msg: String,
+    /// Response data (only present when code == 0)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<T>,
 }
@@ -225,11 +231,19 @@ pub struct OrderResponseData {
 }
 
 /// Market depth API response data
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct DepthApiData {
+    /// Trading symbol name
+    #[schema(example = "BTC_USDT")]
     pub symbol: String,
-    pub bids: Vec<[String; 2]>, // [[price, qty], ...]
+    /// Bid levels [[price, qty], ...]
+    #[schema(example = json!([["85000.00", "0.5"], ["84999.00", "1.2"]]))]
+    pub bids: Vec<[String; 2]>,
+    /// Ask levels [[price, qty], ...]
+    #[schema(example = json!([["85001.00", "0.3"], ["85002.00", "0.8"]]))]
     pub asks: Vec<[String; 2]>,
+    /// Last update sequence ID
+    #[schema(example = 12345)]
     pub last_update_id: u64,
 }
 
