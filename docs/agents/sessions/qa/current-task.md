@@ -1,9 +1,26 @@
 # 🧪 QA Engineer Current Task
 
 ## Session Info
-- **Date**: 2024-12-25
+- **Date**: 2025-12-26
 - **Role**: QA Engineer
-- **Task**: Trade Fee System Testing (Phase 0x0C)
+- **Task**: 0x0E OpenAPI Integration Testing (NEW HANDOVER)
+
+## 🆕 New Handover: 0x0E OpenAPI Integration
+
+**Handover Document**: [`0x0E-openapi-handover.md`](./0x0E-openapi-handover.md)
+
+### Quick Summary
+- **From**: Developer
+- **Status**: ✅ Ready for QA
+- **Tests**: 17 E2E tests (all passing)
+- **Key**: Swagger UI at `/docs`, OpenAPI 3.1 spec
+
+### P0 Test Command
+```bash
+python3 scripts/test_openapi_e2e.py --ci
+```
+
+---
 
 ## Original Goal
 Verify Trade Fee System implementation including fee calculation, VIP discounts, and maker/taker fee logic.
