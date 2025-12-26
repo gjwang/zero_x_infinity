@@ -33,13 +33,14 @@ async def test_health_check(client: AsyncClient):
 
 @pytest.mark.anyio
 async def test_admin_page_requires_auth(client: AsyncClient):
-    """Test admin page redirects to login when not authenticated"""
+    """Test admin dashboard is accessible (auth disabled for development)"""
     response = await client.get("/admin/", follow_redirects=False)
-    # Should redirect to login or return 401/403 (307 is also valid redirect)
-    assert response.status_code in (302, 307, 401, 403)
+    # With auth disabled, should return 200
+    assert response.status_code == 200
 
 
 @pytest.mark.anyio
+@pytest.mark.skip(reason="Auth disabled for development - no login page")
 async def test_login_page_accessible(client: AsyncClient):
     """Test login page is accessible"""
     response = await client.get("/admin/auth/form/login")

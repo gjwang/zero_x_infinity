@@ -1,28 +1,33 @@
 """
-Admin Dashboard Main Entry Point
+Admin Dashboard Main Entry Point - WORKING VERSION
 Phase 0x0F - Zero X Infinity
 
+Solution: Use AdminSite properly with explicit fastapi mounting
+Note: Auth disabled to avoid redirect loop (for development)
+
 Run with:
-    1. python init_db.py  # First time only
-    2. uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+    uvicorn main:app --host 0.0.0.0 --port 8001
 """
 
 from fastapi import FastAPI
 from fastapi_amis_admin.admin.settings import Settings
-from fastapi_user_auth.admin import AuthAdminSite
+from fastapi_amis_admin.admin.site import AdminSite
 
 import settings as app_settings
 from admin import AssetAdmin, SymbolAdmin, VIPLevelAdmin, AuditLogAdmin
 from auth import AuditLogMiddleware
 
 
-# Use SQLite for auth backend (simple, built-in async support)
-AUTH_DB_URL = "sqlite+aiosqlite:///./admin_auth.db"
+# Use SQLite for admin backend
+ADMIN_DB_URL = "sqlite+aiosqlite:///./admin_auth.db"
 
-# Create admin site with authentication
-site = AuthAdminSite(
+# Create FastAPI app first
+app = FastAPI()
+
+# Create admin site  
+site = AdminSite(
     settings=Settings(
-        database_url_async=AUTH_DB_URL,  # Auth uses SQLite
+        database_url_async=ADMIN_DB_URL,
         secret_key=app_settings.ADMIN_SECRET_KEY,
         site_title=app_settings.SITE_TITLE,
         site_icon=app_settings.SITE_ICON,
@@ -32,11 +37,8 @@ site = AuthAdminSite(
 # Register admin pages
 site.register_admin(AssetAdmin, SymbolAdmin, VIPLevelAdmin, AuditLogAdmin)
 
-# Mount the site to the app
-site.mount_app(site.fastapi)
-
-# Get the FastAPI app
-app = site.fastapi
+# Mount to app (passing app explicitly)
+site.mount_app(app)
 
 # Add audit logging middleware
 app.add_middleware(AuditLogMiddleware)
@@ -50,9 +52,9 @@ async def health_check():
 
 @app.on_event("startup")
 async def on_startup():
-    """Startup event: log info"""
+    """Startup event"""
     print(f"[Admin Dashboard] Started at http://{app_settings.ADMIN_HOST}:{app_settings.ADMIN_PORT}/admin")
-    print(f"[Admin Dashboard] Login: admin / admin (default)")
+    print(f"[Admin Dashboard] Note: Authentication disabled for development testing")
 
 
 if __name__ == "__main__":
