@@ -40,7 +40,7 @@ echo "✅ Database Initialized"
 echo "Starting Admin Dashboard..."
 cd "$ADMIN_DIR"
 # Assuming .venv is active or environment is prepared
-python3 -m uvicorn main:app --host 0.0.0.0 --port $ADMIN_PORT --workers 1 > "$LOG_DIR/admin_dashboard.log" 2>&1 &
+$ADMIN_DIR/.venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port $ADMIN_PORT --workers 1 > "$LOG_DIR/admin_dashboard.log" 2>&1 &
 ADMIN_PID=$!
 cd "$PROJECT_ROOT"
 
@@ -86,7 +86,7 @@ done
 echo "🧪 Running E2E Test Script..."
 set +e # Allow test failure to handle cleanup
 cd "$ADMIN_DIR"
-python3 test_admin_gateway_e2e.py
+$ADMIN_DIR/.venv/bin/python test_admin_gateway_e2e.py
 EXIT_CODE=$?
 cd "$PROJECT_ROOT"
 
