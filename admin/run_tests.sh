@@ -54,7 +54,7 @@ echo ""
 echo "================================"
 echo "🧪 Running pytest..."
 echo "================================"
-pytest tests/ "${@}"
+pytest "${@:-tests/}"
 
 # Capture exit code
 EXIT_CODE=$?

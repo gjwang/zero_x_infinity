@@ -52,7 +52,10 @@ class AssetCreateSchema(BaseModel):
                 return AssetStatus[v.upper()]
             except KeyError:
                 raise ValueError(f"Status must be ACTIVE or DISABLED, got: {v}")
-        return AssetStatus(v)  # Accept int
+        try:
+            return AssetStatus(v)
+        except ValueError:
+            raise ValueError(f"Status must be ACTIVE or DISABLED, got: {v}")
     
     @field_serializer('status')
     def serialize_status(self, value: AssetStatus) -> str:
@@ -97,7 +100,10 @@ class AssetUpdateSchema(BaseModel):
                 return AssetStatus[v.upper()]
             except KeyError:
                 raise ValueError(f"Status must be ACTIVE or DISABLED, got: {v}")
-        return AssetStatus(v)
+        try:
+            return AssetStatus(v)
+        except ValueError:
+            raise ValueError(f"Status must be ACTIVE or DISABLED, got: {v}")
     
     @field_serializer('status')
     def serialize_status(self, value: AssetStatus) -> str:

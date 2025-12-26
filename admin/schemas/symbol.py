@@ -71,7 +71,10 @@ class SymbolCreateSchema(BaseModel):
                 return SymbolStatus[normalized]
             except KeyError:
                 raise ValueError(f"Status must be ONLINE, OFFLINE, or CLOSE_ONLY, got: {v}")
-        return SymbolStatus(v)  # Accept int
+        try:
+            return SymbolStatus(v)
+        except ValueError:
+            raise ValueError(f"Status must be ONLINE, OFFLINE, or CLOSE_ONLY, got: {v}")
     
     @field_serializer('status')
     def serialize_status(self, value: SymbolStatus) -> str:
@@ -139,7 +142,10 @@ class SymbolUpdateSchema(BaseModel):
                 return SymbolStatus[normalized]
             except KeyError:
                 raise ValueError(f"Status must be ONLINE, OFFLINE, or CLOSE_ONLY, got: {v}")
-        return SymbolStatus(v)
+        try:
+            return SymbolStatus(v)
+        except ValueError:
+            raise ValueError(f"Status must be ONLINE, OFFLINE, or CLOSE_ONLY, got: {v}")
     
     @field_serializer('status')
     def serialize_status(self, value: SymbolStatus) -> str:

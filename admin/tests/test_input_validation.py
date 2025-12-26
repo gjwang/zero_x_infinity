@@ -77,7 +77,7 @@ class TestAssetValidation:
                 status=3,  # Only 0 or 1 allowed
             )
         # Pydantic IntEnum with custom validator (UX-08)
-        assert "not a valid assetstatus" in str(exc_info.value).lower()
+        assert "status must be active or disabled" in str(exc_info.value).lower()
 
 
 class TestSymbolValidation:
