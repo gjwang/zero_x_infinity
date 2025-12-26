@@ -249,6 +249,17 @@ A → B → C → A  ❌
 
 When writing tutorial chapters (`docs/src/0xXX-*.md`):
 
+### ⚠️ CRITICAL: Branch First!
+
+> **开始新章节前，必须先创建分支！**
+
+```bash
+git checkout -b 0xXX-chapter-name
+# 完成所有工作后再 merge 到 main
+```
+
+不要直接在 main 上开发新章节。
+
 ### Structure
 
 - [ ] **Separate EN/CN sections** - Complete English section first, then complete Chinese section (not mixed per-paragraph)
