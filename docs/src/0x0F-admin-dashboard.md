@@ -206,12 +206,15 @@ admin/
 
 ## 3. 实现计划
 
-| 阶段 | 内容 | 天数 |
-|------|------|------|
-| Phase 1 | 项目搭建、基础登录 | 1 |
-| Phase 2 | 用户/资产/费率管理 | 2-3 |
-| Phase 3 | TDengine 监控面板 | 1 |
-| Phase 4 | RBAC + 审计日志 | 1 |
+**Phase 1 范围**: 登录 + 配置管理 CRUD
+
+| 功能 | 表 |
+|------|-----|
+| Asset 管理 | `assets_tb` |
+| Symbol 管理 | `symbols_tb` |
+| VIP 等级管理 | `vip_levels_tb` |
+
+目标：替换目前 hardcoded 的基础配置。
 
 ---
 
