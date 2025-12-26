@@ -8,13 +8,13 @@ Admin UI → Database → Gateway → Matching Engine
 Prerequisites:
 - PostgreSQL running on :5433
 - Admin Dashboard running on :8001
-- Gateway running on :8000
+- Gateway running on :8080
 
 Run with:
     pytest admin/tests/e2e/ -v
     
 Or with environment variables:
     ADMIN_URL=http://localhost:8001 \
-    GATEWAY_URL=http://localhost:8000 \
+    GATEWAY_URL=http://localhost:8080 \
     pytest admin/tests/e2e/ -v
 """

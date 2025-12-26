@@ -43,11 +43,11 @@ class TestAuditLogCapture:
         
         # Create asset
         asset_code = f"AUDIT{int(timestamp_before.timestamp()) % 10000}"
-        create_resp = await admin_client.post("/admin/asset/", json={
+        create_resp = await admin_client.post("/admin/AssetAdmin/item", json={
             "asset": asset_code,
             "name": "Audit Test Asset",
             "decimals": 8,
-            "status": 1,
+            "status": "ACTIVE",
         })
         
         if create_resp.status_code not in (200, 201):
@@ -56,9 +56,11 @@ class TestAuditLogCapture:
         # Query audit log
         await asyncio.sleep(1)  # Wait for log write
         
-        audit_resp = await admin_client.get("/admin/audit_log/", params={
-            "action": "POST",
-            "path": "/admin/asset/",
+        audit_resp = await admin_client.post("/admin/AuditLogAdmin/list", json={
+            "filter": {
+                 "path": "/admin/AssetAdmin/item",
+                 "action": "POST"
+            }
         })
         
         if audit_resp.status_code != 200:
@@ -86,7 +88,7 @@ class TestAuditLogCapture:
         Update Asset → Audit log has old_value and new_value
         """
         # Get an existing asset
-        assets = await admin_client.get("/admin/asset/")
+        assets = await admin_client.get("/admin/AssetAdmin/item")
         if assets.status_code != 200 or not assets.json().get("items"):
             pytest.skip("No assets available for update test")
         
@@ -97,7 +99,7 @@ class TestAuditLogCapture:
         
         # Update asset
         update_resp = await admin_client.put(
-            f"/admin/asset/{asset_id}",
+            f"/admin/AssetAdmin/item/{asset_id}",
             json={"name": new_name}
         )
         
@@ -107,9 +109,11 @@ class TestAuditLogCapture:
         # Query audit log
         await asyncio.sleep(1)
         
-        audit_resp = await admin_client.get("/admin/audit_log/", params={
-            "entity_type": "asset",
-            "entity_id": asset_id,
+        audit_resp = await admin_client.post("/admin/AuditLogAdmin/list", json={
+            "filter": {
+                "entity_type": "asset",
+                "entity_id": str(asset_id),
+            }
         })
         
         if audit_resp.status_code != 200:
@@ -130,7 +134,7 @@ class TestAuditLogCapture:
                         return
         
         # Restore original name
-        await admin_client.put(f"/admin/asset/{asset_id}", json={"name": old_name})
+        await admin_client.put(f"/admin/AssetAdmin/item/{asset_id}", json={"name": old_name})
     
     @pytest.mark.asyncio  
     async def test_audit_log_not_editable(self, admin_client):
@@ -138,7 +142,7 @@ class TestAuditLogCapture:
         Audit log should not allow delete or update
         """
         # Get an audit log entry
-        audit_resp = await admin_client.get("/admin/audit_log/")
+        audit_resp = await admin_client.post("/admin/AuditLogAdmin/list", json={})
         if audit_resp.status_code != 200 or not audit_resp.json().get("items"):
             pytest.skip("No audit log entries available")
         
@@ -146,13 +150,13 @@ class TestAuditLogCapture:
         log_id = log_entry.get("id")
         
         # Try to delete - should fail
-        delete_resp = await admin_client.delete(f"/admin/audit_log/{log_id}")
+        delete_resp = await admin_client.delete(f"/admin/AuditLogAdmin/item/{log_id}")
         assert delete_resp.status_code in (403, 405), \
             f"Audit log delete should be forbidden: {delete_resp.status_code}"
         
         # Try to update - should fail
         update_resp = await admin_client.put(
-            f"/admin/audit_log/{log_id}",
+            f"/admin/AuditLogAdmin/item/{log_id}",
             json={"action": "MODIFIED"}
         )
         assert update_resp.status_code in (403, 405), \
@@ -170,8 +174,8 @@ class TestAuditLogQuery:
     @pytest.mark.asyncio
     async def test_query_by_admin_id(self, admin_client):
         """Can filter audit log by admin ID"""
-        resp = await admin_client.get("/admin/audit_log/", params={
-            "admin_id": 1
+        resp = await admin_client.post("/admin/AuditLogAdmin/list", json={
+            "filter": {"admin_id": 1}
         })
         # Should succeed or return empty if no logs for this admin
         assert resp.status_code == 200
@@ -182,17 +186,20 @@ class TestAuditLogQuery:
         today = datetime.utcnow().date()
         yesterday = today - timedelta(days=1)
         
-        resp = await admin_client.get("/admin/audit_log/", params={
-            "start_date": yesterday.isoformat(),
-            "end_date": today.isoformat(),
+        resp = await admin_client.post("/admin/AuditLogAdmin/list", json={
+            "filter": {
+                "created_at": {">=": yesterday.isoformat(), "<=": today.isoformat()}
+            }
         })
         assert resp.status_code == 200
     
     @pytest.mark.asyncio
     async def test_query_by_entity(self, admin_client):
         """Can filter audit log by entity type and ID"""
-        resp = await admin_client.get("/admin/audit_log/", params={
-            "entity_type": "asset",
-            "entity_id": 1,
+        resp = await admin_client.post("/admin/AuditLogAdmin/list", json={
+            "filter": {
+                "entity_type": "asset",
+                "entity_id": str(1),
+            }
         })
         assert resp.status_code == 200

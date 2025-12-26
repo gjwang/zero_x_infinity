@@ -12,7 +12,7 @@ Test Flow:
 Prerequisites:
 - PostgreSQL running on :5433
 - Admin Dashboard running on :8001
-- Gateway running on :8000
+- Gateway running on :8080
 """
 
 import asyncio
@@ -20,7 +20,7 @@ import httpx
 import pytest
 
 ADMIN_URL = "http://localhost:8001"
-GATEWAY_URL = "http://localhost:8000"
+GATEWAY_URL = "http://localhost:8080"
 HOT_RELOAD_SLA_SECONDS = 5
 
 
@@ -52,11 +52,11 @@ class TestAssetLifecycle:
         3. Transfer/deposit should recognize asset
         """
         # Step 1: Create Asset
-        asset_resp = await admin_client.post("/admin/asset/", json={
+        asset_resp = await admin_client.post("/admin/AssetAdmin/item", json={
             "asset": "E2ETEST",
             "name": "E2E Test Asset",
             "decimals": 8,
-            "status": 1,  # Active
+            "status": "ACTIVE",  # Active
         })
         assert asset_resp.status_code in (200, 201), f"Failed to create asset: {asset_resp.text}"
         
@@ -92,7 +92,7 @@ class TestAssetLifecycle:
         3. Transfer should be rejected
         """
         # Get asset ID
-        assets = await admin_client.get("/admin/asset/")
+        assets = await admin_client.get("/admin/AssetAdmin/item")
         test_asset = None
         for a in assets.json().get("items", []):
             if a.get("asset") == "E2ETEST":
@@ -104,8 +104,8 @@ class TestAssetLifecycle:
         
         # Step 1: Disable asset
         disable_resp = await admin_client.put(
-            f"/admin/asset/{test_asset['asset_id']}",
-            json={"status": 0}  # Disabled
+            f"/admin/AssetAdmin/item{test_asset['asset_id']}",
+            json={"status": "OFFLINE"}  # Disabled
         )
         assert disable_resp.status_code == 200, f"Failed to disable: {disable_resp.text}"
         
@@ -132,7 +132,7 @@ class TestAssetLifecycle:
         E2E-01 Step 5: Re-enable Asset → Operations work
         """
         # Get asset
-        assets = await admin_client.get("/admin/asset/")
+        assets = await admin_client.get("/admin/AssetAdmin/item")
         test_asset = None
         for a in assets.json().get("items", []):
             if a.get("asset") == "E2ETEST":
@@ -144,8 +144,8 @@ class TestAssetLifecycle:
         
         # Re-enable
         enable_resp = await admin_client.put(
-            f"/admin/asset/{test_asset['asset_id']}",
-            json={"status": 1}  # Active
+            f"/admin/AssetAdmin/item{test_asset['asset_id']}",
+            json={"status": "ACTIVE"}  # Active
         )
         assert enable_resp.status_code == 200
         
@@ -178,31 +178,31 @@ class TestAssetDeletionConstraint:
         3. Try to delete Asset AAA → Should fail
         """
         # Create asset
-        asset_resp = await admin_client.post("/admin/asset/", json={
+        asset_resp = await admin_client.post("/admin/AssetAdmin/item", json={
             "asset": "REFTEST",
             "name": "Referenced Test",
             "decimals": 8,
-            "status": 1,
+            "status": "ACTIVE",
         })
         assert asset_resp.status_code in (200, 201)
         asset_id = asset_resp.json().get("asset_id")
         
         # Create symbol referencing it (need quote asset too)
         # Assuming USDT exists with ID 2
-        symbol_resp = await admin_client.post("/admin/symbol/", json={
+        symbol_resp = await admin_client.post("/admin/SymbolAdmin/item", json={
             "symbol": "REFTEST_USDT",
             "base_asset_id": asset_id,
             "quote_asset_id": 2,  # Assuming USDT
             "price_decimals": 2,
             "qty_decimals": 8,
-            "status": 1,
+            "status": "ACTIVE",
         })
         
         if symbol_resp.status_code not in (200, 201):
             pytest.skip("Could not create referencing symbol")
         
         # Try to delete the asset
-        delete_resp = await admin_client.delete(f"/admin/asset/{asset_id}")
+        delete_resp = await admin_client.delete(f"/admin/AssetAdmin/item{asset_id}")
         
         # Should fail with FK constraint error
         assert delete_resp.status_code in (400, 409), \

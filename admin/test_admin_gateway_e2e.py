@@ -14,7 +14,7 @@ from typing import Dict, Any
 
 # Endpoints
 ADMIN_API = "http://localhost:8001"
-GATEWAY_API = "http://localhost:8000"
+GATEWAY_API = "http://localhost:8080"
 
 class E2ETestRunner:
     def __init__(self):
@@ -70,8 +70,11 @@ def check_db_integrity():
     import sys
 
     print("Checking Database Schema Integrity...")
-
+    from database import init_db
+    from settings import settings
+    
     async def run_check():
+        await init_db(settings.database_url)
         async with AsyncSessionLocal() as session:
             # Check symbols_tb columns
             try:
@@ -113,9 +116,9 @@ def check_admin_health():
 
 def check_gateway_health():
     """Verify Gateway is running"""
-    print("Checking Gateway health...")
-    resp = requests.get(f"{GATEWAY_API}/health", timeout=5)
-    assert resp.status_code == 200, f"Gateway health check failed: {resp.status_code}"
+    print(f"Checking Gateway health at {GATEWAY_API}/api/v1/health...")
+    resp = requests.get(f"{GATEWAY_API}/api/v1/health", timeout=5)
+    assert resp.status_code == 200, f"Gateway health check failed: {resp.status_code} {resp.text}"
     print(f"✅ Gateway: {resp.json()}")
 
 
@@ -126,9 +129,11 @@ def test_asset_creation_propagation(runner: E2ETestRunner):
     """
     def run():
         # Step 1: Create Asset via Admin API
+        suffix = int(time.time())
+        asset_code = f"E2E_A_{suffix}"
         asset_data = {
-            "asset": "E2E_TEST",
-            "name": "E2E Test Asset",
+            "asset": asset_code,
+            "name": f"E2E Asset {suffix}",
             "decimals": 8,
             "status": 1,
             "asset_flags": 7
@@ -136,8 +141,8 @@ def test_asset_creation_propagation(runner: E2ETestRunner):
         
         print("Step 1: Creating Asset via Admin...")
         admin_resp = requests.post(
-            f"{ADMIN_API}/admin/api/asset/create",
-            json=asset_data,
+            f"{ADMIN_API}/admin/AssetAdmin/item",
+            json=[asset_data],
             timeout=5
         )
         assert admin_resp.status_code in [200, 201], f"Asset creation failed: {admin_resp.text}"
@@ -147,16 +152,19 @@ def test_asset_creation_propagation(runner: E2ETestRunner):
         time.sleep(1)
         
         # Step 3: Verify via Gateway API
-        print("Step 2: Verifying via Gateway API...")
-        gateway_resp = requests.get(
-            f"{GATEWAY_API}/api/v1/assets",
-            timeout=5
-        )
-        assert gateway_resp.status_code == 200, f"Gateway asset query failed"
+        print(f"Step 2: Verifying via Gateway API at {GATEWAY_API}/api/v1/public/assets...")
+        try:
+            gateway_resp = requests.get(
+                f"{GATEWAY_API}/api/v1/public/assets",
+                timeout=5
+            )
+            assert gateway_resp.status_code == 200, f"Gateway asset query failed: {gateway_resp.status_code} {gateway_resp.text}"
+        except Exception as e:
+            raise AssertionError(f"Gateway connection failed: {e}")
         
-        assets = gateway_resp.json()
-        found = any(a.get("asset") == "E2E_TEST" for a in assets)
-        assert found, f"Asset E2E_TEST not found in Gateway response: {assets}"
+        assets = gateway_resp.json()["data"]
+        found = any(a.get("asset") == asset_code for a in assets)
+        assert found, f"Asset {asset_code} not found in Gateway response"
         print(f"✅ Asset verified in Gateway")
     
     runner.test("E2E-01: Asset Creation Propagation", run)
@@ -170,8 +178,8 @@ def test_symbol_creation_propagation(runner: E2ETestRunner):
     def run():
         # Step 1: Get Asset IDs from Gateway
         print("Step 1: Getting existing assets from Gateway...")
-        assets_resp = requests.get(f"{GATEWAY_API}/api/v1/assets", timeout=5)
-        assets = assets_resp.json()
+        assets_resp = requests.get(f"{GATEWAY_API}/api/v1/public/assets", timeout=5)
+        assets = assets_resp.json()["data"]
         
         if len(assets) < 2:
             raise AssertionError("Need at least 2 assets for symbol creation")
@@ -180,8 +188,12 @@ def test_symbol_creation_propagation(runner: E2ETestRunner):
         quote_id = assets[1]["asset_id"]
         
         # Step 2: Create Symbol via Admin
+        suffix = int(time.time())
+        # Regex requires ^[A-Z0-9]+_[A-Z0-9]+$ so we need strict BASE_QUOTE
+        # Assuming Base=Asset0, Quote=Asset1
+        symbol_code = f"TEST_{suffix}"
         symbol_data = {
-            "symbol": f"E2E_SYM",
+            "symbol": symbol_code,
             "base_asset_id": base_id,
             "quote_asset_id": quote_id,
             "price_decimals": 2,
@@ -195,8 +207,8 @@ def test_symbol_creation_propagation(runner: E2ETestRunner):
         
         print(f"Step 2: Creating Symbol {symbol_data['symbol']} via Admin...")
         admin_resp = requests.post(
-            f"{ADMIN_API}/admin/api/symbol/create",
-            json=symbol_data,
+            f"{ADMIN_API}/admin/SymbolAdmin/item",
+            json=[symbol_data],  # Wrap in list
             timeout=5
         )
         assert admin_resp.status_code in [200, 201], f"Symbol creation failed: {admin_resp.text}"
@@ -208,14 +220,14 @@ def test_symbol_creation_propagation(runner: E2ETestRunner):
         # Step 4: Verify via Gateway API
         print("Step 3: Verifying via Gateway API...")
         gateway_resp = requests.get(
-            f"{GATEWAY_API}/api/v1/symbols",
+            f"{GATEWAY_API}/api/v1/public/symbols",
             timeout=5
         )
-        assert gateway_resp.status_code == 200, f"Gateway symbol query failed"
+        assert gateway_resp.status_code == 200, f"Gateway symbol query failed: {gateway_resp.status_code}"
         
-        symbols = gateway_resp.json()
-        found = any(s.get("symbol") == "E2E_SYM" for s in symbols)
-        assert found, f"Symbol E2E_SYM not found in Gateway response"
+        symbols = gateway_resp.json()["data"]
+        found = any(s.get("symbol") == symbol_code for s in symbols)
+        assert found, f"Symbol {symbol_code} not found in Gateway response"
         print(f"✅ Symbol verified in Gateway")
     
     runner.test("E2E-02: Symbol Creation Propagation", run)
@@ -240,8 +252,8 @@ def test_symbol_status_change_propagation(runner: E2ETestRunner):
         
         # Step 2: Update status via Admin (halt symbol)
         print(f"Step 2: Halting symbol {symbol['symbol']} via Admin...")
-        admin_resp = requests.patch(
-            f"{ADMIN_API}/admin/api/symbol/update/{symbol_id}",
+        admin_resp = requests.put(
+            f"{ADMIN_API}/admin/SymbolAdmin/item/{symbol_id}",
             json={"status": 0},  # 0 = halted
             timeout=5
         )
@@ -253,8 +265,8 @@ def test_symbol_status_change_propagation(runner: E2ETestRunner):
         
         # Step 4: Verify via Gateway API
         print("Step 3: Verifying status change via Gateway...")
-        gateway_resp = requests.get(f"{GATEWAY_API}/api/v1/symbols", timeout=5)
-        updated_symbols = gateway_resp.json()
+        gateway_resp = requests.get(f"{GATEWAY_API}/api/v1/public/symbols", timeout=5)
+        updated_symbols = gateway_resp.json()["data"]
         
         updated_symbol = next((s for s in updated_symbols if s["symbol_id"] == symbol_id), None)
         assert updated_symbol, f"Symbol {symbol_id} not found after update"
@@ -286,8 +298,8 @@ def test_fee_update_propagation(runner: E2ETestRunner):
         new_taker_fee = 25
         
         print(f"Step 2: Updating fees for {symbol['symbol']} via Admin...")
-        admin_resp = requests.patch(
-            f"{ADMIN_API}/admin/api/symbol/update/{symbol_id}",
+        admin_resp = requests.put(
+            f"{ADMIN_API}/admin/SymbolAdmin/item/{symbol_id}",
             json={
                 "base_maker_fee": new_maker_fee,
                 "base_taker_fee": new_taker_fee
@@ -302,8 +314,8 @@ def test_fee_update_propagation(runner: E2ETestRunner):
         
         # Step 4: Verify via Gateway API
         print("Step 3: Verifying fee change via Gateway...")
-        gateway_resp = requests.get(f"{GATEWAY_API}/api/v1/symbols", timeout=5)
-        updated_symbols = gateway_resp.json()
+        gateway_resp = requests.get(f"{GATEWAY_API}/api/v1/public/symbols", timeout=5)
+        updated_symbols = gateway_resp.json()["data"]
         
         updated_symbol = next((s for s in updated_symbols if s["symbol_id"] == symbol_id), None)
         assert updated_symbol, f"Symbol {symbol_id} not found after fee update"

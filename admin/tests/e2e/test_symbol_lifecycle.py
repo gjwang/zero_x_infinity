@@ -14,7 +14,7 @@ Test Flow:
 Prerequisites:
 - PostgreSQL running on :5433
 - Admin Dashboard running on :8001
-- Gateway running on :8000
+- Gateway running on :8080
 """
 
 import asyncio
@@ -25,7 +25,7 @@ from typing import Optional
 
 # Configuration
 ADMIN_URL = "http://localhost:8001"
-GATEWAY_URL = "http://localhost:8000"
+GATEWAY_URL = "http://localhost:8080"
 HOT_RELOAD_SLA_SECONDS = 5
 
 
@@ -71,30 +71,30 @@ class TestSymbolLifecycle:
         4. Submit order → Should succeed
         """
         # Step 1: Create Assets
-        base_asset = await admin_client.post("/admin/asset/", json={
+        base_asset = await admin_client.post("/admin/AssetAdmin/item", json={
             "asset": "TESTA",
             "name": "Test Asset A",
             "decimals": 8,
-            "status": 1,
+            "status": "ACTIVE",
         })
         assert base_asset.status_code in (200, 201), f"Failed to create base asset: {base_asset.text}"
         
-        quote_asset = await admin_client.post("/admin/asset/", json={
+        quote_asset = await admin_client.post("/admin/AssetAdmin/item", json={
             "asset": "TESTB",
             "name": "Test Asset B",
             "decimals": 8,
-            "status": 1,
+            "status": "ACTIVE",
         })
         assert quote_asset.status_code in (200, 201), f"Failed to create quote asset: {quote_asset.text}"
         
         # Step 2: Create Symbol
-        symbol_resp = await admin_client.post("/admin/symbol/", json={
+        symbol_resp = await admin_client.post("/admin/SymbolAdmin/item", json={
             "symbol": "TESTA_TESTB",
             "base_asset_id": base_asset.json().get("asset_id", 999),
             "quote_asset_id": quote_asset.json().get("asset_id", 998),
             "price_decimals": 2,
             "qty_decimals": 8,
-            "status": 1,  # Trading
+            "status": "ACTIVE",  # Trading
             "base_maker_fee": 10,
             "base_taker_fee": 20,
         })
@@ -126,7 +126,7 @@ class TestSymbolLifecycle:
         3. Submit order → Should be rejected
         """
         # Step 1: Get symbol ID and Halt it
-        symbols = await admin_client.get("/admin/symbol/")
+        symbols = await admin_client.get("/admin/SymbolAdmin/item")
         test_symbol = None
         for s in symbols.json().get("items", []):
             if s.get("symbol") == "TESTA_TESTB":
@@ -138,8 +138,8 @@ class TestSymbolLifecycle:
         
         # Halt the symbol
         halt_resp = await admin_client.put(
-            f"/admin/symbol/{test_symbol['symbol_id']}",
-            json={"status": 0}  # Halt
+            f"/admin/SymbolAdmin/item{test_symbol['symbol_id']}",
+            json={"status": "OFFLINE"}  # Halt
         )
         assert halt_resp.status_code == 200, f"Failed to halt symbol: {halt_resp.text}"
         
@@ -173,7 +173,7 @@ class TestSymbolLifecycle:
         4. New order → Should be rejected
         """
         # Get symbol
-        symbols = await admin_client.get("/admin/symbol/")
+        symbols = await admin_client.get("/admin/SymbolAdmin/item")
         test_symbol = None
         for s in symbols.json().get("items", []):
             if s.get("symbol") == "TESTA_TESTB":
@@ -185,7 +185,7 @@ class TestSymbolLifecycle:
         
         # Step 1: Set to CloseOnly
         close_only_resp = await admin_client.put(
-            f"/admin/symbol/{test_symbol['symbol_id']}",
+            f"/admin/SymbolAdmin/item{test_symbol['symbol_id']}",
             json={"status": 2}  # CloseOnly
         )
         assert close_only_resp.status_code == 200
@@ -214,7 +214,7 @@ class TestSymbolLifecycle:
         E2E-02 Step 7: Resume trading → Orders work again
         """
         # Get symbol
-        symbols = await admin_client.get("/admin/symbol/")
+        symbols = await admin_client.get("/admin/SymbolAdmin/item")
         test_symbol = None
         for s in symbols.json().get("items", []):
             if s.get("symbol") == "TESTA_TESTB":
@@ -226,8 +226,8 @@ class TestSymbolLifecycle:
         
         # Resume trading
         resume_resp = await admin_client.put(
-            f"/admin/symbol/{test_symbol['symbol_id']}",
-            json={"status": 1}  # Trading
+            f"/admin/SymbolAdmin/item{test_symbol['symbol_id']}",
+            json={"status": "ACTIVE"}  # Trading
         )
         assert resume_resp.status_code == 200
         

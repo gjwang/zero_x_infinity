@@ -11,7 +11,7 @@ import os
 
 # Environment configuration
 ADMIN_URL = os.getenv("ADMIN_URL", "http://localhost:8001")
-GATEWAY_URL = os.getenv("GATEWAY_URL", "http://localhost:8000")
+GATEWAY_URL = os.getenv("GATEWAY_URL", "http://localhost:8080")
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5433/zero_x_infinity")
 
 # SLA Configuration
@@ -96,11 +96,11 @@ async def ensure_services_running():
 
 async def create_test_asset(client: httpx.AsyncClient, code: str) -> dict:
     """Create a test asset, return asset data"""
-    resp = await client.post("/admin/asset/", json={
+    resp = await client.post("/admin/AssetAdmin/item", json={
         "asset": code.upper(),
         "name": f"Test {code}",
         "decimals": 8,
-        "status": 1,
+        "status": "ACTIVE",
     })
     if resp.status_code in (200, 201):
         return resp.json()
@@ -114,13 +114,13 @@ async def create_test_symbol(
     quote_asset_id: int
 ) -> dict:
     """Create a test symbol, return symbol data"""
-    resp = await client.post("/admin/symbol/", json={
+    resp = await client.post("/admin/SymbolAdmin/item", json={
         "symbol": symbol.upper(),
         "base_asset_id": base_asset_id,
         "quote_asset_id": quote_asset_id,
         "price_decimals": 2,
         "qty_decimals": 8,
-        "status": 1,
+        "status": "ACTIVE",
         "base_maker_fee": 10,
         "base_taker_fee": 20,
     })
@@ -132,17 +132,17 @@ async def create_test_symbol(
 async def cleanup_test_data(client: httpx.AsyncClient):
     """Clean up test data created during tests"""
     # Get all assets starting with TEST or E2E
-    assets_resp = await client.get("/admin/asset/")
+    assets_resp = await client.get("/admin/AssetAdmin/item")
     if assets_resp.status_code == 200:
         for asset in assets_resp.json().get("items", []):
             code = asset.get("asset", "")
             if code.startswith("TEST") or code.startswith("E2E"):
-                await client.delete(f"/admin/asset/{asset['asset_id']}")
+                await client.delete(f"/admin/AssetAdmin/item{asset['asset_id']}")
     
     # Get all symbols with test assets
-    symbols_resp = await client.get("/admin/symbol/")
+    symbols_resp = await client.get("/admin/SymbolAdmin/item")
     if symbols_resp.status_code == 200:
         for symbol in symbols_resp.json().get("items", []):
             name = symbol.get("symbol", "")
             if "TEST" in name or "E2E" in name:
-                await client.delete(f"/admin/symbol/{symbol['symbol_id']}")
+                await client.delete(f"/admin/SymbolAdmin/item{symbol['symbol_id']}")

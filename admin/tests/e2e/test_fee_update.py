@@ -21,7 +21,7 @@ import pytest
 from decimal import Decimal
 
 ADMIN_URL = "http://localhost:8001"
-GATEWAY_URL = "http://localhost:8000"
+GATEWAY_URL = "http://localhost:8080"
 HOT_RELOAD_SLA_SECONDS = 5
 
 
@@ -43,7 +43,7 @@ class TestFeeUpdate:
     
     async def get_symbol_fee(self, admin_client, symbol: str) -> tuple[int, int]:
         """Get current maker/taker fee for symbol"""
-        symbols = await admin_client.get("/admin/symbol/")
+        symbols = await admin_client.get("/admin/SymbolAdmin/item")
         for s in symbols.json().get("items", []):
             if s.get("symbol") == symbol:
                 return s.get("base_maker_fee", 0), s.get("base_taker_fee", 0)
@@ -105,7 +105,7 @@ class TestFeeUpdate:
         new_taker_fee = old_taker_fee + 10
         
         # Get symbol ID
-        symbols = await admin_client.get("/admin/symbol/")
+        symbols = await admin_client.get("/admin/SymbolAdmin/item")
         symbol_id = None
         for s in symbols.json().get("items", []):
             if s.get("symbol") == symbol:
@@ -117,7 +117,7 @@ class TestFeeUpdate:
         
         # Update fee
         update_resp = await admin_client.put(
-            f"/admin/symbol/{symbol_id}",
+            f"/admin/SymbolAdmin/item{symbol_id}",
             json={
                 "base_maker_fee": new_maker_fee,
                 "base_taker_fee": new_taker_fee,
@@ -140,7 +140,7 @@ class TestFeeUpdate:
         
         # Restore original fee
         await admin_client.put(
-            f"/admin/symbol/{symbol_id}",
+            f"/admin/SymbolAdmin/item{symbol_id}",
             json={
                 "base_maker_fee": old_maker_fee,
                 "base_taker_fee": old_taker_fee,
