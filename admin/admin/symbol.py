@@ -1,6 +1,11 @@
 """
 Symbol Admin CRUD
 AC-05, AC-06, AC-12: Create, Edit, Trading/Halt
+
+IMPORTANT: Per id-specification.md, certain fields are IMMUTABLE after creation:
+- symbol (trading pair name)
+- base_asset_id (base asset reference)
+- quote_asset_id (quote asset reference)
 """
 
 import re
@@ -14,7 +19,7 @@ from models import Symbol
 
 
 class SymbolCreateSchema(BaseModel):
-    """Schema for creating/updating Symbols with validation"""
+    """Schema for creating Symbols - all fields allowed"""
     symbol: str
     base_asset_id: int
     quote_asset_id: int
@@ -48,15 +53,56 @@ class SymbolCreateSchema(BaseModel):
     @field_validator("status")
     @classmethod
     def validate_status(cls, v: int) -> int:
-        """Status: 0=offline, 1=online, 2=maintenance"""
+        """Status: 0=offline, 1=online, 2=close_only (per GAP-01)"""
         if v not in (0, 1, 2):
-            raise ValueError("Status must be 0 (offline), 1 (online), or 2 (maintenance)")
+            raise ValueError("Status must be 0 (offline), 1 (online), or 2 (close-only)")
         return v
     
     @field_validator("base_maker_fee", "base_taker_fee")
     @classmethod
     def validate_fee(cls, v: int) -> int:
-        """Fee rate: 0-10000 bps (0-100%)"""
+        """Fee rate: 0-10000 bps (0-100%), integer only (per GAP-06)"""
+        if not 0 <= v <= 10000:
+            raise ValueError("Fee must be between 0 and 10000 bps (0-100%)")
+        return v
+
+
+class SymbolUpdateSchema(BaseModel):
+    """Schema for updating Symbols - IMMUTABLE fields excluded
+    
+    Per id-specification.md:
+    - symbol: IMMUTABLE (cannot change trading pair name)
+    - base_asset_id: IMMUTABLE (cannot change base asset)
+    - quote_asset_id: IMMUTABLE (cannot change quote asset)
+    
+    Only mutable fields:
+    - min_qty: minimum quantity can be adjusted
+    - status: trading status (online/offline/close-only)
+    - symbol_flags: feature flags
+    - base_maker_fee: maker fee rate
+    - base_taker_fee: taker fee rate
+    
+    NOTE: price_decimals and qty_decimals are also immutable
+    (changing precision would break existing orders)
+    """
+    min_qty: int
+    status: int
+    symbol_flags: int
+    base_maker_fee: int
+    base_taker_fee: int
+    
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v: int) -> int:
+        """Status: 0=offline, 1=online, 2=close_only (per GAP-01)"""
+        if v not in (0, 1, 2):
+            raise ValueError("Status must be 0 (offline), 1 (online), or 2 (close-only)")
+        return v
+    
+    @field_validator("base_maker_fee", "base_taker_fee")
+    @classmethod
+    def validate_fee(cls, v: int) -> int:
+        """Fee rate: 0-10000 bps (0-100%), integer only (per GAP-06)"""
         if not 0 <= v <= 10000:
             raise ValueError("Fee must be between 0 and 10000 bps (0-100%)")
         return v
@@ -89,5 +135,7 @@ class SymbolAdmin(admin.ModelAdmin):
     enable_bulk_create = False
     
     # Custom schemas with validation
+    # IMPORTANT: Different schemas for create vs update!
     schema_create = SymbolCreateSchema
-    schema_update = SymbolCreateSchema
+    schema_update = SymbolUpdateSchema  # Only mutable fields
+

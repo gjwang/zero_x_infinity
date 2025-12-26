@@ -1,6 +1,10 @@
 """
 Asset Admin CRUD
 AC-02, AC-03, AC-11: Create, Edit, Enable/Disable
+
+IMPORTANT: Per id-specification.md, certain fields are IMMUTABLE after creation:
+- asset (asset code)
+- decimals (precision)
 """
 
 import re
@@ -14,7 +18,7 @@ from models import Asset
 
 
 class AssetCreateSchema(BaseModel):
-    """Schema for creating/updating Assets with validation"""
+    """Schema for creating Assets - all fields allowed"""
     asset: str
     name: str
     decimals: int
@@ -49,6 +53,31 @@ class AssetCreateSchema(BaseModel):
         return v
 
 
+class AssetUpdateSchema(BaseModel):
+    """Schema for updating Assets - IMMUTABLE fields excluded
+    
+    Per id-specification.md:
+    - asset: IMMUTABLE (cannot change asset code)
+    - decimals: IMMUTABLE (cannot change precision after creation)
+    
+    Only mutable fields:
+    - name: display name can be updated
+    - status: enable/disable
+    - asset_flags: feature flags
+    """
+    name: str
+    status: int
+    asset_flags: int
+    
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v: int) -> int:
+        """Status: 0=disabled, 1=active"""
+        if v not in (0, 1):
+            raise ValueError("Status must be 0 (disabled) or 1 (active)")
+        return v
+
+
 class AssetAdmin(admin.ModelAdmin):
     """Admin interface for Asset management"""
     
@@ -73,5 +102,7 @@ class AssetAdmin(admin.ModelAdmin):
     enable_bulk_create = False  # Prevent bulk create for safety
     
     # Custom schemas with validation
+    # IMPORTANT: Different schemas for create vs update!
     schema_create = AssetCreateSchema
-    schema_update = AssetCreateSchema
+    schema_update = AssetUpdateSchema  # Only mutable fields
+
