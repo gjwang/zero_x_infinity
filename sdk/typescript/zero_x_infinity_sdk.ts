@@ -4,6 +4,9 @@
  * Type-safe SDK for Zero X Infinity Exchange API.
  * Supports Ed25519 authentication for private endpoints.
  * 
+ * Requirements:
+ *   npm install @noble/ed25519
+ * 
  * Usage:
  *   import { ZeroXInfinityClient } from './zero_x_infinity_sdk';
  *   
@@ -14,10 +17,33 @@
  *   // Private endpoints (with auth)
  *   const authClient = new ZeroXInfinityClient({
  *     apiKey: 'AK_0000000000001001',
- *     privateKeyHex: '9d61b19...'
+ *     privateKeyHex: '9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60'
  *   });
  *   const orders = await authClient.getOrders(10);
  */
+
+import * as ed from '@noble/ed25519';
+
+// =============================================================================
+// Base62 Encoding (matches Rust server)
+// =============================================================================
+
+const ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+
+function base62Encode(bytes: Uint8Array): string {
+    let num = BigInt(0);
+    for (const byte of bytes) {
+        num = num * 256n + BigInt(byte);
+    }
+    if (num === 0n) return ALPHABET[0];
+
+    const result: string[] = [];
+    while (num > 0n) {
+        result.push(ALPHABET[Number(num % 62n)]);
+        num = num / 62n;
+    }
+    return result.reverse().join('');
+}
 
 // =============================================================================
 // Types
@@ -88,11 +114,42 @@ export class ZeroXInfinityClient {
     private baseUrl: string;
     private apiKey?: string;
     private privateKeyHex?: string;
+    private lastTsNonce: number = 0;
 
     constructor(config: ClientConfig = {}) {
         this.baseUrl = config.baseUrl || 'http://localhost:8080';
         this.apiKey = config.apiKey;
         this.privateKeyHex = config.privateKeyHex;
+    }
+
+    /**
+     * Generate monotonically increasing ts_nonce (prevents replay)
+     */
+    private getTsNonce(): string {
+        const now = Date.now();
+        this.lastTsNonce = Math.max(now, this.lastTsNonce + 1);
+        return this.lastTsNonce.toString();
+    }
+
+    /**
+     * Sign request with Ed25519
+     * Payload format: {api_key}{ts_nonce}{method}{path}{body}
+     */
+    private async signRequest(method: string, path: string, body: string = ''): Promise<string> {
+        if (!this.apiKey || !this.privateKeyHex) {
+            throw new Error('Auth required. Initialize with apiKey and privateKeyHex');
+        }
+
+        const tsNonce = this.getTsNonce();
+        const payload = `${this.apiKey}${tsNonce}${method}${path}${body}`;
+
+        // Ed25519 sign
+        const privateKey = this.privateKeyHex.slice(0, 64); // First 32 bytes (64 hex chars)
+        const messageBytes = new TextEncoder().encode(payload);
+        const signature = await ed.signAsync(messageBytes, privateKey);
+        const sigBase62 = base62Encode(signature);
+
+        return `ZXINF v1.${this.apiKey}.${tsNonce}.${sigBase62}`;
     }
 
     private async get<T>(path: string, params?: Record<string, any>): Promise<ApiResponse<T>> {
@@ -108,10 +165,6 @@ export class ZeroXInfinityClient {
     }
 
     private async authGet<T>(path: string, params?: Record<string, any>): Promise<ApiResponse<T>> {
-        if (!this.apiKey || !this.privateKeyHex) {
-            throw new Error('Auth required. Initialize with apiKey and privateKeyHex');
-        }
-
         const url = new URL(path, this.baseUrl);
         if (params) {
             Object.entries(params).forEach(([k, v]) => {
@@ -119,7 +172,8 @@ export class ZeroXInfinityClient {
             });
         }
 
-        const auth = await this.signRequest('GET', url.pathname + url.search);
+        const signPath = url.pathname + url.search;
+        const auth = await this.signRequest('GET', signPath);
         const resp = await fetch(url.toString(), {
             headers: { 'Authorization': auth }
         });
@@ -127,11 +181,8 @@ export class ZeroXInfinityClient {
     }
 
     private async authPost<T>(path: string, body?: any): Promise<ApiResponse<T>> {
-        if (!this.apiKey || !this.privateKeyHex) {
-            throw new Error('Auth required. Initialize with apiKey and privateKeyHex');
-        }
-
-        const auth = await this.signRequest('POST', path);
+        // Server uses empty body for signature (matches middleware.rs)
+        const auth = await this.signRequest('POST', path, '');
         const resp = await fetch(`${this.baseUrl}${path}`, {
             method: 'POST',
             headers: {
@@ -141,19 +192,6 @@ export class ZeroXInfinityClient {
             body: body ? JSON.stringify(body) : undefined
         });
         return resp.json();
-    }
-
-    private async signRequest(method: string, path: string): Promise<string> {
-        // Ed25519 signature (requires noble-ed25519 or similar library)
-        // This is a placeholder - real implementation needs ed25519 signing
-        const tsNonce = Date.now().toString();
-        const payload = `${this.apiKey}${tsNonce}${method}${path}`;
-
-        // TODO: Implement actual Ed25519 signing with privateKeyHex
-        // For now, return placeholder (will fail auth on server)
-        const signature = 'SIGNATURE_PLACEHOLDER';
-
-        return `ZXINF v1.${this.apiKey}.${tsNonce}.${signature}`;
     }
 
     // =========================================================================
