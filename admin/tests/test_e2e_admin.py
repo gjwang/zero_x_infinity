@@ -49,7 +49,7 @@ class TestInputValidationUnit:
     
     def test_asset_create_schema_valid(self):
         """Valid asset creation"""
-        from admin.asset import AssetCreateSchema
+        from schemas.asset import AssetCreateSchema
         schema = AssetCreateSchema(
             asset="BTC",
             name="Bitcoin",
@@ -61,7 +61,7 @@ class TestInputValidationUnit:
     
     def test_asset_create_schema_invalid_decimals(self):
         """Invalid decimals rejected"""
-        from admin.asset import AssetCreateSchema
+        from schemas.asset import AssetCreateSchema
         from pydantic import ValidationError
         
         with pytest.raises(ValidationError):
@@ -73,14 +73,14 @@ class TestInputValidationUnit:
     
     def test_asset_update_schema_immutable_fields(self):
         """Asset update schema should not have immutable fields"""
-        from admin.asset import AssetUpdateSchema
+        from schemas.asset import AssetUpdateSchema
         fields = AssetUpdateSchema.model_fields.keys()
         assert "asset" not in fields, "asset is immutable"
         assert "decimals" not in fields, "decimals is immutable"
     
     def test_symbol_create_schema_valid(self):
         """Valid symbol creation"""
-        from admin.symbol import SymbolCreateSchema
+        from schemas.symbol import SymbolCreateSchema
         schema = SymbolCreateSchema(
             symbol="BTC_USDT",
             base_asset_id=1,
@@ -92,7 +92,7 @@ class TestInputValidationUnit:
     
     def test_symbol_create_schema_invalid_format(self):
         """Invalid symbol format rejected"""
-        from admin.symbol import SymbolCreateSchema
+        from schemas.symbol import SymbolCreateSchema
         from pydantic import ValidationError
         
         with pytest.raises(ValidationError):
@@ -106,7 +106,7 @@ class TestInputValidationUnit:
     
     def test_symbol_create_schema_invalid_fee(self):
         """Invalid fee rejected"""
-        from admin.symbol import SymbolCreateSchema
+        from schemas.symbol import SymbolCreateSchema
         from pydantic import ValidationError
         
         with pytest.raises(ValidationError):
@@ -121,7 +121,7 @@ class TestInputValidationUnit:
     
     def test_symbol_update_schema_immutable_fields(self):
         """Symbol update schema should not have immutable fields"""
-        from admin.symbol import SymbolUpdateSchema
+        from schemas.symbol import SymbolUpdateSchema
         fields = SymbolUpdateSchema.model_fields.keys()
         assert "symbol" not in fields
         assert "base_asset_id" not in fields
@@ -131,7 +131,7 @@ class TestInputValidationUnit:
     
     def test_vip_level_create_schema_valid(self):
         """Valid VIP level creation"""
-        from admin.vip_level import VIPLevelCreateSchema
+        from schemas.vip_level import VIPLevelCreateSchema
         schema = VIPLevelCreateSchema(
             level=0,
             discount_percent=100,
@@ -142,7 +142,7 @@ class TestInputValidationUnit:
     
     def test_vip_level_create_schema_invalid_discount(self):
         """Invalid discount rejected"""
-        from admin.vip_level import VIPLevelCreateSchema
+        from schemas.vip_level import VIPLevelCreateSchema
         from pydantic import ValidationError
         
         with pytest.raises(ValidationError):

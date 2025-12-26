@@ -16,8 +16,8 @@ Tests:
 import pytest
 from pydantic import ValidationError
 
-from admin.asset import AssetCreateSchema
-from admin.symbol import SymbolCreateSchema
+from schemas.asset import AssetCreateSchema
+from schemas.symbol import SymbolCreateSchema
 
 
 class TestSymbolAssetNameDisplay:
@@ -127,7 +127,7 @@ class TestImmutableFieldsUI:
         - name: ENABLED
         - status: ENABLED
         """
-        from admin.asset import AssetUpdateSchema
+        from schemas.asset import AssetUpdateSchema
         
         # These fields should NOT be in UpdateSchema
         update_fields = set(AssetUpdateSchema.model_fields.keys())
@@ -147,7 +147,7 @@ class TestImmutableFieldsUI:
         - status: ENABLED ✏️
         - fees: ENABLED ✏️
         """
-        from admin.symbol import SymbolUpdateSchema
+        from schemas.symbol import SymbolUpdateSchema
         
         update_fields = set(SymbolUpdateSchema.model_fields.keys())
         

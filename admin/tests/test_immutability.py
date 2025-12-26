@@ -15,8 +15,8 @@ These fields are IMMUTABLE after creation per id-specification.md
 import pytest
 from pydantic import ValidationError
 
-from admin.asset import AssetCreateSchema, AssetUpdateSchema
-from admin.symbol import SymbolCreateSchema, SymbolUpdateSchema
+from schemas.asset import AssetCreateSchema, AssetUpdateSchema
+from schemas.symbol import SymbolCreateSchema, SymbolUpdateSchema
 
 
 class TestAssetImmutability:

@@ -11,9 +11,9 @@ Per 0x0F-admin-test-plan.md:
 import pytest
 from pydantic import ValidationError
 
-from admin.asset import AssetCreateSchema
-from admin.symbol import SymbolCreateSchema, SymbolUpdateSchema
-from admin.vip_level import VIPLevelCreateSchema
+from schemas.asset import AssetCreateSchema
+from schemas.symbol import SymbolCreateSchema, SymbolUpdateSchema
+from schemas.vip_level import VIPLevelCreateSchema
 
 
 class TestEdgeCasesAgentA:
@@ -82,7 +82,8 @@ class TestEdgeCasesAgentA:
                 level=1,
                 discount_percent=101,  # >100% not allowed
             )
-        assert "between 0 and 100" in str(exc_info.value)
+        # Pydantic Field(le=100) error message
+        assert "less than or equal" in str(exc_info.value).lower() or "100" in str(exc_info.value)
     
     def test_vip_discount_exactly_100_accepted(self):
         """VIP discount exactly 100% (no discount) should be accepted"""

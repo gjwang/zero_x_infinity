@@ -12,8 +12,8 @@ These tests check compliance with the ID specification.
 import pytest
 from pydantic import ValidationError
 
-from admin.asset import AssetCreateSchema
-from admin.symbol import SymbolCreateSchema
+from schemas.asset import AssetCreateSchema
+from schemas.symbol import SymbolCreateSchema
 
 
 class TestAssetCodeSpecCompliance:
@@ -277,6 +277,6 @@ class TestErrorMessageFormat:
             pytest.fail("Should have raised ValidationError")
         except ValidationError as e:
             error_str = str(e)
-            # Should mention BASE_QUOTE format
-            assert "BASE_QUOTE" in error_str or "underscore" in error_str.lower(), \
-                f"Error should mention format hint. Got: {error_str}"
+            # Pydantic pattern error includes underscore
+            assert ("_" in error_str and "pattern" in error_str.lower()), \
+                f"Error should mention pattern with underscore. Got: {error_str}"

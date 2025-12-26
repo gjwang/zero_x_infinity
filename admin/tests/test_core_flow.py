@@ -12,8 +12,8 @@ Agent B focuses on core flow stability and regression testing.
 import pytest
 from pydantic import ValidationError
 
-from admin.symbol import SymbolCreateSchema, SymbolUpdateSchema
-from admin.vip_level import VIPLevelCreateSchema
+from schemas.symbol import SymbolCreateSchema, SymbolUpdateSchema
+from schemas.vip_level import VIPLevelCreateSchema
 
 
 class TestSymbolCloseOnlyFlowAgentB:
@@ -132,7 +132,7 @@ class TestCRUDFlowAgentB:
     
     def test_asset_create_flow(self):
         """Complete asset creation flow"""
-        from admin.asset import AssetCreateSchema
+        from schemas.asset import AssetCreateSchema
         
         schema = AssetCreateSchema(
             asset="ETH",
@@ -147,7 +147,7 @@ class TestCRUDFlowAgentB:
     
     def test_asset_update_flow(self):
         """Complete asset update flow (mutable fields only)"""
-        from admin.asset import AssetUpdateSchema
+        from schemas.asset import AssetUpdateSchema
         
         schema = AssetUpdateSchema(
             name="Ethereum Updated",

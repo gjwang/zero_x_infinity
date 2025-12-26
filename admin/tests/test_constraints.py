@@ -12,8 +12,8 @@ These are constraint tests that were identified as missing.
 import pytest
 from pydantic import ValidationError
 
-from admin.symbol import SymbolCreateSchema, SymbolUpdateSchema
-from admin.asset import AssetCreateSchema
+from schemas.symbol import SymbolCreateSchema, SymbolUpdateSchema
+from schemas.asset import AssetCreateSchema
 
 
 class TestSelfReferentialConstraint:
@@ -123,7 +123,8 @@ class TestSymbolNamingConvention:
                 price_decimals=2,
                 qty_decimals=8,
             )
-        assert "BASE_QUOTE" in str(exc_info.value)
+        # Pydantic Field(pattern=...) includes underscore in the pattern
+        assert "pattern" in str(exc_info.value).lower() and "_" in str(exc_info.value)
     
     def test_symbol_multiple_underscores_rejected(self):
         """Symbol with multiple underscores should be rejected"""

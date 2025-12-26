@@ -11,8 +11,8 @@ These are CRITICAL tests for data integrity.
 import pytest
 from pydantic import ValidationError
 
-from admin.asset import AssetCreateSchema
-from admin.symbol import SymbolCreateSchema
+from schemas.asset import AssetCreateSchema
+from schemas.symbol import SymbolCreateSchema
 
 
 class TestAssetIdMapping:
@@ -194,13 +194,13 @@ class TestIdImmutability:
     
     def test_asset_code_immutable(self):
         """Asset code cannot change (covered in immutability tests)"""
-        from admin.asset import AssetUpdateSchema
+        from schemas.asset import AssetUpdateSchema
         fields = AssetUpdateSchema.model_fields.keys()
         assert "asset" not in fields, "asset code should be immutable"
     
     def test_symbol_code_immutable(self):
         """Symbol code cannot change"""
-        from admin.symbol import SymbolUpdateSchema
+        from schemas.symbol import SymbolUpdateSchema
         fields = SymbolUpdateSchema.model_fields.keys()
         assert "symbol" not in fields, "symbol code should be immutable"
     
@@ -209,7 +209,7 @@ class TestIdImmutability:
         
         Changing these would break the meaning of the symbol
         """
-        from admin.symbol import SymbolUpdateSchema
+        from schemas.symbol import SymbolUpdateSchema
         fields = SymbolUpdateSchema.model_fields.keys()
         assert "base_asset_id" not in fields, "base_asset_id should be immutable"
         assert "quote_asset_id" not in fields, "quote_asset_id should be immutable"

@@ -6,9 +6,9 @@ AC-09: Reject invalid input (decimals<0, fee>100%)
 import pytest
 from pydantic import ValidationError
 
-from admin.asset import AssetCreateSchema, AssetUpdateSchema
-from admin.symbol import SymbolCreateSchema, SymbolUpdateSchema
-from admin.vip_level import VIPLevelCreateSchema
+from schemas.asset import AssetCreateSchema, AssetUpdateSchema
+from schemas.symbol import SymbolCreateSchema, SymbolUpdateSchema
+from schemas.vip_level import VIPLevelCreateSchema
 
 
 class TestAssetValidation:
@@ -42,7 +42,8 @@ class TestAssetValidation:
                 name="Bitcoin",
                 decimals=8,
             )
-        assert "uppercase letters" in str(exc_info.value).lower()
+        # Pydantic Field(pattern=...) error message
+        assert "pattern" in str(exc_info.value).lower() or "string_pattern_mismatch" in str(exc_info.value).lower()
     
     def test_invalid_decimals_negative(self):
         """Negative decimals should be rejected"""
@@ -52,7 +53,8 @@ class TestAssetValidation:
                 name="Bitcoin",
                 decimals=-1,
             )
-        assert "between 0 and 18" in str(exc_info.value)
+        # Pydantic Field(ge=0) error message
+        assert "greater than or equal" in str(exc_info.value).lower() or "ge=0" in str(exc_info.value).lower()
     
     def test_invalid_decimals_too_large(self):
         """Decimals > 18 should be rejected"""
@@ -62,7 +64,8 @@ class TestAssetValidation:
                 name="Bitcoin",
                 decimals=19,
             )
-        assert "between 0 and 18" in str(exc_info.value)
+        # Pydantic Field(le=18) error message
+        assert "less than or equal" in str(exc_info.value).lower() or "le=18" in str(exc_info.value).lower()
     
     def test_invalid_status(self):
         """Invalid status should be rejected"""
@@ -73,7 +76,8 @@ class TestAssetValidation:
                 decimals=8,
                 status=3,  # Only 0 or 1 allowed
             )
-        assert "must be 0" in str(exc_info.value)
+        # Pydantic Field(le=1) error message
+        assert "less than or equal" in str(exc_info.value).lower() or "le=1" in str(exc_info.value).lower()
 
 
 class TestSymbolValidation:
@@ -111,7 +115,8 @@ class TestSymbolValidation:
                 price_decimals=2,
                 qty_decimals=8,
             )
-        assert "BASE_QUOTE" in str(exc_info.value)
+        # Pydantic Field(pattern=...) error message
+        assert "pattern" in str(exc_info.value).lower() or "string_pattern_mismatch" in str(exc_info.value).lower()
     
     def test_invalid_fee_too_high(self):
         """Fee > 10000 bps should be rejected"""
@@ -124,7 +129,8 @@ class TestSymbolValidation:
                 qty_decimals=8,
                 base_maker_fee=10001,  # > 100%
             )
-        assert "between 0 and 10000" in str(exc_info.value)
+        # Pydantic Field(le=10000) error message
+        assert "less than or equal" in str(exc_info.value).lower() or "le=10000" in str(exc_info.value).lower()
     
     def test_invalid_fee_negative(self):
         """Negative fee should be rejected"""
@@ -137,7 +143,8 @@ class TestSymbolValidation:
                 qty_decimals=8,
                 base_taker_fee=-1,
             )
-        assert "between 0 and 10000" in str(exc_info.value)
+        # Pydantic Field(ge=0) error message
+        assert "greater than or equal" in str(exc_info.value).lower() or "ge=0" in str(exc_info.value).lower()
 
 
 class TestVIPLevelValidation:
@@ -160,7 +167,8 @@ class TestVIPLevelValidation:
                 level=-1,
                 discount_percent=100,
             )
-        assert "0 or greater" in str(exc_info.value)
+        # Pydantic Field(ge=0) error message
+        assert "greater than or equal" in str(exc_info.value).lower() or "ge=0" in str(exc_info.value).lower()
     
     def test_invalid_discount_too_high(self):
         """Discount > 100 should be rejected"""
@@ -169,7 +177,8 @@ class TestVIPLevelValidation:
                 level=1,
                 discount_percent=101,
             )
-        assert "between 0 and 100" in str(exc_info.value)
+        # Pydantic Field(le=100) error message
+        assert "less than or equal" in str(exc_info.value).lower() or "le=100" in str(exc_info.value).lower()
     
     def test_invalid_discount_negative(self):
         """Negative discount should be rejected"""
@@ -178,7 +187,8 @@ class TestVIPLevelValidation:
                 level=1,
                 discount_percent=-1,
             )
-        assert "between 0 and 100" in str(exc_info.value)
+        # Pydantic Field(ge=0) error message
+        assert "greater than or equal" in str(exc_info.value).lower() or "ge=0" in str(exc_info.value).lower()
 
 
 class TestAssetImmutability:

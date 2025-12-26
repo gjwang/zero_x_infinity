@@ -29,7 +29,7 @@ class TestAuthenticationAgentC:
         - Number required  
         - Special char required
         """
-        from admin.auth.password import validate_password_strength
+        from auth.password import validate_password_strength
         
         # Too short
         assert not validate_password_strength("Short1!")
@@ -67,12 +67,12 @@ class TestSessionSecurityAgentC:
         - Refresh token: 24 hours
         - Idle timeout: 30 min
         """
-        from admin.settings import settings
+        from settings import settings
         
-        # Check configured values
-        assert settings.ACCESS_TOKEN_EXPIRE_MINUTES == 15
-        assert settings.REFRESH_TOKEN_EXPIRE_HOURS == 24
-        assert settings.IDLE_TIMEOUT_MINUTES == 30
+        # Check configured values (lowercase for Pydantic Settings)
+        assert settings.access_token_expire_minutes == 15
+        assert settings.refresh_token_expire_hours == 24
+        assert settings.idle_timeout_minutes == 30
     
     def test_sensitive_ops_require_reauth(self):
         """TC-AUTH-07: Sensitive operations require re-authentication
@@ -163,7 +163,7 @@ class TestDataProtectionAgentC:
     
     def test_passwords_hashed(self):
         """TC-DATA-01: Passwords must be hashed with bcrypt/argon2"""
-        from admin.auth.password import hash_password, verify_password
+        from auth.password import hash_password, verify_password
         
         password = "TestPassword123!"
         hashed = hash_password(password)
@@ -179,23 +179,23 @@ class TestDataProtectionAgentC:
     
     def test_db_credentials_from_env(self):
         """TC-DATA-02: DB credentials should come from environment"""
-        from admin.settings import settings
+        from settings import settings
         
-        # DATABASE_URL should be loaded from environment
-        assert settings.DATABASE_URL is not None
+        # DATABASE_URL should be loaded from environment (lowercase for Pydantic)
+        assert settings.database_url is not None
         # Should not be hardcoded default
-        assert "localhost:5432" not in settings.DATABASE_URL or \
-               settings.DATABASE_URL.startswith("postgresql://")
+        assert "localhost:5432" not in settings.database_url or \
+               settings.database_url.startswith("postgresql://")
     
     def test_jwt_secret_from_env(self):
         """TC-DATA-03: JWT secret should come from environment"""
-        from admin.settings import settings
+        from settings import settings
         
-        # SECRET_KEY should be loaded from environment
-        assert settings.SECRET_KEY is not None
+        # SECRET_KEY should be loaded from environment (lowercase for Pydantic)
+        assert settings.admin_secret_key is not None
         # Should not be a default/weak value
-        assert len(settings.SECRET_KEY) >= 32
-        assert settings.SECRET_KEY != "changeme"
+        assert len(settings.admin_secret_key) >= 32
+        assert settings.admin_secret_key != "changeme"
     
     def test_error_responses_no_internal_details(self):
         """TC-DATA-04: Error responses should not expose internal details"""
