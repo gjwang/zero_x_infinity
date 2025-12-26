@@ -3,7 +3,8 @@ Admin Dashboard Main Entry Point
 Phase 0x0F - Zero X Infinity
 
 Run with:
-    uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+    1. python init_db.py  # First time only
+    2. uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 """
 
 from fastapi import FastAPI
@@ -28,11 +29,10 @@ site = AuthAdminSite(
     ),
 )
 
-
 # Register admin pages
 site.register_admin(AssetAdmin, SymbolAdmin, VIPLevelAdmin, AuditLogAdmin)
 
-# Mount the site to the app (this is the key step!)
+# Mount the site to the app
 site.mount_app(site.fastapi)
 
 # Get the FastAPI app
@@ -50,20 +50,9 @@ async def health_check():
 
 @app.on_event("startup")
 async def on_startup():
-    """Startup event: create tables and default admin user"""
-    # Create ALL auth tables (SQLite) - includes user, role, casbin_rule, login_history, token
-    await site.db.async_run_sync(site.auth.user_model.metadata.create_all, is_session=False)
-    
-    # Create default admin user using create_role_user
-    try:
-        await site.auth.create_role_user(role_key="admin")
-        print(f"[Admin] Created default admin user")
-    except Exception as e:
-        # User may already exist
-        print(f"[Admin] Admin user already exists or error: {e}")
-    
+    """Startup event: log info"""
     print(f"[Admin Dashboard] Started at http://{app_settings.ADMIN_HOST}:{app_settings.ADMIN_PORT}/admin")
-    print(f"[Admin Dashboard] Login: admin / admin (default, first login)")
+    print(f"[Admin Dashboard] Login: admin / admin (default)")
 
 
 if __name__ == "__main__":
