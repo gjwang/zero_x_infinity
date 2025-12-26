@@ -47,3 +47,4 @@ docs/src/agent-build-verification-guide.md
 data/
 admin/admin_auth.db
 cookies.txt
+admin/.venv/
