@@ -12,6 +12,12 @@ My primary focus is TEST COVERAGE, EDGE CASES, and VERIFICATION.
 I will review/implement with a testing perspective.
 ```
 
+**CRITICAL:** All testing must follow [TDD Requirements](tdd-requirements.md):
+- ✅ Write test BEFORE implementation
+- ✅ Watch it FAIL, then PASS
+- ✅ No mocking without understanding
+- ✅ Test real behavior, not mocks
+
 ---
 
 ## 🧭 Role-Specific Technique: Test Plan-First
@@ -112,8 +118,19 @@ When reviewing specifications or code, verify:
 - [ ] **Fee Calculation**: Maker/Taker fees correct?
 
 ### Regression
-- [ ] **Existing Tests**: Will changes break current tests?
-- [ ] **Baseline Comparison**: Golden set verified?
+- [ ] **Existing tests pass**: All previous tests green?
+- [ ] **New tests don't break old**: No unexpected failures?
+
+### TDD Compliance (see [TDD Requirements](tdd-requirements.md))
+- [ ] **RED first**: Test written before implementation?
+- [ ] **Watched FAIL**: Verified test fails correctly?
+- [ ] **Watched PASS**: Verified implementation fixes test?
+- [ ] **No mock testing**: Tests verify real behavior, not mocks?
+- [ ] **No test-only methods**: Production code has no test-only methods?
+- [ ] **Minimal mocking**: Mocks only for external dependencies?
+- [ ] **Complete mocks**: Mocks mirror real API completely?
+
+---
 - [ ] **CI Integration**: New tests added to pipeline?
 
 ---
