@@ -57,4 +57,18 @@ When making a decision that impacts other roles:
 
 ---
 
+### 2025-12-26 - Phase 0x0E OpenAPI Merged to Main
+
+- **Decided by**: Architect (AI Agent)
+- **Decision**: Merge `0x0E-openapi-integration` branch to `main` with tag `v0.0E-openapi`
+- **Rationale**: QA approved all tests (293 unit, 17 E2E). Swagger UI at `/docs` verified.
+- **Impact on other roles**: 
+  - DevOps: New dependency `utoipa` + `utoipa-swagger-ui`
+  - All: `/docs` now serves interactive API documentation
+- **Key commits**:
+  - `8d57365` - Merge 0x0E-openapi-integration
+- **Tag**: `v0.0E-openapi`
+
+---
+
 <!-- Add new decisions above this line -->
