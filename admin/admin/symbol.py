@@ -12,7 +12,7 @@ import re
 from typing import Any
 
 from fastapi_amis_admin.admin import admin
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 from starlette.requests import Request
 
 from models import Symbol
@@ -34,10 +34,10 @@ class SymbolCreateSchema(BaseModel):
     @field_validator("symbol")
     @classmethod
     def validate_symbol(cls, v: str) -> str:
-        """Symbol must be uppercase letters and underscores only (e.g., BTC_USDT)"""
+        """Symbol must be BASE_QUOTE format with A-Z, 0-9 (per ID spec)"""
         v = v.upper()
-        if not re.match(r"^[A-Z]+_[A-Z]+$", v):
-            raise ValueError("Symbol must be in format BASE_QUOTE (e.g., BTC_USDT)")
+        if not re.match(r"^[A-Z0-9]+_[A-Z0-9]+$", v):
+            raise ValueError("Symbol must be in format BASE_QUOTE (e.g., BTC_USDT, ETH2_USDT)")
         if len(v) > 32:
             raise ValueError("Symbol must be 32 characters or less")
         return v
@@ -65,6 +65,13 @@ class SymbolCreateSchema(BaseModel):
         if not 0 <= v <= 10000:
             raise ValueError("Fee must be between 0 and 10000 bps (0-100%)")
         return v
+    
+    @model_validator(mode='after')
+    def validate_base_not_equal_quote(self):
+        """Ensure base_asset_id != quote_asset_id (BUG-07 fix)"""
+        if self.base_asset_id == self.quote_asset_id:
+            raise ValueError("base_asset_id cannot equal quote_asset_id")
+        return self
 
 
 class SymbolUpdateSchema(BaseModel):

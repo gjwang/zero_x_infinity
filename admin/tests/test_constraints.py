@@ -152,14 +152,10 @@ class TestAssetCodeConvention:
         assert schema.asset == "BTC"
         assert schema.asset.isupper()
     
-    def test_asset_code_with_numbers_rejected(self):
-        """Asset code with numbers should be rejected"""
-        with pytest.raises(ValidationError):
-            AssetCreateSchema(
-                asset="BTC2",  # Number not allowed
-                name="Bitcoin 2",
-                decimals=8,
-            )
+    # REMOVED: test_asset_code_with_numbers_rejected
+    # Per ID spec update, numbers ARE now allowed (e.g., BTC2, 1INCH)
+    # See: test_id_spec_compliance.py for updated tests
+    
     
     def test_asset_code_max_length(self):
         """Asset code should be max 16 characters"""

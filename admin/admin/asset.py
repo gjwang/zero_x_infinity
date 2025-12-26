@@ -28,12 +28,10 @@ class AssetCreateSchema(BaseModel):
     @field_validator("asset")
     @classmethod
     def validate_asset(cls, v: str) -> str:
-        """Asset must be uppercase letters only"""
+        """Asset must be A-Z, 0-9, _ only (per ID spec)"""
         v = v.upper()
-        if not re.match(r"^[A-Z]+$", v):
-            raise ValueError("Asset must contain only uppercase letters")
-        if len(v) > 16:
-            raise ValueError("Asset must be 16 characters or less")
+        if not re.match(r"^[A-Z0-9_]{1,16}$", v):
+            raise ValueError("Asset must be 1-16 chars, A-Z/0-9/_ only")
         return v
     
     @field_validator("decimals")
