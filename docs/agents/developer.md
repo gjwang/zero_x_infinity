@@ -18,6 +18,8 @@ I will review/implement with a developer's perspective.
 
 > **Follows [Universal Methodology](../../AGENTS.md#universal-methodology-all-roles)** + Developer-specific: Test-Driven Development (TDD)
 
+> **Reference**: Based on [Superpowers TDD Skill](https://github.com/obra/superpowers/tree/main/skills/test-driven-development)
+
 ### The TDD Workflow
 
 ```
