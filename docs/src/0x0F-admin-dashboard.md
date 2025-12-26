@@ -157,6 +157,53 @@ pip install fastapi-amis-admin fastapi-user-auth sqlalchemy asyncpg
 >
 > 适用于：Symbol 下架、Asset 禁用等不可撤销操作
 
+> **多重签名提现 (Multisig)**:
+> - 后台只能生成"提现提案"，不能直接执行
+> - 流程：客服提交 → 财务审核 → 离线签名/MPC 执行
+> - 私钥绝对不能碰后台服务器
+
+---
+
+## 6. 安全要求 (MVP 必须)
+
+### 6.1 强制审计日志 (Middleware)
+
+每个请求都必须记录：
+
+```python
+# FastAPI Middleware
+@app.middleware("http")
+async def audit_log_middleware(request: Request, call_next):
+    response = await call_next(request)
+    await AuditLog.create(
+        admin_id=request.state.admin_id,
+        ip=request.client.host,
+        timestamp=datetime.utcnow(),
+        action=f"{request.method} {request.url.path}",
+        old_value=...,
+        new_value=...,
+    )
+    return response
+```
+
+### 6.2 Decimal 精度 (必须)
+
+防止 JSON float 精度丢失：
+
+```python
+from pydantic import BaseModel, field_serializer
+from decimal import Decimal
+
+class FeeRateResponse(BaseModel):
+    rate: Decimal
+
+    @field_serializer('rate')
+    def serialize_rate(self, rate: Decimal, _info):
+        return str(rate)  # 序列化为 String
+```
+
+> ⚠️ 所有金额、费率必须用 `Decimal`，输出必须是 `String`
+
 #### 命名一致性 (与现有代码)
 
 | 实体 | 字段 | 值 |
