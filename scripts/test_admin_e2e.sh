@@ -24,7 +24,10 @@ ADMIN_DIR="$PROJECT_DIR/admin"
 
 cd "$PROJECT_DIR"
 
-# Admin uses its own Pydantic Settings (settings.py) - no external env needed
+# Source database environment variables (CI standard - required per ci-pitfalls.md 2.1)
+if [ -f "$SCRIPT_DIR/lib/db_env.sh" ]; then
+    source "$SCRIPT_DIR/lib/db_env.sh"
+fi
 
 # Colors
 RED='\033[0;31m'

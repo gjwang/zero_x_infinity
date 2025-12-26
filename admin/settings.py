@@ -15,15 +15,14 @@ class Settings(BaseSettings):
         extra="ignore",
     )
     
-    # Database
-    # Prefer DATABASE_URL_ASYNC (from env) for async driver compatibility
-    # Falls back to hardcoded default with asyncpg
-    database_url: str = "postgresql+asyncpg://trading:trading123@localhost:5433/exchange_info_db"
+    # Database - MUST be set via environment variable (CI standard)
+    # Source: db_env.sh exports DATABASE_URL_ASYNC
+    database_url: str
     
-    # Security
-    admin_secret_key: str = "change-me-in-production-0x0F-32chars+"
+    # Security - MUST be set in production
+    admin_secret_key: str = "dev-secret-key-change-in-production-32chars+"
     
-    # Server
+    # Server - defaults OK for development
     admin_host: str = "0.0.0.0"
     admin_port: int = 8001
     
@@ -36,7 +35,7 @@ class Settings(BaseSettings):
     site_title: str = "Zero X Infinity Admin"
     site_icon: str = "https://raw.githubusercontent.com/gjwang/zero_x_infinity/main/docs/assets/logo.png"
     
-    # Default admin credentials
+    # Default admin credentials - OK for development
     default_admin_username: str = "admin"
     default_admin_password: str = "admin123"
 
