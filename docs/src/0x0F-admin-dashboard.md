@@ -86,32 +86,47 @@ Build an admin dashboard for exchange operations using **FastAPI Amis Admin + Fa
 
 ## 4. Implementation Plan
 
-### Phase 1: Setup (Day 1)
+### Phase 1: MVP - Config Management
 
-1. Create `admin/` Python project
-2. Install fastapi-amis-admin, fastapi-user-auth
-3. Connect to existing PostgreSQL
-4. Basic admin login
+**Scope**: Basic login + config CRUD (Asset, Symbol, VIP)
 
-### Phase 2: Core Modules (Day 2-3)
+#### Step 1: Project Setup
+```bash
+mkdir admin && cd admin
+python -m venv venv && source venv/bin/activate
+pip install fastapi-amis-admin fastapi-user-auth sqlalchemy asyncpg
+```
 
-1. User management CRUD
-2. Balance/Asset viewer
-3. Withdrawal review workflow
-4. Fee config editor
+#### Step 2: Database Connection
+- Connect to existing PostgreSQL (`zero_x_infinity` database)
+- Reuse existing tables: `assets_tb`, `symbols_tb`, `users_tb`
 
-### Phase 3: Monitoring (Day 4)
+#### Step 3: Admin CRUD
+| Model | Table | Operations |
+|-------|-------|------------|
+| Asset | `assets_tb` | List, Create, Update |
+| Symbol | `symbols_tb` | List, Create, Update |
+| VIP Level | `vip_levels_tb` | List, Create, Update |
 
-1. TDengine read-only integration
-2. Real-time trading dashboard
-3. System health dashboard
+#### Step 4: Admin Auth
+- Default super admin account
+- Login/Logout UI
 
-### Phase 4: Security (Day 5)
+#### Deliverables
+- [ ] Admin login at `http://localhost:8001/admin`
+- [ ] Asset CRUD
+- [ ] Symbol CRUD
+- [ ] VIP Level CRUD
 
-1. RBAC role setup
-2. Audit logging
-3. Rate limiting
-4. IP whitelist
+---
+
+### Future Phases (Not in MVP)
+
+| Phase | Content |
+|-------|---------|
+| Phase 2 | User management, balance viewer |
+| Phase 3 | TDengine monitoring |
+| Phase 4 | Full RBAC, audit logs |
 
 ---
 
