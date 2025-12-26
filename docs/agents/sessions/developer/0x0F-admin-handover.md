@@ -118,6 +118,12 @@ mkdir admin && cd admin
 python -m venv venv && source venv/bin/activate
 pip install fastapi-amis-admin fastapi-user-auth sqlalchemy asyncpg
 
+### UX-09: Default Descending Sorting (CRITICAL)
+
+**Requirement**: All list views must default to **descending order** (newest items first).
+**Reason**: Recent activity is usually most relevant.
+**Implementation**: Set `ordering = [Model.pk.desc()]` in `ModelAdmin` classes.
+
 # 3. 参考设计文档
 docs/src/0x0F-admin-dashboard.md
 ```

@@ -27,6 +27,9 @@ class AuditLogAdmin(admin.ModelAdmin):
         AdminAuditLog.created_at,
     ]
     
+    # Default ordering descending (UX-09)
+    ordering = [AdminAuditLog.id.desc()]
+    
     # Search and filter
     search_fields = [AdminAuditLog.admin_username, AdminAuditLog.path, AdminAuditLog.entity_type]
     

@@ -22,6 +22,9 @@ class VIPLevelAdmin(admin.ModelAdmin):
         VIPLevel.description,
     ]
     
+    # Default ordering descending (UX-09)
+    ordering = [VIPLevel.level.desc()]
+    
     # Disable bulk operations
     enable_bulk_create = False
     

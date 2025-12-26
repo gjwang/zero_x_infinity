@@ -25,6 +25,9 @@ class AssetAdmin(admin.ModelAdmin):
         Asset.created_at,
     ]
     
+    # Default ordering descending (UX-09)
+    ordering = [Asset.asset_id.desc()]
+    
     # Search fields
     search_fields = [Asset.asset, Asset.name]
     

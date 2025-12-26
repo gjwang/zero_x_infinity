@@ -28,6 +28,9 @@ class SymbolAdmin(admin.ModelAdmin):
         Symbol.created_at,
     ]
     
+    # Default ordering descending (UX-09)
+    ordering = [Symbol.symbol_id.desc()]
+    
     # Search fields
     search_fields = [Symbol.symbol]
     

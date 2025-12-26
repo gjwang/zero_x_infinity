@@ -413,6 +413,14 @@ def serialize_status(self, status: int, _info):
 
 ---
 
+### 6.9 Default Descending Sorting (UX-09)
+
+**Requirement**: All list views must default to **descending order** (newest items first).
+**Reason**: Admins usually want to see recent activity or newly created entities.
+**Implementation**: Set `ordering = [Model.pk.desc()]` in `ModelAdmin` classes.
+
+---
+
 ### UX Priority Implementation
 
 | Feature | Priority | Phase |
@@ -420,6 +428,7 @@ def serialize_status(self, status: int, _info):
 | **UX-06 Base≠Quote** | 🔴 P0 | **MVP** (blocking bug) |
 | **UX-07 ID Auto-Gen** | 🔴 P0 | **MVP** (standard practice) |
 | **UX-08 Status Strings** | 🔴 P0 | **MVP** (usability) |
+| **UX-09 Default Sorting** | 🔴 P0 | **MVP** (usability) |
 | UX-01 Asset display | P1 | Post-MVP |
 | UX-02 Fee format | P1 | Post-MVP |
 | UX-03 Confirm dialog | P1 | Post-MVP |
