@@ -6,11 +6,14 @@ use axum::{
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
+use utoipa::ToSchema;
 
 use crate::pipeline::OrderAction;
 
 use super::state::AppState;
-use super::types::{ApiResponse, CancelOrderRequest, ClientOrder, OrderResponseData, error_codes};
+use super::types::{
+    ApiResponse, CancelOrderRequest, ClientOrder, DepthApiData, OrderResponseData, error_codes,
+};
 
 use crate::symbol_manager::SymbolManager;
 
@@ -122,7 +125,20 @@ fn format_qty_internal(value: u64, decimals: u32, display_decimals: u32) -> Stri
 
 /// Create order endpoint
 ///
-/// POST /api/v1/create_order
+/// POST /api/v1/private/order
+#[utoipa::path(
+    post,
+    path = "/api/v1/private/order",
+    request_body(content = String, description = "Order request JSON", content_type = "application/json"),
+    responses(
+        (status = 202, description = "Order accepted", content_type = "application/json"),
+        (status = 400, description = "Invalid parameters"),
+        (status = 401, description = "Authentication failed"),
+        (status = 503, description = "Service unavailable")
+    ),
+    security(("ed25519_auth" = [])),
+    tag = "Trading"
+)]
 pub async fn create_order(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<crate::api_auth::AuthenticatedUser>,
@@ -194,7 +210,20 @@ pub async fn create_order(
 
 /// Cancel order endpoint
 ///
-/// POST /api/v1/cancel_order
+/// POST /api/v1/private/cancel
+#[utoipa::path(
+    post,
+    path = "/api/v1/private/cancel",
+    request_body(content = String, description = "Cancel request with order_id", content_type = "application/json"),
+    responses(
+        (status = 200, description = "Cancel request accepted", content_type = "application/json"),
+        (status = 400, description = "Invalid order ID"),
+        (status = 401, description = "Authentication failed"),
+        (status = 503, description = "Service unavailable")
+    ),
+    security(("ed25519_auth" = [])),
+    tag = "Trading"
+)]
 pub async fn cancel_order(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<crate::api_auth::AuthenticatedUser>,
@@ -253,6 +282,19 @@ pub async fn cancel_order(
 /// POST /api/v1/private/transfer
 ///
 /// Uses FSM-based transfer when coordinator is available, otherwise falls back to legacy.
+#[utoipa::path(
+    post,
+    path = "/api/v1/private/transfer",
+    request_body(content = String, description = "Transfer request: from, to, asset, amount", content_type = "application/json"),
+    responses(
+        (status = 200, description = "Transfer completed", content_type = "application/json"),
+        (status = 400, description = "Invalid parameters or insufficient balance"),
+        (status = 401, description = "Authentication failed"),
+        (status = 503, description = "Service unavailable")
+    ),
+    security(("ed25519_auth" = [])),
+    tag = "Transfer"
+)]
 pub async fn create_transfer(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<crate::api_auth::AuthenticatedUser>,
@@ -369,7 +411,22 @@ async fn create_transfer_fsm_handler(
 
 /// Get transfer status endpoint
 ///
-/// GET /api/v1/private/transfer/:req_id
+/// GET /api/v1/private/transfer/{req_id}
+#[utoipa::path(
+    get,
+    path = "/api/v1/private/transfer/{req_id}",
+    params(
+        ("req_id" = String, Path, description = "Transfer request ID (ULID format)")
+    ),
+    responses(
+        (status = 200, description = "Transfer status", content_type = "application/json"),
+        (status = 400, description = "Invalid request ID format"),
+        (status = 404, description = "Transfer not found"),
+        (status = 503, description = "Service unavailable")
+    ),
+    security(("ed25519_auth" = [])),
+    tag = "Transfer"
+)]
 pub async fn get_transfer(
     State(state): State<Arc<AppState>>,
     Path(req_id_str): Path<String>,
@@ -449,7 +506,21 @@ fn now_ms() -> u64 {
 
 /// Get single order by ID
 ///
-/// GET /api/v1/order/:order_id
+/// GET /api/v1/private/order/{order_id}
+#[utoipa::path(
+    get,
+    path = "/api/v1/private/order/{order_id}",
+    params(
+        ("order_id" = u64, Path, description = "Order ID")
+    ),
+    responses(
+        (status = 200, description = "Order details", content_type = "application/json"),
+        (status = 404, description = "Order not found"),
+        (status = 503, description = "Service unavailable")
+    ),
+    security(("ed25519_auth" = [])),
+    tag = "Account"
+)]
 pub async fn get_order(
     State(state): State<Arc<AppState>>,
     Path(order_id): Path<u64>,
@@ -500,7 +571,20 @@ pub async fn get_order(
 
 /// Get orders list
 ///
-/// GET /api/v1/orders?user_id=1001&limit=10
+/// GET /api/v1/private/orders?limit=10
+#[utoipa::path(
+    get,
+    path = "/api/v1/private/orders",
+    params(
+        ("limit" = Option<u32>, Query, description = "Number of orders (default: 10)")
+    ),
+    responses(
+        (status = 200, description = "List of user orders", content_type = "application/json"),
+        (status = 503, description = "Service unavailable")
+    ),
+    security(("ed25519_auth" = [])),
+    tag = "Account"
+)]
 pub async fn get_orders(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<crate::api_auth::AuthenticatedUser>,
@@ -554,7 +638,20 @@ pub async fn get_orders(
 
 /// Get trades list
 ///
-/// GET /api/v1/trades?limit=100
+/// GET /api/v1/private/trades?limit=100
+#[utoipa::path(
+    get,
+    path = "/api/v1/private/trades",
+    params(
+        ("limit" = Option<u32>, Query, description = "Number of trades (default: 100)")
+    ),
+    responses(
+        (status = 200, description = "List of trades", content_type = "application/json"),
+        (status = 503, description = "Service unavailable")
+    ),
+    security(("ed25519_auth" = [])),
+    tag = "Account"
+)]
 pub async fn get_trades(
     State(state): State<Arc<AppState>>,
     Query(params): Query<std::collections::HashMap<String, String>>,
@@ -604,7 +701,22 @@ pub async fn get_trades(
 
 /// Get user balance
 ///
-/// GET /api/v1/balances?user_id=1001&asset_id=1
+/// GET /api/v1/private/balances?asset_id=1
+#[utoipa::path(
+    get,
+    path = "/api/v1/private/balances",
+    params(
+        ("asset_id" = u32, Query, description = "Asset ID")
+    ),
+    responses(
+        (status = 200, description = "Balance details", content_type = "application/json"),
+        (status = 400, description = "Missing asset_id"),
+        (status = 404, description = "Balance not found"),
+        (status = 503, description = "Service unavailable")
+    ),
+    security(("ed25519_auth" = [])),
+    tag = "Account"
+)]
 pub async fn get_balances(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<crate::api_auth::AuthenticatedUser>,
@@ -674,6 +786,16 @@ pub async fn get_balances(
 ///
 /// GET /api/v1/private/balances/all
 /// Returns balances from PostgreSQL (real source of truth)
+#[utoipa::path(
+    get,
+    path = "/api/v1/private/balances/all",
+    responses(
+        (status = 200, description = "All user balances", content_type = "application/json"),
+        (status = 503, description = "Service unavailable")
+    ),
+    security(("ed25519_auth" = [])),
+    tag = "Account"
+)]
 pub async fn get_all_balances(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<crate::api_auth::AuthenticatedUser>,
@@ -714,6 +836,20 @@ pub async fn get_all_balances(
 /// Get K-Line data
 ///
 /// GET /api/v1/klines?interval=1m&limit=100
+#[utoipa::path(
+    get,
+    path = "/api/v1/public/klines",
+    params(
+        ("interval" = Option<String>, Query, description = "K-line interval: 1m, 5m, 15m, 30m, 1h, 1d"),
+        ("limit" = Option<u32>, Query, description = "Number of K-lines (default: 100, max: 1000)")
+    ),
+    responses(
+        (status = 200, description = "K-line candlestick data", content_type = "application/json"),
+        (status = 400, description = "Invalid interval parameter"),
+        (status = 503, description = "Service unavailable")
+    ),
+    tag = "Market Data"
+)]
 pub async fn get_klines(
     State(state): State<Arc<AppState>>,
     Query(params): Query<std::collections::HashMap<String, String>>,
@@ -779,6 +915,19 @@ pub async fn get_klines(
 /// Get order book depth
 ///
 /// GET /api/v1/depth?symbol=BTC_USDT&limit=20
+#[utoipa::path(
+    get,
+    path = "/api/v1/public/depth",
+    params(
+        ("symbol" = Option<String>, Query, description = "Trading pair (e.g., BTC_USDT)"),
+        ("limit" = Option<u32>, Query, description = "Depth levels (default: 20, max: 100)")
+    ),
+    responses(
+        (status = 200, description = "Order book depth", body = DepthApiData, content_type = "application/json"),
+        (status = 503, description = "Service unavailable")
+    ),
+    tag = "Market Data"
+)]
 pub async fn get_depth(
     State(state): State<Arc<AppState>>,
     Query(params): Query<std::collections::HashMap<String, String>>,
@@ -955,11 +1104,30 @@ mod tests {
 // ============================================================================
 
 /// Health check response data
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, ToSchema)]
 pub struct HealthResponse {
     /// Server timestamp in milliseconds
+    #[schema(example = 1703494800000_u64)]
     pub timestamp_ms: u64,
 }
+
+/// Health check endpoint
+///
+/// Returns service health status with server timestamp.
+/// Internally checks all dependencies (TDengine, etc.) but does NOT
+/// expose any internal details in the response.
+///
+/// - Healthy: 200 OK + {code: 0, data: {timestamp_ms}}
+/// - Unhealthy: 503 Service Unavailable + {code: 503, msg: "unavailable"}
+#[utoipa::path(
+    get,
+    path = "/api/v1/health",
+    responses(
+        (status = 200, description = "Service healthy", body = HealthResponse, content_type = "application/json"),
+        (status = 503, description = "Service unavailable")
+    ),
+    tag = "System"
+)]
 
 /// Health check endpoint
 ///
@@ -1029,33 +1197,64 @@ pub async fn health_check(
 // ============================================================================
 
 /// Asset API response data
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, ToSchema)]
 pub struct AssetApiData {
+    /// Asset ID
+    #[schema(example = 1)]
     pub asset_id: i32,
+    /// Asset symbol (e.g., BTC)
+    #[schema(example = "BTC")]
     pub asset: String,
+    /// Asset full name
+    #[schema(example = "Bitcoin")]
     pub name: String,
+    /// Decimal precision
+    #[schema(example = 8)]
     pub decimals: i16,
+    /// Can deposit
     pub can_deposit: bool,
+    /// Can withdraw
     pub can_withdraw: bool,
+    /// Can trade
     pub can_trade: bool,
 }
 
 /// Symbol API response data
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, ToSchema)]
 pub struct SymbolApiData {
+    /// Symbol ID
+    #[schema(example = 1)]
     pub symbol_id: i32,
+    /// Symbol name (e.g., BTC_USDT)
+    #[schema(example = "BTC_USDT")]
     pub symbol: String,
+    /// Base asset symbol
+    #[schema(example = "BTC")]
     pub base_asset: String,
+    /// Quote asset symbol
+    #[schema(example = "USDT")]
     pub quote_asset: String,
+    /// Price decimal precision
     pub price_decimals: i16,
+    /// Quantity decimal precision
     pub qty_decimals: i16,
+    /// Is trading enabled
     pub is_tradable: bool,
+    /// Is visible in UI
     pub is_visible: bool,
 }
 
 /// Get all assets
 ///
 /// GET /api/v1/assets
+#[utoipa::path(
+    get,
+    path = "/api/v1/public/assets",
+    responses(
+        (status = 200, description = "List of all assets", body = ApiResponse<Vec<AssetApiData>>)
+    ),
+    tag = "Market Data"
+)]
 pub async fn get_assets(
     State(state): State<Arc<AppState>>,
 ) -> Result<(StatusCode, Json<ApiResponse<Vec<AssetApiData>>>), (StatusCode, Json<ApiResponse<()>>)>
@@ -1080,6 +1279,14 @@ pub async fn get_assets(
 /// Get all symbols (trading pairs)
 ///
 /// GET /api/v1/symbols
+#[utoipa::path(
+    get,
+    path = "/api/v1/public/symbols",
+    responses(
+        (status = 200, description = "List of all trading pairs", body = ApiResponse<Vec<SymbolApiData>>)
+    ),
+    tag = "Market Data"
+)]
 pub async fn get_symbols(
     State(state): State<Arc<AppState>>,
 ) -> Result<(StatusCode, Json<ApiResponse<Vec<SymbolApiData>>>), (StatusCode, Json<ApiResponse<()>>)>
@@ -1122,12 +1329,29 @@ pub async fn get_symbols(
 // ============================================================================
 
 /// Exchange info response data
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, ToSchema)]
 pub struct ExchangeInfoData {
+    /// All available assets
     pub assets: Vec<AssetApiData>,
+    /// All trading pairs
     pub symbols: Vec<SymbolApiData>,
+    /// Server timestamp in milliseconds
+    #[schema(example = 1703494800000_u64)]
     pub server_time: u64,
 }
+
+/// Get exchange info (combined assets and symbols)
+///
+/// GET /api/v1/exchange_info
+/// Returns all assets and symbols in a single response.
+#[utoipa::path(
+    get,
+    path = "/api/v1/public/exchange_info",
+    responses(
+        (status = 200, description = "Exchange metadata", body = ApiResponse<ExchangeInfoData>)
+    ),
+    tag = "Market Data"
+)]
 
 /// Get exchange info (combined assets and symbols)
 ///
