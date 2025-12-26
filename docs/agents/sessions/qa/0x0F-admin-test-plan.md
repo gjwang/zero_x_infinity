@@ -95,6 +95,9 @@ enum SymbolStatus {
 | TC-EDGE-11 | symbol | `"BTC USDT"` (space) | Reject | **P1** |
 | TC-EDGE-12 | symbol | `"A"*256` (overflow) | Reject | **P0** |
 | TC-EDGE-13 | base_asset | `"NOTEXIST"` | Reject (FK) | **P0** |
+| TC-EDGE-14 | symbol | `"BTC_💎_USDT"` (unicode) | Reject | **P1** |
+| TC-EDGE-15 | name | `"A"*1000` (超长) | Reject | **P1** |
+| TC-EDGE-16 | vip_discount | `101%` | Reject | **P1** |
 
 ### State Machine Tests
 
@@ -105,6 +108,7 @@ enum SymbolStatus {
 | TC-STATE-03 | Delete VIP Level 0 | Reject (reserved) | **P1** |
 | TC-STATE-04 | Duplicate Symbol name | Reject (unique) | **P0** |
 | TC-STATE-05 | Duplicate Asset name | Reject (unique) | **P0** |
+| TC-STATE-06 | Symbol CloseOnly → 只能撤单 | New order rejected, cancel OK | **P0** |
 
 ### 🚨 Immutability Tests (CRITICAL)
 
@@ -169,6 +173,9 @@ enum SymbolStatus {
 | TC-CORE-10 | VIP Create | Set level, discount → Submit | VIP in DB | **P0** |
 | TC-CORE-11 | VIP Update | Edit discount → Save | Changes in DB | **P0** |
 | TC-CORE-12 | VIP Default | Check Level 0 | Exists, 100% fee | **P0** |
+| TC-CORE-13 | Symbol CloseOnly | Set status=2 → Cancel order | Cancel succeeds | **P0** |
+| TC-CORE-14 | CloseOnly→Trading | CloseOnly→Trading → New order | Order accepted | **P0** |
+| TC-CORE-15 | VIP Level 跳跃 | Create Level 5 (skip 2,3,4) | Allowed or rejected? | **P1** |
 
 ### Hot Reload Tests
 
@@ -187,6 +194,8 @@ enum SymbolStatus {
 | TC-REG-02 | Matching engine throughput | 1.3M/s | **P1** |
 | TC-REG-03 | All existing CI tests pass | 100% | **P0** |
 | TC-REG-04 | TDengine writes unaffected | Normal | **P1** |
+| TC-REG-05 | Audit log 查询性能 (10000条) | <1s | **P1** |
+| TC-REG-06 | Admin UI 页面加载 | <2s | **P2** |
 
 ---
 
@@ -204,6 +213,8 @@ enum SymbolStatus {
 | TC-AUTH-04 | Session timeout | Force re-login | **P1** |
 | TC-AUTH-05 | Default password first login | Force change | **P0** |
 | TC-AUTH-06 | Password in logs | Never logged | **P0** |
+| TC-AUTH-07 | 敏感操作重认证 (Asset disable) | 需重新输入密码 | **P0** |
+| TC-AUTH-08 | 并发 Session 踢出 | 第2次登录踢掉第1次 | **P1** |
 
 ### RBAC Tests
 
@@ -225,6 +236,7 @@ enum SymbolStatus {
 | TC-AUDIT-04 | Audit log old_value/new_value | Correct JSON | **P1** |
 | TC-AUDIT-05 | Audit log deletion attempt | **MUST FAIL** | **P0** |
 | TC-AUDIT-06 | Audit log tampering | **MUST FAIL** | **P0** |
+| TC-AUDIT-07 | X-Forwarded-For IP 伪造 | 记录真实 IP (非伪造) | **P0** |
 
 ### Data Protection Tests
 
@@ -235,6 +247,7 @@ enum SymbolStatus {
 | TC-DATA-03 | JWT secret | Env var, not code | **P0** |
 | TC-DATA-04 | Error responses | No internal details | **P1** |
 | TC-DATA-05 | PII in audit logs | Masked if sensitive | **P1** |
+| TC-SEC-01 | CSRF 防护 | 无 CSRF token 的 POST → Reject | **P0** |
 
 ---
 
@@ -327,8 +340,8 @@ python -m pytest admin/tests/ -v
 
 ### QA Sign-off Conditions
 
-- [ ] All P0 tests pass (52 tests, incl. 6 Immutability 🔴)
-- [ ] All P1 tests pass or exceptions documented (18 tests)
+- [ ] All P0 tests pass (68 tests, incl. 6 Immutability 🔴)
+- [ ] All P1 tests pass or exceptions documented (23 tests)
 - [x] 6 Design gaps clarified by Architect ✅
 - [ ] Security review completed (Agent C)
 - [ ] No regression in existing CI
@@ -347,13 +360,24 @@ python -m pytest admin/tests/ -v
 
 ## 📊 Test Count Summary
 
+> Multi-Agent Review 新增 15 个测试用例
+
 | Category | P0 | P1 | P2 | Total |
 |----------|----|----|----|-------|
-| Edge Cases | 18 | 7 | 2 | 27 |
+| Edge Cases | 14 | 6 | 0 | 20 |
+| State Machine | 4 | 2 | 0 | 6 |
 | **Immutability** 🔴 | **6** | 0 | 0 | **6** |
-| Core Flow | 16 | 4 | 0 | 20 |
-| Security | 12 | 7 | 0 | 19 |
-| **Total** | **52** | **18** | **2** | **72** |
+| Concurrency | 0 | 0 | 2 | 2 |
+| Injection | 1 | 2 | 0 | 3 |
+| Precision | 3 | 0 | 0 | 3 |
+| Core Flow | 17 | 1 | 0 | 18 |
+| Hot Reload | 4 | 0 | 0 | 4 |
+| Regression | 1 | 4 | 1 | 6 |
+| Authentication | 6 | 2 | 0 | 8 |
+| RBAC | 2 | 3 | 0 | 5 |
+| Audit Log | 6 | 1 | 0 | 7 |
+| Data Protection | 4 | 2 | 0 | 6 |
+| **Total** | **68** | **23** | **3** | **94** |
 
 ---
 
