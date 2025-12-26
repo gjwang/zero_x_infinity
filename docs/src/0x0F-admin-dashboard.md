@@ -112,11 +112,18 @@ pip install fastapi-amis-admin fastapi-user-auth sqlalchemy asyncpg
 - Default super admin account
 - Login/Logout UI
 
-#### Deliverables
-- [ ] Admin login at `http://localhost:8001/admin`
-- [ ] Asset CRUD
-- [ ] Symbol CRUD
-- [ ] VIP Level CRUD
+#### Acceptance Criteria
+
+| ID | Criteria | Verify |
+|----|---------|--------|
+| AC-01 | Admin 可登录 `http://localhost:8001/admin` | 浏览器访问 |
+| AC-02 | 可新增 Asset (name, symbol, decimals) | UI 操作 + DB 验证 |
+| AC-03 | 可编辑 Asset | UI 操作 + DB 验证 |
+| AC-04 | Gateway 热加载 Asset 配置 | 无需重启验证 |
+| AC-05 | 可新增 Symbol (base, quote, fees) | UI 操作 + DB 验证 |
+| AC-06 | 可编辑 Symbol | UI 操作 + DB 验证 |
+| AC-07 | Gateway 热加载 Symbol 配置 | 无需重启验证 |
+| AC-08 | 可新增/编辑 VIP Level | UI 操作 + DB 验证 |
 
 ---
 
