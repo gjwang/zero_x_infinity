@@ -57,10 +57,10 @@ class AssetCreateSchema(BaseModel):
         except ValueError:
             raise ValueError(f"Status must be ACTIVE or DISABLED, got: {v}")
     
-    # @field_serializer('status')
-    # def serialize_status(self, value: AssetStatus) -> str:
-    #     """Display status as string (UX-08)"""
-    #     return value.name  # "ACTIVE" or "DISABLED"
+    @field_serializer('status')
+    def serialize_status(self, value: AssetStatus) -> str:
+        """Display status as string (UX-08)"""
+        return value.name  # "ACTIVE" or "DISABLED"
     
     asset_flags: Annotated[int, Field(
         default=7,
@@ -105,10 +105,10 @@ class AssetUpdateSchema(BaseModel):
         except ValueError:
             raise ValueError(f"Status must be ACTIVE or DISABLED, got: {v}")
     
-    # @field_serializer('status')
-    # def serialize_status(self, value: AssetStatus) -> str:
-    #     """Display status as string (UX-08)"""
-    #     return value.name
+    @field_serializer('status')
+    def serialize_status(self, value: AssetStatus) -> str:
+        """Display status as string (UX-08)"""
+        return value.name
     
     asset_flags: Annotated[int, Field(
         ge=0,

@@ -76,10 +76,10 @@ class SymbolCreateSchema(BaseModel):
         except ValueError:
             raise ValueError(f"Status must be ONLINE, OFFLINE, or CLOSE_ONLY, got: {v}")
     
-    # @field_serializer('status')
-    # def serialize_status(self, value: SymbolStatus) -> str:
-    #     """Display status as string (UX-08)"""
-    #     return value.name  # "ONLINE", "OFFLINE", or "CLOSE_ONLY"
+    @field_serializer('status')
+    def serialize_status(self, value: SymbolStatus) -> str:
+        """Display status as string (UX-08)"""
+        return value.name  # "ONLINE", "OFFLINE", or "CLOSE_ONLY"
     
     symbol_flags: Annotated[int, Field(
         default=15,
@@ -147,10 +147,10 @@ class SymbolUpdateSchema(BaseModel):
         except ValueError:
             raise ValueError(f"Status must be ONLINE, OFFLINE, or CLOSE_ONLY, got: {v}")
     
-    # @field_serializer('status')
-    # def serialize_status(self, value: SymbolStatus) -> str:
-    #     """Display status as string (UX-08)"""
-    #     return value.name
+    @field_serializer('status')
+    def serialize_status(self, value: SymbolStatus) -> str:
+        """Display status as string (UX-08)"""
+        return value.name
     
     symbol_flags: Annotated[int, Field(
         ge=0,

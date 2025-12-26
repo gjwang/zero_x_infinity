@@ -68,4 +68,4 @@ class TestUX08StatusHandling:
                 symbol="BTC_USDT", base_asset_id=1, quote_asset_id=2, 
                 price_decimals=2, qty_decimals=8, status=99
             )
-        assert "Status must be a string" in str(exc.value)
+        assert "Status must be ONLINE, OFFLINE, or CLOSE_ONLY" in str(exc.value)
