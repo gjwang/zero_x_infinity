@@ -157,7 +157,38 @@ pip install fastapi-amis-admin fastapi-user-auth sqlalchemy asyncpg
 >
 > 适用于：Symbol 下架、Asset 禁用等不可撤销操作
 
+#### 命名一致性 (与现有代码)
+
+| 实体 | 字段 | 值 |
+|------|------|-----|
+| Asset | `status` | 0=disabled, 1=active |
+| Symbol | `status` | 0=offline, 1=online, 2=maintenance |
+
+> ⚠️ 实现时必须与 `migrations/001_init_schema.sql` 保持一致
+
 ---
+
+## 5. E2E 测试与交付清单
+
+### 测试脚本
+
+| 脚本 | 功能 |
+|------|------|
+| `test_admin_login.py` | Admin 登录/登出 |
+| `test_asset_crud.py` | Asset 增删改查 + 禁用 |
+| `test_symbol_crud.py` | Symbol 增删改查 + 下线 |
+| `test_input_validation.py` | 非法输入拒绝 |
+| `test_hot_reload.py` | Gateway 热加载验证 |
+
+### 交付清单
+
+| 序号 | 交付物 | 验收方式 |
+|------|--------|----------|
+| 1 | `admin/` 项目代码 | Code Review |
+| 2 | Admin UI 可访问 | 浏览器访问 `localhost:8001` |
+| 3 | E2E 测试全部通过 | `pytest admin/tests/ -v` |
+| 4 | 操作日志可查询 | Admin UI 审计日志页面 |
+| 5 | Gateway 热加载工作 | 改配置后无需重启验证 |
 
 ### Future Phases (Not in MVP)
 
