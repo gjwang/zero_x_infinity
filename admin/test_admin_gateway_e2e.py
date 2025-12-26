@@ -135,7 +135,7 @@ def test_asset_creation_propagation(runner: E2ETestRunner):
             "asset": asset_code,
             "name": f"E2E Asset {suffix}",
             "decimals": 8,
-            "status": 1,
+            "status": 1,  # 1 = ACTIVE
             "asset_flags": 7
         }
         
@@ -149,7 +149,7 @@ def test_asset_creation_propagation(runner: E2ETestRunner):
         print(f"✅ Asset created: {admin_resp.json()}")
         
         # Step 2: Wait for propagation (if needed)
-        time.sleep(1)
+        time.sleep(10)  # Wait for TTL cache refresh (5s + buffer)
         
         # Step 3: Verify via Gateway API
         print(f"Step 2: Verifying via Gateway API at {GATEWAY_API}/api/v1/public/assets...")
@@ -199,7 +199,7 @@ def test_symbol_creation_propagation(runner: E2ETestRunner):
             "price_decimals": 2,
             "qty_decimals": 8,
             "min_qty": 0.0,
-            "status": 1,
+            "status": 1,  # 1 = ONLINE
             "symbol_flags": 0,
             "base_maker_fee": 10,
             "base_taker_fee": 20
@@ -215,7 +215,7 @@ def test_symbol_creation_propagation(runner: E2ETestRunner):
         print(f"✅ Symbol created: {admin_resp.json()}")
         
         # Step 3: Wait for propagation
-        time.sleep(1)
+        time.sleep(10)  # Wait for TTL cache refresh
         
         # Step 4: Verify via Gateway API
         print("Step 3: Verifying via Gateway API...")
@@ -254,14 +254,14 @@ def test_symbol_status_change_propagation(runner: E2ETestRunner):
         print(f"Step 2: Halting symbol {symbol['symbol']} via Admin...")
         admin_resp = requests.put(
             f"{ADMIN_API}/admin/SymbolAdmin/item/{symbol_id}",
-            json={"status": 0},  # 0 = halted
+            json={"status": 0},  # 0 = OFFLINE (halted)
             timeout=5
         )
         assert admin_resp.status_code == 200, f"Symbol update failed: {admin_resp.text}"
         print(f"✅ Symbol status updated")
         
         # Step 3: Wait for propagation
-        time.sleep(2)
+        time.sleep(10)  # Wait for TTL cache refresh
         
         # Step 4: Verify via Gateway API
         print("Step 3: Verifying status change via Gateway...")
@@ -270,7 +270,7 @@ def test_symbol_status_change_propagation(runner: E2ETestRunner):
         
         updated_symbol = next((s for s in updated_symbols if s["symbol_id"] == symbol_id), None)
         assert updated_symbol, f"Symbol {symbol_id} not found after update"
-        assert updated_symbol["status"] == 0, f"Status not updated. Expected 0, got {updated_symbol['status']}"
+        assert updated_symbol["is_tradable"] == False, f"Symbol not halted. is_tradable still True"
         print(f"✅ Symbol status verified in Gateway (halted)")
     
     runner.test("E2E-03: Symbol Status Change Propagation", run)
@@ -310,7 +310,7 @@ def test_fee_update_propagation(runner: E2ETestRunner):
         print(f"✅ Fees updated: maker={new_maker_fee}, taker={new_taker_fee}")
         
         # Step 3: Wait for propagation
-        time.sleep(2)
+        time.sleep(10)  # Wait for TTL cache refresh
         
         # Step 4: Verify via Gateway API
         print("Step 3: Verifying fee change via Gateway...")

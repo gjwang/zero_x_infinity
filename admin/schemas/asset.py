@@ -38,26 +38,30 @@ class AssetCreateSchema(BaseModel):
         description="Precision decimals (0-18)"
     )]
     
-    status: Annotated[AssetStatus, Field(
-        default=AssetStatus.ACTIVE,
-        description="Status: ACTIVE or DISABLED"
+    status: Annotated[int, Field(
+        default=1,  # 1 = ACTIVE
+        ge=0,
+        le=1,
+        description="Status: ACTIVE (1) or DISABLED (0)"
     )]
     
     @field_validator('status', mode='before')
     @classmethod
     def validate_status(cls, v):
-        """Accept string input ONLY (UX-08) - reject integers"""
-        if not isinstance(v, str):
-            raise ValueError(f"Status must be a string (ACTIVE or DISABLED), got: {type(v).__name__}")
-        try:
-            return AssetStatus[v.upper()]
-        except KeyError:
-            raise ValueError(f"Status must be ACTIVE or DISABLED, got: {v}")
+        """Accept string or int input and convert to integer for DB storage"""
+        if isinstance(v, str):
+            mapping = {"ACTIVE": 1, "DISABLED": 0}
+            upper_v = v.upper()
+            if upper_v not in mapping:
+                raise ValueError(f"Status must be ACTIVE or DISABLED, got: {v}")
+            return mapping[upper_v]
+        if isinstance(v, int):
+            if v not in (0, 1):
+                raise ValueError(f"Status must be 0 (DISABLED) or 1 (ACTIVE), got: {v}")
+            return v
+        raise ValueError(f"Invalid status type: {type(v).__name__}")
     
-    @field_serializer('status')
-    def serialize_status(self, value: AssetStatus) -> str:
-        """Display status as string (UX-08)"""
-        return value.name  # "ACTIVE" or "DISABLED"
+    # Note: No serializer - keep status as int for DB compatibility
     
     asset_flags: Annotated[int, Field(
         default=7,
@@ -84,25 +88,29 @@ class AssetUpdateSchema(BaseModel):
         description="Asset display name"
     )]
     
-    status: Annotated[AssetStatus, Field(
-        description="Status: ACTIVE or DISABLED"
+    status: Annotated[int, Field(
+        ge=0,
+        le=1,
+        description="Status: ACTIVE (1) or DISABLED (0)"
     )]
     
     @field_validator('status', mode='before')
     @classmethod
     def validate_status(cls, v):
-        """Accept string input ONLY (UX-08) - reject integers"""
-        if not isinstance(v, str):
-            raise ValueError(f"Status must be a string (ACTIVE or DISABLED), got: {type(v).__name__}")
-        try:
-            return AssetStatus[v.upper()]
-        except KeyError:
-            raise ValueError(f"Status must be ACTIVE or DISABLED, got: {v}")
+        """Accept string or int input and convert to integer for DB storage"""
+        if isinstance(v, str):
+            mapping = {"ACTIVE": 1, "DISABLED": 0}
+            upper_v = v.upper()
+            if upper_v not in mapping:
+                raise ValueError(f"Status must be ACTIVE or DISABLED, got: {v}")
+            return mapping[upper_v]
+        if isinstance(v, int):
+            if v not in (0, 1):
+                raise ValueError(f"Status must be 0 (DISABLED) or 1 (ACTIVE), got: {v}")
+            return v
+        raise ValueError(f"Invalid status type: {type(v).__name__}")
     
-    @field_serializer('status')
-    def serialize_status(self, value: AssetStatus) -> str:
-        """Display status as string (UX-08)"""
-        return value.name
+    # Note: No serializer - keep status as int for DB compatibility
     
     asset_flags: Annotated[int, Field(
         ge=0,

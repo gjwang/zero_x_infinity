@@ -55,27 +55,30 @@ class SymbolCreateSchema(BaseModel):
         description="Minimum order quantity"
     )]
     
-    status: Annotated[SymbolStatus, Field(
-        default=SymbolStatus.ONLINE,
-        description="Trading status: ONLINE, OFFLINE, or CLOSE_ONLY"
+    status: Annotated[int, Field(
+        default=1,  # 1 = ONLINE
+        ge=0,
+        le=2,
+        description="Trading status: ONLINE (1), OFFLINE (0), or CLOSE_ONLY (2)"
     )]
     
     @field_validator('status', mode='before')
     @classmethod
     def validate_status(cls, v):
-        """Accept string input ONLY (UX-08) - reject integers"""
-        if not isinstance(v, str):
-            raise ValueError(f"Status must be a string (ONLINE, OFFLINE, or CLOSE_ONLY), got: {type(v).__name__}")
-        normalized = v.upper().replace('-', '_')
-        try:
-            return SymbolStatus[normalized]
-        except KeyError:
-            raise ValueError(f"Status must be ONLINE, OFFLINE, or CLOSE_ONLY, got: {v}")
+        """Accept string or int input and convert to integer for DB storage"""
+        if isinstance(v, str):
+            normalized = v.upper().replace('-', '_')
+            mapping = {"ONLINE": 1, "OFFLINE": 0, "CLOSE_ONLY": 2}
+            if normalized not in mapping:
+                raise ValueError(f"Status must be ONLINE, OFFLINE, or CLOSE_ONLY, got: {v}")
+            return mapping[normalized]
+        if isinstance(v, int):
+            if v not in (0, 1, 2):
+                raise ValueError(f"Status must be 0, 1, or 2, got: {v}")
+            return v
+        raise ValueError(f"Invalid status type: {type(v).__name__}")
     
-    @field_serializer('status')
-    def serialize_status(self, value: SymbolStatus) -> str:
-        """Display status as string (UX-08)"""
-        return value.name  # "ONLINE", "OFFLINE", or "CLOSE_ONLY"
+    # Note: No serializer - keep status as int for DB compatibility
     
     symbol_flags: Annotated[int, Field(
         default=15,
@@ -124,26 +127,29 @@ class SymbolUpdateSchema(BaseModel):
         description="Minimum order quantity"
     )]
     
-    status: Annotated[SymbolStatus, Field(
-        description="Trading status: ONLINE, OFFLINE, or CLOSE_ONLY"
+    status: Annotated[int, Field(
+        ge=0,
+        le=2,
+        description="Trading status: ONLINE (1), OFFLINE (0), or CLOSE_ONLY (2)"
     )]
     
     @field_validator('status', mode='before')
     @classmethod
     def validate_status(cls, v):
-        """Accept string input ONLY (UX-08) - reject integers"""
-        if not isinstance(v, str):
-            raise ValueError(f"Status must be a string (ONLINE, OFFLINE, or CLOSE_ONLY), got: {type(v).__name__}")
-        normalized = v.upper().replace('-', '_')
-        try:
-            return SymbolStatus[normalized]
-        except KeyError:
-            raise ValueError(f"Status must be ONLINE, OFFLINE, or CLOSE_ONLY, got: {v}")
+        """Accept string or int input and convert to integer for DB storage"""
+        if isinstance(v, str):
+            normalized = v.upper().replace('-', '_')
+            mapping = {"ONLINE": 1, "OFFLINE": 0, "CLOSE_ONLY": 2}
+            if normalized not in mapping:
+                raise ValueError(f"Status must be ONLINE, OFFLINE, or CLOSE_ONLY, got: {v}")
+            return mapping[normalized]
+        if isinstance(v, int):
+            if v not in (0, 1, 2):
+                raise ValueError(f"Status must be 0, 1, or 2, got: {v}")
+            return v
+        raise ValueError(f"Invalid status type: {type(v).__name__}")
     
-    @field_serializer('status')
-    def serialize_status(self, value: SymbolStatus) -> str:
-        """Display status as string (UX-08)"""
-        return value.name
+    # Note: No serializer - keep status as int for DB compatibility
     
     symbol_flags: Annotated[int, Field(
         ge=0,

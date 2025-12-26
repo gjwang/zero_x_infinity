@@ -37,20 +37,3 @@ class AssetAdmin(admin.ModelAdmin):
     # Use optimized Pydantic schemas
     schema_create = AssetCreateSchema
     schema_update = AssetUpdateSchema
-
-    def error_execute_sql(self, request: object, error: Exception):
-        """Handle SQL/validation errors with proper JSON-serializable messages"""
-        import sys
-        import traceback
-        from fastapi import HTTPException
-        
-        # Log for debugging
-        print(f"DEBUG: Error caught in AssetAdmin: {type(error).__name__}: {error}")
-        traceback.print_exc(file=sys.stdout)
-        sys.stdout.flush()
-        
-        # Convert error to string to avoid "ValueError is not JSON serializable"
-        error_msg = str(error) if error else "Unknown error"
-        
-        # Raise HTTPException with string message (JSON-serializable)
-        raise HTTPException(status_code=422, detail=error_msg)
