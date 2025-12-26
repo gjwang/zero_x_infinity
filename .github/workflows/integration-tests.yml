@@ -665,11 +665,22 @@ jobs:
       - name: Set Binary Executable
         run: chmod +x target/release/zero_x_infinity
 
+      - name: Wait for PostgreSQL Ready
+        run: |
+          for i in {1..10}; do
+            if PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -c "SELECT 1" > /dev/null 2>&1; then
+              echo "✅ PostgreSQL is ready"
+              break
+            fi
+            echo "⏳ Waiting for PostgreSQL... ($i/10)"
+            sleep 2
+          done
+
       - name: Start Gateway
         run: |
           ./target/release/zero_x_infinity --gateway --port 8080 > /tmp/gateway_openapi.log 2>&1 &
           echo $! > /tmp/gateway.pid
-          sleep 8  # Wait for Gateway to initialize
+          sleep 12  # Wait for Gateway to initialize fully
 
       - name: Run OpenAPI E2E Tests
         run: python3 scripts/test_openapi_e2e.py --ci -v
