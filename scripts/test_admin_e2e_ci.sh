@@ -29,18 +29,26 @@ export ADMIN_PORT=8001
 
 echo "🚀 Starting Admin <-> Gateway E2E Automation..."
 
+# Standard venv path (must be 'venv', not '.venv')
+VENV_PYTHON="$ADMIN_DIR/venv/bin/python"
+if [ ! -f "$VENV_PYTHON" ]; then
+    echo "❌ Python venv not found at $ADMIN_DIR/venv"
+    echo "   Run: cd admin && python3 -m venv venv && pip install -r requirements.txt"
+    exit 1
+fi
+
 # 1. Database Initialization
 echo "📦 Initializing Databases..."
 # Force fresh init using dynamic vars
 PGPASSWORD=$PG_PASSWORD psql -h $PG_HOST -p $PG_PORT -U $PG_USER -d $PG_DB -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
-$ADMIN_DIR/.venv/bin/python $ADMIN_DIR/init_db.py
+$VENV_PYTHON $ADMIN_DIR/init_db.py
 echo "✅ Database Initialized"
 
 # 2. Start Admin Dashboard (Background)
 echo "Starting Admin Dashboard..."
 cd "$ADMIN_DIR"
 # Assuming .venv is active or environment is prepared
-$ADMIN_DIR/.venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port $ADMIN_PORT --workers 1 > "$LOG_DIR/admin_dashboard.log" 2>&1 &
+$VENV_PYTHON -m uvicorn main:app --host 0.0.0.0 --port $ADMIN_PORT --workers 1 > "$LOG_DIR/admin_dashboard.log" 2>&1 &
 ADMIN_PID=$!
 cd "$PROJECT_ROOT"
 
@@ -86,7 +94,7 @@ done
 echo "🧪 Running E2E Test Script..."
 set +e # Allow test failure to handle cleanup
 cd "$ADMIN_DIR"
-$ADMIN_DIR/.venv/bin/python test_admin_gateway_e2e.py
+$VENV_PYTHON test_admin_gateway_e2e.py
 EXIT_CODE=$?
 cd "$PROJECT_ROOT"
 
