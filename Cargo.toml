@@ -10,6 +10,7 @@ license = "MIT"
 keywords = ["trading", "hft", "exchange", "matching-engine", "latency"]
 categories = ["finance", "algorithms", "concurrency"]
 readme = "README.md"
+default-run = "zero_x_infinity"
 
 [dependencies]
 rustc-hash = "2"
