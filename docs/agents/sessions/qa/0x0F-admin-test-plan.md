@@ -106,6 +106,24 @@ enum SymbolStatus {
 | TC-STATE-04 | Duplicate Symbol name | Reject (unique) | **P0** |
 | TC-STATE-05 | Duplicate Asset name | Reject (unique) | **P0** |
 
+### 🚨 Immutability Tests (CRITICAL)
+
+> [!CAUTION]
+> 这些字段创建后**不可变更**，必须 100% 测试覆盖。见 [arch-to-qa-0x0F-immutability-critical.md](../shared/arch-to-qa-0x0F-immutability-critical.md)
+
+| ID | Entity | Field | Action | Expected | Priority |
+|----|--------|-------|--------|----------|----------|
+| TC-IMMUTABLE-01 | Asset | `asset` (code) | Update BTC→BITCOIN | **BLOCKED** | **P0** 🔴 |
+| TC-IMMUTABLE-02 | Asset | `decimals` | Update 8→6 | **BLOCKED** | **P0** 🔴 |
+| TC-IMMUTABLE-03 | Symbol | `symbol` | Update BTC_USDT→BITCOIN_USDT | **BLOCKED** | **P0** 🔴 |
+| TC-IMMUTABLE-04 | Symbol | `base_asset_id` | Update 1→3 | **BLOCKED** | **P0** 🔴 |
+| TC-IMMUTABLE-05 | Symbol | `quote_asset_id` | Update 2→4 | **BLOCKED** | **P0** 🔴 |
+| TC-IMMUTABLE-06 | Symbol | `price_decimals`, `qty_decimals` | Update 2→4 | **BLOCKED** | **P0** 🔴 |
+
+**Implementation**: 
+- ✅ `AssetUpdateSchema` - 只暴露: name, status, asset_flags
+- ✅ `SymbolUpdateSchema` - 只暴露: min_qty, status, symbol_flags, fees
+
 ### Concurrency Tests
 
 | ID | Scenario | Expected | Priority |
@@ -309,7 +327,7 @@ python -m pytest admin/tests/ -v
 
 ### QA Sign-off Conditions
 
-- [ ] All P0 tests pass (46 tests)
+- [ ] All P0 tests pass (52 tests, incl. 6 Immutability 🔴)
 - [ ] All P1 tests pass or exceptions documented (18 tests)
 - [x] 6 Design gaps clarified by Architect ✅
 - [ ] Security review completed (Agent C)
@@ -330,11 +348,12 @@ python -m pytest admin/tests/ -v
 ## 📊 Test Count Summary
 
 | Category | P0 | P1 | P2 | Total |
-|----------|----|----|----|----|
+|----------|----|----|----|-------|
 | Edge Cases | 18 | 7 | 2 | 27 |
+| **Immutability** 🔴 | **6** | 0 | 0 | **6** |
 | Core Flow | 16 | 4 | 0 | 20 |
 | Security | 12 | 7 | 0 | 19 |
-| **Total** | **46** | **18** | **2** | **66** |
+| **Total** | **52** | **18** | **2** | **72** |
 
 ---
 
@@ -343,6 +362,7 @@ python -m pytest admin/tests/ -v
 - [Design Doc](file:///docs/src/0x0F-admin-dashboard.md)
 - [Arch→QA Handover](file:///docs/agents/sessions/qa/0x0F-admin-handover.md)
 - [Arch Clarification Response](file:///docs/agents/sessions/shared/arch-to-qa-0x0F-clarification-response.md)
+- [🔴 Immutability Critical](file:///docs/agents/sessions/shared/arch-to-qa-0x0F-immutability-critical.md)
 - [Migration 007](file:///migrations/007_admin_audit_log.sql)
 
 ---
