@@ -20,8 +20,10 @@ GATEWAY_BIN="$PROJECT_ROOT/target/release/zero_x_infinity"
 LOG_DIR="$PROJECT_ROOT/logs"
 mkdir -p "$LOG_DIR"
 
-export DATABASE_URL="postgresql://trading:trading123@localhost:5432/exchange_info_db"
-export DATABASE_URL_ASYNC="postgresql+asyncpg://trading:trading123@localhost:5432/exchange_info_db"
+# Source DB environment variables (handles CI vs Local ports automatically)
+source "$PROJECT_ROOT/scripts/lib/db_env.sh"
+print_db_config
+
 export GATEWAY_PORT=8080
 export ADMIN_PORT=8001
 
@@ -29,8 +31,8 @@ echo "🚀 Starting Admin <-> Gateway E2E Automation..."
 
 # 1. Database Initialization
 echo "📦 Initializing Databases..."
-# Force fresh init
-PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+# Force fresh init using dynamic vars
+PGPASSWORD=$PG_PASSWORD psql -h $PG_HOST -p $PG_PORT -U $PG_USER -d $PG_DB -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
 $ADMIN_DIR/.venv/bin/python $ADMIN_DIR/init_db.py
 echo "✅ Database Initialized"
 
@@ -53,6 +55,13 @@ for i in {1..30}; do
 done
 
 # 3. Start Gateway (Background)
+# Update CI config to match current environment (port/password)
+if [ -f "config/ci.yaml" ]; then
+    # Escape slashes in DATABASE_URL for sed
+    SAFE_PG_URL=$(echo $DATABASE_URL | sed 's/\//\\\//g')
+    sed -i '' "s/postgres_url: .*/postgres_url: \"$SAFE_PG_URL\"/g" config/ci.yaml
+fi
+
 echo "Starting Gateway..."
 if [ ! -f "$GATEWAY_BIN" ]; then
     echo "❌ Gateway binary not found at $GATEWAY_BIN"

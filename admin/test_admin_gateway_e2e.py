@@ -142,7 +142,7 @@ def test_asset_creation_propagation(runner: E2ETestRunner):
         print("Step 1: Creating Asset via Admin...")
         admin_resp = requests.post(
             f"{ADMIN_API}/admin/AssetAdmin/item",
-            json=[asset_data],
+            json=asset_data,
             timeout=5
         )
         assert admin_resp.status_code in [200, 201], f"Asset creation failed: {admin_resp.text}"
@@ -208,7 +208,7 @@ def test_symbol_creation_propagation(runner: E2ETestRunner):
         print(f"Step 2: Creating Symbol {symbol_data['symbol']} via Admin...")
         admin_resp = requests.post(
             f"{ADMIN_API}/admin/SymbolAdmin/item",
-            json=[symbol_data],  # Wrap in list
+            json=symbol_data,
             timeout=5
         )
         assert admin_resp.status_code in [200, 201], f"Symbol creation failed: {admin_resp.text}"

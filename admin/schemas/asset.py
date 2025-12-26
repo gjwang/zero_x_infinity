@@ -38,29 +38,29 @@ class AssetCreateSchema(BaseModel):
         description="Precision decimals (0-18)"
     )]
     
-    status: Annotated[int, Field(
-        default=1,
+    status: Annotated[AssetStatus, Field(
+        default=AssetStatus.ACTIVE,
         description="Status: ACTIVE or DISABLED"
     )]
     
     @field_validator('status', mode='before')
     @classmethod
     def validate_status(cls, v):
-        """Accept string input only (UX-08), convert to int internally"""
-        if not isinstance(v, str):
-            raise ValueError(f"Status must be a string (ACTIVE or DISABLED), got: {type(v).__name__}")
+        """Accept string or int input (UX-08)"""
+        if isinstance(v, str):
+            try:
+                return AssetStatus[v.upper()]
+            except KeyError:
+                raise ValueError(f"Status must be ACTIVE or DISABLED, got: {v}")
         try:
-            return AssetStatus[v.upper()].value
-        except KeyError:
+            return AssetStatus(v)
+        except ValueError:
             raise ValueError(f"Status must be ACTIVE or DISABLED, got: {v}")
     
-    @field_serializer('status', when_used='json')
-    def serialize_status(self, value: int) -> str:
-        """Display status as string (UX-08)"""
-        try:
-            return AssetStatus(value).name
-        except ValueError:
-            return str(value)
+    # @field_serializer('status')
+    # def serialize_status(self, value: AssetStatus) -> str:
+    #     """Display status as string (UX-08)"""
+    #     return value.name  # "ACTIVE" or "DISABLED"
     
     asset_flags: Annotated[int, Field(
         default=7,
@@ -87,28 +87,28 @@ class AssetUpdateSchema(BaseModel):
         description="Asset display name"
     )]
     
-    status: Annotated[int, Field(
+    status: Annotated[AssetStatus, Field(
         description="Status: ACTIVE or DISABLED"
     )]
     
     @field_validator('status', mode='before')
     @classmethod
     def validate_status(cls, v):
-        """Accept string input only (UX-08), convert to int internally"""
-        if not isinstance(v, str):
-            raise ValueError(f"Status must be a string (ACTIVE or DISABLED), got: {type(v).__name__}")
+        """Accept string or int input (UX-08)"""
+        if isinstance(v, str):
+            try:
+                return AssetStatus[v.upper()]
+            except KeyError:
+                raise ValueError(f"Status must be ACTIVE or DISABLED, got: {v}")
         try:
-            return AssetStatus[v.upper()].value
-        except KeyError:
+            return AssetStatus(v)
+        except ValueError:
             raise ValueError(f"Status must be ACTIVE or DISABLED, got: {v}")
     
-    @field_serializer('status', when_used='json')
-    def serialize_status(self, value: int) -> str:
-        """Display status as string (UX-08)"""
-        try:
-            return AssetStatus(value).name
-        except ValueError:
-            return str(value)
+    # @field_serializer('status')
+    # def serialize_status(self, value: AssetStatus) -> str:
+    #     """Display status as string (UX-08)"""
+    #     return value.name
     
     asset_flags: Annotated[int, Field(
         ge=0,
