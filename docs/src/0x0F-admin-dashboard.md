@@ -102,11 +102,20 @@ pip install fastapi-amis-admin fastapi-user-auth sqlalchemy asyncpg
 - Reuse existing tables: `assets_tb`, `symbols_tb`, `users_tb`
 
 #### Step 3: Admin CRUD
+
 | Model | Table | Operations |
 |-------|-------|------------|
-| Asset | `assets_tb` | List, Create, Update |
-| Symbol | `symbols_tb` | List, Create, Update |
+| Asset | `assets_tb` | List, Create, Update, **Enable/Disable** |
+| Symbol | `symbols_tb` | List, Create, Update, **Trading/Halt** |
 | VIP Level | `vip_levels_tb` | List, Create, Update |
+| **Audit Log** | `admin_audit_log` | **List (只读)** |
+
+#### Symbol Status
+
+| Status | 说明 |
+|--------|------|
+| `trading` | 正常交易 |
+| `halt` | 暂停交易 (维护/紧急) |
 
 #### Step 4: Admin Auth
 - Default super admin account
@@ -126,6 +135,9 @@ pip install fastapi-amis-admin fastapi-user-auth sqlalchemy asyncpg
 | AC-08 | 可新增/编辑 VIP Level | UI + DB |
 | **AC-09** | **非法输入拒绝** (decimals<0, fee>100%) | 边界测试 |
 | **AC-10** | **VIP 默认 Normal (level=0, 100% fee)** | 初始化数据 |
+| **AC-11** | **Asset Enable/Disable** | 禁用后 Gateway 拒绝该资产 |
+| **AC-12** | **Symbol Halt** | 暂停后 Gateway 拒绝新订单 |
+| **AC-13** | **操作日志记录** | 所有 CRUD 操作可查询 |
 
 #### Input Validation Rules
 
