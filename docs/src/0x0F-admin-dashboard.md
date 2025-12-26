@@ -339,15 +339,63 @@ def validate_base_quote_different(self):
 
 ## 7. E2E Tests and Deliverables
 
-### Test Scripts
+### 🚀 One-Click E2E Testing
+
+**NEW**: Comprehensive automated testing script
+
+```bash
+# Run complete E2E test suite
+./scripts/test_admin_e2e.sh
+```
+
+**What it does:**
+1. ✅ Checks prerequisites (Python3, PostgreSQL)
+2. ✅ Installs Python dependencies (venv + pip + requirements.txt)
+3. ✅ Initializes database (SQLite with default admin user)
+4. ✅ Starts Admin server (`uvicorn` on port 8001)
+5. ✅ Runs all tests (Basic HTTP + Unit + E2E)
+6. ✅ Cleanup (stops server gracefully)
+
+**Test Coverage:** 171 total tests
+- 4 Basic HTTP tests (`verify_e2e.py`)
+- 163 Unit tests (validation, security, constraints)
+- 17 E2E integration tests (asset/symbol lifecycle, audit log, fee updates)
+
+**Expected Runtime:**
+- First run: ~3-5 minutes (includes dependency installation)
+- Subsequent runs: ~1-2 minutes (idempotent)
+
+**Logs Location:**
+- Server: `/tmp/admin_e2e.log`
+- Basic tests: `/tmp/verify_e2e.log`
+- Unit tests: `/tmp/pytest_unit.log`
+- E2E tests: `/tmp/pytest_e2e.log`
+
+---
+
+### Test Scripts (Manual)
+
+For granular testing, use these scripts individually:
 
 | Script | Function |
 |--------|----------|
-| `test_admin_login.py` | Admin login/logout |
-| `test_asset_crud.py` | Asset CRUD + disable |
-| `test_symbol_crud.py` | Symbol CRUD + halt |
+| `verify_e2e.py` | Admin login/logout, health check |
+| `test_admin_login.py` | Authentication tests |
+| `test_constraints.py` | Database constraint validation |
+| `test_core_flow.py` | Asset/Symbol CRUD workflows |
 | `test_input_validation.py` | Invalid input rejection |
-| `test_hot_reload.py` | Gateway hot-reload verification |
+| `test_security.py` | Security and authentication |
+| `tests/e2e/test_asset_lifecycle.py` | Asset enable/disable lifecycle |
+| `tests/e2e/test_symbol_lifecycle.py` | Symbol trading status management |
+| `tests/e2e/test_fee_update.py` | Fee configuration updates |
+| `tests/e2e/test_audit_log.py` | Audit trail verification |
+
+**Run individual tests:**
+```bash
+cd admin && source venv/bin/activate
+pytest tests/test_core_flow.py -v
+pytest tests/e2e/test_asset_lifecycle.py -v
+```
 
 ### Deliverables Checklist
 
@@ -355,9 +403,10 @@ def validate_base_quote_different(self):
 |---|-------------|------------|
 | 1 | `admin/` project code | Code Review |
 | 2 | Admin UI accessible | Browser at `localhost:8001` |
-| 3 | E2E tests all pass | `pytest admin/tests/ -v` |
-| 4 | Audit log queryable | Admin UI audit page |
-| 5 | Gateway hot-reload works | Config change without restart |
+| 3 | **One-click E2E test** | `./scripts/test_admin_e2e.sh` passes |
+| 4 | All 171 tests pass | `pytest admin/tests/ -v` |
+| 5 | Audit log queryable | Admin UI audit page |
+| 6 | Gateway hot-reload works | Config change without restart |
 
 ### Future Phases (Not in MVP)
 

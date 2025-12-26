@@ -39,8 +39,11 @@ export PG_USER="${PG_USER:-trading}"
 export PG_PASSWORD="${PG_PASSWORD:-trading123}"
 export PG_DB="${PG_DB:-exchange_info_db}"
 
-# Connection URL (for sqlx and other tools)
+# PostgreSQL Connection String (sync driver - for Rust/psql)
 export DATABASE_URL="postgresql://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DB}"
+
+# PostgreSQL Async Connection String (async driver - for Python Admin Dashboard)
+export DATABASE_URL_ASYNC="postgresql+asyncpg://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DB}"
 
 # For psql commands
 export PGPASSWORD="${PG_PASSWORD}"

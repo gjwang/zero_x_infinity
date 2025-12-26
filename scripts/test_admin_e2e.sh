@@ -24,10 +24,7 @@ ADMIN_DIR="$PROJECT_DIR/admin"
 
 cd "$PROJECT_DIR"
 
-# Source database environment variables (CI-compatible)
-if [ -f "$SCRIPT_DIR/lib/db_env.sh" ]; then
-    source "$SCRIPT_DIR/lib/db_env.sh"
-fi
+# Admin uses its own Pydantic Settings (settings.py) - no external env needed
 
 # Colors
 RED='\033[0;31m'
@@ -40,6 +37,11 @@ STEP=0
 TOTAL_TESTS=0
 PASSED_TESTS=0
 FAILED_TESTS=0
+
+# Phase 1: Check Prerequisites
+echo -e "${BLUE}════════════════════════════════════════════${NC}"
+echo -e "${BLUE}Phase 1: Checking Prerequisites${NC}"
+echo -e "${BLUE}════════════════════════════════════════════${NC}"
 
 fail_at_step() {
     echo ""
@@ -98,25 +100,15 @@ fi
 PYTHON_VERSION=$(python3 --version)
 echo -e "    ${GREEN}✓${NC} $PYTHON_VERSION"
 
-# Check PostgreSQL
-if [ -n "$CI" ]; then
-    # In CI: use REST API or psql if available
-    if command -v psql &> /dev/null && pg_check; then
-        echo -e "    ${GREEN}✓${NC} PostgreSQL accessible (CI mode)"
+# Check PostgreSQL (optional - Admin works standalone)
+if command -v psql &>/dev/null; then
+    if psql -h localhost -p 5433 -U trading -d exchange_info_db -c "SELECT 1" &>/dev/null; then
+        echo -e "    ${GREEN}✓${NC} PostgreSQL running on port 5433"
     else
-        echo -e "    ${YELLOW}⚠${NC}  PostgreSQL check skipped in CI (using SQLite for auth)"
+        echo -e "    ${YELLOW}⚠${NC}  PostgreSQL not accessible (Admin uses default config)"
     fi
 else
-    # Local: check PostgreSQL
-    if command -v psql &> /dev/null; then
-        if pg_check; then
-            echo -e "    ${GREEN}✓${NC} PostgreSQL running on port $PG_PORT"
-        else
-            echo -e "    ${YELLOW}⚠${NC}  PostgreSQL not accessible (using SQLite for auth)"
-        fi
-    else
-        echo -e "    ${YELLOW}⚠${NC}  psql not found (using SQLite for auth)"
-    fi
+    echo -e "    ${YELLOW}⚠${NC}  psql not found (Admin uses default config)"
 fi
 
 # Check admin directory

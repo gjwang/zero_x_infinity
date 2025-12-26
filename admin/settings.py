@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     )
     
     # Database
+    # Prefer DATABASE_URL_ASYNC (from env) for async driver compatibility
+    # Falls back to hardcoded default with asyncpg
     database_url: str = "postgresql+asyncpg://trading:trading123@localhost:5433/exchange_info_db"
     
     # Security
