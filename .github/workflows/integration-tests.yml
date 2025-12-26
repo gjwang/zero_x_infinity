@@ -677,11 +677,8 @@ jobs:
           done
 
       - name: Start Gateway
-        env:
-          DATABASE_URL: postgresql://trading:trading123@localhost:5432/exchange_info_db
-          TDENGINE_DSN: taos+ws://root:taosdata@localhost:6041
         run: |
-          ./target/release/zero_x_infinity --gateway --port 8080 > /tmp/gateway_openapi.log 2>&1 &
+          ./target/release/zero_x_infinity --gateway --env ci --port 8080 > /tmp/gateway_openapi.log 2>&1 &
           echo $! > /tmp/gateway.pid
           # Wait for Gateway health check (per ci-pitfalls.md pattern)
           for i in $(seq 1 60); do
