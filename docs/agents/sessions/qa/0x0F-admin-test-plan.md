@@ -3,7 +3,7 @@
 > **From**: QA Team (Multi-Agent Review)  
 > **To**: Architect / Developer  
 > **Date**: 2025-12-26  
-> **Status**: 🔶 Pending Architect Clarification  
+> **Status**: ✅ Ready for Testing (Architect Clarified)  
 > **Branch**: `0x0F-admin-dashboard`
 
 ---
@@ -30,19 +30,35 @@
 
 ---
 
-## ⚠️ Design Gaps Requiring Architect Clarification
+## ✅ Architect Decisions (Confirmed)
 
-> [!IMPORTANT]
-> 以下问题需要 Architect 在实现前澄清
+> [!NOTE]
+> 以下决策由 Architect 于 2025-12-26 确认，见 [arch-to-qa-0x0F-clarification-response.md](../shared/arch-to-qa-0x0F-clarification-response.md)
 
-| # | Gap | Risk | Recommendation |
-|---|-----|------|----------------|
-| GAP-01 | **Symbol Halt 时 Open Order 处理** | 用户资金卡住 | 定义: Cancel all / Freeze / Close-only |
-| GAP-02 | **Asset 删除的级联行为** | 孤儿数据 | 定义: 有引用则拒绝 / 级联删除 |
-| GAP-03 | **Hot Reload SLA** | 用户困惑 | 定义: "5秒内生效" |
-| GAP-04 | **Password Policy** | 弱密码风险 | 定义: 12+ 字符, 复杂度要求 |
-| GAP-05 | **Session Expiry** | Token 被盗风险 | 定义: 24h 最大, refresh token |
-| GAP-06 | **Sub-bps Fee Precision** | 计算误差 | 定义: 四舍五入到 bps |
+| # | Decision | Spec |
+|---|----------|------|
+| GAP-01 | **Close-Only Mode** | Symbol Halt 时用户可撤单，不可新建订单 |
+| GAP-02 | **Reject if Referenced** | Asset 有 Symbol 引用时拒绝禁用/删除 |
+| GAP-03 | **5 Seconds SLA** | 配置变更必须 5 秒内生效 |
+| GAP-04 | **Strong Password** | 12+ 字符, 大写+数字+特殊字符, 90天过期, 3次历史 |
+| GAP-05 | **Session Expiry** | Access 15min, Refresh 24h, Idle 30min, 敏感操作需重认证 |
+| GAP-06 | **Integer bps Only** | 只接受整数 bps (0-10000)，拒绝小数 |
+
+### Symbol Status Enum (GAP-01)
+
+```rust
+enum SymbolStatus {
+    Halt = 0,       // All ops rejected (maintenance)
+    Trading = 1,    // Normal trading
+    CloseOnly = 2,  // Cancel allowed, new orders rejected
+}
+```
+
+### Sensitive Operations Requiring Re-auth (GAP-05)
+
+- Asset disable
+- Symbol halt  
+- VIP level modification
 
 ---
 
@@ -295,19 +311,19 @@ python -m pytest admin/tests/ -v
 
 - [ ] All P0 tests pass (46 tests)
 - [ ] All P1 tests pass or exceptions documented (18 tests)
-- [ ] 6 Design gaps clarified by Architect
+- [x] 6 Design gaps clarified by Architect ✅
 - [ ] Security review completed (Agent C)
 - [ ] No regression in existing CI
 - [ ] Hot reload SLA met (<5s)
 
-### Architect Actions Required
+### Architect Actions ✅ COMPLETED
 
-- [ ] Clarify GAP-01: Open order handling during Symbol Halt
-- [ ] Clarify GAP-02: Asset deletion cascade behavior
-- [ ] Clarify GAP-03: Define hot reload SLA
-- [ ] Clarify GAP-04: Define password policy
-- [ ] Clarify GAP-05: Define session expiry
-- [ ] Clarify GAP-06: Define sub-bps precision handling
+- [x] GAP-01: Close-Only mode for Symbol Halt
+- [x] GAP-02: Reject if Asset referenced by Symbol
+- [x] GAP-03: 5 seconds hot reload SLA
+- [x] GAP-04: Strong password policy (12+ chars, complexity)
+- [x] GAP-05: Session expiry (15min/24h/30min)
+- [x] GAP-06: Integer bps only (reject fractional)
 
 ---
 
@@ -326,6 +342,7 @@ python -m pytest admin/tests/ -v
 
 - [Design Doc](file:///docs/src/0x0F-admin-dashboard.md)
 - [Arch→QA Handover](file:///docs/agents/sessions/qa/0x0F-admin-handover.md)
+- [Arch Clarification Response](file:///docs/agents/sessions/shared/arch-to-qa-0x0F-clarification-response.md)
 - [Migration 007](file:///migrations/007_admin_audit_log.sql)
 
 ---
