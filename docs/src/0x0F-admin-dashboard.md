@@ -215,7 +215,129 @@ class FeeRateResponse(BaseModel):
 
 ---
 
-## 6. E2E Tests and Deliverables
+## 6. UX Requirements (Post-QA Review)
+
+> Based on QA feedback from 160+ test cases. These requirements enhance usability and prevent errors.
+
+### 6.1 Asset/Symbol Display Enhancement
+
+**UX-01**: Display Asset names in Symbol creation/edit forms
+
+```
+Base Asset: [BTC (ID: 1) ▼]  ← Dropdown with asset code
+Quote Asset: [USDT (ID: 2) ▼]
+```
+
+**Implementation**: Use SQLAlchemy relationship display in FastAPI Amis Admin.
+
+---
+
+### 6.2 Fee Display Format
+
+**UX-02**: Show fees in both percentage and basis points
+
+```
+Maker Fee: 0.10% (10 bps)
+Taker Fee: 0.20% (20 bps)
+```
+
+**Implementation**: 
+```python
+@field_serializer('base_maker_fee')
+def serialize_fee(self, fee: int, _info):
+    pct = fee / 10000
+    return f"{pct:.2f}% ({fee} bps)"
+```
+
+---
+
+### 6.3 Danger Confirmation Dialog
+
+**UX-03**: Confirm dialog for critical operations (Symbol Halt, Asset Disable)
+
+```
+┌─────────────────────────────────┐
+│  ⚠️ Halt Symbol: BTC_USDT        │
+├─────────────────────────────────┤
+│  • Current orders: 1,234        │
+│  • 24h volume: $12M             │
+│                                 │
+│  This action is reversible      │
+│                                 │
+│    [Confirm Halt]    [Cancel]   │
+└─────────────────────────────────┘
+```
+
+> **Note**: No "type to confirm" required (action is reversible).
+
+---
+
+### 6.4 Immutable Field Indicators
+
+**UX-04**: Visually mark immutable fields in edit forms
+
+```
+Asset Edit:
+┌──────────────────────────┐
+│ Asset Code: BTC 🔒       │  ← Locked, disabled
+│ Decimals: 8 🔒           │  ← Locked, disabled
+│ Name: [Bitcoin      ] ✏️  │  ← Editable
+│ Status: [Active ▼] ✏️     │  ← Editable
+└──────────────────────────┘
+```
+
+**Implementation**: Use `readonly_fields` in ModelAdmin.
+
+---
+
+### 6.5 Structured Error Messages
+
+**UX-05**: Provide actionable error responses
+
+```json
+{
+  "field": "asset",
+  "error": "Invalid format",
+  "got": "btc!",
+  "expected": "Uppercase letters A-Z only (e.g., BTC)",
+  "hint": "Remove special character '!'"
+}
+```
+
+---
+
+### 🚨 6.6 CRITICAL: Base ≠ Quote Validation
+
+**UX-06**: Prevent creating symbols with same base and quote
+
+**This is a LOGIC BUG, not just UX.**
+
+```python
+@model_validator(mode='after')
+def validate_base_quote_different(self):
+    if self.base_asset_id == self.quote_asset_id:
+        raise ValueError("Base and Quote assets must be different")
+    return self
+```
+
+**Test Case**: `BTC_BTC` must be rejected.
+
+---
+
+### UX Priority Implementation
+
+| Feature | Priority | Phase |
+|---------|----------|-------|
+| **UX-06 Base≠Quote** | 🔴 P0 | **MVP** (blocking bug) |
+| UX-01 Asset display | P1 | Post-MVP |
+| UX-02 Fee format | P1 | Post-MVP |
+| UX-03 Confirm dialog | P1 | Post-MVP |
+| UX-04 Readonly fields | P1 | Post-MVP |
+| UX-05 Error messages | P2 | Post-MVP |
+
+---
+
+## 7. E2E Tests and Deliverables
 
 ### Test Scripts
 
