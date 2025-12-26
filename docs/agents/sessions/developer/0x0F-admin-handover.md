@@ -67,6 +67,34 @@ See: `admin/admin/asset.py` and `admin/admin/symbol.py` for reference.
 
 ---
 
+## 🎯 NEW: P0 UX Requirements
+
+### UX-07: ID Auto-Generation (CRITICAL)
+
+**Requirement**: `asset_id` and `symbol_id` are **DB auto-generated** (SERIAL), NOT user input.
+
+Users only fill:
+- **Asset**: `asset`, `name`, `decimals`
+- **Symbol**: `symbol`, `base_asset_id`, `quote_asset_id`
+
+IDs are generated automatically by PostgreSQL `SERIAL` in `migrations/001_init_schema.sql`.
+
+### UX-08: Status/Flags String Display (CRITICAL)
+
+**Requirement**: Display status and flags as **human-readable strings**, not raw numbers.
+
+| Entity | DB Value | Display String |
+|--------|----------|----------------|
+| Asset Status | 0 | `Disabled` (🔴 Red) |
+| Asset Status | 1 | `Active` (🟢 Green) |
+| Symbol Status | 0 | `Offline` (⚫ Gray) |
+| Symbol Status | 1 | `Online` (🟢 Green) |
+| Symbol Status | 2 | `Close-Only` (🟡 Yellow) |
+
+**Implementation**: Use `field_serializer` or Enum in Pydantic schemas.
+
+---
+
 ## Acceptance Criteria
 
 | ID | Criteria |

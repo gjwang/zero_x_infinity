@@ -42,6 +42,31 @@
 | AC-12 | Symbol Halt | 暂停后拒绝新订单 |
 | AC-13 | 操作日志记录 | 可查询 |
 
+---
+
+## 🎯 NEW: P0 UX Test Requirements
+
+### UX-07: ID Auto-Generation
+
+**Test Cases**:
+- [ ] TC-UX-07-01: Creating Asset does NOT require `asset_id` input
+- [ ] TC-UX-07-02: Creating Symbol does NOT require `symbol_id` input
+- [ ] TC-UX-07-03: After creation, `asset_id` is auto-assigned (DB SERIAL)
+- [ ] TC-UX-07-04: After creation, `symbol_id` is auto-assigned (DB SERIAL)
+- [ ] TC-UX-07-05: IDs are sequential (1, 2, 3, ...)
+
+### UX-08: Status/Flags String Display
+
+**Test Cases**:
+- [ ] TC-UX-08-01: Asset status displays as `"Disabled"` (not `0`)
+- [ ] TC-UX-08-02: Asset status displays as `"Active"` (not `1`)
+- [ ] TC-UX-08-03: Symbol status displays as `"Offline"` (not `0`)
+- [ ] TC-UX-08-04: Symbol status displays as `"Online"` (not `1`)
+- [ ] TC-UX-08-05: Symbol status displays as `"Close-Only"` (not `2`)
+- [ ] TC-UX-08-06: Asset flags display as checkboxes/labels (not `23`)
+
+---
+
 ## Test Cases (建议)
 
 ### 输入验证
