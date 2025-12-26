@@ -51,8 +51,8 @@ async def health_check():
 @app.on_event("startup")
 async def on_startup():
     """Startup event: create tables and default admin user"""
-    # Create auth tables (SQLite)
-    await site.db.async_run_sync(site.auth.user_model.__table__.metadata.create_all, is_session=False)
+    # Create ALL auth tables (SQLite) - includes user, role, casbin_rule, login_history, token
+    await site.db.async_run_sync(site.auth.user_model.metadata.create_all, is_session=False)
     
     # Create default admin user using create_role_user
     try:
