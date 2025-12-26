@@ -63,17 +63,13 @@ class SymbolCreateSchema(BaseModel):
     @field_validator('status', mode='before')
     @classmethod
     def validate_status(cls, v):
-        """Accept string or int input (UX-08)"""
-        if isinstance(v, str):
-            # Handle both underscore and hyphen formats
-            normalized = v.upper().replace('-', '_')
-            try:
-                return SymbolStatus[normalized]
-            except KeyError:
-                raise ValueError(f"Status must be ONLINE, OFFLINE, or CLOSE_ONLY, got: {v}")
+        """Accept string input ONLY (UX-08) - reject integers"""
+        if not isinstance(v, str):
+            raise ValueError(f"Status must be a string (ONLINE, OFFLINE, or CLOSE_ONLY), got: {type(v).__name__}")
+        normalized = v.upper().replace('-', '_')
         try:
-            return SymbolStatus(v)
-        except ValueError:
+            return SymbolStatus[normalized]
+        except KeyError:
             raise ValueError(f"Status must be ONLINE, OFFLINE, or CLOSE_ONLY, got: {v}")
     
     @field_serializer('status')
@@ -135,16 +131,13 @@ class SymbolUpdateSchema(BaseModel):
     @field_validator('status', mode='before')
     @classmethod
     def validate_status(cls, v):
-        """Accept string or int input (UX-08)"""
-        if isinstance(v, str):
-            normalized = v.upper().replace('-', '_')
-            try:
-                return SymbolStatus[normalized]
-            except KeyError:
-                raise ValueError(f"Status must be ONLINE, OFFLINE, or CLOSE_ONLY, got: {v}")
+        """Accept string input ONLY (UX-08) - reject integers"""
+        if not isinstance(v, str):
+            raise ValueError(f"Status must be a string (ONLINE, OFFLINE, or CLOSE_ONLY), got: {type(v).__name__}")
+        normalized = v.upper().replace('-', '_')
         try:
-            return SymbolStatus(v)
-        except ValueError:
+            return SymbolStatus[normalized]
+        except KeyError:
             raise ValueError(f"Status must be ONLINE, OFFLINE, or CLOSE_ONLY, got: {v}")
     
     @field_serializer('status')

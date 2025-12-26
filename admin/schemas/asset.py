@@ -46,15 +46,12 @@ class AssetCreateSchema(BaseModel):
     @field_validator('status', mode='before')
     @classmethod
     def validate_status(cls, v):
-        """Accept string or int input (UX-08)"""
-        if isinstance(v, str):
-            try:
-                return AssetStatus[v.upper()]
-            except KeyError:
-                raise ValueError(f"Status must be ACTIVE or DISABLED, got: {v}")
+        """Accept string input ONLY (UX-08) - reject integers"""
+        if not isinstance(v, str):
+            raise ValueError(f"Status must be a string (ACTIVE or DISABLED), got: {type(v).__name__}")
         try:
-            return AssetStatus(v)
-        except ValueError:
+            return AssetStatus[v.upper()]
+        except KeyError:
             raise ValueError(f"Status must be ACTIVE or DISABLED, got: {v}")
     
     @field_serializer('status')
@@ -94,15 +91,12 @@ class AssetUpdateSchema(BaseModel):
     @field_validator('status', mode='before')
     @classmethod
     def validate_status(cls, v):
-        """Accept string or int input (UX-08)"""
-        if isinstance(v, str):
-            try:
-                return AssetStatus[v.upper()]
-            except KeyError:
-                raise ValueError(f"Status must be ACTIVE or DISABLED, got: {v}")
+        """Accept string input ONLY (UX-08) - reject integers"""
+        if not isinstance(v, str):
+            raise ValueError(f"Status must be a string (ACTIVE or DISABLED), got: {type(v).__name__}")
         try:
-            return AssetStatus(v)
-        except ValueError:
+            return AssetStatus[v.upper()]
+        except KeyError:
             raise ValueError(f"Status must be ACTIVE or DISABLED, got: {v}")
     
     @field_serializer('status')
