@@ -33,7 +33,12 @@
 ```bash
 cd admin
 source venv/bin/activate
-pytest tests/ -v
+
+# REQUIRED: Load environment variables (sets DATABASE_URL_ASYNC)
+# Per ci-pitfalls.md section 2.1: "测试脚本必须加载 db_env.sh"
+source ../scripts/lib/db_env.sh
+
+pytest tests/  # 期待 171/171 PASS
 ```
 
 **预期结果**:
