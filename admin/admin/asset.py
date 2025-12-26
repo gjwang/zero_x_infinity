@@ -37,3 +37,12 @@ class AssetAdmin(admin.ModelAdmin):
     # Use optimized Pydantic schemas
     schema_create = AssetCreateSchema
     schema_update = AssetUpdateSchema
+
+    def error_execute_sql(self, request: object, error: Exception):
+        import sys
+        import traceback
+        print(f"DEBUG: SQL Error Caught in AssetAdmin: {error}")
+        traceback.print_exc(file=sys.stdout)
+        sys.stdout.flush()
+        # Call super to maintain default behavior (raising 422/500)
+        return super().error_execute_sql(request, error)

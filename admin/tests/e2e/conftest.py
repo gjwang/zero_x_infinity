@@ -137,7 +137,7 @@ async def cleanup_test_data(client: httpx.AsyncClient):
         for asset in assets_resp.json().get("items", []):
             code = asset.get("asset", "")
             if code.startswith("TEST") or code.startswith("E2E"):
-                await client.delete(f"/admin/AssetAdmin/item{asset['asset_id']}")
+                await client.delete(f"/admin/AssetAdmin/item/{asset['asset_id']}")
     
     # Get all symbols with test assets
     symbols_resp = await client.get("/admin/SymbolAdmin/item")
@@ -145,4 +145,4 @@ async def cleanup_test_data(client: httpx.AsyncClient):
         for symbol in symbols_resp.json().get("items", []):
             name = symbol.get("symbol", "")
             if "TEST" in name or "E2E" in name:
-                await client.delete(f"/admin/SymbolAdmin/item{symbol['symbol_id']}")
+                await client.delete(f"/admin/SymbolAdmin/item/{symbol['symbol_id']}")

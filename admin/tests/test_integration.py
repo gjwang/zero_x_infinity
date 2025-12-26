@@ -55,7 +55,7 @@ class TestHotReloadSymbol:
         """TC-HOT-02: Halt Symbol → Gateway rejects new orders
         
         Steps:
-        1. Admin sets Symbol status=0 (Halt)
+        1. Admin sets Symbol status="DISABLED" (Halt)
         2. Wait for hot-reload (max 5 seconds)
         3. Gateway should reject all new orders for that Symbol
         4. Existing orders remain (no forced cancellation)

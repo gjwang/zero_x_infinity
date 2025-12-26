@@ -36,7 +36,7 @@ class TestSymbolCloseOnlyFlowAgentB:
         # Simulate: current status is Trading (1), update to CloseOnly (2)
         update_schema = SymbolUpdateSchema(
             min_qty=100,
-            status=2,  # CloseOnly
+            status="CLOSE_ONLY",  # CloseOnly
             symbol_flags=0,
             base_maker_fee=100,
             base_taker_fee=200,
@@ -48,18 +48,19 @@ class TestSymbolCloseOnlyFlowAgentB:
         # Simulate: current status is CloseOnly (2), update to Trading (1)
         update_schema = SymbolUpdateSchema(
             min_qty=100,
-            status=1,  # Back to Trading
+            status="ONLINE",  # Back to Trading
             symbol_flags=0,
             base_maker_fee=100,
             base_taker_fee=200,
         )
+        assert update_schema.status == 1  # Trading
         assert update_schema.status == 1  # Trading
     
     def test_symbol_transition_trading_to_halt(self):
         """Symbol transition from Trading to Halt"""
         update_schema = SymbolUpdateSchema(
             min_qty=100,
-            status=0,  # Halt
+            status="OFFLINE",  # Halt
             symbol_flags=0,
             base_maker_fee=100,
             base_taker_fee=200,
@@ -70,11 +71,12 @@ class TestSymbolCloseOnlyFlowAgentB:
         """Symbol transition from Halt back to Trading"""
         update_schema = SymbolUpdateSchema(
             min_qty=100,
-            status=1,  # Trading
+            status="ONLINE",  # Trading
             symbol_flags=0,
             base_maker_fee=100,
             base_taker_fee=200,
         )
+        assert update_schema.status == 1  # Trading
         assert update_schema.status == 1
 
 
@@ -138,7 +140,7 @@ class TestCRUDFlowAgentB:
             asset="ETH",
             name="Ethereum",
             decimals=18,
-            status=1,
+            status="ACTIVE",
         )
         assert schema.asset == "ETH"
         assert schema.name == "Ethereum"
@@ -151,7 +153,7 @@ class TestCRUDFlowAgentB:
         
         schema = AssetUpdateSchema(
             name="Ethereum Updated",
-            status=0,  # Disable
+            status="DISABLED",  # Disable
             asset_flags=0,
         )
         assert schema.name == "Ethereum Updated"
@@ -177,7 +179,7 @@ class TestCRUDFlowAgentB:
         """Complete symbol update flow (mutable fields only)"""
         schema = SymbolUpdateSchema(
             min_qty=500,
-            status=1,
+            status="ONLINE",
             symbol_flags=7,
             base_maker_fee=30,
             base_taker_fee=80,
@@ -193,7 +195,7 @@ class TestFeeUpdateFlowAgentB:
         """Fee can be increased"""
         schema = SymbolUpdateSchema(
             min_qty=100,
-            status=1,
+            status="ONLINE",
             symbol_flags=0,
             base_maker_fee=200,  # Increased from 100
             base_taker_fee=300,  # Increased from 200
@@ -205,7 +207,7 @@ class TestFeeUpdateFlowAgentB:
         """Fee can be decreased"""
         schema = SymbolUpdateSchema(
             min_qty=100,
-            status=1,
+            status="ONLINE",
             symbol_flags=0,
             base_maker_fee=0,  # Reduced to 0
             base_taker_fee=0,  # Reduced to 0
@@ -217,7 +219,7 @@ class TestFeeUpdateFlowAgentB:
         """Fee can be set to maximum"""
         schema = SymbolUpdateSchema(
             min_qty=100,
-            status=1,
+            status="ONLINE",
             symbol_flags=0,
             base_maker_fee=10000,  # 100%
             base_taker_fee=10000,  # 100%

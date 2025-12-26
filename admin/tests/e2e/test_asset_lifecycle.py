@@ -51,6 +51,17 @@ class TestAssetLifecycle:
         2. Wait for hot-reload
         3. Transfer/deposit should recognize asset
         """
+        # Step 0: Ensure cleanup (idempotency)
+        # Search widely because 'search' param might only check name or be strict
+        existing_resp = await admin_client.post("/admin/AssetAdmin/list", json={
+            "page": 1,
+            "perPage": 100
+        })
+        if existing_resp.status_code == 200:
+            for item in existing_resp.json().get("data", {}).get("items", []):
+                if item.get("asset") == "E2ETEST":
+                    await admin_client.delete(f"/admin/AssetAdmin/item/{item['asset_id']}")
+
         # Step 1: Create Asset
         asset_resp = await admin_client.post("/admin/AssetAdmin/item", json={
             "asset": "E2ETEST",
@@ -87,7 +98,7 @@ class TestAssetLifecycle:
         """
         E2E-01 Step 4: Disable Asset → Operations rejected
         
-        1. Disable asset via Admin (status=0)
+        1. Disable asset via Admin (status="DISABLED")
         2. Wait for hot-reload
         3. Transfer should be rejected
         """
@@ -104,7 +115,7 @@ class TestAssetLifecycle:
         
         # Step 1: Disable asset
         disable_resp = await admin_client.put(
-            f"/admin/AssetAdmin/item{test_asset['asset_id']}",
+            f"/admin/AssetAdmin/item/{test_asset['asset_id']}",
             json={"status": "OFFLINE"}  # Disabled
         )
         assert disable_resp.status_code == 200, f"Failed to disable: {disable_resp.text}"
@@ -144,7 +155,7 @@ class TestAssetLifecycle:
         
         # Re-enable
         enable_resp = await admin_client.put(
-            f"/admin/AssetAdmin/item{test_asset['asset_id']}",
+            f"/admin/AssetAdmin/item/{test_asset['asset_id']}",
             json={"status": "ACTIVE"}  # Active
         )
         assert enable_resp.status_code == 200
@@ -202,7 +213,7 @@ class TestAssetDeletionConstraint:
             pytest.skip("Could not create referencing symbol")
         
         # Try to delete the asset
-        delete_resp = await admin_client.delete(f"/admin/AssetAdmin/item{asset_id}")
+        delete_resp = await admin_client.delete(f"/admin/AssetAdmin/item/{asset_id}")
         
         # Should fail with FK constraint error
         assert delete_resp.status_code in (400, 409), \

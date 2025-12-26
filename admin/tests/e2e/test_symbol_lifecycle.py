@@ -36,14 +36,6 @@ class TestSymbolLifecycle:
     async def admin_client(self):
         """Authenticated admin client"""
         async with httpx.AsyncClient(base_url=ADMIN_URL) as client:
-            # Login to get session
-            login_resp = await client.post("/admin/auth/login", json={
-                "username": "admin",
-                "password": "admin123"  # Default admin password
-            })
-            if login_resp.status_code == 200:
-                # Set session cookie
-                pass
             yield client
     
     @pytest.fixture
@@ -70,6 +62,21 @@ class TestSymbolLifecycle:
         3. Wait for hot-reload
         4. Submit order → Should succeed
         """
+        # Step 0: Ensure cleanup (idempotency)
+        # Check and delete TESTA_TESTB
+        existing_symbols = await admin_client.post("/admin/SymbolAdmin/list", json={"page":1, "search": "TESTA_TESTB"})
+        if existing_symbols.status_code == 200:
+            for item in existing_symbols.json().get("data", {}).get("items", []):
+                if item.get("symbol") == "TESTA_TESTB":
+                    await admin_client.delete(f"/admin/SymbolAdmin/item/{item['symbol_id']}")
+        
+        # Check and delete TESTA/TESTB
+        existing_assets = await admin_client.post("/admin/AssetAdmin/list", json={"page":1, "perPage": 100})
+        if existing_assets.status_code == 200:
+            for item in existing_assets.json().get("data", {}).get("items", []):
+                if item.get("asset") in ("TESTA", "TESTB"):
+                    await admin_client.delete(f"/admin/AssetAdmin/item/{item['asset_id']}")
+
         # Step 1: Create Assets
         base_asset = await admin_client.post("/admin/AssetAdmin/item", json={
             "asset": "TESTA",
@@ -94,7 +101,7 @@ class TestSymbolLifecycle:
             "quote_asset_id": quote_asset.json().get("asset_id", 998),
             "price_decimals": 2,
             "qty_decimals": 8,
-            "status": "ACTIVE",  # Trading
+            "status": "ONLINE",  # Trading
             "base_maker_fee": 10,
             "base_taker_fee": 20,
         })
@@ -121,7 +128,7 @@ class TestSymbolLifecycle:
         """
         E2E-02 Step 5: Halt Symbol → Orders rejected
         
-        1. Halt symbol via Admin (status=0)
+        1. Halt symbol via Admin (status="DISABLED")
         2. Wait for hot-reload
         3. Submit order → Should be rejected
         """
@@ -138,7 +145,7 @@ class TestSymbolLifecycle:
         
         # Halt the symbol
         halt_resp = await admin_client.put(
-            f"/admin/SymbolAdmin/item{test_symbol['symbol_id']}",
+            f"/admin/SymbolAdmin/item/{test_symbol['symbol_id']}",
             json={"status": "OFFLINE"}  # Halt
         )
         assert halt_resp.status_code == 200, f"Failed to halt symbol: {halt_resp.text}"
@@ -167,7 +174,7 @@ class TestSymbolLifecycle:
         """
         E2E-02 Step 6: CloseOnly → Cancel allowed, new orders rejected
         
-        1. Set symbol to CloseOnly (status=2)
+        1. Set symbol to CloseOnly (status="CLOSE_ONLY")
         2. Wait for hot-reload
         3. Cancel existing order → Should succeed
         4. New order → Should be rejected
@@ -185,7 +192,7 @@ class TestSymbolLifecycle:
         
         # Step 1: Set to CloseOnly
         close_only_resp = await admin_client.put(
-            f"/admin/SymbolAdmin/item{test_symbol['symbol_id']}",
+            f"/admin/SymbolAdmin/item/{test_symbol['symbol_id']}",
             json={"status": 2}  # CloseOnly
         )
         assert close_only_resp.status_code == 200
@@ -226,8 +233,8 @@ class TestSymbolLifecycle:
         
         # Resume trading
         resume_resp = await admin_client.put(
-            f"/admin/SymbolAdmin/item{test_symbol['symbol_id']}",
-            json={"status": "ACTIVE"}  # Trading
+            f"/admin/SymbolAdmin/item/{test_symbol['symbol_id']}",
+            json={"status": "ONLINE"}  # Trading
         )
         assert resume_resp.status_code == 200
         

@@ -20,6 +20,7 @@ from sqlalchemy import (
     ForeignKey,
     CheckConstraint,
     Index,
+    func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncAttrs
@@ -29,6 +30,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 class Base(AsyncAttrs, DeclarativeBase):
     """Base class for all models"""
     pass
+
 
 
 class Asset(Base):
@@ -44,7 +46,7 @@ class Asset(Base):
     decimals: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     status: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)  # 0=disabled, 1=active
     asset_flags: Mapped[int] = mapped_column(Integer, nullable=False, default=7)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=func.now())
     
     __table_args__ = (
         CheckConstraint("asset = UPPER(asset)", name="chk_asset_uppercase"),
@@ -69,7 +71,7 @@ class Symbol(Base):
     symbol_flags: Mapped[int] = mapped_column(Integer, nullable=False, default=15)
     base_maker_fee: Mapped[int] = mapped_column(Integer, nullable=False, default=1000)  # 0.10%
     base_taker_fee: Mapped[int] = mapped_column(Integer, nullable=False, default=2000)  # 0.20%
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=func.now())
     
     __table_args__ = (
         CheckConstraint("symbol = UPPER(symbol)", name="chk_symbol_uppercase"),
@@ -106,7 +108,8 @@ class AdminAuditLog(Base):
     entity_id: Mapped[Optional[int]] = mapped_column(BigInteger)
     old_value: Mapped[Optional[dict]] = mapped_column(JSONB)
     new_value: Mapped[Optional[dict]] = mapped_column(JSONB)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=func.now())
+
     
     __table_args__ = (
         Index("idx_audit_admin_id", "admin_id"),

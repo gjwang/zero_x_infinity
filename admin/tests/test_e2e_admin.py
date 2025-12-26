@@ -54,7 +54,7 @@ class TestInputValidationUnit:
             asset="BTC",
             name="Bitcoin",
             decimals=8,
-            status=1,
+            status="ACTIVE",
         )
         assert schema.asset == "BTC"
         assert schema.decimals == 8

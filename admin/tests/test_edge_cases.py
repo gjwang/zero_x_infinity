@@ -111,7 +111,7 @@ class TestSymbolCloseOnlyState:
         """CloseOnly status (2) should be valid in update"""
         schema = SymbolUpdateSchema(
             min_qty=100,
-            status=2,  # CloseOnly
+            status="CLOSE_ONLY",  # CloseOnly
             symbol_flags=0,
             base_maker_fee=100,
             base_taker_fee=200,
@@ -122,7 +122,7 @@ class TestSymbolCloseOnlyState:
         """Trading status (1) should be valid"""
         schema = SymbolUpdateSchema(
             min_qty=100,
-            status=1,  # Trading
+            status="ONLINE",  # Trading
             symbol_flags=0,
             base_maker_fee=100,
             base_taker_fee=200,
@@ -133,7 +133,7 @@ class TestSymbolCloseOnlyState:
         """Halt status (0) should be valid"""
         schema = SymbolUpdateSchema(
             min_qty=100,
-            status=0,  # Halt
+            status="OFFLINE",  # Halt
             symbol_flags=0,
             base_maker_fee=100,
             base_taker_fee=200,

@@ -20,7 +20,7 @@ class TestAssetValidation:
             asset="BTC",
             name="Bitcoin",
             decimals=8,
-            status=1,
+            status="ACTIVE",
         )
         assert schema.asset == "BTC"
         assert schema.decimals == 8
@@ -74,7 +74,7 @@ class TestAssetValidation:
                 asset="BTC",
                 name="Bitcoin",
                 decimals=8,
-                status=3,  # Only 0 or 1 allowed
+                status="INVALID",  # Only 0 or 1 allowed
             )
         # Pydantic IntEnum with custom validator (UX-08)
         assert "status must be active or disabled" in str(exc_info.value).lower()
@@ -215,7 +215,7 @@ class TestAssetImmutability:
         """Valid update should pass"""
         schema = AssetUpdateSchema(
             name="Bitcoin Updated",
-            status=0,  # Disable
+            status="DISABLED",  # Disable
             asset_flags=7,
         )
         assert schema.name == "Bitcoin Updated"
@@ -259,7 +259,7 @@ class TestSymbolImmutability:
         """Valid update should pass"""
         schema = SymbolUpdateSchema(
             min_qty=100,
-            status=2,  # Close-only
+            status="CLOSE_ONLY",  # Close-only
             symbol_flags=15,
             base_maker_fee=500,  # 0.05%
             base_taker_fee=1000,  # 0.10%

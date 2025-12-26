@@ -55,7 +55,7 @@ class TestAssetImmutability:
         # UpdateSchema doesn't accept 'asset' field
         schema = AssetUpdateSchema(
             name="Updated Name",
-            status=1,
+            status="ACTIVE",
             asset_flags=7,
         )
         # Verify 'asset' is not present
@@ -65,7 +65,7 @@ class TestAssetImmutability:
         """Attempting to pass 'decimals' to UpdateSchema should have no effect"""
         schema = AssetUpdateSchema(
             name="Updated Name",
-            status=1,
+            status="ACTIVE",
             asset_flags=7,
         )
         # Verify 'decimals' is not present
@@ -136,7 +136,7 @@ class TestSymbolImmutability:
         """Attempting to pass 'symbol' to UpdateSchema should have no effect"""
         schema = SymbolUpdateSchema(
             min_qty=100,
-            status=1,
+            status="ONLINE",
             symbol_flags=0,
             base_maker_fee=50,
             base_taker_fee=100,
@@ -147,7 +147,7 @@ class TestSymbolImmutability:
         """Attempting to pass asset IDs to UpdateSchema should have no effect"""
         schema = SymbolUpdateSchema(
             min_qty=100,
-            status=1,
+            status="ONLINE",
             symbol_flags=0,
             base_maker_fee=50,
             base_taker_fee=100,
