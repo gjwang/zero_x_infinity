@@ -76,9 +76,8 @@ class TestAssetValidation:
                 decimals=8,
                 status=3,  # Only 0 or 1 allowed
             )
-        # Pydantic IntEnum error message (UX-08)
-        assert ("not a valid assetstatus" in str(exc_info.value).lower() or "type=value_error" in str(exc_info.value).lower())
-        assert ("not a valid assetstatus" in str(exc_info.value).lower() or "type=value_error" in str(exc_info.value).lower())
+        # Pydantic IntEnum with custom validator (UX-08)
+        assert "not a valid assetstatus" in str(exc_info.value).lower()
 
 
 class TestSymbolValidation:
