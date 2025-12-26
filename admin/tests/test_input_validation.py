@@ -77,8 +77,8 @@ class TestAssetValidation:
                 status=3,  # Only 0 or 1 allowed
             )
         # Pydantic IntEnum error message (UX-08)
-        assert ("input should be 0 or 1" in str(exc_info.value).lower() 
-                or "type=enum" in str(exc_info.value).lower())
+        assert ("not a valid assetstatus" in str(exc_info.value).lower() or "type=value_error" in str(exc_info.value).lower())
+        assert ("not a valid assetstatus" in str(exc_info.value).lower() or "type=value_error" in str(exc_info.value).lower())
 
 
 class TestSymbolValidation:

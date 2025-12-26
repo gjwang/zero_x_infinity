@@ -40,8 +40,19 @@ class AssetCreateSchema(BaseModel):
     
     status: Annotated[AssetStatus, Field(
         default=AssetStatus.ACTIVE,
-        description="Status: 0=disabled, 1=active"
+        description="Status: ACTIVE or DISABLED"
     )]
+    
+    @field_validator('status', mode='before')
+    @classmethod
+    def validate_status(cls, v):
+        """Accept string or int input (UX-08)"""
+        if isinstance(v, str):
+            try:
+                return AssetStatus[v.upper()]
+            except KeyError:
+                raise ValueError(f"Status must be ACTIVE or DISABLED, got: {v}")
+        return AssetStatus(v)  # Accept int
     
     @field_serializer('status')
     def serialize_status(self, value: AssetStatus) -> str:
@@ -74,8 +85,19 @@ class AssetUpdateSchema(BaseModel):
     )]
     
     status: Annotated[AssetStatus, Field(
-        description="Status: 0=disabled, 1=active"
+        description="Status: ACTIVE or DISABLED"
     )]
+    
+    @field_validator('status', mode='before')
+    @classmethod
+    def validate_status(cls, v):
+        """Accept string or int input (UX-08)"""
+        if isinstance(v, str):
+            try:
+                return AssetStatus[v.upper()]
+            except KeyError:
+                raise ValueError(f"Status must be ACTIVE or DISABLED, got: {v}")
+        return AssetStatus(v)
     
     @field_serializer('status')
     def serialize_status(self, value: AssetStatus) -> str:

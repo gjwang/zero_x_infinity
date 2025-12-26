@@ -57,8 +57,21 @@ class SymbolCreateSchema(BaseModel):
     
     status: Annotated[SymbolStatus, Field(
         default=SymbolStatus.ONLINE,
-        description="Trading status: 0=offline, 1=online, 2=close-only"
+        description="Trading status: ONLINE, OFFLINE, or CLOSE_ONLY"
     )]
+    
+    @field_validator('status', mode='before')
+    @classmethod
+    def validate_status(cls, v):
+        """Accept string or int input (UX-08)"""
+        if isinstance(v, str):
+            # Handle both underscore and hyphen formats
+            normalized = v.upper().replace('-', '_')
+            try:
+                return SymbolStatus[normalized]
+            except KeyError:
+                raise ValueError(f"Status must be ONLINE, OFFLINE, or CLOSE_ONLY, got: {v}")
+        return SymbolStatus(v)  # Accept int
     
     @field_serializer('status')
     def serialize_status(self, value: SymbolStatus) -> str:
@@ -113,8 +126,20 @@ class SymbolUpdateSchema(BaseModel):
     )]
     
     status: Annotated[SymbolStatus, Field(
-        description="Trading status"
+        description="Trading status: ONLINE, OFFLINE, or CLOSE_ONLY"
     )]
+    
+    @field_validator('status', mode='before')
+    @classmethod
+    def validate_status(cls, v):
+        """Accept string or int input (UX-08)"""
+        if isinstance(v, str):
+            normalized = v.upper().replace('-', '_')
+            try:
+                return SymbolStatus[normalized]
+            except KeyError:
+                raise ValueError(f"Status must be ONLINE, OFFLINE, or CLOSE_ONLY, got: {v}")
+        return SymbolStatus(v)
     
     @field_serializer('status')
     def serialize_status(self, value: SymbolStatus) -> str:
