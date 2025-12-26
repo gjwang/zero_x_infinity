@@ -2,6 +2,7 @@
 Application Settings with Pydantic validation
 FastAPI best practice: type-safe configuration with .env support
 """
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,7 +18,8 @@ class Settings(BaseSettings):
     
     # Database - MUST be set via environment variable (CI standard)
     # Source: db_env.sh exports DATABASE_URL_ASYNC
-    database_url: str
+    # Pydantic will read from DATABASE_URL_ASYNC or database_url env vars
+    database_url: str = Field(validation_alias="DATABASE_URL_ASYNC")
     
     # Security - MUST be set in production
     admin_secret_key: str = "dev-secret-key-change-in-production-32chars+"
