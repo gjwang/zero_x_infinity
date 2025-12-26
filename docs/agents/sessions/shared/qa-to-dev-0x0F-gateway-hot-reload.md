@@ -52,6 +52,13 @@ To resolve this, you must implement a **Hot-Reload Mechanism** (Phase 0x10).
 
 **Goal**: `scripts/test_admin_e2e_ci.sh` must pass GREEN.
 
+## 🔮 Phase 0x11: UI E2E (Playwright) Requirements
+**Context**: Once Hot-Reload is fixed, we need a minimal UI test.
+**Scope**: "Longest Path" Verification (Happy Path Only).
+1.  **Action**: Playwright clicks "Create Asset" in Browser.
+2.  **Verification**: Poll Gateway API (`/api/v1/public/assets`) until the asset appears.
+**Rationale**: Ensures the UI Form -> API Payload mapping is correct, but offloads edge-case testing to the cheaper API E2E job.
+
 ---
 
 **Artifacts Included**:

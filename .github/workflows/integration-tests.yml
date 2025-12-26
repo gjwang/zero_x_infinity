@@ -666,7 +666,11 @@ jobs:
     runs-on: ubuntu-latest
     if: false # TODO: Enable in Phase 0x11 (Playwright)
     steps:
-      - run: echo "Placeholder for Playwright UI Smoke Test (Login + Create 1 Asset)"
+      - run: |
+          echo "Placeholder for Playwright UI End-to-End Test"
+          echo "Scope: Longest Path Verification (Happy Path Only)"
+          echo "Flow: UI Input -> Admin Backend -> DB -> Gateway API Verification"
+          echo "Note: Edge cases are covered by 'Admin API E2E', this test focuses on UI integrity."
 
 
   test-openapi:
