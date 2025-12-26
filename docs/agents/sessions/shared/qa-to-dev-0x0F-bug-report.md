@@ -1,23 +1,28 @@
 # QA → Developer: 0x0F Bug Report
 
 > **From**: QA Team (Agent Leader)  
-> **To**: Developer  
-> **Date**: 2025-12-26  
-> **Priority**: 🔴 P0 / 🟡 P1  
+> **To**: Developer + Architect  
+> **Date**: 2025-12-26 (v3 - ID Spec Compliance)  
+> **Priority**: 🔴 P0 / 🟡 P1 / 🟠 架构确认  
 > **Branch**: `0x0F-admin-dashboard`
 
 ---
 
 ## 📊 Test Execution Summary
 
-| Agent | Tests | Passed | Failed | Blocked |
-|-------|-------|--------|--------|---------|
-| 🔴 A (Edge) | 18 | 17 | **1** | 0 |
-| 🔵 B (Core) | 15 | 15 | 0 | 0 |
-| 🟣 C (Security) | 12 | 4 | **6** | 2 |
-| Immutability | 22 | 22 | 0 | 0 |
+| Category | Tests | Passed | Failed | Skipped |
+|----------|-------|--------|--------|---------|
 | Input Validation | 26 | 26 | 0 | 0 |
-| **Total** | **93** | **84** | **7** | **2** |
+| Immutability | 22 | 22 | 0 | 0 |
+| ID Mapping | 17 | 17 | 0 | 0 |
+| **ID Spec Compliance** | **17** | **12** | **5** | 0 |
+| Edge Cases | 18 | 17 | 1 | 0 |
+| Core Flow | 15 | 15 | 0 | 0 |
+| Constraints | 11 | 10 | 1 | 0 |
+| Security | 12 | 4 | 6 | 2 |
+| Integration | 14 | 0 | 0 | 14 |
+| Login | 3 | 1 | 2 | 0 |
+| **Total** | **160** | **131** | **15** | **14** |
 
 ---
 
@@ -171,6 +176,126 @@ curl http://localhost:8001/admin/
 
 ---
 
+## 🐛 BUG-07: Symbol 允许 base_asset_id = quote_asset_id [P0]
+
+**TC-NEW-01**: Self-referential constraint
+
+### 复现步骤
+
+```python
+from admin.symbol import SymbolCreateSchema
+
+schema = SymbolCreateSchema(
+    symbol="BTC_BTC",
+    base_asset_id=1,
+    quote_asset_id=1,  # Same as base!
+    price_decimals=2,
+    qty_decimals=8,
+)
+# No ValidationError raised!
+```
+
+### 预期行为
+
+- `base_asset_id != quote_asset_id` 应该被校验
+- BTC_BTC 这种自引用 Symbol 应该被拒绝
+
+### 实际行为
+
+- 接受 base_asset_id = quote_asset_id
+
+### 文件位置
+
+`admin/admin/symbol.py` - `SymbolCreateSchema` 缺少自引用校验
+
+### 建议修复
+
+```python
+@model_validator(mode='after')
+def validate_base_not_equal_quote(self):
+    if self.base_asset_id == self.quote_asset_id:
+        raise ValueError("base_asset_id cannot equal quote_asset_id")
+    return self
+```
+
+---
+
+## 🐛 BUG-08: Asset 正则过于严格 - 不允许数字 [P0]
+
+**TC-SPEC-01~03**: ID Specification Compliance
+
+### 问题
+
+Per `id-specification.md`:
+- 规范正则: `^[A-Z0-9_]{1,16}$`
+- 当前实现: `^[A-Z]+$` ❌
+
+### 复现
+
+```python
+AssetCreateSchema(asset="BTC2", ...)      # ❌ Rejected (should be valid)
+AssetCreateSchema(asset="1INCH", ...)     # ❌ Rejected (should be valid)
+AssetCreateSchema(asset="STABLE_COIN",..) # ❌ Rejected (should be valid)
+```
+
+### 预期
+
+按规范，以下应该合法：
+- `BTC2` (数字)
+- `1INCH` (数字开头)
+- `STABLE_COIN` (下划线)
+
+### 建议修复
+
+```python
+# admin/admin/asset.py
+@field_validator("asset")
+def validate_asset(cls, v: str) -> str:
+    v = v.upper()
+    if not re.match(r"^[A-Z0-9_]{1,16}$", v):  # 改为规范的正则
+        raise ValueError("Asset must contain only A-Z, 0-9, underscore")
+    return v
+```
+
+---
+
+## 🐛 BUG-09: Symbol 正则过于严格 - 不允许数字 [P0]
+
+**TC-SPEC-04~05**: ID Specification Compliance
+
+### 问题
+
+Per `id-specification.md`:
+- 规范正则: `^[A-Z0-9]+_[A-Z0-9]+$`
+- 当前实现: `^[A-Z]+_[A-Z]+$` ❌
+
+### 复现
+
+```python
+SymbolCreateSchema(symbol="ETH2_USDT", ...)     # ❌ Rejected
+SymbolCreateSchema(symbol="1000SHIB_USDT", ...) # ❌ Rejected
+```
+
+### 预期
+
+按规范，以下应该合法：
+- `ETH2_USDT`
+- `1000SHIB_USDT`
+
+### 建议修复
+
+```python
+# admin/admin/symbol.py
+@field_validator("symbol")
+def validate_symbol(cls, v: str) -> str:
+    v = v.upper()
+    if not re.match(r"^[A-Z0-9]+_[A-Z0-9]+$", v):  # 改为规范的正则
+        raise ValueError("Symbol must be in format BASE_QUOTE")
+    return v
+```
+
+---
+
 ## ✅ 通过的关键测试
 
 | Test | Status |
@@ -180,6 +305,7 @@ curl http://localhost:8001/admin/
 | TC-STATE-01~06 | ✅ 6/6 状态机测试 |
 | TC-CORE-13~14 | ✅ CloseOnly 状态转换 |
 | TC-PREC-01~03 | ✅ 精度测试 |
+| **TC-ID-01~17** | ✅ **17/17 ID 映射测试全部通过** |
 
 ---
 
@@ -189,6 +315,9 @@ curl http://localhost:8001/admin/
 
 - [ ] BUG-01: 添加 Asset name 长度验证
 - [ ] BUG-02: 设置 AuditLogAdmin readonly=True
+- [ ] BUG-07: 添加 base_asset_id != quote_asset_id 校验
+- [ ] BUG-08: Asset 正则改为 `^[A-Z0-9_]{1,16}$`
+- [ ] BUG-09: Symbol 正则改为 `^[A-Z0-9]+_[A-Z0-9]+$`
 
 ### P1 (High - 应该修复)
 
@@ -196,6 +325,23 @@ curl http://localhost:8001/admin/
 - [ ] BUG-04: 添加 Session 过期配置
 - [ ] BUG-05: 使用更长的默认 SECRET_KEY
 - [ ] BUG-06: 修复 Admin 页面路由
+
+---
+
+## 📊 最终测试统计
+
+| Category | Total | Pass | Fail | Skip |
+|----------|-------|------|------|------|
+| Input Validation | 26 | 26 | 0 | 0 |
+| Immutability | 22 | 22 | 0 | 0 |
+| ID Mapping | 17 | 17 | 0 | 0 |
+| Edge Cases | 18 | 17 | 1 | 0 |
+| Core Flow | 15 | 15 | 0 | 0 |
+| Constraints | 11 | 10 | 1 | 0 |
+| Security | 12 | 4 | 6 | 2 |
+| Integration | 14 | 0 | 0 | 14 |
+| Login | 3 | 1 | 2 | 0 |
+| **Total** | **143** | **119** | **10** | **14** |
 
 ---
 
@@ -208,4 +354,5 @@ curl http://localhost:8001/admin/
 ---
 
 *QA Team (Agent Leader)*  
-*Generated: 2025-12-26*
+*Generated: 2025-12-26 (Updated)*
+
