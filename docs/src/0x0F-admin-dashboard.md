@@ -390,26 +390,34 @@ Flags: [Deposit ✓] [Withdraw ✓] [Trade ✓] [Internal Transfer ✓]
 
 Instead of: `asset_flags: 23`
 
-**Implementation**:
+**Implementation** (Final Design):
+
+> ⚠️ **API Design**: Status accepts **STRING INPUT ONLY**. Integer input is rejected.
 
 ```python
-class AssetStatusEnum(str, Enum):
-    DISABLED = "Disabled"
-    ACTIVE = "Active"
+class AssetStatus(IntEnum):
+    DISABLED = 0
+    ACTIVE = 1
 
-class SymbolStatusEnum(str, Enum):
-    OFFLINE = "Offline"
-    ONLINE = "Online"
-    CLOSE_ONLY = "Close-Only"
+class SymbolStatus(IntEnum):
+    OFFLINE = 0
+    ONLINE = 1
+    CLOSE_ONLY = 2
 
-# FastAPI Amis Admin custom display
+# Pydantic schema validation (string-only input)
+@field_validator('status', mode='before')
+def validate_status(cls, v):
+    if not isinstance(v, str):
+        raise ValueError(f"Status must be a string, got: {type(v).__name__}")
+    return AssetStatus[v.upper()]
+
+# Output serialization (always string)
 @field_serializer('status')
-def serialize_status(self, status: int, _info):
-    if status == 0:
-        return "Disabled"
-    elif status == 1:
-        return "Active"
+def serialize_status(self, value: int) -> str:
+    return AssetStatus(value).name  # "ACTIVE" or "DISABLED"
 ```
+
+**Test Count**: 177 unit tests (5 for UX-08 specifically)
 
 ---
 
@@ -456,7 +464,7 @@ def serialize_status(self, status: int, _info):
 5. ✅ Runs all tests (Basic HTTP + Unit + E2E)
 6. ✅ Cleanup (stops server gracefully)
 
-**Test Coverage:** 171 total tests
+**Test Coverage:** 177 total tests
 - 4 Basic HTTP tests (`verify_e2e.py`)
 - 163 Unit tests (validation, security, constraints)
 - 17 E2E integration tests (asset/symbol lifecycle, audit log, fee updates)
@@ -504,7 +512,7 @@ pytest tests/e2e/test_asset_lifecycle.py -v
 | 1 | `admin/` project code | Code Review |
 | 2 | Admin UI accessible | Browser at `localhost:8001` |
 | 3 | **One-click E2E test** | `./scripts/test_admin_e2e.sh` passes |
-| 4 | All 171 tests pass | `pytest admin/tests/ -v` |
+| 4 | All 177 tests pass | `pytest admin/tests/ -v` |
 | 5 | Audit log queryable | Admin UI audit page |
 | 6 | Gateway hot-reload works | Config change without restart |
 
