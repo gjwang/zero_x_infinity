@@ -32,6 +32,8 @@
 1. **命名一致性**: 使用 `status` 字段，值与 `migrations/001_init_schema.sql` 一致
 2. **输入验证**: 严格拒绝非法输入
 3. **热加载**: 配置变更后 Gateway 无需重启
+4. **审计日志**: 使用 Middleware 记录所有操作 (AdminID, IP, Action, OldValue, NewValue)
+5. **Decimal 精度**: 所有金额/费率用 `Decimal`，序列化为 `String` (防止 float 精度丢失)
 
 ## Acceptance Criteria
 

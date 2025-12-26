@@ -19,9 +19,10 @@
 | Asset | CRUD + Enable/Disable |
 | Symbol | CRUD + Trading/Halt |
 | VIP Level | CRUD + 默认值 |
-| Audit Log | 所有操作有日志 |
+| Audit Log | 所有操作有日志 (AdminID, IP, Action) |
 | 输入验证 | 非法输入拒绝 |
 | 热加载 | 配置变更无需重启 Gateway |
+| **Decimal 精度** | 费率 API 返回 String，非 float |
 
 ## Acceptance Criteria
 
