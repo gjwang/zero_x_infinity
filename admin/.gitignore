@@ -1,0 +1,18 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+
+# Database
+*.db
+admin_auth.db
+
+# Environment
+.env
+
+# IDE
+.vscode/
+.idea/
