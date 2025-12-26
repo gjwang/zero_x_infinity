@@ -40,3 +40,12 @@ class SymbolAdmin(admin.ModelAdmin):
     # Use optimized Pydantic schemas
     schema_create = SymbolCreateSchema
     schema_update = SymbolUpdateSchema
+
+    def error_execute_sql(self, request: object, error: Exception):
+        import sys
+        import traceback
+        print(f"DEBUG: SQL Error Caught in SymbolAdmin: {error}")
+        traceback.print_exc(file=sys.stdout)
+        sys.stdout.flush()
+        # Call super to maintain default behavior (raising 422/500)
+        return super().error_execute_sql(request, error)

@@ -95,10 +95,20 @@ class TestSymbolLifecycle:
         assert quote_asset.status_code in (200, 201), f"Failed to create quote asset: {quote_asset.text}"
         
         # Step 2: Create Symbol
+        base_asset_data = base_asset.json()
+        quote_asset_data = quote_asset.json()
+        
+        # FastAPI-Amis-Admin response format: {"status": 0, "msg": "success", "data": {...}}
+        base_asset_id = base_asset_data.get("data", {}).get("asset_id")
+        quote_asset_id = quote_asset_data.get("data", {}).get("asset_id")
+        
+        assert base_asset_id is not None, f"Failed to get base asset_id from response: {base_asset_data}"
+        assert quote_asset_id is not None, f"Failed to get quote asset_id from response: {quote_asset_data}"
+        
         symbol_resp = await admin_client.post("/admin/SymbolAdmin/item", json={
             "symbol": "TESTA_TESTB",
-            "base_asset_id": base_asset.json().get("asset_id", 999),
-            "quote_asset_id": quote_asset.json().get("asset_id", 998),
+            "base_asset_id": base_asset_id,
+            "quote_asset_id": quote_asset_id,
             "price_decimals": 2,
             "qty_decimals": 8,
             "status": "ONLINE",  # Trading
