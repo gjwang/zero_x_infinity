@@ -680,7 +680,15 @@ jobs:
         run: |
           ./target/release/zero_x_infinity --gateway --port 8080 > /tmp/gateway_openapi.log 2>&1 &
           echo $! > /tmp/gateway.pid
-          sleep 12  # Wait for Gateway to initialize fully
+          # Wait for Gateway health check (per ci-pitfalls.md pattern)
+          for i in $(seq 1 60); do
+            if curl -sf "http://localhost:8080/api/v1/health" > /dev/null 2>&1; then
+              echo "✅ Gateway is ready"
+              break
+            fi
+            echo "⏳ Waiting for Gateway... ($i/60)"
+            sleep 1
+          done
 
       - name: Run OpenAPI E2E Tests
         run: python3 scripts/test_openapi_e2e.py --ci -v
