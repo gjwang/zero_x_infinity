@@ -104,6 +104,7 @@ graph TD
 | 0x0C | [Trade Fee](./docs/src/0x0C-trade-fee.md) | Maker/Taker Fee System |
 | **Part III** | **Resilience** | |
 | 0x0D | [Snapshot & Recovery](./docs/src/0x0D-snapshot-recovery.md) | Universal WAL & Snapshot Persistence |
+| 0x0E | [OpenAPI Integration](./docs/src/0x0E-openapi-integration.md) | Swagger UI & SDK Generation |
 
 ---
 
@@ -276,6 +277,7 @@ graph TD
 | 0x0C | [Trade Fee](./docs/src/0x0C-trade-fee.md) | Maker/Taker 手续费系统 |
 | **Part III** | **鲁棒性阶段 (Resilience)** | |
 | 0x0D | [Snapshot & Recovery](./docs/src/0x0D-snapshot-recovery.md) | 通用 WAL & 快照持久化 |
+| 0x0E | [OpenAPI Integration](./docs/src/0x0E-openapi-integration.md) | Swagger UI 与 SDK 生成 |
 
 ---
 
