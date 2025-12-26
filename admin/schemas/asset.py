@@ -1,8 +1,16 @@
 """
 Asset Schemas - FastAPI Best Practice: Declarative Pydantic Validation
+UX-08: Status displayed as human-readable strings
 """
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, field_serializer
 from typing import Annotated
+from enum import IntEnum
+
+
+class AssetStatus(IntEnum):
+    """Asset operational status"""
+    DISABLED = 0  # 🔴 Red
+    ACTIVE = 1    # 🟢 Green
 
 
 class AssetCreateSchema(BaseModel):
@@ -30,12 +38,15 @@ class AssetCreateSchema(BaseModel):
         description="Precision decimals (0-18)"
     )]
     
-    status: Annotated[int, Field(
-        ge=0,
-        le=1,
-        default=1,
+    status: Annotated[AssetStatus, Field(
+        default=AssetStatus.ACTIVE,
         description="Status: 0=disabled, 1=active"
     )]
+    
+    @field_serializer('status')
+    def serialize_status(self, value: AssetStatus) -> str:
+        """Display status as string (UX-08)"""
+        return value.name  # "ACTIVE" or "DISABLED"
     
     asset_flags: Annotated[int, Field(
         default=7,
@@ -62,11 +73,14 @@ class AssetUpdateSchema(BaseModel):
         description="Asset display name"
     )]
     
-    status: Annotated[int, Field(
-        ge=0,
-        le=1,
+    status: Annotated[AssetStatus, Field(
         description="Status: 0=disabled, 1=active"
     )]
+    
+    @field_serializer('status')
+    def serialize_status(self, value: AssetStatus) -> str:
+        """Display status as string (UX-08)"""
+        return value.name
     
     asset_flags: Annotated[int, Field(
         ge=0,

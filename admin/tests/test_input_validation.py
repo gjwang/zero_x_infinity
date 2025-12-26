@@ -76,8 +76,9 @@ class TestAssetValidation:
                 decimals=8,
                 status=3,  # Only 0 or 1 allowed
             )
-        # Pydantic Field(le=1) error message
-        assert "less than or equal" in str(exc_info.value).lower() or "le=1" in str(exc_info.value).lower()
+        # Pydantic IntEnum error message (UX-08)
+        assert ("input should be 0 or 1" in str(exc_info.value).lower() 
+                or "type=enum" in str(exc_info.value).lower())
 
 
 class TestSymbolValidation:

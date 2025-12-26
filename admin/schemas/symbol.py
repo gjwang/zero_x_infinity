@@ -1,7 +1,8 @@
 """
 Symbol Schemas - FastAPI Best Practice: Declarative Pydantic Validation
+UX-08: Status displayed as human-readable strings
 """
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, field_serializer, model_validator
 from typing import Annotated
 from enum import IntEnum
 
@@ -59,6 +60,11 @@ class SymbolCreateSchema(BaseModel):
         description="Trading status: 0=offline, 1=online, 2=close-only"
     )]
     
+    @field_serializer('status')
+    def serialize_status(self, value: SymbolStatus) -> str:
+        """Display status as string (UX-08)"""
+        return value.name  # "ONLINE", "OFFLINE", or "CLOSE_ONLY"
+    
     symbol_flags: Annotated[int, Field(
         default=15,
         ge=0,
@@ -109,6 +115,11 @@ class SymbolUpdateSchema(BaseModel):
     status: Annotated[SymbolStatus, Field(
         description="Trading status"
     )]
+    
+    @field_serializer('status')
+    def serialize_status(self, value: SymbolStatus) -> str:
+        """Display status as string (UX-08)"""
+        return value.name
     
     symbol_flags: Annotated[int, Field(
         ge=0,
