@@ -28,22 +28,31 @@
 
 ## 🧪 验证步骤
 
-### 1. 运行完整测试套件
+### 1. 运行完整测试套件 (一键测试)
 
 ```bash
 cd admin
-source venv/bin/activate
-
-# REQUIRED: Load environment variables (sets DATABASE_URL_ASYNC)
-# Per ci-pitfalls.md section 2.1: "测试脚本必须加载 db_env.sh"
-source ../scripts/lib/db_env.sh
-
-pytest tests/  # 期待 171/171 PASS
+./run_tests.sh
 ```
+
+**脚本自动处理**:
+- ✅ 检查/创建 venv
+- ✅ 安装依赖
+- ✅ 加载环境变量 (DATABASE_URL_ASYNC)
+- ✅ 运行 pytest
 
 **预期结果**:
 ```
 ================= 171 passed, 32 skipped, 36 warnings in ~7.5s =================
+✅ All tests passed!
+```
+
+**手动测试** (如果需要):
+```bash
+cd admin
+source venv/bin/activate
+source ../scripts/lib/db_env.sh  # REQUIRED
+pytest tests/ -v
 ```
 
 **关键测试类**:
