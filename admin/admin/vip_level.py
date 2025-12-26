@@ -45,6 +45,7 @@ class VIPLevelAdmin(admin.ModelAdmin):
     """Admin interface for VIP Level management"""
     
     page_schema = admin.PageSchema(label="VIP Levels", icon="fa fa-star")
+    pk_name = "level"  # Specify primary key name
     model = VIPLevel
     
     # List columns

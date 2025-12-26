@@ -14,7 +14,7 @@ BASE_DIR = Path(__file__).resolve().parent
 # Database
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql+asyncpg://postgres:postgres@localhost:5432/exchange_info_db"
+    "postgresql+asyncpg://trading:trading123@localhost:5433/exchange_info_db"
 )
 
 # Admin settings

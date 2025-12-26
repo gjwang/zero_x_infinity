@@ -82,6 +82,7 @@ class AssetAdmin(admin.ModelAdmin):
     """Admin interface for Asset management"""
     
     page_schema = admin.PageSchema(label="Assets", icon="fa fa-coins")
+    pk_name = "asset_id"  # Specify primary key name
     model = Asset
     
     # List columns

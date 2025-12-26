@@ -112,6 +112,7 @@ class SymbolAdmin(admin.ModelAdmin):
     """Admin interface for Symbol management"""
     
     page_schema = admin.PageSchema(label="Symbols", icon="fa fa-exchange-alt")
+    pk_name = "symbol_id"  # Specify primary key name
     model = Symbol
     
     # List columns

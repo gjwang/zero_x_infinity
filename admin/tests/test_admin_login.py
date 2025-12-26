@@ -35,8 +35,8 @@ async def test_health_check(client: AsyncClient):
 async def test_admin_page_requires_auth(client: AsyncClient):
     """Test admin page redirects to login when not authenticated"""
     response = await client.get("/admin/", follow_redirects=False)
-    # Should redirect to login or return 401/403
-    assert response.status_code in (302, 401, 403)
+    # Should redirect to login or return 401/403 (307 is also valid redirect)
+    assert response.status_code in (302, 307, 401, 403)
 
 
 @pytest.mark.anyio

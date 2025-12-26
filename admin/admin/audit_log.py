@@ -12,6 +12,7 @@ class AuditLogAdmin(admin.ModelAdmin):
     """Admin interface for Audit Log - READ ONLY"""
     
     page_schema = admin.PageSchema(label="Audit Log", icon="fa fa-history")
+    pk_name = "id"  # Specify primary key name
     model = AdminAuditLog
     
     # List columns
