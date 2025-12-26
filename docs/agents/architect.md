@@ -268,28 +268,12 @@ When writing tutorial chapters (`docs/src/0xXX-*.md`):
 
 ### Anti-patterns (DON'T)
 
-- ❌ "承前启后" as section title
 - ❌ Long philosophical explanations ("good documentation is not a luxury...")
 - ❌ Mixing English and Chinese in same paragraph
 - ❌ Repeating the same content in different words
 
 ### Example
 
-**❌ Bad (AI味太重)**:
-```markdown
-### 1.1 承前启后：从崩溃恢复到开发者体验
-
-在 0x0D 章节中，我们构建了...现在我们的核心交易引擎已经具备了鲁棒性。
-但仅有鲁棒性不足以成为可用的产品。考虑这个场景...
-```
-
-**✅ Good (简洁直接)**:
-```markdown
-### 1.1 为什么需要 OpenAPI？
-
-程序化交易者需要 API 文档。与其手写 YAML（容易和代码不同步），
-不如直接从 Rust 类型生成 OpenAPI 3.0 规范。
-```
 
 ---
 
