@@ -61,6 +61,9 @@ crc = "3.0"  # CRC64 for snapshot checksum
 utoipa = { version = "5.3", features = ["axum_extras", "chrono", "uuid"] }
 utoipa-swagger-ui = { version = "9.0", features = ["axum"] }
 
+# TTL Cache for hot-reload endpoints (Phase 0x0F)
+cached = { version = "0.54", features = ["async", "async_tokio_rt_multi_thread"] }
+
 [dev-dependencies]
 crossterm = "0.29.0"
 ratatui = "0.29.0"

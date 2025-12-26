@@ -1259,9 +1259,9 @@ pub async fn get_assets(
     State(state): State<Arc<AppState>>,
 ) -> Result<(StatusCode, Json<ApiResponse<Vec<AssetApiData>>>), (StatusCode, Json<ApiResponse<()>>)>
 {
-    // Hot-reload: Query PostgreSQL directly instead of using cached data
+    // Use TTL-cached loader (30 second cache, refreshes on expiry)
     if let Some(ref pg_db) = state.pg_db {
-        match crate::account::AssetManager::load_all(pg_db.pool()).await {
+        match super::cache::load_assets_cached(pg_db.pool().clone().into()).await {
             Ok(assets) => {
                 let data: Vec<AssetApiData> = assets
                     .iter()
@@ -1278,12 +1278,12 @@ pub async fn get_assets(
                 return Ok((StatusCode::OK, Json(ApiResponse::success(data))));
             }
             Err(e) => {
-                tracing::warn!("[get_assets] DB query failed, falling back to cache: {}", e);
+                tracing::warn!("[get_assets] Cached loader failed, falling back: {}", e);
             }
         }
     }
 
-    // Fallback to cached data if DB unavailable
+    // Fallback to startup cache if DB unavailable
     let assets: Vec<AssetApiData> = state
         .pg_assets
         .iter()
@@ -1316,11 +1316,11 @@ pub async fn get_symbols(
     State(state): State<Arc<AppState>>,
 ) -> Result<(StatusCode, Json<ApiResponse<Vec<SymbolApiData>>>), (StatusCode, Json<ApiResponse<()>>)>
 {
-    // Hot-reload: Query PostgreSQL directly instead of using cached data
+    // Use TTL-cached loaders (30 second cache, refreshes on expiry)
     if let Some(ref pg_db) = state.pg_db {
-        // Load fresh assets and symbols from DB
-        let assets_result = crate::account::AssetManager::load_all(pg_db.pool()).await;
-        let symbols_result = crate::account::SymbolManager::load_all(pg_db.pool()).await;
+        let pool = pg_db.pool().clone().into();
+        let assets_result = super::cache::load_assets_cached(Arc::clone(&pool)).await;
+        let symbols_result = super::cache::load_symbols_cached(pool).await;
 
         if let (Ok(assets), Ok(symbols)) = (assets_result, symbols_result) {
             let asset_map: std::collections::HashMap<i32, &crate::account::Asset> =
@@ -1352,11 +1352,11 @@ pub async fn get_symbols(
                 .collect();
             return Ok((StatusCode::OK, Json(ApiResponse::success(data))));
         } else {
-            tracing::warn!("[get_symbols] DB query failed, falling back to cache");
+            tracing::warn!("[get_symbols] Cached loader failed, falling back to startup cache");
         }
     }
 
-    // Fallback to cached data if DB unavailable
+    // Fallback to startup cache if DB unavailable
     let asset_map: std::collections::HashMap<i32, &crate::account::Asset> =
         state.pg_assets.iter().map(|a| (a.asset_id, a)).collect();
 
