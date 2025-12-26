@@ -108,14 +108,14 @@ pip install fastapi-amis-admin fastapi-user-auth sqlalchemy asyncpg
 | Asset | `assets_tb` | List, Create, Update, **Enable/Disable** |
 | Symbol | `symbols_tb` | List, Create, Update, **Trading/Halt** |
 | VIP Level | `vip_levels_tb` | List, Create, Update |
-| **Audit Log** | `admin_audit_log` | **List (只读)** |
+| **Audit Log** | `admin_audit_log` | **List (read-only)** |
 
 #### Symbol Status
 
-| Status | 说明 |
-|--------|------|
-| `trading` | 正常交易 |
-| `halt` | 暂停交易 (维护/紧急) |
+| Status | Description |
+|--------|-------------|
+| `trading` | Normal trading |
+| `halt` | Suspended (maintenance/emergency) |
 
 #### Step 4: Admin Auth
 - Default super admin account
