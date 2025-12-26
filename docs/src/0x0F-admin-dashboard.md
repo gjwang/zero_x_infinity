@@ -125,50 +125,50 @@ pip install fastapi-amis-admin fastapi-user-auth sqlalchemy asyncpg
 
 | ID | Criteria | Verify |
 |----|----------|--------|
-| AC-01 | Admin 可登录 `http://localhost:8001/admin` | 浏览器访问 |
-| AC-02 | 可新增 Asset (name, symbol, decimals) | UI + DB |
-| AC-03 | 可编辑 Asset | UI + DB |
-| AC-04 | Gateway 热加载 Asset 配置 | 无需重启 |
-| AC-05 | 可新增 Symbol (base, quote, fees) | UI + DB |
-| AC-06 | 可编辑 Symbol | UI + DB |
-| AC-07 | Gateway 热加载 Symbol 配置 | 无需重启 |
-| AC-08 | 可新增/编辑 VIP Level | UI + DB |
-| **AC-09** | **非法输入拒绝** (decimals<0, fee>100%) | 边界测试 |
-| **AC-10** | **VIP 默认 Normal (level=0, 100% fee)** | 初始化数据 |
-| **AC-11** | **Asset Enable/Disable** | 禁用后 Gateway 拒绝该资产 |
-| **AC-12** | **Symbol Halt** | 暂停后 Gateway 拒绝新订单 |
-| **AC-13** | **操作日志记录** | 所有 CRUD 操作可查询 |
+| AC-01 | Admin can login at `http://localhost:8001/admin` | Browser access |
+| AC-02 | Can create Asset (name, symbol, decimals) | UI + DB |
+| AC-03 | Can edit Asset | UI + DB |
+| AC-04 | Gateway hot-reload Asset config | No restart needed |
+| AC-05 | Can create Symbol (base, quote, fees) | UI + DB |
+| AC-06 | Can edit Symbol | UI + DB |
+| AC-07 | Gateway hot-reload Symbol config | No restart needed |
+| AC-08 | Can create/edit VIP Level | UI + DB |
+| **AC-09** | **Reject invalid input** (decimals<0, fee>100%) | Boundary tests |
+| **AC-10** | **VIP default Normal (level=0, 100% fee)** | Seed data |
+| **AC-11** | **Asset Enable/Disable** | Gateway rejects disabled asset |
+| **AC-12** | **Symbol Halt** | Gateway rejects new orders |
+| **AC-13** | **Audit log** | All CRUD ops queryable |
 
 #### Input Validation Rules
 
 | Field | Rule |
 |-------|------|
-| `decimals` | 0-18, 必须为整数 |
-| `fee_rate` | 0-100%, 不超过 10000 bps |
-| `symbol` | 唯一，大写字母+下划线 |
-| `base_asset` / `quote_asset` | 必须已存在 |
+| `decimals` | 0-18, must be integer |
+| `fee_rate` | 0-100%, max 10000 bps |
+| `symbol` | Unique, uppercase + underscore |
+| `base_asset` / `quote_asset` | Must exist |
 
-#### 未来优化 (P2)
+#### Future Enhancements (P2)
 
-> **关键配置双确认流程**:
-> 1. **预览** - 配置变更预览
-> 2. **二次确认** - 另一管理员审批
-> 3. **生效** - 确认后才应用
+> **Dual-Confirmation Workflow**:
+> 1. **Preview** - Config change preview
+> 2. **Second approval** - Another admin approves
+> 3. **Apply** - Takes effect after confirmation
 >
-> 适用于：Symbol 下架、Asset 禁用等不可撤销操作
+> For: Symbol delisting, Asset disable, and other irreversible ops
 
-> **多重签名提现 (Multisig)**:
-> - 后台只能生成"提现提案"，不能直接执行
-> - 流程：客服提交 → 财务审核 → 离线签名/MPC 执行
-> - 私钥绝对不能碰后台服务器
+> **Multisig Withdrawal**:
+> - Admin can only create "withdrawal proposal", not execute directly
+> - Flow: Support submits → Finance reviews → Offline sign/MPC executes
+> - Private keys must NEVER touch admin server
 
 ---
 
-## 6. 安全要求 (MVP 必须)
+## 5. Security Requirements (MVP Must-Have)
 
-### 6.1 强制审计日志 (Middleware)
+### 5.1 Mandatory Audit Logging (Middleware)
 
-每个请求都必须记录：
+Every request must be logged:
 
 ```python
 # FastAPI Middleware
@@ -186,9 +186,9 @@ async def audit_log_middleware(request: Request, call_next):
     return response
 ```
 
-### 6.2 Decimal 精度 (必须)
+### 5.2 Decimal Precision (Required)
 
-防止 JSON float 精度丢失：
+Prevent JSON float precision loss:
 
 ```python
 from pydantic import BaseModel, field_serializer
@@ -199,43 +199,43 @@ class FeeRateResponse(BaseModel):
 
     @field_serializer('rate')
     def serialize_rate(self, rate: Decimal, _info):
-        return str(rate)  # 序列化为 String
+        return str(rate)  # Serialize as String
 ```
 
-> ⚠️ 所有金额、费率必须用 `Decimal`，输出必须是 `String`
+> ⚠️ All amounts and rates MUST use `Decimal`, output MUST be `String`
 
-#### 命名一致性 (与现有代码)
+#### Naming Consistency (with existing code)
 
-| 实体 | 字段 | 值 |
-|------|------|-----|
+| Entity | Field | Values |
+|--------|-------|--------|
 | Asset | `status` | 0=disabled, 1=active |
 | Symbol | `status` | 0=offline, 1=online, 2=maintenance |
 
-> ⚠️ 实现时必须与 `migrations/001_init_schema.sql` 保持一致
+> ⚠️ Implementation MUST match `migrations/001_init_schema.sql`
 
 ---
 
-## 5. E2E 测试与交付清单
+## 6. E2E Tests and Deliverables
 
-### 测试脚本
+### Test Scripts
 
-| 脚本 | 功能 |
-|------|------|
-| `test_admin_login.py` | Admin 登录/登出 |
-| `test_asset_crud.py` | Asset 增删改查 + 禁用 |
-| `test_symbol_crud.py` | Symbol 增删改查 + 下线 |
-| `test_input_validation.py` | 非法输入拒绝 |
-| `test_hot_reload.py` | Gateway 热加载验证 |
+| Script | Function |
+|--------|----------|
+| `test_admin_login.py` | Admin login/logout |
+| `test_asset_crud.py` | Asset CRUD + disable |
+| `test_symbol_crud.py` | Symbol CRUD + halt |
+| `test_input_validation.py` | Invalid input rejection |
+| `test_hot_reload.py` | Gateway hot-reload verification |
 
-### 交付清单
+### Deliverables Checklist
 
-| 序号 | 交付物 | 验收方式 |
-|------|--------|----------|
-| 1 | `admin/` 项目代码 | Code Review |
-| 2 | Admin UI 可访问 | 浏览器访问 `localhost:8001` |
-| 3 | E2E 测试全部通过 | `pytest admin/tests/ -v` |
-| 4 | 操作日志可查询 | Admin UI 审计日志页面 |
-| 5 | Gateway 热加载工作 | 改配置后无需重启验证 |
+| # | Deliverable | Acceptance |
+|---|-------------|------------|
+| 1 | `admin/` project code | Code Review |
+| 2 | Admin UI accessible | Browser at `localhost:8001` |
+| 3 | E2E tests all pass | `pytest admin/tests/ -v` |
+| 4 | Audit log queryable | Admin UI audit page |
+| 5 | Gateway hot-reload works | Config change without restart |
 
 ### Future Phases (Not in MVP)
 
@@ -247,7 +247,7 @@ class FeeRateResponse(BaseModel):
 
 ---
 
-## 5. Directory Structure
+## 7. Directory Structure
 
 ```
 admin/
