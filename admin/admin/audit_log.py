@@ -32,6 +32,8 @@ class AuditLogAdmin(admin.ModelAdmin):
     
     # READ ONLY - disable all modifications
     enable_bulk_create = False
+    enable_bulk_delete = False  # Explicitly disable bulk delete
+    readonly = True  # Mark as read-only for audit purposes
     
     # Disable create/update/delete operations
     async def has_create_permission(self, request, data=None, **kwargs) -> bool:
