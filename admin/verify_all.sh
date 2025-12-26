@@ -17,7 +17,14 @@ cd "$(dirname "$BASH_SOURCE[0]")"
 
 # 1. Environment Check
 source ../scripts/lib/db_env.sh
-source .venv/bin/activate || source venv/bin/activate
+if [ -d ".venv" ]; then
+    source .venv/bin/activate
+elif [ -d "venv" ]; then
+    source venv/bin/activate
+else
+    echo "Error: Virtual environment not found (.venv or venv)"
+    exit 1
+fi
 
 # 2. Unit Tests
 echo -e "\n[1/3] Running Unit Tests (Schemas & Logic)..."

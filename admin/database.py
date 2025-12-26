@@ -14,6 +14,12 @@ from sqlalchemy.ext.asyncio import (
 engine: AsyncEngine | None = None
 SessionLocal: async_sessionmaker[AsyncSession] | None = None
 
+def AsyncSessionLocal(*args, **kwargs):
+    """Alias for SessionLocal - used in E2E tests"""
+    if SessionLocal is None:
+        raise RuntimeError("Database not initialized. Call init_db() first.")
+    return SessionLocal(*args, **kwargs)
+
 
 async def init_db(database_url: str):
     """

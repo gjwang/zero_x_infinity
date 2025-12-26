@@ -22,7 +22,7 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
     
     # Paths that trigger audit logging
     AUDITED_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
-    AUDITED_PATH_PREFIXES = ["/admin/asset", "/admin/symbol", "/admin/vip"]
+    AUDITED_PATH_PREFIXES = ["/admin/AssetAdmin", "/admin/SymbolAdmin", "/admin/VIPLevelAdmin"]
     
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         # Only audit modifying operations on specific paths
@@ -73,24 +73,37 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
     
     async def _create_audit_log(self, request: Request, body: Optional[dict]) -> None:
         """Create audit log entry"""
-        # Get admin info from request state (set by auth middleware)
+        from database import SessionLocal
+        
+        # 1. Get admin info (Try state first, then request.user from auth)
         admin_id = getattr(request.state, "admin_id", 0)
         admin_username = getattr(request.state, "admin_username", "unknown")
         
-        # Get client IP
+        # Fallback to request.user (fastapi-user-auth standard)
+        if not admin_id and hasattr(request, "user") and request.user:
+            admin_id = getattr(request.user, "id", 0)
+            admin_username = getattr(request.user, "username", "unknown")
+        
+        # 2. Get client IP
         ip_address = request.client.host if request.client else "unknown"
         
-        # Extract entity info
+        # 3. Extract entity info
         entity_type, entity_id = self._extract_entity_info(request.url.path)
         
-        # Get database session (should be available from app state)
+        # 4. Get database session
         db: Optional[AsyncSession] = getattr(request.state, "db", None)
         
-        if db is None:
-            # Fallback: log to console if no DB session
-            print(f"[AUDIT] {admin_username}@{ip_address} {request.method} {request.url.path}")
-            return
+        # If no session in state, create a short-lived one for auditing
+        session_to_use = db
+        should_close = False
         
+        if session_to_use is None:
+            if SessionLocal is None:
+                print(f"[AUDIT ERROR] Database not initialized, cannot log: {request.method} {request.url.path}")
+                return
+            session_to_use = SessionLocal()
+            should_close = True
+            
         try:
             log_entry = AdminAuditLog(
                 admin_id=admin_id,
@@ -103,7 +116,12 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
                 new_value=body,
                 created_at=datetime.utcnow(),
             )
-            db.add(log_entry)
-            await db.commit()
+            session_to_use.add(log_entry)
+            await session_to_use.commit()
         except Exception as e:
             print(f"[AUDIT ERROR] Failed to log: {e}")
+            if session_to_use:
+                await session_to_use.rollback()
+        finally:
+            if should_close and session_to_use:
+                await session_to_use.close()

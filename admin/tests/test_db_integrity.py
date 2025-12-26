@@ -1,7 +1,13 @@
 import pytest
 import asyncio
 from sqlalchemy import text
-from database import AsyncSessionLocal
+from database import init_db, AsyncSessionLocal
+from settings import settings
+
+@pytest.fixture(autouse=True, scope="module")
+async def db_setup():
+    """Initialize database connection for the module"""
+    await init_db(settings.database_url)
 
 @pytest.mark.asyncio
 async def test_db_schema_integrity():
