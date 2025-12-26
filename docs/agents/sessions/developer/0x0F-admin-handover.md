@@ -35,6 +35,38 @@
 4. **审计日志**: 使用 Middleware 记录所有操作 (AdminID, IP, Action, OldValue, NewValue)
 5. **Decimal 精度**: 所有金额/费率用 `Decimal`，序列化为 `String` (防止 float 精度丢失)
 
+---
+
+## 🚨 CRITICAL: ID Immutability
+
+Per `docs/src/standards/id-specification.md`, these fields are **IMMUTABLE** after creation:
+
+### Asset
+
+| Field | Create | Update |
+|-------|--------|--------|
+| `asset` | ✅ | ❌ **BLOCKED** |
+| `decimals` | ✅ | ❌ **BLOCKED** |
+| `name` | ✅ | ✅ |
+| `status` | ✅ | ✅ |
+
+### Symbol
+
+| Field | Create | Update |
+|-------|--------|--------|
+| `symbol` | ✅ | ❌ **BLOCKED** |
+| `base_asset_id` | ✅ | ❌ **BLOCKED** |
+| `quote_asset_id` | ✅ | ❌ **BLOCKED** |
+| `price_decimals` | ✅ | ❌ **BLOCKED** |
+| `qty_decimals` | ✅ | ❌ **BLOCKED** |
+| `min_qty` / `status` / `fees` | ✅ | ✅ |
+
+**Implementation**: Use separate `CreateSchema` and `UpdateSchema` in Pydantic.
+
+See: `admin/admin/asset.py` and `admin/admin/symbol.py` for reference.
+
+---
+
 ## Acceptance Criteria
 
 | ID | Criteria |
