@@ -16,33 +16,15 @@
 
 ## 1. Overview
 
-### 1.1 Connecting the Dots: From Crash Recovery to Developer Experience
+### 1.1 Why OpenAPI?
 
-In **0x0D**, we built the WAL & Snapshot persistence layer, ensuring the exchange can recover from crashes without losing a single order. Now our core trading engine is **resilient**.
-
-But resilience alone doesn't make a usable product. 
-
-Consider this scenario: A frontend developer wants to integrate with our API. They ask:
-- *"What endpoints are available?"*
-- *"What's the request/response format?"*
-- *"How do I authenticate?"*
-
-Without documentation, they have to read Rust source code. That's not acceptable.
-
-This is the topic of this chapter: **OpenAPI Integration**.
-
-> **Design Philosophy**: Good documentation is not a luxury—it's infrastructure. A well-documented API:
-> - Reduces support burden (developers can self-serve)
-> - Enables SDK auto-generation (Python, TypeScript, etc.)
-> - Improves security (clear auth instructions reduce mistakes)
-> - Accelerates frontend development (no guessing)
+Programmatic traders need API documentation to integrate with our exchange. Instead of maintaining separate docs that drift from code, we auto-generate **OpenAPI 3.0** spec directly from Rust types.
 
 ### 1.2 Goal
 
-Integrate **OpenAPI 3.0** documentation that:
-1. Auto-generates from Rust code (single source of truth)
-2. Serves interactive docs at `/docs` (Swagger UI)
-3. Enables client SDK generation
+1. Serve interactive API docs at `/docs` (Swagger UI)
+2. Export `openapi.json` for SDK generation
+3. Keep docs in sync with code (single source of truth)
 
 ### 1.3 Key Concepts
 
@@ -292,33 +274,15 @@ In this chapter, we added OpenAPI documentation to our trading engine:
 
 ## 1. 概述
 
-### 1.1 承前启后：从崩溃恢复到开发者体验
+### 1.1 为什么需要 OpenAPI？
 
-在 **0x0D** 章节中，我们构建了 WAL 和快照持久化层，确保交易所能够在崩溃后恢复，不丢失任何订单。现在我们的核心交易引擎已经具备了**鲁棒性**。
-
-但仅有鲁棒性不足以成为可用的产品。
-
-考虑这个场景：一个前端开发者想要集成我们的 API。他们会问：
-- *"有哪些可用的端点？"*
-- *"请求/响应格式是什么？"*
-- *"如何进行身份验证？"*
-
-如果没有文档，他们就得去读 Rust 源代码。这是不可接受的。
-
-这就是本章的主题：**OpenAPI 集成**。
-
-> **设计理念**：好的文档不是奢侈品——它是基础设施。一个文档完善的 API：
-> - 减少支持负担（开发者可以自助）
-> - 支持 SDK 自动生成（Python、TypeScript 等）
-> - 提升安全性（清晰的认证说明减少错误）
-> - 加速前端开发（无需猜测）
+程序化交易者需要 API 文档。与其手写 YAML 文档（容易和代码不同步），不如直接从 Rust 类型生成 **OpenAPI 3.0** 规范。
 
 ### 1.2 目标
 
-集成 **OpenAPI 3.0** 文档：
-1. 从 Rust 代码自动生成（单一事实来源）
-2. 在 `/docs` 提供交互式文档（Swagger UI）
-3. 支持客户端 SDK 生成
+1. 在 `/docs` 提供交互式文档（Swagger UI）
+2. 导出 `openapi.json` 用于 SDK 生成
+3. 文档和代码保持同步（单一事实来源）
 
 ### 1.3 核心概念
 
