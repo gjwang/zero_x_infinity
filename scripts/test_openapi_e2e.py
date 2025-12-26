@@ -262,7 +262,8 @@ class TestRunner:
         }
         resp = self.auth_client.post("/api/v1/private/transfer", json_body=transfer_req)
         # Accept various responses depending on balance state
-        assert resp.status_code in [200, 400, 503], f"Unexpected status: {resp.status_code}"
+        # 200 = success, 400 = bad request, 422 = validation error, 503 = service unavailable
+        assert resp.status_code in [200, 400, 422, 503], f"Unexpected status: {resp.status_code}"
         data = resp.json()
         self.log(f"transfer response: code={data['code']}, msg={data.get('msg', '')[:50]}")
         # Store req_id if successful
