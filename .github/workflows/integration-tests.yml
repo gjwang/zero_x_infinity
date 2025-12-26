@@ -610,3 +610,90 @@ jobs:
       - name: Report Success
         if: steps.run-test.outcome == 'success'
         run: echo "✅ Fee E2E passed"
+
+  test-openapi:
+    name: OpenAPI E2E
+    needs: [build, check-postgres, check-tdengine]
+    runs-on: ubuntu-latest
+    services:
+      tdengine:
+        image: tdengine/tdengine:latest
+        ports:
+          - 6030:6030
+          - 6041:6041
+      postgres:
+        image: postgres:18
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_DB: exchange_info_db
+          POSTGRES_USER: trading
+          POSTGRES_PASSWORD: trading123
+        options: >-
+          --health-cmd "pg_isready -U trading -d exchange_info_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      
+      - name: Install Python dependencies
+        run: pip install pandas taos-ws-py psycopg2-binary pynacl requests
+      
+      - name: Initialize DB
+        run: ./scripts/db/init.sh pg
+
+      - name: Initialize TDengine
+        run: ./scripts/db/init.sh td && sleep 5
+
+      - name: Download Binary
+        uses: actions/download-artifact@v4
+        with:
+          name: gateway-binary
+          path: target/release
+      
+      - name: Set Binary Executable
+        run: chmod +x target/release/zero_x_infinity
+
+      - name: Start Gateway
+        run: |
+          ./target/release/zero_x_infinity --gateway --port 8080 > /tmp/gateway_openapi.log 2>&1 &
+          echo $! > /tmp/gateway.pid
+          sleep 8  # Wait for Gateway to initialize
+
+      - name: Run OpenAPI E2E Tests
+        run: python3 scripts/test_openapi_e2e.py --ci -v
+        id: run-test
+
+      - name: Stop Gateway
+        if: always()
+        run: |
+          if [ -f /tmp/gateway.pid ]; then
+            kill $(cat /tmp/gateway.pid) 2>/dev/null || true
+          fi
+
+      - name: Dump Logs on Failure
+        if: failure() && steps.run-test.outcome == 'failure'
+        run: |
+          echo "=== OpenAPI E2E Test Output ==="
+          echo ""
+          echo "=== Gateway Log ==="
+          cat /tmp/gateway_openapi.log || true
+
+      - name: Upload Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-openapi-e2e
+          path: |
+            /tmp/gateway_openapi.log
+          retention-days: 7
+
+      - name: Report Success
+        if: steps.run-test.outcome == 'success'
+        run: echo "✅ OpenAPI E2E passed (17 tests)"
