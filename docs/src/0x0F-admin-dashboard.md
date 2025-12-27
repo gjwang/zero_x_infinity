@@ -143,7 +143,7 @@ pip install fastapi-amis-admin fastapi-user-auth sqlalchemy asyncpg
 
 | ID | Criteria | Verify |
 |----|----------|--------|
-| AC-01 | Admin can login at `http://localhost:8001/admin` | Browser access |
+| AC-01 | Admin can login at `http://localhost:$ADMIN_PORT/admin` | Browser access (dev:8002, ci:8001) |
 | AC-02 | Can create Asset (name, symbol, decimals) | UI + DB |
 | AC-03 | Can edit Asset | UI + DB |
 | AC-04 | Gateway hot-reload Asset config | No restart needed |
@@ -558,35 +558,36 @@ class AuditLog(Base):
 
 ### 🚀 One-Click E2E Testing
 
-**NEW**: Comprehensive automated testing script
+**Updated 2024-12-27**: Test scripts renamed for clarity.
 
 ```bash
-# Run complete E2E test suite
-./scripts/test_admin_e2e.sh
+# 运行全部测试 (Rust + Admin Unit + E2E)
+./scripts/run_admin_full_suite.sh
+
+# 快速模式 (跳过Unit Tests)
+./scripts/run_admin_full_suite.sh --quick
+
+# 仅运行 Admin → Gateway 传播E2E
+./scripts/run_admin_gateway_e2e.sh
 ```
 
-**What it does:**
-1. ✅ Checks prerequisites (Python3, PostgreSQL)
-2. ✅ Installs Python dependencies (venv + pip + requirements.txt)
-3. ✅ Initializes database (SQLite with default admin user)
-4. ✅ Starts Admin server (`uvicorn` on port 8001)
-5. ✅ Runs all tests (Basic HTTP + Unit + E2E)
-6. ✅ Cleanup (stops server gracefully)
+**测试入口对照表:**
+| 脚本 | 用途 |
+|------|------|
+| `run_admin_full_suite.sh` | 统一入口（Rust + Admin Unit + E2E） |
+| `run_admin_gateway_e2e.sh` | Admin → Gateway 传播测试 |
+| `run_admin_tests_standalone.sh` | 一键完整测试（安装deps+启动server） |
 
-**Test Coverage:** 177 total tests
-- 4 Basic HTTP tests (`verify_e2e.py`)
-- 163 Unit tests (validation, security, constraints)
-- 17 E2E integration tests (asset/symbol lifecycle, audit log, fee updates)
+**端口配置:**
+| 环境 | Admin Port | Gateway Port |
+|------|------------|-------------|
+| Dev (本地) | 8002 | 8080 |
+| CI | 8001 | 8080 |
 
-**Expected Runtime:**
-- First run: ~3-5 minutes (includes dependency installation)
-- Subsequent runs: ~1-2 minutes (idempotent)
-
-**Logs Location:**
-- Server: `/tmp/admin_e2e.log`
-- Basic tests: `/tmp/verify_e2e.log`
-- Unit tests: `/tmp/pytest_unit.log`
-- E2E tests: `/tmp/pytest_e2e.log`
+**Test Coverage:** 178+ tests
+- Rust unit tests: 5 passed
+- Admin unit tests: 178 passed
+- Admin E2E tests: 4/4 passed
 
 ---
 
@@ -619,9 +620,9 @@ pytest tests/e2e/test_asset_lifecycle.py -v
 | # | Deliverable | Acceptance |
 |---|-------------|------------|
 | 1 | `admin/` project code | Code Review |
-| 2 | Admin UI accessible | Browser at `localhost:8001` |
-| 3 | **One-click E2E test** | `./scripts/test_admin_e2e.sh` passes |
-| 4 | All 177 tests pass | `pytest admin/tests/ -v` |
+| 2 | Admin UI accessible | Browser at `localhost:$ADMIN_PORT` (dev:8002, ci:8001) |
+| 3 | **One-click E2E test** | `./scripts/run_admin_full_suite.sh` passes |
+| 4 | All 178+ tests pass | `./scripts/run_admin_full_suite.sh` |
 | 5 | Audit log queryable | Admin UI audit page |
 | 6 | Gateway hot-reload works | Config change without restart |
 
