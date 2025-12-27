@@ -537,104 +537,34 @@ class AuditLog(Base):
 - [ ] Response includes `X-Trace-ID` header
 - [ ] Local log files are rotated and retained
 
----
+## 7. Testing
 
-### UX Priority Implementation
+> **� Full Testing Guide**: [0x0F-admin-testing.md](./0x0F-admin-testing.md)
 
-| Feature | Priority | Phase |
-|---------|----------|-------|
-| **UX-06 Base≠Quote** | 🔴 P0 | **MVP** (blocking bug) |
-| **UX-07 ID Auto-Gen** | 🔴 P0 | **MVP** (standard practice) |
-| **UX-08 Status Strings** | 🔴 P0 | **MVP** (usability) |
-| **UX-09 Default Sorting** | 🔴 P0 | **MVP** (usability) |
-| **UX-10 Trace ID** | 🔴 P0 | **MVP** (observability) |
-| UX-01 Asset display | P1 | Post-MVP |
-| UX-02 Fee format | P1 | Post-MVP |
-| UX-03 Confirm dialog | P1 | Post-MVP |
-| UX-04 Readonly fields | P1 | Post-MVP |
-| UX-05 Error messages | P2 | Post-MVP |
-
----
-
-## 7. E2E Tests and Deliverables
-
-### 🚀 One-Click E2E Testing
-
-**Updated 2024-12-27**: Test scripts renamed for clarity.
-
+**Quick Start:**
 ```bash
-# Run all tests (Rust + Admin Unit + E2E)
-./scripts/run_admin_full_suite.sh
-
-# Quick mode (skip Unit Tests)
-./scripts/run_admin_full_suite.sh --quick
-
-# Run only Admin → Gateway propagation E2E
-./scripts/run_admin_gateway_e2e.sh
+./scripts/run_admin_full_suite.sh   # Run all tests
 ```
 
-**Test Script Reference:**
-| Script | Purpose |
-|--------|---------|
-| `run_admin_full_suite.sh` | Unified entry (Rust + Admin Unit + E2E) |
-| `run_admin_gateway_e2e.sh` | Admin → Gateway propagation tests |
-| `run_admin_tests_standalone.sh` | One-click full test (install deps + start server) |
+**Test Summary:**
+| Category | Count | Status |
+|----------|-------|--------|
+| Rust unit tests | 5 | ✅ |
+| Admin unit tests | 178+ | ✅ |
+| Admin E2E tests | 4/4 | ✅ |
+| UX-10 Trace ID | 16/16 | ✅ |
 
-**Port Configuration:**
-| Environment | Admin Port | Gateway Port |
-|-------------|------------|--------------|
-| Dev (local) | 8002 | 8080 |
-| CI | 8001 | 8080 |
-
-**Test Coverage:** 178+ tests
-- Rust unit tests: 5 passed
-- Admin unit tests: 178 passed
-- Admin E2E tests: 4/4 passed
+**Ports:** Dev `8002`, CI `8001`
 
 ---
 
-### Test Scripts (Manual)
-
-For granular testing, use these scripts individually:
-
-| Script | Function |
-|--------|----------|
-| `verify_e2e.py` | Admin login/logout, health check |
-| `test_admin_login.py` | Authentication tests |
-| `test_constraints.py` | Database constraint validation |
-| `test_core_flow.py` | Asset/Symbol CRUD workflows |
-| `test_input_validation.py` | Invalid input rejection |
-| `test_security.py` | Security and authentication |
-| `tests/e2e/test_asset_lifecycle.py` | Asset enable/disable lifecycle |
-| `tests/e2e/test_symbol_lifecycle.py` | Symbol trading status management |
-| `tests/e2e/test_fee_update.py` | Fee configuration updates |
-| `tests/e2e/test_audit_log.py` | Audit trail verification |
-
-**Run individual tests:**
-```bash
-cd admin && source venv/bin/activate
-pytest tests/test_core_flow.py -v
-pytest tests/e2e/test_asset_lifecycle.py -v
-```
-
-### Deliverables Checklist
-
-| # | Deliverable | Acceptance |
-|---|-------------|------------|
-| 1 | `admin/` project code | Code Review |
-| 2 | Admin UI accessible | Browser at `localhost:$ADMIN_PORT` (dev:8002, ci:8001) |
-| 3 | **One-click E2E test** | `./scripts/run_admin_full_suite.sh` passes |
-| 4 | All 178+ tests pass | `./scripts/run_admin_full_suite.sh` |
-| 5 | Audit log queryable | Admin UI audit page |
-| 6 | Gateway hot-reload works | Config change without restart |
-
-### Future Phases (Not in MVP)
+## 8. Future Phases
 
 | Phase | Content |
 |-------|---------|
 | Phase 2 | User management, balance viewer |
 | Phase 3 | TDengine monitoring |
-| Phase 4 | Full RBAC, audit logs |
+| Phase 4 | Full RBAC, advanced audit |
 
 ---
 
