@@ -342,6 +342,7 @@ persistence:
 **公开接口 (Public)**:
 - `GET /api/v1/public/depth` - 盘口深度
 - `GET /api/v1/public/klines` - K 线数据
+- `GET /api/v1/public/trades` - 公开交易历史
 - `GET /api/v1/public/assets` - 资产列表
 
 **私有接口 (Private, Ed25519 签名)**:

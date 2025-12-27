@@ -11,11 +11,14 @@ This document outlines the backend development tasks required to fully support t
 
 **Goal**: Provide public historical data for charts and "Last Trades" widget.
 
-### 1.1 Public Trade History
+### 1.1 Public Trade History ✅ **IMPLEMENTED**
+
 *   **Endpoint**: `GET /api/v1/public/trades`
+*   **Status**: ✅ Complete (Phase 0x10.5)
+*   **Implementation**: Commit `51027cb` (2025-12-27)
 *   **Description**: Get recent trades for a specific symbol.
 *   **Parameters**:
-    *   `symbol` (required): e.g., `BTC_USDT`
+    *   `symbol` (optional): e.g., `BTC_USDT` (currently uses active symbol)
     *   `limit` (optional, default 500, max 1000)
     *   `fromId` (optional): Fetch trades > id (pagination)
 *   **Response**: `Vec<PublicTrade>`
@@ -32,10 +35,13 @@ This document outlines the backend development tasks required to fully support t
       }
     ]
     ```
-*   **Implementation Note**:
-    *   Query **TDengine** `trades` table.
-    *   Filter by `symbol`.
-    *   Need to support efficient pagination (time-based or ID-based if strictly monotonic).
+*   **Implementation Notes**:
+    *   ✅ Queries **TDengine** `trades` table
+    *   ✅ Pagination via `fromId` parameter
+    *   ✅ **Security**: NO `user_id` or `order_id` exposure
+    *   ✅ **Precision**: All prices/quantities as Strings
+    *   ✅ Unit tests: 5/5 passing
+    *   ✅ E2E test: `./scripts/test_public_trades_e2e.sh`
 
 ---
 
