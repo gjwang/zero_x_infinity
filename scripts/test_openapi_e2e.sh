@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export GATEWAY_URL="http://localhost:8080"
 export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
 
