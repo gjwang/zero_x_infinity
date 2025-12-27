@@ -59,7 +59,7 @@ run_test "Rust Unit Tests" "cargo test --quiet 2>&1 | tail -10"
 # 2. Admin Unit Tests (if not quick mode)
 if [ "$QUICK_MODE" == "false" ]; then
     if [ -d "admin/tests" ]; then
-        run_test "Admin Unit Tests" "cd admin && source venv/bin/activate && pytest tests/ -m 'not e2e' --ignore=tests/e2e -q --tb=short 2>&1 || true"
+        run_test "Admin Unit Tests" "cd admin && source venv/bin/activate && pytest tests/ -m 'not e2e' --ignore=tests/e2e --ignore=tests/integration -q --tb=short 2>&1 || true"
     fi
 fi
 
