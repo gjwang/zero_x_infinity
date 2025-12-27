@@ -14,7 +14,7 @@
 > **Branch**: `0x0F-admin-dashboard`
 > **Updated**: 2024-12-27
 
-> **📦 Code Changes**: [View Tag](https://github.com/gjwang/zero_x_infinity/releases/tag/v0.0F-admin-dashboard)
+> **📦 Code Changes**: [View Code](https://github.com/gjwang/zero_x_infinity/tree/v0.0F-admin-dashboard)
 
 ---
 
@@ -670,7 +670,7 @@ admin/
 > **📅 状态**: ✅ 已验证 (E2E 4/4 通过)
 > **分支**: `0x0F-admin-dashboard`
 
-> **📦 代码变更**: [查看 Tag](https://github.com/gjwang/zero_x_infinity/releases/tag/v0.0F-admin-dashboard)
+> **📦 代码变更**: [查看代码](https://github.com/gjwang/zero_x_infinity/tree/v0.0F-admin-dashboard)
 
 ---
 
