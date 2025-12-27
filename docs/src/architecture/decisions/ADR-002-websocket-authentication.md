@@ -1,17 +1,22 @@
 # ADR-002: WebSocket Authentication (Listen Key Pattern)
 
-| Status | **PROPOSED** |
+| Status | **REJECTED** |
 | :--- | :--- |
 | **Date** | 2025-12-27 |
 | **Author** | Architect Agent |
 | **Context** | Phase 0x10.5, Response to AR-001 |
 
 ## Context
-AR-001 highlights that strict anonymous mode (ADR-001) blocks legitimate authenticated users. We need a secure way to authenticate WebSocket connections.
-Standard HTTP headers (`Authorization`) are difficult to set in standard browser `WebSocket` APIs. Sending long-term API credentials (API Key + Secret/Signature) in Query Parameters is a security risk (logs, history).
+AR-001 highlights that strict anonymous mode (ADR-001) blocks legitimate authenticated users.
+**UPDATE**: The User has explicitly **REJECTED** the "Listen Key" pattern (2025-12-27), citing disapproval of the scheme.
+We need to revisit AR-001 for alternative designs (e.g. Header-based, encrypted token, or separate auth socket).
 
-## Decision: Ephemeral "Listen Key" Resource
-We will adopt the industry-standard "Listen Key" pattern (used by Binance, etc.).
+## Decision: REJECTED (Do Not Implement)
+The "Listen Key" pattern is **NOT** approved.
+
+### Suspended Proposal
+*(The following is preserved for reference but is NOT active)*
+
 
 ### 1. The Mechanism
 Authentication is performed via a **2-step process**:

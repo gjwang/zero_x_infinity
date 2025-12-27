@@ -12,8 +12,8 @@
 ### Quick Summary
 - **From**: Architect
 - **Status**: ⏳ Pending Review
-- **Goal**: Verify Public Market Data & WebSocket Security
-- **Priority**: P0
+- **Goal**: Verify Public Market Data (Private/Auth SUSPENDED)
+- **Priority**: P0 (Public Only)
 
 ### P0 Actions
 1. Review `docs/src/0x10-qa-test-plan.md`

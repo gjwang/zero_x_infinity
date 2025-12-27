@@ -3,7 +3,7 @@
 ## Session Info
 - **Date**: 2025-12-27
 - **Role**: Developer
-- **Status**: ⏳ **Pending Pickup (0x10.5)**
+- **Status**: ⚠️ **Partial Pickup (Public Only)**
 
 ## Completed Work
 
@@ -18,8 +18,10 @@
 - **Priority**: P0 (Frontend Blocker)
 
 ### Deliverables for QA
-- `GET /public/trades` API
-- `market.*` WebSocket channels
+- ✅ `GET /public/trades` API (EXECUTE)
+- ✅ `market.*` WebSocket channels (EXECUTE)
+- 🛑 `private.*` channels (SKIP - Auth Rejected)
+- 🛑 `ListenKey` logic (SKIP - Auth Rejected)
 
 ## Previous Work (Completed)
 

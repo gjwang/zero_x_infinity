@@ -13,8 +13,8 @@
 **Key Metrics**:
 - **Availability**: Public endpoints must be cache-friendly and high-availability.
 - **ADR-001**: WebSocket Security (Strict Anonymous Mode).
-- **ADR-002**: WebSocket Authentication (Listen Key Pattern).
-- **AR-001**: Response provided via ADR-002.from matching.
+- **ADR-002**: WebSocket Authentication (REJECTED by User).
+- **AR-001**: Open/Unresolved (Private Channels Blocked).
 - **Precision**: 100% adherence to `String` format for all prices/quantities.
 
 ## 📋 Implementation Plan Summary (Phase 0x10.5)
@@ -32,15 +32,12 @@
 - `market.ticker.{symbol}`
 - `market.depth.{symbol}`
 
-### 2.2 Authentication (Priority P0 - Unblocks Private Channels)
-- **Design**: See `ADR-002-websocket-authentication.md` (Listen Key).
-- **New Endpoints**:
-    - `POST /api/v1/userDataStream` -> `{ "listenKey": "..." }`
-    - `PUT /api/v1/userDataStream?listenKey=...`
-    - `DELETE /api/v1/userDataStream?listenKey=...`
-- **WS Logic**:
-    - Handler checks `?listenKey=...` against `ListenKeyManager`.
-    - If valid, bind session to `user_id`..
+### 2.2 Authentication (BLOCKED - Design Rejected)
+- **Status**: 🛑 BLOCKED
+- **Reason**: User rejected ADR-002 (Listen Key).
+- **Action**: Developer to SKIP private channels until new Auth design is approved.
+- ~~`POST /api/v1/userDataStream`~~ (Do Not Implement)
+- ~~Binding `user_id`~~ (Do Not Implement)
 - Task 2.3: Implement `market.ticker` 24h stats rolling aggregator.
 
 ## 🔑 Key Design Decisions
