@@ -1242,6 +1242,12 @@ pub struct SymbolApiData {
     pub is_tradable: bool,
     /// Is visible in UI
     pub is_visible: bool,
+    /// Base maker fee in basis points
+    #[schema(example = 10)]
+    pub base_maker_fee: i32,
+    /// Base taker fee in basis points
+    #[schema(example = 20)]
+    pub base_taker_fee: i32,
 }
 
 /// Get all assets
@@ -1259,6 +1265,31 @@ pub async fn get_assets(
     State(state): State<Arc<AppState>>,
 ) -> Result<(StatusCode, Json<ApiResponse<Vec<AssetApiData>>>), (StatusCode, Json<ApiResponse<()>>)>
 {
+    // Use TTL-cached loader (30 second cache, refreshes on expiry)
+    if let Some(ref pg_db) = state.pg_db {
+        match super::cache::load_assets_cached(pg_db.pool().clone().into()).await {
+            Ok(assets) => {
+                let data: Vec<AssetApiData> = assets
+                    .iter()
+                    .map(|a| AssetApiData {
+                        asset_id: a.asset_id,
+                        asset: a.asset.clone(),
+                        name: a.name.clone(),
+                        decimals: a.decimals,
+                        can_deposit: a.can_deposit(),
+                        can_withdraw: a.can_withdraw(),
+                        can_trade: a.can_trade(),
+                    })
+                    .collect();
+                return Ok((StatusCode::OK, Json(ApiResponse::success(data))));
+            }
+            Err(e) => {
+                tracing::warn!("[get_assets] Cached loader failed, falling back: {}", e);
+            }
+        }
+    }
+
+    // Fallback to startup cache if DB unavailable
     let assets: Vec<AssetApiData> = state
         .pg_assets
         .iter()
@@ -1291,7 +1322,49 @@ pub async fn get_symbols(
     State(state): State<Arc<AppState>>,
 ) -> Result<(StatusCode, Json<ApiResponse<Vec<SymbolApiData>>>), (StatusCode, Json<ApiResponse<()>>)>
 {
-    // Build asset lookup map
+    // Use TTL-cached loaders (30 second cache, refreshes on expiry)
+    if let Some(ref pg_db) = state.pg_db {
+        let pool = pg_db.pool().clone().into();
+        let assets_result = super::cache::load_assets_cached(Arc::clone(&pool)).await;
+        let symbols_result = super::cache::load_symbols_cached(pool).await;
+
+        if let (Ok(assets), Ok(symbols)) = (assets_result, symbols_result) {
+            let asset_map: std::collections::HashMap<i32, &crate::account::Asset> =
+                assets.iter().map(|a| (a.asset_id, a)).collect();
+
+            let data: Vec<SymbolApiData> = symbols
+                .iter()
+                .map(|s| {
+                    let base_asset = asset_map
+                        .get(&s.base_asset_id)
+                        .map(|a| a.asset.clone())
+                        .unwrap_or_else(|| format!("UNKNOWN_{}", s.base_asset_id));
+                    let quote_asset = asset_map
+                        .get(&s.quote_asset_id)
+                        .map(|a| a.asset.clone())
+                        .unwrap_or_else(|| format!("UNKNOWN_{}", s.quote_asset_id));
+
+                    SymbolApiData {
+                        symbol_id: s.symbol_id,
+                        symbol: s.symbol.clone(),
+                        base_asset,
+                        quote_asset,
+                        price_decimals: s.price_decimals,
+                        qty_decimals: s.qty_decimals,
+                        is_tradable: s.is_tradable(),
+                        is_visible: s.is_visible(),
+                        base_maker_fee: s.base_maker_fee,
+                        base_taker_fee: s.base_taker_fee,
+                    }
+                })
+                .collect();
+            return Ok((StatusCode::OK, Json(ApiResponse::success(data))));
+        } else {
+            tracing::warn!("[get_symbols] Cached loader failed, falling back to startup cache");
+        }
+    }
+
+    // Fallback to startup cache if DB unavailable
     let asset_map: std::collections::HashMap<i32, &crate::account::Asset> =
         state.pg_assets.iter().map(|a| (a.asset_id, a)).collect();
 
@@ -1317,6 +1390,8 @@ pub async fn get_symbols(
                 qty_decimals: s.qty_decimals,
                 is_tradable: s.is_tradable(),
                 is_visible: s.is_visible(),
+                base_maker_fee: s.base_maker_fee,
+                base_taker_fee: s.base_taker_fee,
             }
         })
         .collect();
@@ -1403,6 +1478,8 @@ pub async fn get_exchange_info(
                 qty_decimals: s.qty_decimals,
                 is_tradable: s.is_tradable(),
                 is_visible: s.is_visible(),
+                base_maker_fee: s.base_maker_fee,
+                base_taker_fee: s.base_taker_fee,
             }
         })
         .collect();

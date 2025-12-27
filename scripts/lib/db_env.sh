@@ -26,8 +26,14 @@ fi
 
 # Extract port from postgres_url in config file (e.g., localhost:5432)
 if [ -f "$CONFIG_FILE" ]; then
-    PG_URL_FROM_CONFIG=$(grep "postgres_url:" "$CONFIG_FILE" | head -1 | sed 's/.*localhost:\([0-9]*\).*/\1/')
-    DEFAULT_PG_PORT="${PG_URL_FROM_CONFIG:-5432}"
+    # Extract port generic regex (matches last :PORT/ pattern)
+    PG_URL_FROM_CONFIG=$(grep "postgres_url:" "$CONFIG_FILE" | head -1 | sed 's/.*:\([0-9]*\)\/.*/\1/')
+    # Validate if it's actually a number, else default
+    if [[ "$PG_URL_FROM_CONFIG" =~ ^[0-9]+$ ]]; then
+        DEFAULT_PG_PORT="$PG_URL_FROM_CONFIG"
+    else
+        DEFAULT_PG_PORT="5432"
+    fi
 else
     # Fallback if config file is missing
     DEFAULT_PG_PORT="5432"
@@ -39,8 +45,11 @@ export PG_USER="${PG_USER:-trading}"
 export PG_PASSWORD="${PG_PASSWORD:-trading123}"
 export PG_DB="${PG_DB:-exchange_info_db}"
 
-# Connection URL (for sqlx and other tools)
+# PostgreSQL Connection String (sync driver - for Rust/psql)
 export DATABASE_URL="postgresql://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DB}"
+
+# PostgreSQL Async Connection String (async driver - for Python Admin Dashboard)
+export DATABASE_URL_ASYNC="postgresql+asyncpg://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DB}"
 
 # For psql commands
 export PGPASSWORD="${PG_PASSWORD}"
@@ -60,6 +69,22 @@ export TDENGINE_DSN="taos+ws://${TD_USER}:${TD_PASSWORD}@${TD_HOST}:${TD_PORT_RE
 
 # REST API base URL
 export TD_REST_URL="http://${TD_HOST}:${TD_PORT_REST}"
+
+# -----------------------------------------------------------------------------
+# Service Ports Configuration
+# -----------------------------------------------------------------------------
+# Gateway - Rust API server
+export GATEWAY_PORT="${GATEWAY_PORT:-8080}"
+export GATEWAY_URL="http://localhost:${GATEWAY_PORT}"
+
+# Admin Dashboard - Python FastAPI server
+# CI uses 8001, Dev uses 8002 to avoid conflict
+if [ "$CI" = "true" ]; then
+    export ADMIN_PORT="${ADMIN_PORT:-8001}"
+else
+    export ADMIN_PORT="${ADMIN_PORT:-8002}"
+fi
+export ADMIN_URL="http://localhost:${ADMIN_PORT}"
 
 # -----------------------------------------------------------------------------
 # Derived URLs (convenience)

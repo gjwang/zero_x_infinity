@@ -43,6 +43,8 @@
         - [Build & Verification Guide | 编译与验证事项](./agent-build-verification-guide.md)
 - [0x0C Trade Fee | 手续费系统](./0x0C-trade-fee.md)
 - [0x0D Snapshot & Recovery | 鲁棒性: 快照与恢复](./0x0D-snapshot-recovery.md)
+- [0x0E OpenAPI Integration | OpenAPI 集成](./0x0E-openapi-integration.md)
+- [0x0F Admin Dashboard | 管理后台](./0x0F-admin-dashboard.md)
 
 ---
 
