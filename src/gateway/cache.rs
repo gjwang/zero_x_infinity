@@ -11,14 +11,14 @@ use std::sync::Arc;
 use crate::account::{Asset, AssetManager, Symbol, SymbolManager};
 
 /// TTL for config cache in seconds
-pub const TTL_SECONDS: u64 = 5;
+pub const TTL_SECONDS: u64 = 3;
 
 /// Load all assets from database with caching
 ///
 /// Results are cached for TTL_SECONDS. After expiration,
 /// the next call will refresh from the database.
 #[cached(
-    time = 5,
+    time = 3,
     key = "String",
     convert = r#"{ "assets".to_string() }"#,
     result = true
@@ -35,7 +35,7 @@ pub async fn load_assets_cached(pool: Arc<PgPool>) -> Result<Vec<Asset>, String>
 /// Results are cached for TTL_SECONDS. After expiration,
 /// the next call will refresh from the database.
 #[cached(
-    time = 5,
+    time = 3,
     key = "String",
     convert = r#"{ "symbols".to_string() }"#,
     result = true
@@ -53,6 +53,6 @@ mod tests {
 
     #[test]
     fn test_ttl_constant() {
-        assert_eq!(TTL_SECONDS, 5);
+        assert_eq!(TTL_SECONDS, 3);
     }
 }

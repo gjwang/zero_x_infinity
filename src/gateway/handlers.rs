@@ -1242,6 +1242,12 @@ pub struct SymbolApiData {
     pub is_tradable: bool,
     /// Is visible in UI
     pub is_visible: bool,
+    /// Base maker fee in basis points
+    #[schema(example = 10)]
+    pub base_maker_fee: i32,
+    /// Base taker fee in basis points
+    #[schema(example = 20)]
+    pub base_taker_fee: i32,
 }
 
 /// Get all assets
@@ -1347,6 +1353,8 @@ pub async fn get_symbols(
                         qty_decimals: s.qty_decimals,
                         is_tradable: s.is_tradable(),
                         is_visible: s.is_visible(),
+                        base_maker_fee: s.base_maker_fee,
+                        base_taker_fee: s.base_taker_fee,
                     }
                 })
                 .collect();
@@ -1382,6 +1390,8 @@ pub async fn get_symbols(
                 qty_decimals: s.qty_decimals,
                 is_tradable: s.is_tradable(),
                 is_visible: s.is_visible(),
+                base_maker_fee: s.base_maker_fee,
+                base_taker_fee: s.base_taker_fee,
             }
         })
         .collect();
@@ -1468,6 +1478,8 @@ pub async fn get_exchange_info(
                 qty_decimals: s.qty_decimals,
                 is_tradable: s.is_tradable(),
                 is_visible: s.is_visible(),
+                base_maker_fee: s.base_maker_fee,
+                base_taker_fee: s.base_taker_fee,
             }
         })
         .collect();

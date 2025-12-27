@@ -40,3 +40,12 @@ class SymbolAdmin(admin.ModelAdmin):
     # Use optimized Pydantic schemas
     schema_create = SymbolCreateSchema
     schema_update = SymbolUpdateSchema
+    
+    # Enable field updates (CRITICAL: defaults to empty list = no updates!)
+    update_fields = [
+        Symbol.min_qty,
+        Symbol.status,
+        Symbol.symbol_flags,
+        Symbol.base_maker_fee,
+        Symbol.base_taker_fee,
+    ]

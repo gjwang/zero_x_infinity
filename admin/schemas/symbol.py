@@ -3,7 +3,7 @@ Symbol Schemas - FastAPI Best Practice: Declarative Pydantic Validation
 UX-08: Status displayed as human-readable strings
 """
 from pydantic import BaseModel, Field, field_validator, field_serializer, model_validator
-from typing import Annotated
+from typing import Annotated, Optional
 from enum import IntEnum
 
 
@@ -120,14 +120,18 @@ class SymbolUpdateSchema(BaseModel):
     """
     Schema for updating Symbols
     IMMUTABLE fields excluded: symbol, base_asset_id, quote_asset_id, decimals
+    All fields Optional to allow partial updates
     """
     
-    min_qty: Annotated[int, Field(
+    model_config = {"extra": "ignore"}  # Ignore extra fields
+    min_qty: Annotated[Optional[int], Field(
+        default=None,
         ge=0,
         description="Minimum order quantity"
     )]
     
-    status: Annotated[int, Field(
+    status: Annotated[Optional[int], Field(
+        default=None,
         ge=0,
         le=2,
         description="Trading status: ONLINE (1), OFFLINE (0), or CLOSE_ONLY (2)"
@@ -137,6 +141,8 @@ class SymbolUpdateSchema(BaseModel):
     @classmethod
     def validate_status(cls, v):
         """Accept string or int input and convert to integer for DB storage"""
+        if v is None:
+            return None
         if isinstance(v, str):
             normalized = v.upper().replace('-', '_')
             mapping = {"ONLINE": 1, "OFFLINE": 0, "CLOSE_ONLY": 2}
@@ -151,18 +157,21 @@ class SymbolUpdateSchema(BaseModel):
     
     # Note: No serializer - keep status as int for DB compatibility
     
-    symbol_flags: Annotated[int, Field(
+    symbol_flags: Annotated[Optional[int], Field(
+        default=None,
         ge=0,
         description="Feature flags bitmap"
     )]
     
-    base_maker_fee: Annotated[int, Field(
+    base_maker_fee: Annotated[Optional[int], Field(
+        default=None,
         ge=0,
         le=10000,
         description="Maker fee in basis points"
     )]
     
-    base_taker_fee: Annotated[int, Field(
+    base_taker_fee: Annotated[Optional[int], Field(
+        default=None,
         ge=0,
         le=10000,
         description="Taker fee in basis points"

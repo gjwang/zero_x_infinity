@@ -62,7 +62,11 @@ site = AdminSite(
 # Register admin pages
 site.register_admin(AssetAdmin, SymbolAdmin, VIPLevelAdmin, AuditLogAdmin)
 
-# Mount to app
+# CRITICAL: Add database middleware BEFORE mounting to properly wrap admin routes
+# Without this, UPDATE operations won't persist to database!
+app.add_middleware(site.db.asgi_middleware)
+
+# Mount to app (AFTER adding db middleware)
 site.mount_app(app)
 
 

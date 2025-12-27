@@ -37,3 +37,10 @@ class AssetAdmin(admin.ModelAdmin):
     # Use optimized Pydantic schemas
     schema_create = AssetCreateSchema
     schema_update = AssetUpdateSchema
+    
+    # Enable field updates (CRITICAL: defaults to empty list = no updates!)
+    update_fields = [
+        Asset.name,
+        Asset.status,
+        Asset.asset_flags,
+    ]

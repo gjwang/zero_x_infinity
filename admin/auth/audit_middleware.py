@@ -25,25 +25,55 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
     AUDITED_PATH_PREFIXES = ["/admin/AssetAdmin", "/admin/SymbolAdmin", "/admin/VIPLevelAdmin"]
     
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        import uuid
+        trace_id = str(uuid.uuid4())[:8]
+        
         # Only audit modifying operations on specific paths
         if not self._should_audit(request):
             return await call_next(request)
         
-        # Capture request body (for old_value/new_value)
-        body = None
-        if request.method in ("POST", "PUT", "PATCH"):
-            try:
-                body = await request.json()
-            except Exception:
-                body = None
+        print(f"[{trace_id}] AUDIT START: {request.method} {request.url.path}")
         
-        # Execute the request
+        # DON'T read body here - it will be consumed and downstream handlers get empty body!
+        # Instead, we capture the body through a custom receive wrapper
+        
+        body_bytes = b""
+        
+        # Wrap receive to capture body bytes
+        original_receive = request.receive
+        async def receive_wrapper():
+            nonlocal body_bytes
+            message = await original_receive()
+            if message.get("type") == "http.request":
+                body_chunk = message.get("body", b"")
+                body_bytes += body_chunk
+                print(f"[{trace_id}] RECEIVE: {len(body_chunk)} bytes captured")
+            return message
+        
+        # Replace receive function
+        request._receive = receive_wrapper
+        
+        print(f"[{trace_id}] CALLING downstream handler...")
+        
+        # Execute the request (downstream can read body normally)
         response = await call_next(request)
         
-        # Log after successful operations
-        if 200 <= response.status_code < 300:
-            await self._create_audit_log(request, body)
+        print(f"[{trace_id}] RESPONSE: status={response.status_code}, body_captured={len(body_bytes)} bytes")
         
+        # Log after successful operations using captured body
+        if 200 <= response.status_code < 300:
+            body = None
+            if body_bytes:
+                try:
+                    body = json.loads(body_bytes.decode())
+                    print(f"[{trace_id}] BODY PARSED: {body}")
+                except Exception as e:
+                    print(f"[{trace_id}] BODY PARSE FAILED: {e}")
+                    body = None
+            await self._create_audit_log(request, body)
+            print(f"[{trace_id}] AUDIT LOG CREATED")
+        
+        print(f"[{trace_id}] AUDIT END")
         return response
     
     def _should_audit(self, request: Request) -> bool:

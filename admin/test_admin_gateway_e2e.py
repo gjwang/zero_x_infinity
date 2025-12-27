@@ -10,11 +10,14 @@ Usage:
 import requests
 import time
 import sys
+import os
 from typing import Dict, Any
 
-# Endpoints
-ADMIN_API = "http://localhost:8001"
-GATEWAY_API = "http://localhost:8080"
+# Endpoints - use environment variables to support different environments
+ADMIN_PORT = os.environ.get("ADMIN_PORT", "8002")
+GATEWAY_PORT = os.environ.get("GATEWAY_PORT", "8081")
+ADMIN_API = f"http://localhost:{ADMIN_PORT}"
+GATEWAY_API = f"http://localhost:{GATEWAY_PORT}"
 
 class E2ETestRunner:
     def __init__(self):
@@ -125,34 +128,37 @@ def check_gateway_health():
 def test_asset_creation_propagation(runner: E2ETestRunner):
     """
     E2E-01: Asset Creation Propagation
-    Admin creates Asset → Gateway API can retrieve it
+    Admin creates 2 Assets (needed for Symbol creation) → Gateway API can retrieve them
     """
     def run():
-        # Step 1: Create Asset via Admin API
         suffix = int(time.time())
-        asset_code = f"E2E_A_{suffix}"
-        asset_data = {
-            "asset": asset_code,
-            "name": f"E2E Asset {suffix}",
-            "decimals": 8,
-            "status": 1,  # 1 = ACTIVE
-            "asset_flags": 7
-        }
         
-        print("Step 1: Creating Asset via Admin...")
-        admin_resp = requests.post(
-            f"{ADMIN_API}/admin/AssetAdmin/item",
-            json=asset_data,
-            timeout=5
-        )
-        assert admin_resp.status_code in [200, 201], f"Asset creation failed: {admin_resp.text}"
-        print(f"✅ Asset created: {admin_resp.json()}")
+        # Create 2 Assets (needed for Symbol creation in E2E-02)
+        for i, code_prefix in enumerate(["BASE", "QUOTE"]):
+            asset_code = f"{code_prefix}_{suffix}"
+            asset_data = {
+                "asset": asset_code,
+                "name": f"E2E {code_prefix} Asset {suffix}",
+                "decimals": 8,
+                "status": 1,  # 1 = ACTIVE
+                "asset_flags": 7
+            }
+            
+            print(f"Step {i+1}: Creating {code_prefix} Asset via Admin...")
+            admin_resp = requests.post(
+                f"{ADMIN_API}/admin/AssetAdmin/item",
+                json=asset_data,
+                timeout=5
+            )
+            assert admin_resp.status_code in [200, 201], f"Asset creation failed: {admin_resp.text}"
+            print(f"✅ {code_prefix} Asset created: {admin_resp.json()}")
         
-        # Step 2: Wait for propagation (if needed)
-        time.sleep(10)  # Wait for TTL cache refresh (5s + buffer)
+        # Wait for TTL cache refresh
+        print("Waiting for TTL cache refresh (5s + buffer)...")
+        time.sleep(10)
         
-        # Step 3: Verify via Gateway API
-        print(f"Step 2: Verifying via Gateway API at {GATEWAY_API}/api/v1/public/assets...")
+        # Verify via Gateway API
+        print(f"Step 3: Verifying via Gateway API at {GATEWAY_API}/api/v1/public/assets...")
         try:
             gateway_resp = requests.get(
                 f"{GATEWAY_API}/api/v1/public/assets",
@@ -163,9 +169,11 @@ def test_asset_creation_propagation(runner: E2ETestRunner):
             raise AssertionError(f"Gateway connection failed: {e}")
         
         assets = gateway_resp.json()["data"]
-        found = any(a.get("asset") == asset_code for a in assets)
-        assert found, f"Asset {asset_code} not found in Gateway response"
-        print(f"✅ Asset verified in Gateway")
+        base_found = any(a.get("asset") == f"BASE_{suffix}" for a in assets)
+        quote_found = any(a.get("asset") == f"QUOTE_{suffix}" for a in assets)
+        assert base_found, f"BASE_{suffix} not found in Gateway response"
+        assert quote_found, f"QUOTE_{suffix} not found in Gateway response"
+        print(f"✅ Both Assets verified in Gateway (total: {len(assets)})")
     
     runner.test("E2E-01: Asset Creation Propagation", run)
 
@@ -241,8 +249,9 @@ def test_symbol_status_change_propagation(runner: E2ETestRunner):
     def run():
         # Step 1: Get symbol from Gateway
         print("Step 1: Getting symbol from Gateway...")
-        symbols_resp = requests.get(f"{GATEWAY_API}/api/v1/symbols", timeout=5)
-        symbols = symbols_resp.json()
+        symbols_resp = requests.get(f"{GATEWAY_API}/api/v1/public/symbols", timeout=5)
+        resp_data = symbols_resp.json()
+        symbols = resp_data.get("data", [])
         
         if not symbols:
             raise AssertionError("No symbols available for testing")
@@ -257,21 +266,34 @@ def test_symbol_status_change_propagation(runner: E2ETestRunner):
             json={"status": 0},  # 0 = OFFLINE (halted)
             timeout=5
         )
+        print(f"PUT Response: status={admin_resp.status_code}, body={admin_resp.text[:200]}")
         assert admin_resp.status_code == 200, f"Symbol update failed: {admin_resp.text}"
         print(f"✅ Symbol status updated")
         
         # Step 3: Wait for propagation
         time.sleep(10)  # Wait for TTL cache refresh
         
-        # Step 4: Verify via Gateway API
+        # Step 4: Verify via Gateway API - OFFLINE symbol should NOT be returned
         print("Step 3: Verifying status change via Gateway...")
         gateway_resp = requests.get(f"{GATEWAY_API}/api/v1/public/symbols", timeout=5)
         updated_symbols = gateway_resp.json()["data"]
         
+        # OFFLINE (status=0) symbols should NOT appear in Gateway's public API
+        # Gateway uses WHERE status=1 to filter only ONLINE symbols
         updated_symbol = next((s for s in updated_symbols if s["symbol_id"] == symbol_id), None)
-        assert updated_symbol, f"Symbol {symbol_id} not found after update"
-        assert updated_symbol["is_tradable"] == False, f"Symbol not halted. is_tradable still True"
-        print(f"✅ Symbol status verified in Gateway (halted)")
+        assert updated_symbol is None, f"OFFLINE symbol {symbol_id} should NOT appear in Gateway API, but was found"
+        print(f"✅ Symbol correctly hidden from Gateway (OFFLINE)")
+        
+        # Step 5: Restore symbol status so E2E-04 can use it
+        print("Step 4: Restoring symbol status...")
+        admin_resp = requests.put(
+            f"{ADMIN_API}/admin/SymbolAdmin/item/{symbol_id}",
+            json={"status": 1},  # 1 = ONLINE
+            timeout=5
+        )
+        assert admin_resp.status_code == 200, f"Symbol restore failed: {admin_resp.text}"
+        print(f"✅ Symbol status restored to ONLINE")
+        time.sleep(10)  # Wait for TTL cache refresh
     
     runner.test("E2E-03: Symbol Status Change Propagation", run)
 
@@ -284,8 +306,9 @@ def test_fee_update_propagation(runner: E2ETestRunner):
     def run():
         # Step 1: Get symbol from Gateway
         print("Step 1: Getting symbol from Gateway...")
-        symbols_resp = requests.get(f"{GATEWAY_API}/api/v1/symbols", timeout=5)
-        symbols = symbols_resp.json()
+        symbols_resp = requests.get(f"{GATEWAY_API}/api/v1/public/symbols", timeout=5)
+        resp_data = symbols_resp.json()
+        symbols = resp_data.get("data", [])
         
         if not symbols:
             raise AssertionError("No symbols available for fee testing")
@@ -310,10 +333,17 @@ def test_fee_update_propagation(runner: E2ETestRunner):
         print(f"✅ Fees updated: maker={new_maker_fee}, taker={new_taker_fee}")
         
         # Step 3: Wait for propagation
-        time.sleep(10)  # Wait for TTL cache refresh
+        # Cache TTL is 3s - wait for cache to expire, then trigger refresh
+        print("Waiting for TTL cache expiry (5s)...")
+        time.sleep(5)  # Wait for cache to expire
         
-        # Step 4: Verify via Gateway API
-        print("Step 3: Verifying fee change via Gateway...")
+        # Step 4: Trigger cache refresh with a dummy request
+        print("Triggering cache refresh...")
+        _ = requests.get(f"{GATEWAY_API}/api/v1/public/symbols", timeout=5)
+        time.sleep(1)  # Let the refresh complete
+        
+        # Step 5: Verify via Gateway API
+        print("Step 4: Verifying fee change via Gateway...")
         gateway_resp = requests.get(f"{GATEWAY_API}/api/v1/public/symbols", timeout=5)
         updated_symbols = gateway_resp.json()["data"]
         
