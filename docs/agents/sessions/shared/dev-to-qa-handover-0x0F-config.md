@@ -6,6 +6,27 @@
 
 ---
 
+## ⚠️ CRITICAL FIX (响应QA拒绝)
+
+**问题**: `run_admin_full_suite.sh` 有BUG隐藏测试失败  
+**修复**: commit `50eadfd`
+
+| 问题 | 修复 |
+|------|------|
+| `\|\| true` 隐藏失败 | ❌ 已移除 |
+| venv路径混乱 | ✅ 统一为 `admin/venv/` |
+| 无错误处理 | ✅ 添加pydantic验证 |
+
+**QA环境设置**:
+```bash
+cd admin
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+---
+
 ## 📦 交付物清单
 
 - [x] 配置统一：所有端口配置收敛到 `scripts/lib/db_env.sh`
