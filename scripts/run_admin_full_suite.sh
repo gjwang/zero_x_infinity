@@ -75,56 +75,54 @@ run_test() {
     fi
 }
 
-# Helper: Setup and activate Python venv (auto-create if needed)
+# Helper: Setup and activate Python venv
 setup_admin_venv() {
     cd "$PROJECT_ROOT/admin"
     
-    # Check Python version (require 3.10-3.12, passlib incompatible with 3.13+)
-    PYTHON_MAJOR=$(python3 -c 'import sys; print(sys.version_info.major)')
-    PYTHON_MINOR=$(python3 -c 'import sys; print(sys.version_info.minor)')
-    
-    if [ "$PYTHON_MAJOR" -lt 3 ] || ([ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -lt 10 ]); then
-        echo -e "${RED}ERROR: Python 3.10+ required, found Python ${PYTHON_MAJOR}.${PYTHON_MINOR}${NC}"
-        return 1
-    fi
-    
-    if [ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -ge 13 ]; then
-        echo -e "${RED}ERROR: Python 3.13+ not supported (passlib crypt issue), found Python ${PYTHON_MAJOR}.${PYTHON_MINOR}${NC}"
-        echo "Use Python 3.10, 3.11, or 3.12"
-        return 1
-    fi
-    
-    echo "Python ${PYTHON_MAJOR}.${PYTHON_MINOR} ✓"
-    
-    # Auto-create venv if not exists
-    if [ ! -d "venv" ]; then
-        echo -e "${YELLOW}Creating Python venv at admin/venv/...${NC}"
-        python3 -m venv venv
-        if [ $? -ne 0 ]; then
-            echo -e "${RED}ERROR: Failed to create venv${NC}"
-            return 1
+    # Use existing venv if it exists (preferred - already set up with Python 3.11)
+    if [ -d "venv" ] && [ -f "venv/bin/python" ]; then
+        # Verify venv Python version
+        VENV_PYTHON_VERSION=$(venv/bin/python --version 2>&1)
+        echo "Using existing venv: $VENV_PYTHON_VERSION"
+        
+        # Activate venv
+        source venv/bin/activate
+        
+        # Auto-install requirements if key packages missing
+        if ! python -c "import pydantic; import ulid; import requests" 2>/dev/null; then
+            echo -e "${YELLOW}Installing/updating requirements...${NC}"
+            pip install -r requirements.txt -q --upgrade
         fi
+        
+        return 0
     fi
     
-    # Activate venv
-    source venv/bin/activate
-    
-    # Verify Python version
-    PYTHON_VERSION=$(python --version 2>&1)
-    echo "Using: $PYTHON_VERSION"
-    
-    # Auto-install requirements if key packages missing
-    if ! python -c "import pydantic; import ulid" 2>/dev/null; then
-        echo -e "${YELLOW}Installing/updating requirements...${NC}"
+    # Fallback: Try to create venv with python3.11 specifically
+    if command -v python3.11 &> /dev/null; then
+        echo -e "${YELLOW}Creating Python venv with python3.11...${NC}"
+        python3.11 -m venv venv
+        source venv/bin/activate
         pip install -r requirements.txt -q --upgrade
-        if [ $? -ne 0 ]; then
-            echo -e "${RED}ERROR: Failed to install requirements${NC}"
-            return 1
-        fi
+        return 0
     fi
     
-    return 0
+    # Last resort: Check if system Python is compatible
+    PYTHON_MAJOR=$(python3 -c 'import sys; print(sys.version_info.major)' 2>/dev/null || echo "0")
+    PYTHON_MINOR=$(python3 -c 'import sys; print(sys.version_info.minor)' 2>/dev/null || echo "0")
+    
+    if [ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -ge 10 ] && [ "$PYTHON_MINOR" -lt 13 ]; then
+        echo -e "${YELLOW}Creating Python venv with python3...${NC}"
+        python3 -m venv venv
+        source venv/bin/activate
+        pip install -r requirements.txt -q --upgrade
+        return 0
+    fi
+    
+    echo -e "${RED}ERROR: No compatible Python found. Need Python 3.10-3.12${NC}"
+    echo "Please create venv manually: cd admin && python3.11 -m venv venv"
+    return 1
 }
+
 
 # 1. Rust Unit Tests
 run_test "Rust Unit Tests" "cargo test --quiet 2>&1 | tail -10"
