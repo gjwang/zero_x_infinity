@@ -32,8 +32,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'lib'))
 
 try:
     from api_auth import get_test_client, ApiClient
-except ImportError:
-    print("Error: Cannot import api_auth. Ensure scripts/lib/api_auth.py exists.")
+except ImportError as e:
+    print(f"Error: Cannot import api_auth. Detail: {e}")
+    print(f"sys.path: {sys.path}")
+    print(f"CWD: {os.getcwd()}")
     sys.exit(1)
 
 try:
