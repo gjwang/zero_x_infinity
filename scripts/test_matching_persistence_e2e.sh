@@ -163,7 +163,7 @@ STEP=6
 echo ""
 echo "[Step $STEP] Injecting orders..."
 
-if ! python3 "${SCRIPT_DIR}/inject_orders.py" --input fixtures/orders.csv --workers 4 --limit 200 2>&1 | tail -3; then
+if ! uv run "${SCRIPT_DIR}/inject_orders.py" --input fixtures/orders.csv --workers 4 --limit 200 2>&1 | tail -3; then
     fail_at_step "Order injection failed"
 fi
 echo -e "   ${GREEN}✓${NC} Orders injected"
@@ -251,7 +251,7 @@ STEP=10
 echo ""
 echo "[Step $STEP] Injecting orders after recovery..."
 
-if ! python3 "${SCRIPT_DIR}/inject_orders.py" --input fixtures/orders.csv --workers 4 --limit 100 2>&1 | tail -3; then
+if ! uv run "${SCRIPT_DIR}/inject_orders.py" --input fixtures/orders.csv --workers 4 --limit 100 2>&1 | tail -3; then
     fail_at_step "Post-recovery order injection failed"
 fi
 echo -e "    ${GREEN}✓${NC} System continues working after recovery"

@@ -184,7 +184,7 @@ if [ -f "$SCRIPT_DIR/compare_settlement.py" ] && [ -f "$BASELINE_DIR/t2_balances
     echo "     TDengine balances dumped: $DB_BALANCE_COUNT records"
     
     # Run field-level comparison
-    if python3 "$SCRIPT_DIR/compare_settlement.py" \
+    if uv run "$SCRIPT_DIR/compare_settlement.py" \
         --pipeline "$BASELINE_DIR/t2_balances_final.csv" \
         --db "$DUMP_DIR/balances.csv" \
         --no-color 2>/dev/null; then

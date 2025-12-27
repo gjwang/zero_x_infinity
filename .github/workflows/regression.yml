@@ -86,14 +86,15 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-regression-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: '3.10'
+          version: "0.5.11"
+          enable-cache: true
 
       - name: Install dependencies
         run: |
-          pip install pandas taos-ws-py psycopg2-binary pynacl requests
+          uv sync
           sudo apt-get update && sudo apt-get install -y lsof
 
       - name: Build Release

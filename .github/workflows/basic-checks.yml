@@ -23,6 +23,11 @@ jobs:
           toolchain: 1.92.0
           components: rustfmt, clippy
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.5.11"
+
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
 

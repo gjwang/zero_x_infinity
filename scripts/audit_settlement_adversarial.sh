@@ -91,7 +91,7 @@ echo -e "${YELLOW}Test 1: WAL Poisoning & Fallback Audit (GAP-01)${NC}"
 ./target/release/zero_x_infinity --gateway --env audit_settlement --port $PORT > "$GW_LOG" 2>&1 &
 wait_for_gw || fail_audit "Gateway failed to start"
 echo "Injecting 200 orders to generate trades..."
-GATEWAY_URL="http://localhost:$PORT" python3 "${SCRIPT_DIR}/inject_orders.py" --input fixtures/orders.csv --limit 200 > /dev/null
+GATEWAY_URL="http://localhost:$PORT" uv run "${SCRIPT_DIR}/inject_orders.py" --input fixtures/orders.csv --limit 200 > /dev/null
 sleep 3
 
 # Kill
@@ -165,7 +165,7 @@ fi
 echo -e "${YELLOW}Test 3: Post-Crash Functionality & ID Re-sync Audit${NC}"
 
 # Check health and inject more
-GATEWAY_URL="http://localhost:$PORT" python3 "${SCRIPT_DIR}/inject_orders.py" --input fixtures/orders.csv --limit 10 > /dev/null
+GATEWAY_URL="http://localhost:$PORT" uv run "${SCRIPT_DIR}/inject_orders.py" --input fixtures/orders.csv --limit 10 > /dev/null
 if curl -sf "http://localhost:$PORT/api/v1/health" > /dev/null; then
     pass_step "System recovered to full operational state"
 else

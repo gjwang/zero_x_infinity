@@ -43,12 +43,18 @@ check_and_start_tdengine() {
 check_python_deps() {
     echo "检查 Python 依赖..."
     
-    if ! python3 -c "import websockets" 2>/dev/null; then
-        echo "⚠️  websockets 模块未安装 (将自动安装)"
-        return 0
+    if ! command -v uv >/dev/null; then
+        echo "❌ uv 未安装. 请运行 ./scripts/setup-dev.sh"
+        return 1
+    fi
+
+    # check if uv sync needed
+    if ! uv run python3 -c "import websockets" 2>/dev/null; then
+        echo "⚠️  依赖缺失或未同步. 正在运行 uv sync..."
+        uv sync
     fi
     
-    echo "✅ Python 依赖就绪"
+    echo "✅ Python 依赖就绪 (via uv)"
     return 0
 }
 

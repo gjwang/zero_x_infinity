@@ -219,7 +219,7 @@ print_header "API Endpoint Tests"
 
 # Test 1: Orders query
 print_test "GET /api/v1/private/orders?limit=5"
-PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH" RESPONSE=$(python3 "$SCRIPT_DIR/query_api.py" GET "/api/v1/private/orders" --user 1001 --params '{"limit": 5}')
+PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH" RESPONSE=$(uv run "$SCRIPT_DIR/query_api.py" GET "/api/v1/private/orders" --user 1001 --params '{"limit": 5}')
 
 CODE=$(echo "$RESPONSE" | jq -r '.code')
 if [ "$CODE" = "0" ]; then
@@ -231,7 +231,7 @@ fi
 
 # Test 2: Order by ID query
 print_test "GET /api/v1/private/order/100"
-PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH" RESPONSE=$(python3 "$SCRIPT_DIR/query_api.py" GET "/api/v1/private/order/100" --user 1001)
+PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH" RESPONSE=$(uv run "$SCRIPT_DIR/query_api.py" GET "/api/v1/private/order/100" --user 1001)
 
 CODE=$(echo "$RESPONSE" | jq -r '.code')
 if [ "$CODE" = "0" ] || [ "$CODE" = "4001" ]; then
@@ -243,7 +243,7 @@ fi
 
 # Test 3: Trades query
 print_test "GET /api/v1/private/trades?limit=5"
-PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH" RESPONSE=$(python3 "$SCRIPT_DIR/query_api.py" GET "/api/v1/private/trades" --user 1001 --params '{"limit": 5}')
+PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH" RESPONSE=$(uv run "$SCRIPT_DIR/query_api.py" GET "/api/v1/private/trades" --user 1001 --params '{"limit": 5}')
 
 CODE=$(echo "$RESPONSE" | jq -r '.code')
 if [ "$CODE" = "0" ]; then
@@ -255,7 +255,7 @@ fi
 
 # Test 4: Balance query
 print_test "GET /api/v1/private/balances?asset_id=1"
-PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH" RESPONSE=$(python3 "$SCRIPT_DIR/query_api.py" GET "/api/v1/private/balances" --user 1001 --params '{"asset_id": 1}')
+PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH" RESPONSE=$(uv run "$SCRIPT_DIR/query_api.py" GET "/api/v1/private/balances" --user 1001 --params '{"asset_id": 1}')
 
 CODE=$(echo "$RESPONSE" | jq -r '.code')
 if [ "$CODE" = "0" ]; then
@@ -281,7 +281,7 @@ print_header "Connection Stability Test"
 print_test "Testing connection stability (5 consecutive queries)..."
 STABLE=true
 for i in {1..5}; do
-    PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH" RESPONSE=$(python3 "$SCRIPT_DIR/query_api.py" GET "/api/v1/private/orders" --user 1001 --params '{"limit": 1}')
+    PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH" RESPONSE=$(uv run "$SCRIPT_DIR/query_api.py" GET "/api/v1/private/orders" --user 1001 --params '{"limit": 1}')
 
     CODE=$(echo "$RESPONSE" | jq -r '.code')
     if [ "$CODE" != "0" ]; then
@@ -304,7 +304,7 @@ fi
 print_header "Create Order Test"
 
 print_test "Creating a test order..."
-PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH" RESPONSE=$(python3 "$SCRIPT_DIR/query_api.py" POST "/api/v1/private/order" --user 1001 --data '{
+PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH" RESPONSE=$(uv run "$SCRIPT_DIR/query_api.py" POST "/api/v1/private/order" --user 1001 --data '{
         "symbol": "BTC_USDT",
         "side": "BUY",
         "order_type": "LIMIT",

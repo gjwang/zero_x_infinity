@@ -34,7 +34,7 @@ jobs:
           cargo run --release -- --baseline
 
       - name: Generate performance report
-        run: python3 scripts/generate_perf_report.py > docs/src/perf-report.md
+        run: uv run scripts/generate_perf_report.py > docs/src/perf-report.md
 
       - name: Setup mdBook
         uses: peaceiris/actions-mdbook@v2

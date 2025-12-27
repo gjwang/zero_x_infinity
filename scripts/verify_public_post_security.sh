@@ -56,7 +56,7 @@ if __name__ == "__main__":
         sys.exit(1)
 EOF
 
-if python3 /tmp/test_ws_anon.py; then
+if uv run /tmp/test_ws_anon.py; then
     echo "✅ WebSocket Public Access: OK"
 else
     echo "❌ WebSocket Public Access: FAILED"

@@ -25,7 +25,7 @@ echo ""
 echo "--------------------------------------------------------"
 echo "🔍 1. Regression Tests (OpenAPI E2E)"
 echo "--------------------------------------------------------"
-if python3 scripts/test_openapi_e2e.py; then
+if uv run scripts/test_openapi_e2e.py; then
     echo "✅ Regression Tests PASSED"
 else
     echo "❌ Regression Tests FAILED"
@@ -48,9 +48,9 @@ fi
 
 echo ">> 2.2 WebSocket Channels"
 # Run them as a group
-if python3 scripts/test_websocket_ticker_e2e.py && \
-   python3 scripts/test_websocket_depth_e2e.py && \
-   python3 scripts/test_websocket_public_e2e.py; then
+if uv run scripts/test_websocket_ticker_e2e.py && \
+   uv run scripts/test_websocket_depth_e2e.py && \
+   uv run scripts/test_websocket_public_e2e.py; then
    echo "✅ WebSocket Channels PASSED"
 else
    echo "❌ WebSocket Channels FAILED"
@@ -62,7 +62,7 @@ echo ""
 echo "--------------------------------------------------------"
 echo "🛡️ 3. Security Tests (Adversarial QA)"
 echo "--------------------------------------------------------"
-if python3 scripts/test_qa_adversarial.py; then
+if uv run scripts/test_qa_adversarial.py; then
     echo "✅ Security Tests PASSED"
 else
     echo "❌ Security Tests FAILED (CRITICAL VULNERABILITY DETECTED)"

@@ -158,12 +158,12 @@ wait_for_gw || fail_audit "Gateway failed to start"
 # Record initial balance (this would need API support)
 # For now, inject orders to create frozen balances
 echo "Injecting orders to create frozen balance state..."
-GATEWAY_URL="http://localhost:$PORT" python3 "${SCRIPT_DIR}/inject_orders.py" --input fixtures/orders.csv --limit 50 > /dev/null 2>&1
+GATEWAY_URL="http://localhost:$PORT" uv run "${SCRIPT_DIR}/inject_orders.py" --input fixtures/orders.csv --limit 50 > /dev/null 2>&1
 sleep 2
 
 # Capture stats BEFORE crash
 STATS_BEFORE=$(curl -sf "http://localhost:$PORT/api/v1/stats" 2>/dev/null || echo "{}")
-TRADES_BEFORE=$(echo "$STATS_BEFORE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('trades_generated',0))" 2>/dev/null || echo "0")
+TRADES_BEFORE=$(echo "$STATS_BEFORE" | uv run python3 -c "import sys,json; print(json.load(sys.stdin).get('trades_generated',0))" 2>/dev/null || echo "0")
 echo "Stats before crash: trades=$TRADES_BEFORE"
 
 # SIGKILL to simulate crash
@@ -190,12 +190,12 @@ fi
 
 # Capture stats AFTER recovery
 STATS_AFTER=$(curl -sf "http://localhost:$PORT/api/v1/stats" 2>/dev/null || echo "{}")
-TRADES_AFTER=$(echo "$STATS_AFTER" | python3 -c "import sys,json; print(json.load(sys.stdin).get('trades_generated',0))" 2>/dev/null || echo "0")
+TRADES_AFTER=$(echo "$STATS_AFTER" | uv run python3 -c "import sys,json; print(json.load(sys.stdin).get('trades_generated',0))" 2>/dev/null || echo "0")
 echo "Stats after recovery: trades=$TRADES_AFTER"
 
 # Verify post-crash functionality
 echo "Verifying post-crash order acceptance..."
-GATEWAY_URL="http://localhost:$PORT" python3 "${SCRIPT_DIR}/inject_orders.py" --input fixtures/orders.csv --limit 10 > /dev/null 2>&1
+GATEWAY_URL="http://localhost:$PORT" uv run "${SCRIPT_DIR}/inject_orders.py" --input fixtures/orders.csv --limit 10 > /dev/null 2>&1
 if curl -sf "http://localhost:$PORT/api/v1/health" > /dev/null; then
     pass_step "System accepting orders after recovery"
 else

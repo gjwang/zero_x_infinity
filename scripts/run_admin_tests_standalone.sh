@@ -97,10 +97,10 @@ STEP=1
 echo "[Step $STEP] Checking prerequisites..."
 
 # Check Python3
-if ! command -v python3 &> /dev/null; then
+if ! command -v uv run &> /dev/null; then
     fail_at_step "Python3 not found. Install with: brew install python3"
 fi
-PYTHON_VERSION=$(python3 --version)
+PYTHON_VERSION=$(uv run python3 --version)
 echo -e "    ${GREEN}✓${NC} $PYTHON_VERSION"
 
 # Check PostgreSQL (optional - Admin works standalone)
@@ -137,7 +137,7 @@ cd "$ADMIN_DIR"
 # Create virtual environment if not exists
 if [ ! -d "venv" ]; then
     echo "    Creating virtual environment..."
-    python3 -m venv venv
+    uv run python3 -m venv venv
     echo -e "    ${GREEN}✓${NC} Virtual environment created"
 else
     echo -e "    ${GREEN}✓${NC} Virtual environment already exists"

@@ -236,13 +236,13 @@ check_dependencies() {
     
     # Python3
     echo -n "[DEP] Python3... "
-    if command -v python3 &> /dev/null; then
-        echo -e "${GREEN}OK${NC} ($(python3 --version 2>/dev/null | cut -d' ' -f2))"
+    if command -v uv run &> /dev/null; then
+        echo -e "${GREEN}OK${NC} ($(uv run python3 --version 2>/dev/null | cut -d' ' -f2))"
         # In CI, ensure required packages are present
         if [ "$CI" = "true" ]; then
             echo "    Installing Python dependencies..."
-            python3 -m pip install --upgrade pip &>/dev/null
-            python3 -m pip install pandas taos-ws-py &>/dev/null || echo "    Warning: Python dependency install failed"
+            uv run python3 -m pip install --upgrade pip &>/dev/null
+            uv run python3 -m pip install pandas taos-ws-py &>/dev/null || echo "    Warning: Python dependency install failed"
         fi
     else
         echo -e "${RED}MISSING${NC}"
@@ -355,7 +355,7 @@ clean_env() {
     fi
     
     if [ "$CI" = "true" ] && [ -f "scripts/ci_clean.py" ]; then
-         python3 scripts/ci_clean.py || echo "   [WARN] DB cleanup script failed"
+         uv run scripts/ci_clean.py || echo "   [WARN] DB cleanup script failed"
     fi
     sleep 2
 }
@@ -471,7 +471,7 @@ main() {
         
         POSTGRES_AVAILABLE=false
         if [ "$CI" = "true" ]; then
-            if python3 -c "import psycopg2; psycopg2.connect(host='localhost', dbname='exchange_info_db', user='trading', password='trading123').close()" 2>/dev/null; then
+            if uv run python3 -c "import psycopg2; psycopg2.connect(host='localhost', dbname='exchange_info_db', user='trading', password='trading123').close()" 2>/dev/null; then
                 POSTGRES_AVAILABLE=true
             fi
         elif docker ps --format '{{.Names}}' 2>/dev/null | grep -q "postgres"; then
@@ -497,7 +497,7 @@ main() {
         
         POSTGRES_AVAILABLE=false
         if [ "$CI" = "true" ]; then
-            if python3 -c "import psycopg2; psycopg2.connect(host='localhost', dbname='exchange_info_db', user='trading', password='trading123').close()" 2>/dev/null; then
+            if uv run python3 -c "import psycopg2; psycopg2.connect(host='localhost', dbname='exchange_info_db', user='trading', password='trading123').close()" 2>/dev/null; then
                 POSTGRES_AVAILABLE=true
             fi
         elif docker ps --format '{{.Names}}' 2>/dev/null | grep -q "postgres"; then

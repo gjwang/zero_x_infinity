@@ -133,7 +133,7 @@ test_start "Initialize database to clean state"
 if [ "$CI" = "true" ]; then
     # In CI, database is already initialized by the workflow's "Initialize DB" step
     log_success "Database initialization skipped (CI workflow handles this)"
-elif python3 scripts/db/manage_db.py init >/dev/null 2>&1; then
+elif uv run scripts/db/manage_db.py init >/dev/null 2>&1; then
     log_success "Database initialized (reset + seed)"
 else
     log_error "Failed to initialize database"
@@ -148,7 +148,7 @@ test_start "Check PostgreSQL connection"
 # Locally, it's accessed via docker exec
 if [ "$CI" = "true" ]; then
     # CI environment - use psql directly or Python
-    if python3 -c "import psycopg2; conn = psycopg2.connect(host='localhost', dbname='exchange_info_db', user='trading', password='trading123'); conn.close()" 2>/dev/null; then
+    if uv run python3 -c "import psycopg2; conn = psycopg2.connect(host='localhost', dbname='exchange_info_db', user='trading', password='trading123'); conn.close()" 2>/dev/null; then
         log_success "PostgreSQL is accessible (via psycopg2)"
     elif command -v psql &>/dev/null && PGPASSWORD=trading123 psql -h localhost -U trading -d exchange_info_db -c "SELECT 1" >/dev/null 2>&1; then
         log_success "PostgreSQL is accessible (via psql)"

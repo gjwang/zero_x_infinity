@@ -21,7 +21,7 @@ echo "[2/2] Verifying WAL file with Python..."
 WAL_FILE=$(find target -name "test_wal_v2_*.wal" 2>/dev/null | head -1 || true)
 
 if [ -n "$WAL_FILE" ] && [ -f "$WAL_FILE" ]; then
-    python3 "$SCRIPT_DIR/verify_wal.py" "$WAL_FILE"
+    uv run "$SCRIPT_DIR/verify_wal.py" "$WAL_FILE"
 else
     echo "Note: No WAL file found (test may have cleaned up)"
     echo "✅ Unit tests verified WAL format internally"

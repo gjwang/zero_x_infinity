@@ -165,7 +165,7 @@ if [ "$LIMIT" -gt 0 ]; then
     INJECT_ARGS="$INJECT_ARGS --limit $LIMIT"
 fi
 
-if ! python3 "${SCRIPT_DIR}/inject_orders.py" $INJECT_ARGS; then
+if ! uv run "${SCRIPT_DIR}/inject_orders.py" $INJECT_ARGS; then
     fail_at_step "Order injection failed"
 fi
 echo -e "    ${GREEN}✓${NC} Orders injected"

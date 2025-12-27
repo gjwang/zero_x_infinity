@@ -136,13 +136,14 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: '3.10'
-      
+          version: "0.5.11"
+          enable-cache: true
+
       - name: Install Python dependencies
-        run: pip install pandas taos-ws-py psycopg2-binary pynacl requests
+        run: uv sync
       
       - name: Download Binary
         uses: actions/download-artifact@v4
@@ -186,13 +187,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: '3.10'
-      
+          version: "0.5.11"
+          enable-cache: true
+
       - name: Install Python dependencies
-        run: pip install pandas taos-ws-py psycopg2-binary pynacl requests
+        run: uv sync
       
       - name: Initialize DB
         run: ./scripts/db/init.sh pg
@@ -260,13 +262,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: '3.10'
-      
+          version: "0.5.11"
+          enable-cache: true
+
       - name: Install Python dependencies
-        run: pip install pandas taos-ws-py psycopg2-binary pynacl requests
+        run: uv sync
       
       - name: Initialize DB
         run: ./scripts/db/init.sh pg
@@ -334,13 +337,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: '3.10'
-      
+          version: "0.5.11"
+          enable-cache: true
+
       - name: Install Python dependencies
-        run: pip install pandas taos-ws-py psycopg2-binary pynacl requests
+        run: uv sync
       
       - name: Initialize DB
         run: ./scripts/db/init.sh pg
@@ -408,13 +412,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: '3.10'
-      
+          version: "0.5.11"
+          enable-cache: true
+
       - name: Install Python dependencies
-        run: pip install pandas taos-ws-py psycopg2-binary pynacl requests
+        run: uv sync
       
       - name: Initialize DB
         run: ./scripts/db/init.sh pg
@@ -486,13 +491,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: '3.10'
-      
+          version: "0.5.11"
+          enable-cache: true
+
       - name: Install Python dependencies
-        run: pip install pandas taos-ws-py psycopg2-binary pynacl requests
+        run: uv sync
       
       - name: Initialize DB
         run: ./scripts/db/init.sh pg
@@ -564,13 +570,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: '3.10'
-      
+          version: "0.5.11"
+          enable-cache: true
+
       - name: Install Python dependencies
-        run: pip install pandas taos-ws-py psycopg2-binary pynacl requests
+        run: uv sync
       
       - name: Initialize DB
         run: ./scripts/db/init.sh pg
@@ -637,15 +644,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: '3.11'
+          version: "0.5.11"
+          enable-cache: true
           
       - name: Install Dependencies
         run: |
-          pip install pandas taos-ws-py psycopg2-binary pynacl requests
-          cd admin && pip install -r requirements.txt
+          uv sync
+          uv pip install -r admin/requirements.txt --python .venv
           
       - name: Download Binary
         uses: actions/download-artifact@v4
@@ -709,27 +717,27 @@ jobs:
       - name: Initialize PostgreSQL
         run: ./scripts/db/init.sh pg
 
-      - name: Setup Python
-        uses: actions/setup-python@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: '3.11'
+          version: "0.5.11"
+          enable-cache: true
 
       - name: Install Admin Dependencies
         run: |
-          cd admin
-          pip install -r requirements.txt
-          pip install playwright pytest-playwright requests
-          playwright install chromium --with-deps
+          uv sync
+          uv pip install -r admin/requirements.txt --python .venv
+          uv run playwright install chromium --with-deps
 
       - name: Initialize Admin DB
         run: |
           cd admin
-          python init_db.py
+          uv run python init_db.py
 
       - name: Start Admin Service
         run: |
           cd admin
-          nohup uvicorn main:app --host 0.0.0.0 --port $ADMIN_PORT > /tmp/admin.log 2>&1 &
+          nohup uv run uvicorn main:app --host 0.0.0.0 --port $ADMIN_PORT > /tmp/admin.log 2>&1 &
           echo "Waiting for Admin..."
           for i in {1..30}; do
             curl -s $ADMIN_URL/health && break
@@ -748,7 +756,7 @@ jobs:
       - name: Run Playwright UI Test
         run: |
           cd admin
-          pytest test_ui_poc.py -v --tb=short
+          uv run pytest test_ui_poc.py -v --tb=short
         continue-on-error: true  # First run - verify it works
 
       - name: Upload Logs on Failure
@@ -785,13 +793,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: '3.10'
-      
+          version: "0.5.11"
+          enable-cache: true
+
       - name: Install Python dependencies
-        run: pip install pandas taos-ws-py psycopg2-binary pynacl requests
+        run: uv sync
       
       - name: Initialize DB
         run: ./scripts/db/init.sh pg

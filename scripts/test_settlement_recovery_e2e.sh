@@ -88,7 +88,7 @@ wait_for_health() {
 get_trade_count() {
     # Try to get from stats endpoint first
     local stats=$(curl -sf "http://localhost:$PORT/api/v1/stats" 2>/dev/null || echo "{}")
-    local count=$(echo "$stats" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('trades_generated',0))" 2>/dev/null || echo "0")
+    local count=$(echo "$stats" | uv run python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('trades_generated',0))" 2>/dev/null || echo "0")
     echo "$count"
 }
 
@@ -106,7 +106,7 @@ echo "[Step $STEP] Checking prerequisites..."
 
 [ -f "fixtures/orders.csv" ] || fail_at_step "fixtures/orders.csv not found"
 [ -f "fixtures/balances_init.csv" ] || fail_at_step "fixtures/balances_init.csv not found"
-command -v python3 &>/dev/null || fail_at_step "python3 not found"
+command -v uv run &>/dev/null || fail_at_step "uv run not found"
 command -v curl &>/dev/null || fail_at_step "curl not found"
 
 pass_step "All prerequisites available"
@@ -208,7 +208,7 @@ echo ""
 echo "[Step $STEP] Injecting orders (must have >0 accepted)..."
 
 # Use 100 orders to ensure we get plenty of trades
-INJECT_RESULT=$(GATEWAY_URL="http://localhost:$PORT" python3 "${SCRIPT_DIR}/inject_orders.py" \
+INJECT_RESULT=$(GATEWAY_URL="http://localhost:$PORT" uv run "${SCRIPT_DIR}/inject_orders.py" \
     --input fixtures/orders.csv --limit 100 2>&1) || true
 
 # Extract accepted count from output (format: "Accepted:      30")
@@ -357,7 +357,7 @@ echo ""
 echo "[Step $STEP] Testing post-recovery functionality..."
 
 # Inject a few more orders
-POST_INJECT=$(GATEWAY_URL="http://localhost:$PORT" python3 "${SCRIPT_DIR}/inject_orders.py" \
+POST_INJECT=$(GATEWAY_URL="http://localhost:$PORT" uv run "${SCRIPT_DIR}/inject_orders.py" \
     --input fixtures/orders.csv --limit 10 2>&1) || true
 
 # Extract accepted count from output (format: "Accepted:      10")

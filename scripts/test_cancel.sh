@@ -17,11 +17,11 @@ cargo run --release -- --ubscore --input fixtures/test_with_cancel
 
 echo ""
 echo "=== Step 2: Verify Balance Events ==="
-python3 scripts/verify_balance_events.py
+uv run scripts/verify_balance_events.py
 
 echo ""
 echo "=== Step 3: Verify Order Events ==="
-python3 scripts/verify_order_events.py
+uv run scripts/verify_order_events.py
 
 echo ""
 echo "✅ Cancel Test Completed Successfully"

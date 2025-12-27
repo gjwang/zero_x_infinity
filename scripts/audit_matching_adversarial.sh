@@ -106,7 +106,7 @@ wait_for_gw || fail_audit "Gateway failed to start"
 
 # Inject orders to create matched trades and resting orders
 echo "Injecting orders..."
-GATEWAY_URL="http://localhost:$PORT" python3 "${SCRIPT_DIR}/inject_orders.py" --input fixtures/orders.csv --limit 100 > /dev/null 2>&1
+GATEWAY_URL="http://localhost:$PORT" uv run "${SCRIPT_DIR}/inject_orders.py" --input fixtures/orders.csv --limit 100 > /dev/null 2>&1
 sleep 3
 
 # Check if snapshots were created
@@ -120,7 +120,7 @@ else
 fi
 
 # Get order count before crash
-ORDERS_BEFORE=$(curl -sf "http://localhost:$PORT/api/v1/stats" | python3 -c "import sys,json; print(json.load(sys.stdin).get('orders_accepted',0))" 2>/dev/null || echo "0")
+ORDERS_BEFORE=$(curl -sf "http://localhost:$PORT/api/v1/stats" | uv run python3 -c "import sys,json; print(json.load(sys.stdin).get('orders_accepted',0))" 2>/dev/null || echo "0")
 echo "Orders accepted before crash: $ORDERS_BEFORE"
 
 # ============================================================================
@@ -150,7 +150,7 @@ else
 fi
 
 # Verify system is functional
-GATEWAY_URL="http://localhost:$PORT" python3 "${SCRIPT_DIR}/inject_orders.py" --input fixtures/orders.csv --limit 5 > /dev/null 2>&1
+GATEWAY_URL="http://localhost:$PORT" uv run "${SCRIPT_DIR}/inject_orders.py" --input fixtures/orders.csv --limit 5 > /dev/null 2>&1
 if [ $? -eq 0 ]; then
     pass_step "Post-crash order acceptance OK"
 else

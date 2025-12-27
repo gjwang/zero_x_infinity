@@ -116,7 +116,7 @@ STEP=3
 echo ""
 echo "[Step $STEP] Dumping balances from TDengine..."
 
-if ! python3 "${SCRIPT_DIR}/dump_balances.py" \
+if ! uv run "${SCRIPT_DIR}/dump_balances.py" \
     --output "$DB_DUMP_CSV" \
     --users "$USERS" \
     --assets "$ASSETS" \
@@ -137,7 +137,7 @@ STEP=4
 echo ""
 echo "[Step $STEP] Comparing Pipeline CSV vs TDengine CSV..."
 
-if ! python3 "${SCRIPT_DIR}/compare_settlement.py" \
+if ! uv run "${SCRIPT_DIR}/compare_settlement.py" \
     --pipeline "$PIPELINE_CSV" \
     --db "$DB_DUMP_CSV"; then
     fail_at_step $STEP "Comparison failed - mismatches found"

@@ -160,7 +160,7 @@ log_step "Submitting test orders via inject_orders.py (Ed25519 auth)..."
 # Set PYTHONPATH so lib/auth.py is found
 export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
 
-# Detect Python: use system python3 in CI, venv otherwise
+# Detect Python: use system uv run in CI, venv otherwise
 if [ "$CI" = "true" ]; then
     PYTHON_CMD="${PYTHON_CMD:-python3}"
 elif [ -f ".venv/bin/python3" ]; then
