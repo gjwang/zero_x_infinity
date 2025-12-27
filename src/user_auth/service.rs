@@ -221,7 +221,7 @@ impl UserAuthService {
 
     /// Delete API Key
     pub async fn delete_api_key(&self, user_id: i64, api_key: String) -> Result<()> {
-        let res = sqlx::query!(
+        let res: sqlx::postgres::PgQueryResult = sqlx::query!(
             r#"
             DELETE FROM api_keys_tb
             WHERE user_id = $1::bigint AND api_key = $2::text
