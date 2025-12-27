@@ -114,6 +114,47 @@ scripts/run_admin_gateway_e2e.sh   ← source db_env.sh
 
 ---
 
+## 🆕 UX-10: Trace ID Evidence Chain (新增)
+
+### 实现内容
+
+| 文件 | 变更 |
+|------|------|
+| `requirements.txt` | 添加 `python-ulid>=3.0.0` |
+| `auth/audit_middleware.py` | ULID生成、ContextVar、X-Trace-ID响应头 |
+| `models/tables.py` | `AdminAuditLog.trace_id` 列 (VARCHAR 26) |
+| `migrations/012_audit_log_trace_id.sql` | 数据库迁移 |
+| `tests/test_ux10_trace_id.py` | 6个测试用例 |
+
+### QA验证步骤
+
+```bash
+# 1. 运行UX-10单元测试
+cd admin && source venv/bin/activate
+pytest tests/test_ux10_trace_id.py -v
+# 预期: 6/6 PASS
+
+# 2. 验证X-Trace-ID响应头 (需启动Admin服务)
+curl -i http://localhost:8002/health
+# 预期: 响应头包含 X-Trace-ID: 01KDXXX... (26字符ULID)
+
+# 3. 验证audit_log存储trace_id
+# 执行任意CRUD操作后检查数据库:
+psql -c "SELECT trace_id, action, path FROM admin_audit_log ORDER BY id DESC LIMIT 5;"
+# 预期: trace_id列有26字符ULID值
+```
+
+### 验收标准
+
+- [ ] TC-UX-10-01: 每个请求生成唯一ULID ✅ (单测通过)
+- [ ] TC-UX-10-02: 所有日志包含trace_id ✅ (ContextVar)
+- [ ] TC-UX-10-03: 响应头X-Trace-ID存在 (需手动验证)
+- [ ] TC-UX-10-04: audit_log表有trace_id列 ✅ (单测通过)
+- [ ] TC-UX-10-05: 同一操作日志和DB trace_id一致 (需手动验证)
+- [ ] TC-UX-10-06: Trace ID 26字符ULID格式 ✅ (单测通过)
+
+---
+
 ## 📞 Ready for QA
 
 Developer签名: @Developer AI Agent  
