@@ -34,12 +34,12 @@ class TestUX10TraceIdEvidenceChain:
     def test_tc_ux_10_01_unique_trace_id_per_request(self):
         """Each HTTP request must generate a unique ULID trace_id"""
         try:
-            import ulid
+            from ulid import ULID
         except ImportError:
             pytest.skip("ulid package not installed")
         
         # Generate multiple trace IDs
-        trace_ids = [str(ulid.new()) for _ in range(100)]
+        trace_ids = [str(ULID()) for _ in range(100)]
         
         # All must be unique
         assert len(trace_ids) == len(set(trace_ids)), \
@@ -53,7 +53,7 @@ class TestUX10TraceIdEvidenceChain:
     def test_tc_ux_10_01_ulid_is_sortable(self):
         """ULID must be time-sortable (lexicographic order = chronological order)"""
         try:
-            import ulid
+            from ulid import ULID
             import time
         except ImportError:
             pytest.skip("ulid package not installed")
@@ -61,7 +61,7 @@ class TestUX10TraceIdEvidenceChain:
         # Generate ULIDs with small delays
         ulids = []
         for _ in range(5):
-            ulids.append(str(ulid.new()))
+            ulids.append(str(ULID()))
             time.sleep(0.001)  # 1ms delay
         
         # Sorted order should match generation order
@@ -75,7 +75,7 @@ class TestUX10TraceIdEvidenceChain:
     def test_tc_ux_10_02_log_format_contains_trace_id(self):
         """Log format must include trace_id field"""
         # Expected log format pattern
-        log_line = 'trace_id=01HRC5K8F1ABCDEFGHIJK action=START endpoint=/asset'
+        log_line = 'trace_id=01HRCYD5K8F1ABCDEFGHJ0MNQP action=START endpoint=/asset'
         
         # Verify trace_id is present
         assert 'trace_id=' in log_line, "Log must contain trace_id field"
@@ -95,7 +95,7 @@ class TestUX10TraceIdEvidenceChain:
         # Example JSON log entry
         log_entry = {
             "timestamp": "2025-12-27T10:25:00Z",
-            "trace_id": "01HRC5K8F1ABCDEFGHIJK",
+            "trace_id": "01HRCYD5K8F1ABCDEFGHJ0MNQP",
             "admin_id": 1001,
             "action": "DB_UPDATE",
             "entity": "Asset",
@@ -122,7 +122,7 @@ class TestUX10TraceIdEvidenceChain:
         """Response must include X-Trace-ID header with valid ULID"""
         # Mock response headers
         response_headers = {
-            "X-Trace-ID": "01HRC5K8F1ABCDEFGHIJK",
+            "X-Trace-ID": "01HRCYD5K8F1ABCDEFGHJ0MNQP",
             "Content-Type": "application/json"
         }
         
@@ -137,7 +137,7 @@ class TestUX10TraceIdEvidenceChain:
     
     def test_tc_ux_10_03_header_matches_log_trace_id(self):
         """X-Trace-ID header must match trace_id in logs"""
-        trace_id = "01HRC5K8F1ABCDEFGHIJK"
+        trace_id = "01HRCYD5K8F1ABCDEFGHJ0MNQP"
         
         response_header_trace_id = trace_id
         log_trace_id = trace_id
@@ -197,7 +197,7 @@ class TestUX10TraceIdEvidenceChain:
     
     def test_tc_ux_10_05_trace_id_consistency(self):
         """Same trace_id must appear in logs and audit table for one operation"""
-        operation_trace_id = "01HRC5K8F1ABCDEFGHIJK"
+        operation_trace_id = "01HRCYD5K8F1ABCDEFGHJ0MNQP"
         
         # Simulate log entries for one operation
         log_entries = [
@@ -229,7 +229,7 @@ class TestUX10TraceIdEvidenceChain:
     
     def test_tc_ux_10_05_cross_reference_query(self):
         """Can query both logs and DB by trace_id to reconstruct operation"""
-        trace_id = "01HRC5K8F1ABCDEFGHIJK"
+        trace_id = "01HRCYD5K8F1ABCDEFGHJ0MNQP"
         
         # Example grep command for logs
         log_query = f'grep "trace_id={trace_id}" /var/log/admin/app.log'
@@ -247,7 +247,7 @@ class TestUX10TraceIdEvidenceChain:
     
     def test_tc_ux_10_06_ulid_length(self):
         """Trace ID must be exactly 26 characters (ULID format)"""
-        valid_ulid = "01HRC5K8F1ABCDEFGHIJKLMNO"
+        valid_ulid = "01HRCYD5K8F1ABCDEFGHJ0MNQP"
         
         assert len(valid_ulid) == 26, \
             f"ULID must be 26 characters, got {len(valid_ulid)}"
@@ -255,12 +255,12 @@ class TestUX10TraceIdEvidenceChain:
     def test_tc_ux_10_06_ulid_character_set(self):
         """ULID must contain only Crockford Base32 characters (0-9, A-Z except I, L, O, U)"""
         try:
-            import ulid
+            from ulid import ULID
         except ImportError:
             pytest.skip("ulid package not installed")
         
         # Generate a ULID
-        test_ulid = str(ulid.new())
+        test_ulid = str(ULID())
         
         # Verify length
         assert len(test_ulid) == 26, f"ULID must be 26 chars, got {len(test_ulid)}"
@@ -301,12 +301,12 @@ class TestTraceIdMiddlewareContract:
     def test_middleware_generates_ulid_on_entry(self):
         """Middleware must generate ULID at request entry"""
         try:
-            import ulid
+            from ulid import ULID
         except ImportError:
             pytest.skip("ulid package not installed")
         
         # Simulate middleware entry
-        trace_id = str(ulid.new())
+        trace_id = str(ULID())
         
         assert trace_id is not None
         assert len(trace_id) == 26
@@ -319,7 +319,7 @@ class TestTraceIdMiddlewareContract:
         trace_id_var: ContextVar[str] = ContextVar("trace_id", default="")
         
         # Simulate setting trace_id
-        test_trace_id = "01HRC5K8F1ABCDEFGHIJK"
+        test_trace_id = "01HRCYD5K8F1ABCDEFGHJ0MNQP"
         trace_id_var.set(test_trace_id)
         
         # Verify can retrieve
@@ -332,7 +332,7 @@ class TestTraceIdMiddlewareContract:
             headers = {}
         
         response = MockResponse()
-        trace_id = "01HRC5K8F1ABCDEFGHIJK"
+        trace_id = "01HRCYD5K8F1ABCDEFGHJ0MNQP"
         
         # Simulate middleware exit
         response.headers["X-Trace-ID"] = trace_id
