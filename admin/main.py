@@ -52,6 +52,9 @@ app = FastAPI(
     title="Zero X Infinity Admin",
     version="0.0F",
     lifespan=lifespan,
+    docs_url="/docs",      # Swagger UI at /docs
+    redoc_url="/redoc",    # ReDoc at /redoc
+    openapi_url="/openapi.json",
 )
 
 # Add middleware BEFORE mounting (correct order)
