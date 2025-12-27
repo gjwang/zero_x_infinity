@@ -16,10 +16,11 @@ class Settings(BaseSettings):
         extra="ignore",
     )
     
-    # Database - MUST be set via environment variable (CI standard)
-    # Source: db_env.sh exports DATABASE_URL_ASYNC
-    # Pydantic will read from DATABASE_URL_ASYNC or database_url env vars
-    database_url: str = Field(validation_alias="DATABASE_URL_ASYNC")
+    # Database - defaults to local dev, CI sets DATABASE_URL_ASYNC
+    database_url: str = Field(
+        default="postgresql+asyncpg://trading:trading123@localhost:5433/exchange_info_db",
+        validation_alias="DATABASE_URL_ASYNC"
+    )
     
     # Security - MUST be set in production
     admin_secret_key: str = "dev-secret-key-change-in-production-32chars+"

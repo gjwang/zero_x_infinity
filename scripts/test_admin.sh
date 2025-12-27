@@ -18,7 +18,7 @@ RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-PROJECT_ROOT=$(cd "$(dirname "$0")" && pwd)
+PROJECT_ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$PROJECT_ROOT"
 
 QUICK_MODE=false
