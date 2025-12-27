@@ -3,7 +3,8 @@
 > **Status**: Draft
 > **Priority**: P0 (Frontend Blockers)
 
-This document outlines the backend development tasks required to fully support the **[0x10 Web Frontend](./0x10-web-frontend.md)**. These features are currently marked as "Missing" (❌) or "Partial" and are blockers for a complete Trading MVP.
+This document outlines the backend development tasks required to fully support the **[0x10 Web Frontend](./0x10-web-frontend.md)**.
+> **Current Status (2025-12-27)**: All coding tasks are **DONE**. Public features are live. Private features are code-ready but **blocked by Authentication**.
 
 ---
 
@@ -52,6 +53,7 @@ This document outlines the backend development tasks required to fully support t
 
 ### 2.1 Ticker (Rolling 24h Stats)
 *   **Channel**: `market.ticker`
+*   **Status**: ✅ **COMPLETED**
 *   **Topic**: `market.ticker.{symbol}` (e.g., `market.ticker.BTC_USDT` or `market.ticker.all`)
 *   **Update Frequency**: 1000ms (Throttled)
 *   **Payload**:
@@ -75,6 +77,7 @@ This document outlines the backend development tasks required to fully support t
 
 ### 2.2 Incremental Depth (Optional) or Diff Depth
 *   **Channel**: `market.depth`
+*   **Status**: ✅ **COMPLETED** (MVP Snapshot Mode)
 *   **Topic**: `market.depth.{symbol}`
 *   **Update Frequency**: 100ms or 1000ms
 *   **Payload**:
@@ -97,6 +100,7 @@ This document outlines the backend development tasks required to fully support t
 
 ### 2.3 Public Trade Stream
 *   **Channel**: `market.trade`
+*   **Status**: ✅ **COMPLETED**
 *   **Topic**: `market.trade.{symbol}`
 *   **Payload**: Real-time broadcast of every match.
     ```json

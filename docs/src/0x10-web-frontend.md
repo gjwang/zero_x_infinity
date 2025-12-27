@@ -92,7 +92,7 @@ Base URL: `/api/v1/public`
 | `/symbols` | GET | List trading pairs | ✅ Ready |
 | `/depth` | GET | Order book depth | ✅ Ready |
 | `/klines` | GET | OHLCV candles | ✅ Ready |
-| `/trades` | GET | Public trade history | ❌ Missing (TODO) |
+| `/trades` | GET | Public trade history | ✅ Ready |
 
 ### 5.2 Private Trading (Requires Signature)
 Base URL: `/api/v1/private`
@@ -112,12 +112,12 @@ Endpoint: `ws://host:port/ws`
 
 | Channel | Type | Description | Status |
 |---------|------|-------------|--------|
-| `order.update` | Private | Order status change | ✅ Ready |
-| `trade` | Private | User trade execution | ✅ Ready |
-| `balance.update` | Private | Balance change | ✅ Ready |
-| `market.depth` | Public | Orderbook updates | ❌ Missing (TODO) |
-| `market.ticker` | Public | 24h ticker updates | ❌ Missing (TODO) |
-| `market.trade` | Public | Public trade stream | ❌ Missing (TODO) |
+| `order.update` | Private | Order status change | ⚠️ Ready (Blocked by Auth) |
+| `trade` | Private | User trade execution | ⚠️ Ready (Blocked by Auth) |
+| `balance.update` | Private | Balance change | ⚠️ Ready (Blocked by Auth) |
+| `market.depth` | Public | Orderbook updates | ✅ Ready |
+| `market.ticker` | Public | 24h Ticker updates | ✅ Ready |
+| `market.trade` | Public | Public trade stream | ✅ Ready |
 
 ### 5.4 Authentication & User
 | Feature | Description | Status |
@@ -248,7 +248,7 @@ npx @openapitools/openapi-generator-cli generate \
 | `/symbols` | GET | 交易对列表 | ✅ 就绪 |
 | `/depth` | GET | 订单簿深度 | ✅ 就绪 |
 | `/klines` | GET | K线数据 | ✅ 就绪 |
-| `/trades` | GET | 公开成交历史 | ❌ 缺失 (待办) |
+| `/trades` | GET | 公开成交历史 | ✅ 就绪 |
 
 ### 5.2 私有交易 (需签名)
 基础 URL: `/api/v1/private`
@@ -268,12 +268,12 @@ npx @openapitools/openapi-generator-cli generate \
 
 | 频道 | 类型 | 描述 | 状态 |
 |------|------|------|------|
-| `order.update` | 私有 | 订单状态变更 | ✅ 就绪 |
-| `trade` | 私有 | 用户成交通知 | ✅ 就绪 |
-| `balance.update` | 私有 | 余额变更 | ✅ 就绪 |
-| `market.depth` | 公开 | 盘口深度更新 | ❌ 缺失 (待办) |
-| `market.ticker` | 公开 | 24h Ticker更新 | ❌ 缺失 (待办) |
-| `market.trade` | 公开 | 公开成交流 | ❌ 缺失 (待办) |
+| `order.update` | 私有 | 订单状态变更 | ⚠️ 就绪 (被 Auth 阻塞) |
+| `trade` | 私有 | 用户成交通知 | ⚠️ 就绪 (被 Auth 阻塞) |
+| `balance.update` | 私有 | 余额变更 | ⚠️ 就绪 (被 Auth 阻塞) |
+| `market.depth` | 公开 | 盘口深度更新 | ✅ 就绪 |
+| `market.ticker` | 公开 | 24h Ticker更新 | ✅ 就绪 |
+| `market.trade` | 公开 | 公开成交流 | ✅ 就绪 |
 
 ### 5.4 认证与用户
 | 功能 | 描述 | 状态 |
