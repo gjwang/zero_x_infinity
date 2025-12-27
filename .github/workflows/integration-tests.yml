@@ -665,7 +665,7 @@ jobs:
       - run: chmod +x target/release/zero_x_infinity
 
       - name: Run API E2E (Virtual User)
-        run: ./scripts/test_admin_e2e_ci.sh
+        run: ./scripts/run_admin_tests_standalone.sh
         # Note: Phase 0x10 will fix Gateway Hot-Reload. Currently this fails as expected.
         continue-on-error: true
 
