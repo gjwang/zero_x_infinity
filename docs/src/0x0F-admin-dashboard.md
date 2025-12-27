@@ -30,7 +30,24 @@ Build an admin dashboard for exchange operations using **FastAPI Amis Admin + Fa
 | Auth | FastAPI-User-Auth (Casbin RBAC) |
 | Database | PostgreSQL (existing) |
 
-### 1.3 Features
+### 1.3 Design Highlights ✨
+
+> **为什么这些设计很重要？** Admin Dashboard 是交易所的核心运维系统，错误操作可能导致资金损失或系统故障。以下设计原则是我们在实践中总结的**关键经验**：
+
+| 设计原则 | Why? 为什么重要 |
+|----------|----------------|
+| **🔒 ID 不可变** | `asset_id`, `symbol_id` 创建后不能修改。因为历史订单、交易记录都依赖这些 ID，修改会导致数据关联断裂。 |
+| **🔢 ID 由 DB 生成** | `asset_id`, `symbol_id` 使用 PostgreSQL `SERIAL` 自动生成，防止人为输入冲突或错误。 |
+| **📝 状态显示为字符串** | 用户看到 `Active`/`Disabled` 而非 `1`/`0`，避免操作人员记忆负担和误解。 |
+| **🚫 Base ≠ Quote** | 禁止创建 `BTC_BTC` 这样的无效交易对，这是逻辑 BUG 而非 UX 问题。 |
+| **🔍 Trace ID 全链路** | 每个操作携带 ULID trace_id，从入口到出口全程追踪，出问题时能快速定位。 |
+| **📜 强制审计日志** | 所有操作前后状态都记录，满足合规要求，支持事故回溯。 |
+| **🔄 Gateway 热加载** | 配置变更后 5 秒内生效，无需重启服务，应对紧急下线等场景。 |
+| **⬇️ 默认降序排列** | 列表默认最新在前，运维人员通常关注最近的操作。 |
+
+> **Tutorial Tip**: 这些设计原则不是凭空产生的，而是交易所实际运维中踩过的坑。建议读者仔细理解每个 "Why"。
+
+### 1.4 Features
 
 | Module | Functions |
 |--------|-----------|
