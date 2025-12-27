@@ -164,8 +164,8 @@ EOF
 
 # Use Python for Ed25519 authenticated order submission
 export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
-if [ "$CI" = "true" ]; then
-    PYTHON_CMD="${PYTHON_CMD:-python3}"
+if command -v uv >/dev/null 2>&1; then
+    PYTHON_CMD="uv run python3"
 elif [ -f "$PROJECT_DIR/.venv/bin/python3" ]; then
     PYTHON_CMD="${PYTHON_CMD:-$PROJECT_DIR/.venv/bin/python3}"
 else

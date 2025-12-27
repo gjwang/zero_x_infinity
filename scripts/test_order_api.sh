@@ -161,8 +161,8 @@ log_step "Submitting test orders via inject_orders.py (Ed25519 auth)..."
 export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
 
 # Detect Python: use system uv run in CI, venv otherwise
-if [ "$CI" = "true" ]; then
-    PYTHON_CMD="${PYTHON_CMD:-python3}"
+if command -v uv >/dev/null 2>&1; then
+    PYTHON_CMD="uv run python3"
 elif [ -f ".venv/bin/python3" ]; then
     PYTHON_CMD="${PYTHON_CMD:-.venv/bin/python3}"
 else
