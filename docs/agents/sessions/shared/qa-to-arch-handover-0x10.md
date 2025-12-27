@@ -3,25 +3,25 @@
 > **From**: QA Agent
 > **To**: Architect
 > **Date**: 2025-12-27
-> **Status**: 🟢 **VERIFIED** (Release Approved)
+> **Status**: ⚠️ **ESCALATED TO ARCHITECT** (Design Required)
 
-## ✅ Release Verification Summary
+## 🚨 Release Status: BLOCKED
 
-We have **APPROVED** the release of Phase 0x10.5 (Backend Gaps).
+The Phase 0x10.5 Release is **BLOCKED** pending Architectural Design.
 
-### 1. Security Vulnerability (P0) - FIXED
-*   **Issue**: WebSocket Identity Spoofing.
-*   **Status**: ✅ **REMEDIATED**
-*   **Verification**: The Gateway now correctly rejects unauthenticated non-zero `user_id`s with HTTP 401.
+### 1. Security Gap (Authentication)
+*   **Issue**: Current Remediation (Reject non-zero user_id) effectively disables authenticated WebSocket access.
+*   **Requirement**: We need a proper design for **WebSocket Authentication** (e.g. JWT in query, headers, or handshake protocol) to support future private channels.
+*   **Action**: Architect to design `0x10-websocket-auth.md`.
 
 ### 2. Functional Audit (Pass)
-*   **Status**: ✅ **Certified Reliable**
-*   **Logic**: Independent audit confirmed the functional tests (REST & WS) validate business logic, types, and privacy boundaries correctly.
-*   **Minor Gap**: WebSocket Depth test skips "Snapshot" validation, testing only "Updates".
-*   **Report**: `docs/agents/sessions/qa/0x10-functional-audit.md`
+*   **Status**: ✅ **Functionally Ready**
+*   **Logic**: Tests confirm the business logic is sound. We just need a secure way to access it.
 
 ## 🛠 Next Steps
 
-1.  **Frontend Integration**: Frontend Developers can now safely integrate with the Public Data APIs.
-2.  **Gatekeeper**: `scripts/verify_0x10_release.sh` is passing and should be run in CI.
+1.  **Architect**: Design WebSocket Authentication Protocol.
+2.  **Developer**: Implement Auth Protocol.
+3.  **QA**: Verify Auth Protocol using `test_qa_adversarial.py`.
+
 
