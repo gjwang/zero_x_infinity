@@ -224,7 +224,7 @@ impl UserAuthService {
         let res = sqlx::query!(
             r#"
             DELETE FROM api_keys_tb
-            WHERE user_id = $1 AND api_key = $2
+            WHERE user_id = $1::bigint AND api_key = $2::text
             "#,
             user_id,
             api_key
