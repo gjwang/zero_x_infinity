@@ -65,15 +65,22 @@ run_test() {
 setup_admin_venv() {
     cd "$PROJECT_ROOT/admin"
     
-    # Check Python version (require 3.10+)
+    # Check Python version (require 3.10-3.12, passlib incompatible with 3.13+)
     PYTHON_MAJOR=$(python3 -c 'import sys; print(sys.version_info.major)')
     PYTHON_MINOR=$(python3 -c 'import sys; print(sys.version_info.minor)')
     
     if [ "$PYTHON_MAJOR" -lt 3 ] || ([ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -lt 10 ]); then
         echo -e "${RED}ERROR: Python 3.10+ required, found Python ${PYTHON_MAJOR}.${PYTHON_MINOR}${NC}"
-        echo "Install Python 3.10+ and ensure 'python3' points to it"
         return 1
     fi
+    
+    if [ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -ge 13 ]; then
+        echo -e "${RED}ERROR: Python 3.13+ not supported (passlib crypt issue), found Python ${PYTHON_MAJOR}.${PYTHON_MINOR}${NC}"
+        echo "Use Python 3.10, 3.11, or 3.12"
+        return 1
+    fi
+    
+    echo "Python ${PYTHON_MAJOR}.${PYTHON_MINOR} ✓"
     
     # Auto-create venv if not exists
     if [ ! -d "venv" ]; then
