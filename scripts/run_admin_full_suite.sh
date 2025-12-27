@@ -61,27 +61,45 @@ run_test() {
     fi
 }
 
-# Helper: Activate Python venv (standardized: admin/venv/)
-activate_admin_venv() {
+# Helper: Setup and activate Python venv (auto-create if needed)
+setup_admin_venv() {
     cd "$PROJECT_ROOT/admin"
     
-    # Standard: admin/venv/
-    if [ ! -d "venv" ]; then
-        echo -e "${RED}ERROR: Python venv not found at admin/venv/${NC}"
-        echo "Setup: cd admin && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt"
+    # Check Python version (require 3.10+)
+    PYTHON_MAJOR=$(python3 -c 'import sys; print(sys.version_info.major)')
+    PYTHON_MINOR=$(python3 -c 'import sys; print(sys.version_info.minor)')
+    
+    if [ "$PYTHON_MAJOR" -lt 3 ] || ([ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -lt 10 ]); then
+        echo -e "${RED}ERROR: Python 3.10+ required, found Python ${PYTHON_MAJOR}.${PYTHON_MINOR}${NC}"
+        echo "Install Python 3.10+ and ensure 'python3' points to it"
         return 1
     fi
     
+    # Auto-create venv if not exists
+    if [ ! -d "venv" ]; then
+        echo -e "${YELLOW}Creating Python venv at admin/venv/...${NC}"
+        python3 -m venv venv
+        if [ $? -ne 0 ]; then
+            echo -e "${RED}ERROR: Failed to create venv${NC}"
+            return 1
+        fi
+    fi
+    
+    # Activate venv
     source venv/bin/activate
     
     # Verify Python version
     PYTHON_VERSION=$(python --version 2>&1)
     echo "Using: $PYTHON_VERSION"
     
-    # Verify key packages installed
+    # Auto-install requirements if pydantic missing
     if ! python -c "import pydantic" 2>/dev/null; then
-        echo -e "${RED}ERROR: pydantic not installed in venv!${NC}"
-        return 1
+        echo -e "${YELLOW}Installing requirements...${NC}"
+        pip install -r requirements.txt -q
+        if [ $? -ne 0 ]; then
+            echo -e "${RED}ERROR: Failed to install requirements${NC}"
+            return 1
+        fi
     fi
     
     return 0
@@ -99,7 +117,7 @@ if [ "$QUICK_MODE" == "false" ]; then
         TOTAL=$((TOTAL + 1))
         
         # Activate venv properly
-        if activate_admin_venv; then
+        if setup_admin_venv; then
             # Run pytest WITHOUT || true - must fail on error!
             pytest tests/ -m 'not e2e' --ignore=tests/e2e --ignore=tests/integration -q --tb=short 2>&1
             PYTEST_EXIT=$?
