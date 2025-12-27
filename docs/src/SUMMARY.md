@@ -76,4 +76,5 @@
 - [Testing Pitfalls](./testing-pitfalls.md)
 - [Build Verification Guide](./build-verification-guide.md)
 - [Database Selection: TDengine](./database-selection-tdengine.md)
+- [ADR-001: WebSocket Security (Strict Auth)](./architecture/decisions/ADR-001-websocket-security-auth-enforcement.md)
 
