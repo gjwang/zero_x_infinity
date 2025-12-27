@@ -93,6 +93,38 @@ IDs are generated automatically by PostgreSQL `SERIAL` in `migrations/001_init_s
 
 **Implementation**: Use `field_serializer` or Enum in Pydantic schemas.
 
+### UX-10: Trace ID Evidence Chain (CRITICAL - Financial Compliance)
+
+**Requirement**: Every admin operation MUST carry a **unique `trace_id` (ULID)** from entry to exit.
+
+**Why**: This is a **fundamental requirement for financial audit compliance**:
+- **可追溯** (Traceable): Every action links to a unique ID
+- **可举证** (Provable): Evidence chain for dispute resolution
+- **可复现** (Reproducible): Reconstruct events for investigation
+
+**Implementation**:
+```python
+import ulid
+from contextvars import ContextVar
+
+trace_id_var: ContextVar[str] = ContextVar("trace_id", default="")
+
+@app.middleware("http")
+async def trace_middleware(request: Request, call_next):
+    trace_id = str(ulid.new())
+    trace_id_var.set(trace_id)
+    logger.info(f"trace_id={trace_id} action=START endpoint={request.url.path}")
+    response = await call_next(request)
+    response.headers["X-Trace-ID"] = trace_id
+    return response
+```
+
+**Requirements**:
+- [ ] Each request generates unique ULID `trace_id`
+- [ ] All log lines include `trace_id`
+- [ ] `admin_audit_log` table has `trace_id` column (VARCHAR 26)
+- [ ] Response includes `X-Trace-ID` header
+
 ---
 
 ## Acceptance Criteria

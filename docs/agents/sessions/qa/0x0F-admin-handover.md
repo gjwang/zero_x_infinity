@@ -65,6 +65,23 @@
 - [ ] TC-UX-08-05: Symbol status displays as `"Close-Only"` (not `2`)
 - [ ] TC-UX-08-06: Asset flags display as checkboxes/labels (not `23`)
 
+### UX-10: Trace ID Evidence Chain (CRITICAL - Financial Compliance)
+
+**Requirement Verification**:
+- [ ] TC-UX-10-01: Each HTTP request generates unique ULID `trace_id`
+- [ ] TC-UX-10-02: All log entries include `trace_id` field
+- [ ] TC-UX-10-03: Response header `X-Trace-ID` is present
+- [ ] TC-UX-10-04: `admin_audit_log` table contains `trace_id` column
+- [ ] TC-UX-10-05: Same `trace_id` appears in logs AND audit table for one operation
+- [ ] TC-UX-10-06: Trace ID is 26 characters (ULID format)
+
+**Evidence Chain Verification**:
+```bash
+# Example: Verify trace appears in both log file and database
+grep "trace_id=01HRC5K8F1" /var/log/admin/app.log
+psql -c "SELECT * FROM admin_audit_log WHERE trace_id='01HRC5K8F1'"
+```
+
 ---
 
 ## Test Cases (建议)
