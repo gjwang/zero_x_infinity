@@ -79,8 +79,8 @@ Instead of a magic `user_id=0`, we strictly classify channels:
     ```
 3.  **Session Upgrade**: Connection upgrades to WebSocket.
 4.  **Channel Access**:
-    *   `user_id > 0`: Can subscribe to Private topics (automatically) + Public topics.
-    *   `user_id == 0`: Can ONLY subscribe to Public topics.
+    *   **Authenticated (Some)**: Can subscribe to Private topics (automatically) + Public topics.
+    *   **Anonymous (None)**: Can ONLY subscribe to Public topics.
 
 ## 3. Implementation Plan
 
