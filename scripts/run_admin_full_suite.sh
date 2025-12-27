@@ -99,10 +99,10 @@ setup_admin_venv() {
     PYTHON_VERSION=$(python --version 2>&1)
     echo "Using: $PYTHON_VERSION"
     
-    # Auto-install requirements if pydantic missing
-    if ! python -c "import pydantic" 2>/dev/null; then
-        echo -e "${YELLOW}Installing requirements...${NC}"
-        pip install -r requirements.txt -q
+    # Auto-install requirements if key packages missing
+    if ! python -c "import pydantic; import ulid" 2>/dev/null; then
+        echo -e "${YELLOW}Installing/updating requirements...${NC}"
+        pip install -r requirements.txt -q --upgrade
         if [ $? -ne 0 ]; then
             echo -e "${RED}ERROR: Failed to install requirements${NC}"
             return 1
