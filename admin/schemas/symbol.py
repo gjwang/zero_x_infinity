@@ -111,8 +111,7 @@ class SymbolCreateSchema(BaseModel):
     @model_validator(mode='after')
     def validate_base_not_equal_quote(self):
         """Ensure base_asset_id != quote_asset_id (BUG-07 fix)"""
-        if self.base_asset_id == self.quote_asset_id:
-            raise ValueError("base_asset_id cannot equal quote_asset_id")
+        assert self.base_asset_id != self.quote_asset_id, "base_asset_id cannot equal quote_asset_id"
         return self
 
 
