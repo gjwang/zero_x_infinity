@@ -1,23 +1,49 @@
 """
 Audit Logging Middleware
 AC-13: All admin operations must be logged
+UX-10: Trace ID evidence chain with ULID
 """
 
 import json
+from contextvars import ContextVar
 from datetime import datetime
 from typing import Callable, Optional
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response as StarletteResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from ulid import ULID
 
 from models import AdminAuditLog
+
+
+# UX-10: ContextVar for trace_id propagation across async boundaries
+trace_id_var: ContextVar[str] = ContextVar("trace_id", default="")
+
+
+def get_trace_id() -> str:
+    """Get current trace ID from context"""
+    return trace_id_var.get()
+
+
+def generate_trace_id() -> str:
+    """Generate new ULID trace ID (26 chars)"""
+    return str(ULID())
 
 
 class AuditLogMiddleware(BaseHTTPMiddleware):
     """
     Middleware to log all admin operations.
-    Captures: admin_id, IP, action, path, entity info, timestamps
+    Captures: trace_id (ULID), admin_id, IP, action, path, entity info, timestamps
+    
+    UX-10 Requirements:
+    - TC-UX-10-01: Each request gets unique ULID
+    - TC-UX-10-02: All logs include trace_id  
+    - TC-UX-10-03: Response header X-Trace-ID
+    - TC-UX-10-04: audit_log has trace_id column
+    - TC-UX-10-05: Logs and DB use same trace_id
+    - TC-UX-10-06: Trace ID is 26 chars (ULID)
     """
     
     # Paths that trigger audit logging
@@ -25,53 +51,54 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
     AUDITED_PATH_PREFIXES = ["/admin/AssetAdmin", "/admin/SymbolAdmin", "/admin/VIPLevelAdmin"]
     
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        import uuid
-        trace_id = str(uuid.uuid4())[:8]
+        # UX-10: Generate ULID trace_id for every request
+        trace_id = generate_trace_id()
+        trace_id_var.set(trace_id)
+        
+        # Log for all requests (with trace_id)
+        print(f"[{trace_id}] {request.method} {request.url.path}")
         
         # Only audit modifying operations on specific paths
         if not self._should_audit(request):
-            return await call_next(request)
+            response = await call_next(request)
+            # UX-10: Add trace_id to all responses
+            response.headers["X-Trace-ID"] = trace_id
+            return response
         
         print(f"[{trace_id}] AUDIT START: {request.method} {request.url.path}")
         
-        # DON'T read body here - it will be consumed and downstream handlers get empty body!
-        # Instead, we capture the body through a custom receive wrapper
-        
+        # Capture body through receive wrapper
         body_bytes = b""
-        
-        # Wrap receive to capture body bytes
         original_receive = request.receive
+        
         async def receive_wrapper():
             nonlocal body_bytes
             message = await original_receive()
             if message.get("type") == "http.request":
                 body_chunk = message.get("body", b"")
                 body_bytes += body_chunk
-                print(f"[{trace_id}] RECEIVE: {len(body_chunk)} bytes captured")
             return message
         
-        # Replace receive function
         request._receive = receive_wrapper
         
-        print(f"[{trace_id}] CALLING downstream handler...")
-        
-        # Execute the request (downstream can read body normally)
+        # Execute the request
         response = await call_next(request)
         
-        print(f"[{trace_id}] RESPONSE: status={response.status_code}, body_captured={len(body_bytes)} bytes")
+        print(f"[{trace_id}] RESPONSE: status={response.status_code}")
         
-        # Log after successful operations using captured body
+        # Log after successful operations
         if 200 <= response.status_code < 300:
             body = None
             if body_bytes:
                 try:
                     body = json.loads(body_bytes.decode())
-                    print(f"[{trace_id}] BODY PARSED: {body}")
-                except Exception as e:
-                    print(f"[{trace_id}] BODY PARSE FAILED: {e}")
+                except Exception:
                     body = None
-            await self._create_audit_log(request, body)
+            await self._create_audit_log(request, body, trace_id)
             print(f"[{trace_id}] AUDIT LOG CREATED")
+        
+        # UX-10: Add trace_id to response header
+        response.headers["X-Trace-ID"] = trace_id
         
         print(f"[{trace_id}] AUDIT END")
         return response
@@ -91,7 +118,7 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
         entity_id = None
         
         if len(parts) >= 2:
-            entity_type = parts[1]  # asset, symbol, vip_level
+            entity_type = parts[1]
         
         if len(parts) >= 3:
             try:
@@ -101,15 +128,14 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
         
         return entity_type, entity_id
     
-    async def _create_audit_log(self, request: Request, body: Optional[dict]) -> None:
-        """Create audit log entry"""
+    async def _create_audit_log(self, request: Request, body: Optional[dict], trace_id: str) -> None:
+        """Create audit log entry with trace_id"""
         from database import SessionLocal
         
-        # 1. Get admin info (Try state first, then request.user from auth)
+        # Get admin info
         admin_id = getattr(request.state, "admin_id", 0)
         admin_username = getattr(request.state, "admin_username", "unknown")
         
-        # Fallback to request.user (fastapi-user-auth standard)
         if not admin_id and "user" in request.scope:
             try:
                 user = request.user
@@ -118,28 +144,23 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
             except Exception:
                 pass
         
-        # 2. Get client IP
         ip_address = request.client.host if request.client else "unknown"
-        
-        # 3. Extract entity info
         entity_type, entity_id = self._extract_entity_info(request.url.path)
         
-        # 4. Get database session
         db: Optional[AsyncSession] = getattr(request.state, "db", None)
-        
-        # If no session in state, create a short-lived one for auditing
         session_to_use = db
         should_close = False
         
         if session_to_use is None:
             if SessionLocal is None:
-                print(f"[AUDIT ERROR] Database not initialized, cannot log: {request.method} {request.url.path}")
+                print(f"[{trace_id}] AUDIT ERROR: Database not initialized")
                 return
             session_to_use = SessionLocal()
             should_close = True
             
         try:
             log_entry = AdminAuditLog(
+                trace_id=trace_id,  # UX-10: Store trace_id
                 admin_id=admin_id,
                 admin_username=admin_username,
                 ip_address=ip_address,
@@ -153,7 +174,7 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
             session_to_use.add(log_entry)
             await session_to_use.commit()
         except Exception as e:
-            print(f"[AUDIT ERROR] Failed to log: {e}")
+            print(f"[{trace_id}] AUDIT ERROR: {e}")
             if session_to_use:
                 await session_to_use.rollback()
         finally:

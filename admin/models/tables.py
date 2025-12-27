@@ -95,10 +95,12 @@ class AdminAuditLog(Base):
     """
     Admin Audit Log - matches admin_audit_log
     From: migrations/007_admin_audit_log.sql
+    UX-10: trace_id for evidence chain
     """
     __tablename__ = "admin_audit_log"
     
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    trace_id: Mapped[Optional[str]] = mapped_column(String(26))  # UX-10: ULID format
     admin_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     admin_username: Mapped[Optional[str]] = mapped_column(String(64))
     ip_address: Mapped[str] = mapped_column(String(45), nullable=False)  # IPv6 support
@@ -115,4 +117,5 @@ class AdminAuditLog(Base):
         Index("idx_audit_admin_id", "admin_id"),
         Index("idx_audit_created_at", "created_at"),
         Index("idx_audit_entity", "entity_type", "entity_id"),
+        Index("idx_audit_trace_id", "trace_id"),  # UX-10
     )
