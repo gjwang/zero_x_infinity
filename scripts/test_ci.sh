@@ -246,7 +246,7 @@ check_dependencies() {
         if [ "$CI" = "true" ]; then
             echo "    Installing Python dependencies..."
             uv run python3 -m pip install --upgrade pip &>/dev/null
-            uv run python3 -m pip install pandas taos-ws-py &>/dev/null || echo "    Warning: Python dependency install failed"
+            uv run python3 -m pip install pandas taos-ws-py requests pynacl &>/dev/null || echo "    Warning: Python dependency install failed"
         fi
     else
         echo -e "${RED}MISSING${NC}"
