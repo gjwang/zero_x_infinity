@@ -138,7 +138,7 @@ if [ "$CI" = "true" ]; then
     cat "$TEST_DIR/kline_orders.csv"
 fi
 
-if ! "$PYTHON_CMD" "$SCRIPT_DIR/inject_orders.py" --input "$TEST_DIR/kline_orders.csv" --quiet; then
+if ! $PYTHON_CMD "$SCRIPT_DIR/inject_orders.py" --input "$TEST_DIR/kline_orders.csv" --quiet; then
     echo "   DEBUG: inject_orders.py failed, checking Gateway log:"
     cat /tmp/gateway.log 2>/dev/null | tail -20 || true
     fail "Order injection failed - check Ed25519 auth and pynacl installation"

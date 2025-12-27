@@ -172,7 +172,7 @@ else
     PYTHON_CMD="${PYTHON_CMD:-python3}"
 fi
 
-if ! "$PYTHON_CMD" "$SCRIPT_DIR/inject_orders.py" --input "$TEST_DIR/public_trades_orders.csv" --quiet; then
+if ! $PYTHON_CMD "$SCRIPT_DIR/inject_orders.py" --input "$TEST_DIR/public_trades_orders.csv" --quiet; then
     echo "   DEBUG: inject_orders.py failed, checking Gateway log:"
     cat /tmp/gateway.log 2>/dev/null | tail -20 || true
     fail "Order injection failed - check Ed25519 auth and pynacl installation"
