@@ -33,20 +33,20 @@ Build an admin dashboard for exchange operations using **FastAPI Amis Admin + Fa
 
 ### 1.3 Design Highlights ✨
 
-> **为什么这些设计很重要？** Admin Dashboard 是交易所的核心运维系统，错误操作可能导致资金损失或系统故障。以下设计原则是我们在实践中总结的**关键经验**：
+> **Why do these designs matter?** The Admin Dashboard is a core operations system for the exchange. Incorrect operations can lead to fund loss or system failures. The following design principles are **key lessons** we've learned in practice:
 
-| 设计原则 | Why? 为什么重要 |
-|----------|----------------|
-| **🔒 ID 不可变** | `asset_id`, `symbol_id` 创建后不能修改。因为历史订单、交易记录都依赖这些 ID，修改会导致数据关联断裂。 |
-| **🔢 ID 由 DB 生成** | `asset_id`, `symbol_id` 使用 PostgreSQL `SERIAL` 自动生成，防止人为输入冲突或错误。 |
-| **📝 状态显示为字符串** | 用户看到 `Active`/`Disabled` 而非 `1`/`0`，避免操作人员记忆负担和误解。 |
-| **🚫 Base ≠ Quote** | 禁止创建 `BTC_BTC` 这样的无效交易对，这是逻辑 BUG 而非 UX 问题。 |
-| **🔍 Trace ID 证据链** | **金融合规基本要求**。每个操作携带 ULID trace_id，形成完整的审计证据链 (Evidence Chain)。出问题时可追溯、可举证、可复现。 |
-| **📜 强制审计日志** | 所有操作前后状态都记录，满足合规要求，支持事故回溯。 |
-| **🔄 Gateway 热加载** | 配置变更后 5 秒内生效，无需重启服务，应对紧急下线等场景。 |
-| **⬇️ 默认降序排列** | 列表默认最新在前，运维人员通常关注最近的操作。 |
+| Design Principle | Why? |
+|------------------|------|
+| **🔒 ID Immutability** | `asset_id`, `symbol_id` cannot be modified after creation. Historical orders and trade records depend on these IDs—changing them would break data relationships. |
+| **🔢 DB-Generated IDs** | `asset_id`, `symbol_id` use PostgreSQL `SERIAL` for auto-generation, preventing human input conflicts or errors. |
+| **📝 Status as Strings** | Users see `Active`/`Disabled` instead of `1`/`0`, reducing cognitive load and avoiding misinterpretation. |
+| **🚫 Base ≠ Quote** | Prevent creation of invalid pairs like `BTC_BTC`—this is a logic bug, not a UX issue. |
+| **🔍 Trace ID Evidence Chain** | **Fundamental financial compliance requirement.** Each operation carries a ULID trace_id, forming a complete audit evidence chain. When issues arise: traceable, provable, reproducible. |
+| **📜 Mandatory Audit Log** | All operations record before/after states, meeting compliance requirements and supporting incident investigation. |
+| **🔄 Gateway Hot-Reload** | Config changes take effect within 5 seconds without service restart—critical for emergency delisting scenarios. |
+| **⬇️ Default Descending Sort** | Lists show newest items first—operators typically focus on recent activity. |
 
-> **Tutorial Tip**: 这些设计原则不是凭空产生的，而是交易所实际运维中踩过的坑。建议读者仔细理解每个 "Why"。
+> **Tutorial Tip**: These design principles didn't emerge from nothing—they come from real operational pitfalls in exchange systems. Readers should carefully understand each "Why".
 
 ### 1.4 Features
 
@@ -561,27 +561,27 @@ class AuditLog(Base):
 **Updated 2024-12-27**: Test scripts renamed for clarity.
 
 ```bash
-# 运行全部测试 (Rust + Admin Unit + E2E)
+# Run all tests (Rust + Admin Unit + E2E)
 ./scripts/run_admin_full_suite.sh
 
-# 快速模式 (跳过Unit Tests)
+# Quick mode (skip Unit Tests)
 ./scripts/run_admin_full_suite.sh --quick
 
-# 仅运行 Admin → Gateway 传播E2E
+# Run only Admin → Gateway propagation E2E
 ./scripts/run_admin_gateway_e2e.sh
 ```
 
-**测试入口对照表:**
-| 脚本 | 用途 |
-|------|------|
-| `run_admin_full_suite.sh` | 统一入口（Rust + Admin Unit + E2E） |
-| `run_admin_gateway_e2e.sh` | Admin → Gateway 传播测试 |
-| `run_admin_tests_standalone.sh` | 一键完整测试（安装deps+启动server） |
+**Test Script Reference:**
+| Script | Purpose |
+|--------|---------|
+| `run_admin_full_suite.sh` | Unified entry (Rust + Admin Unit + E2E) |
+| `run_admin_gateway_e2e.sh` | Admin → Gateway propagation tests |
+| `run_admin_tests_standalone.sh` | One-click full test (install deps + start server) |
 
-**端口配置:**
-| 环境 | Admin Port | Gateway Port |
-|------|------------|-------------|
-| Dev (本地) | 8002 | 8080 |
+**Port Configuration:**
+| Environment | Admin Port | Gateway Port |
+|-------------|------------|--------------|
+| Dev (local) | 8002 | 8080 |
 | CI | 8001 | 8080 |
 
 **Test Coverage:** 178+ tests
