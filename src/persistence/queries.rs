@@ -926,3 +926,148 @@ mod kline_tests {
         assert!(json.contains("\"quote_volume\":\"14800.00\""));
     }
 }
+
+#[cfg(test)]
+mod public_trades_tests {
+    use super::*;
+
+    #[test]
+    fn test_public_trade_api_data_no_sensitive_fields() {
+        // Verify that PublicTradeApiData does NOT have user_id or order_id fields
+        let trade = PublicTradeApiData {
+            id: 12345,
+            price: "43000.00".to_string(),
+            qty: "0.1000".to_string(),
+            quote_qty: "4300.00".to_string(),
+            time: 1703660555000,
+            is_buyer_maker: true,
+            is_best_match: true,
+        };
+
+        // Serialize to JSON
+        let json = serde_json::to_string(&trade).unwrap();
+
+        // Verify sensitive fields are NOT present
+        assert!(
+            !json.contains("user_id"),
+            "PublicTradeApiData should NOT contain user_id"
+        );
+        assert!(
+            !json.contains("order_id"),
+            "PublicTradeApiData should NOT contain order_id"
+        );
+
+        // Verify expected fields ARE present
+        assert!(json.contains("\"id\":12345"));
+        assert!(json.contains("\"price\":\"43000.00\""));
+        assert!(json.contains("\"qty\":\"0.1000\""));
+        assert!(json.contains("\"quote_qty\":\"4300.00\""));
+        assert!(json.contains("\"time\":1703660555000"));
+        assert!(json.contains("\"is_buyer_maker\":true"));
+        assert!(json.contains("\"is_best_match\":true"));
+    }
+
+    #[test]
+    fn test_quote_qty_calculation_btc_usdt() {
+        // BTC_USDT example:
+        // - price_decimal = 2 (price = 43000.00 -> internal 4300000)
+        // - base_decimals = 8 (qty = 0.1 -> internal 10000000)
+        // - quote_decimals = 2
+        // - quote_qty = (price * qty) / 10^base_decimals
+        //             = (4300000 * 10000000) / 10^8
+        //             = 43000000000000 / 100000000
+        //             = 430000 (internal units, quote_decimals=2)
+        // - display: 430000 / 10^2 = 4300.00 USDT
+
+        let price: u64 = 4300000; // 43000.00 (price_decimal=2)
+        let qty: u64 = 10000000; // 0.1 BTC (base_decimals=8)
+        let base_decimals: u32 = 8;
+        let quote_decimals: u32 = 2;
+        let quote_display_decimals: u32 = 2;
+
+        let quote_qty_internal = (price * qty) / 10u64.pow(base_decimals);
+        assert_eq!(quote_qty_internal, 430000);
+
+        let quote_qty_str =
+            format_amount(quote_qty_internal, quote_decimals, quote_display_decimals);
+        assert_eq!(quote_qty_str, "4300.00");
+    }
+
+    #[test]
+    fn test_quote_qty_calculation_small_trade() {
+        // Small trade: 0.01 BTC @ 35000 USDT = 350 USDT
+        // - price = 35000.00 -> internal 3500000
+        // - qty = 0.01 -> internal 1000000
+        // - quote_qty = (3500000 * 1000000) / 10^8 = 35000
+
+        let price: u64 = 3500000;
+        let qty: u64 = 1000000;
+        let base_decimals: u32 = 8;
+        let quote_decimals: u32 = 2;
+        let quote_display_decimals: u32 = 2;
+
+        let quote_qty_internal = (price * qty) / 10u64.pow(base_decimals);
+        assert_eq!(quote_qty_internal, 35000);
+
+        let quote_qty_str =
+            format_amount(quote_qty_internal, quote_decimals, quote_display_decimals);
+        assert_eq!(quote_qty_str, "350.00");
+    }
+
+    #[test]
+    fn test_is_buyer_maker_logic() {
+        // is_buyer_maker should be true when side is SELL (1)
+        // Because if a SELL order is in the book (maker), the buyer is the taker
+
+        // Case 1: side = 0 (BUY) -> is_buyer_maker = false
+        let side_buy: i8 = 0;
+        let is_buy = side_buy == 0;
+        let is_buyer_maker = !is_buy;
+        assert_eq!(
+            is_buyer_maker, false,
+            "BUY order: buyer is taker, not maker"
+        );
+
+        // Case 2: side = 1 (SELL) -> is_buyer_maker = true
+        let side_sell: i8 = 1;
+        let is_buy = side_sell == 0;
+        let is_buyer_maker = !is_buy;
+        assert_eq!(is_buyer_maker, true, "SELL order: buyer is maker");
+    }
+
+    #[test]
+    fn test_public_trade_string_formatting() {
+        // Verify all numeric fields are Strings, not numbers
+        let trade = PublicTradeApiData {
+            id: 99999,
+            price: "50000.50".to_string(),
+            qty: "1.234567".to_string(),
+            quote_qty: "61728.62".to_string(),
+            time: 1700000000000,
+            is_buyer_maker: false,
+            is_best_match: true,
+        };
+
+        let json = serde_json::to_string(&trade).unwrap();
+
+        // Prices and quantities should be quoted strings in JSON
+        assert!(
+            json.contains("\"price\":\"50000.50\""),
+            "price should be a string"
+        );
+        assert!(
+            json.contains("\"qty\":\"1.234567\""),
+            "qty should be a string"
+        );
+        assert!(
+            json.contains("\"quote_qty\":\"61728.62\""),
+            "quote_qty should be a string"
+        );
+
+        // time should be a number
+        assert!(
+            json.contains("\"time\":1700000000000"),
+            "time should be a number"
+        );
+    }
+}
