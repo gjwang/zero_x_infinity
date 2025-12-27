@@ -1,133 +1,68 @@
-# 0x10 Backend Gap Requirements
+# 0x10 Backend Gap Requirements (MASTER LIST)
 
-> **Status**: Draft
-> **Priority**: P0 (Frontend Blockers)
+> **Status**: **ACTIVE** (Updated 2025-12-27)
+> **Context**: This document tracks ALL missing backend features required for a fully functional Frontend & Exchange.
 
-This document outlines the backend development tasks required to fully support the **[0x10 Web Frontend](./0x10-web-frontend.md)**.
-> **Current Status (2025-12-27)**: All coding tasks are **DONE**. Public features are live. Private features are code-ready but **blocked by Authentication**.
+## 🚨 P0 - Critical Blockers (Trading Loop)
+*Without these, the Frontend cannot perform the core "Register -> Deposit -> Trade" loop.*
 
----
+### 1. **User Authentication Service** ❌ MISSING
+*   **Problem**: Current `src/api_auth` only handles *API Key Verification* (Ed25519). There is NO Way for a human to:
+    *   Register (Sign Up).
+    *   Login (Username/Password).
+    *   Obtain a Session/JWT.
+*   **Requirement**:
+    *   `POST /api/v1/user/register`: Email, Password.
+    *   `POST /api/v1/user/login`: Returns Session Token / JWT.
+    *   `POST /api/v1/user/logout`
 
-## 1. Public Market Data APIs (REST)
+### 2. **User Center & API Key Management** ❌ MISSING
+*   **Problem**: Users cannot create the `Ed25519` keys required to trade.
+*   **Requirement**:
+    *   `POST /api/v1/user/apikeys`: Create new API Key (Generate Key Pair or Upload PubKey).
+    *   `GET /api/v1/user/apikeys`: List keys.
+    *   `DELETE /api/v1/user/apikeys/{id}`: Revoke.
 
-**Goal**: Provide public historical data for charts and "Last Trades" widget.
-
-### 1.1 Public Trade History ✅ **IMPLEMENTED**
-
-*   **Endpoint**: `GET /api/v1/public/trades`
-*   **Status**: ✅ Complete (Phase 0x10.5)
-*   **Implementation**: Commit `51027cb` (2025-12-27)
-*   **Description**: Get recent trades for a specific symbol.
-*   **Parameters**:
-    *   `symbol` (optional): e.g., `BTC_USDT` (currently uses active symbol)
-    *   `limit` (optional, default 500, max 1000)
-    *   `fromId` (optional): Fetch trades > id (pagination)
-*   **Response**: `Vec<PublicTrade>`
-    ```json
-    [
-      {
-        "id": 28457,
-        "price": "43000.00",
-        "qty": "0.15",
-        "quote_qty": "6450.00",
-        "time": 1703660555000,
-        "is_buyer_maker": true,
-        "is_best_match": true
-      }
-    ]
-    ```
-*   **Implementation Notes**:
-    *   ✅ Queries **TDengine** `trades` table
-    *   ✅ Pagination via `fromId` parameter
-    *   ✅ **Security**: NO `user_id` or `order_id` exposure
-    *   ✅ **Precision**: All prices/quantities as Strings
-    *   ✅ Unit tests: 5/5 passing
-    *   ✅ E2E test: `./scripts/test_public_trades_e2e.sh`
+### 3. **WebSocket Private Channels** ⚠️ BLOCKED
+*   **Problem**: Code exists (`src/websocket/service.rs`) but is blocked by "Strict Anonymous Mode".
+*   **Requirement**: Implement **Auth Strategy** (e.g., Ticket/ListenKey) to unblock `ws_handler`.
 
 ---
 
-## 2. WebSocket Push Channels
+## 🔸 P1 - Core Financial Features (Money Loop)
+*Blocking Real-Money Trading (can be mocked for dev).*
 
-**Goal**: Provide real-time data for the Trading UI.
-**Base URL**: `ws://host:port/ws`
+### 4. **Deposit System (Phase 0x11)** ❌ MISSING
+*   **Problem**: No way to fund accounts from blockchain.
+*   **Requirement**:
+    *   Address Generation: `GET /api/v1/capital/deposit/address`.
+    *   Chain Listener: Detect on-chain tx -> Mint internal balance.
 
-### 2.1 Ticker (Rolling 24h Stats)
-*   **Channel**: `market.ticker`
-*   **Status**: ✅ **COMPLETED**
-*   **Topic**: `market.ticker.{symbol}` (e.g., `market.ticker.BTC_USDT` or `market.ticker.all`)
-*   **Update Frequency**: 1000ms (Throttled)
-*   **Payload**:
-    ```json
-    {
-      "e": "24hTicker",
-      "s": "BTC_USDT",
-      "p": "0.15",      // Price Change
-      "P": "0.35",      // Price Change %
-      "o": "42850.00",  // Open Price
-      "h": "43200.00",  // High Price
-      "l": "42800.00",  // Low Price
-      "c": "43000.00",  // Current Price
-      "v": "1500.25",   // Base Volume
-      "q": "64510750.0" // Quote Volume
-    }
-    ```
-*   **Implementation Challenge**:
-    *   Need a **Rolling Window** Aggregator.
-    *   TDengine caching or in-memory ring buffer aggregation required for performance.
-
-### 2.2 Incremental Depth (Optional) or Diff Depth
-*   **Channel**: `market.depth`
-*   **Status**: ✅ **COMPLETED** (MVP Snapshot Mode)
-*   **Topic**: `market.depth.{symbol}`
-*   **Update Frequency**: 100ms or 1000ms
-*   **Payload**:
-    ```json
-    {
-      "e": "depthUpdate",
-      "s": "BTC_USDT",
-      "U": 157, // First update ID
-      "u": 160, // Final update ID
-      "b": [    // Bids to update [price, qty]
-        ["43000.00", "1.5"],
-        ["42998.00", "0.0"] // 0.0 means remove level
-      ],
-      "a": [    // Asks to update
-        ["43001.00", "5.2"]
-      ]
-    }
-    ```
-*   **MVP Shortcut**: sending `partialBookDepth` (Top 200 levels snapshot) every 1s is acceptable for v1 if diff is too complex.
-
-### 2.3 Public Trade Stream
-*   **Channel**: `market.trade`
-*   **Status**: ✅ **COMPLETED**
-*   **Topic**: `market.trade.{symbol}`
-*   **Payload**: Real-time broadcast of every match.
-    ```json
-    {
-      "e": "trade",
-      "s": "BTC_USDT",
-      "t": 12345,       // Trade ID
-      "p": "43000.00",  // Price
-      "q": "0.1",       // Quantity
-      "T": 1703660555000, // Time
-      "m": true         // Is Buyer Maker?
-    }
-    ```
-*   **Source**: The `Settlement` service already processes trades. It needs to emit a public event (stripping user ID).
+### 5. **Withdrawal System (Phase 0x11)** ❌ MISSING
+*   **Problem**: User cannot cash out.
+*   **Requirement**:
+    *   `POST /api/v1/capital/withdraw/apply`.
+    *   Internal Approval Workflow.
+    *   Blockchain Broadcast.
 
 ---
 
-## 3. Implementation Plan (Phase 0x10.5)
+## 🔹 P2 - Operational Features
+*Required for Production Launch but not Dev Testing.*
 
-1.  **Step 1: Public Trades API**
-    *   Add `get_public_trades` handler in Gateway.
-    *   Wire to TDengine.
-2.  **Step 2: WebSocket Broadcaster Refactor**
-    *   Current `WS` handler only supports private user streams.
-    *   Refactor `Session` to support topic subscription (Pub/Sub pattern).
-3.  **Step 3: Ticker & Trade Stream**
-    *   Implement "Global Broadcast" mechanism in `Settlement` layer.
-    *   Connect `Settlement` -> `Gateway` via channel for public messages.
+### 6. **Admin Dashboard APIs** ⚠️ PARTIAL
+*   **Status**: `fastapi_amis_admin` exists but may lack specific User/Asset ops.
+*   **Requirement**:
+    *   User Management (Ban/Unban).
+    *   Asset Config (Enable/Disable Dep/Wdw).
+    *   Trade Correction.
+
+### 7. **KYC / Security** ❌ MISSING
+*   **Requirement**: 2FA (TOTP), Identity Verification.
 
 ---
+
+## 📋 Recommended Roadmap
+1.  **Immediate Next (Phase 0x10.6?)**: Implement **User Auth & API Key Mgmt** (Unblocks Frontend "User Center" & Trading).
+2.  **Next (Phase 0x11)**: Deposit & Withdraw (Unblocks "Assets" page).
+3.  **Finally**: Admin & Operations.

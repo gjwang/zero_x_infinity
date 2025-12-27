@@ -47,7 +47,8 @@ Separted from `api_auth` (which is for API Signatures).
 *   **Logic**:
     1.  Lookup user by email.
     2.  Verify password hash.
-    3.  Generate **JWT Session Token** (Exp: 24h).
+    3.  Generate **JWT Session Token** (Exp: 24h, Algo: HS256).
+    *   **Security Note**: Must forcefully reject `alg: none` header.
 *   **Output**: `{ "token": "eyJ...", "expiry": 170... }`
 
 #### `POST /logout`
@@ -60,11 +61,14 @@ Separted from `api_auth` (which is for API Signatures).
 *   **Auth**: Bearer JWT.
 *   **Output**: `{ "user_id": 123, "email": "...", "kyc_level": 1 }`
 
-#### `GET /apikeys`
+### 3.3 API Key Management (`/api/v1/user/apikeys`)
+*   **Context**: This is the bridge between "Human Identity" (JWT) and "Machine Identity" (Ed25519).
+
+#### `GET /` (List Keys)
 *   **Auth**: Bearer JWT.
 *   **Output**: List of API Keys `{ "id": 1, "api_key": "...", "status": "Active", "created_at": ... }`
 
-#### `POST /apikeys`
+#### `POST /` (Create Key)
 *   **Auth**: Bearer JWT.
 *   **Input**: `{ "label": "My Trading Bot", "permissions": ["Trade", "Read"] }`
 *   **Logic**:
@@ -74,8 +78,9 @@ Separted from `api_auth` (which is for API Signatures).
         *   Server stores `api_key` (Public) in DB.
         *   **CRITICAL**: `api_secret` is SHOWN ONCE to user, never stored.
 *   **Output**: `{ "api_key": "...", "api_secret": "..." }` (Show Once)
+*   **Security Note**: The `api_key` (Public Key) is stored in DB. The `api_secret` (Private Key) is **NEVER** stored. If user loses it, they must generate a new key.
 
-#### `DELETE /apikeys/{id}`
+#### `DELETE /{id}` (Revoke Key)
 *   **Auth**: Bearer JWT.
 *   **Logic**: Delete/Disable key.
 
