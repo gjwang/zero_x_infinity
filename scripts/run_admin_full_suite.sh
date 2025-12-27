@@ -2,15 +2,17 @@
 # ==============================================================================
 # Unified Test Runner - One-Click Full Verification
 # ==============================================================================
-# Usage: ./verify_all.sh [--quick]
+# Usage: ./scripts/run_admin_full_suite.sh [--quick]
 #
 # Runs all test suites in the correct order:
 # 1. Rust unit tests (cargo test)
 # 2. Admin unit tests (pytest)
-# 3. Admin E2E tests (test_admin_e2e_ci.sh)
+# 3. Admin E2E tests (run_admin_gateway_e2e.sh)
+#
+# IMPORTANT: This script MUST fail if any test fails!
 # ==============================================================================
 
-set -e
+set -e  # Exit on first error
 
 # Colors
 GREEN='\033[0;32m'
@@ -45,12 +47,44 @@ run_test() {
     echo "Command: $cmd"
     echo "----------------------------------------------"
     
-    if eval "$cmd"; then
+    # Run command and capture exit code
+    set +e  # Temporarily allow errors
+    eval "$cmd"
+    local exit_code=$?
+    set -e
+    
+    if [ $exit_code -eq 0 ]; then
         echo -e "${GREEN}✅ $name PASSED${NC}"
     else
-        echo -e "${RED}❌ $name FAILED${NC}"
+        echo -e "${RED}❌ $name FAILED (exit code: $exit_code)${NC}"
         FAILED=$((FAILED + 1))
     fi
+}
+
+# Helper: Activate Python venv (standardized: admin/venv/)
+activate_admin_venv() {
+    cd "$PROJECT_ROOT/admin"
+    
+    # Standard: admin/venv/
+    if [ ! -d "venv" ]; then
+        echo -e "${RED}ERROR: Python venv not found at admin/venv/${NC}"
+        echo "Setup: cd admin && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt"
+        return 1
+    fi
+    
+    source venv/bin/activate
+    
+    # Verify Python version
+    PYTHON_VERSION=$(python --version 2>&1)
+    echo "Using: $PYTHON_VERSION"
+    
+    # Verify key packages installed
+    if ! python -c "import pydantic" 2>/dev/null; then
+        echo -e "${RED}ERROR: pydantic not installed in venv!${NC}"
+        return 1
+    fi
+    
+    return 0
 }
 
 # 1. Rust Unit Tests
@@ -59,7 +93,31 @@ run_test "Rust Unit Tests" "cargo test --quiet 2>&1 | tail -10"
 # 2. Admin Unit Tests (if not quick mode)
 if [ "$QUICK_MODE" == "false" ]; then
     if [ -d "admin/tests" ]; then
-        run_test "Admin Unit Tests" "cd admin && source venv/bin/activate && pytest tests/ -m 'not e2e' --ignore=tests/e2e --ignore=tests/integration -q --tb=short 2>&1 || true"
+        echo -e "\n${YELLOW}[2] Admin Unit Tests${NC}"
+        echo "----------------------------------------------"
+        
+        TOTAL=$((TOTAL + 1))
+        
+        # Activate venv properly
+        if activate_admin_venv; then
+            # Run pytest WITHOUT || true - must fail on error!
+            pytest tests/ -m 'not e2e' --ignore=tests/e2e --ignore=tests/integration -q --tb=short 2>&1
+            PYTEST_EXIT=$?
+            
+            if [ $PYTEST_EXIT -eq 0 ]; then
+                echo -e "${GREEN}✅ Admin Unit Tests PASSED${NC}"
+            else
+                echo -e "${RED}❌ Admin Unit Tests FAILED (exit code: $PYTEST_EXIT)${NC}"
+                FAILED=$((FAILED + 1))
+            fi
+            
+            deactivate 2>/dev/null || true
+        else
+            echo -e "${RED}❌ Admin Unit Tests FAILED (venv setup error)${NC}"
+            FAILED=$((FAILED + 1))
+        fi
+        
+        cd "$PROJECT_ROOT"
     fi
 fi
 
