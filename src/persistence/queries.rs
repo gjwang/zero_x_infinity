@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use taos::*;
+use utoipa::ToSchema;
 
 use crate::symbol_manager::SymbolManager;
 
