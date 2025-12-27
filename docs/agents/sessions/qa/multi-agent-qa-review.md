@@ -94,7 +94,7 @@
 - [x] EC-02: Symbol 约束验证 (1/1)
 - [x] SEC-03: SQL 注入测试
 - [x] SEC-04: Trace ID 验证
-- [x] SEC-05~09: Exception Leak Tests
+- [x] SEC-05~09: Exception Leak Tesj xts
 
 ## ⏳ 待完成
 
