@@ -46,6 +46,7 @@
 - [0x0E OpenAPI Integration | OpenAPI 集成](./0x0E-openapi-integration.md)
 - [0x0F Admin Dashboard | 管理后台](./0x0F-admin-dashboard.md)
     - [Testing Guide | 测试指南](./0x0F-admin-testing.md)
+- [0x10 Web Frontend | 前端外包需求](./0x10-web-frontend.md) ⭐
 
 ---
 
