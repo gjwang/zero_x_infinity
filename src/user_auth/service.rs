@@ -210,7 +210,10 @@ impl UserAuthService {
             .map(|r| ApiKeyInfo {
                 api_key: r.api_key,
                 label: r.label,
-                created_at: r.created_at.map(|t| t.to_rfc3339()).unwrap_or_default(),
+                created_at: r
+                    .created_at
+                    .map(|t: chrono::DateTime<Utc>| t.to_rfc3339())
+                    .unwrap_or_default(),
                 status: r.status,
             })
             .collect())

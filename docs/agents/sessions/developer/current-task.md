@@ -1,4 +1,4 @@
-# Current Task: Phase 0x10.6 Essential Services
+# Current Task: Phase 0x10.5 WebSocket Auth
 
 ## Session Info
 - **Date**: 2025-12-27
@@ -6,22 +6,22 @@
 - **Status**: ⏳ **Pending Pickup**
 
 ## 🎯 Objective
-Implement **User Authentication** and **API Key Management** to unblock the Frontend User Loop.
+Implement **WebSocket Authentication** to fix the QA Blocker, stripping out all legacy "Strict Anonymous" code.
 
 ## 🔗 References
-- **Handover Doc**: `docs/agents/sessions/shared/arch-to-dev-handover-0x10-6.md`
-- **Design Doc**: `docs/src/0x10-6-essential-services.md`
+- **Handover Doc**: `docs/agents/sessions/shared/arch-to-dev-handover-0x10-5.md`
+- **Design Doc**: `docs/src/0x10-websocket-auth.md`
 
 ## 🛠️ Tasks
-1.  **Database**: Apply `migrations/0x10_06_users_auth.sql` (Add password fields).
-2.  **Auth Service**: Implement `src/user_auth` (Register/Login/JWT).
-3.  **User Center**: Implement `POST /api/v1/user/apikeys` (Ed25519 Key Gen).
+1.  **Refactor Handler**: `src/websocket/handler.rs` -> User `Option<u64>`.
+2.  **Strict Auth**: Reject invalid tokens (401). No Implicit Downgrade.
+3.  **Permission Check**: Enforce `Private` channel requires `Some(uid)`.
 
 ## 🚨 Constraints
-- **Security**: Do NOT store API Private Keys. Store Public Key only. Show Private Key once.
-- **Strict Separation**: Do not mix `user_auth` code into `api_auth`.
+- **NO Magic Numbers**: `user_id = 0` is forbidden. Use `None`.
+- **Security Check**: `test_qa_adversarial.py` must pass.
 
 ## ✅ Definition of Done
-- User can Register & Login via REST API.
-- User can Generate an API Key Set.
-- User can use that API Key to call `GET /private/balances`.
+- WebSocket connection accepts `?token=JWT`.
+- Authenticated user can subscribe to `order.update`.
+- Anonymous user (no token) can ONLY see `ticker`.
