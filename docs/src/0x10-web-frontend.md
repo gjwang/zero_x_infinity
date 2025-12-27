@@ -31,13 +31,13 @@ We are looking for a professional development team to build the web frontend for
 
 ### 2.1 Core Pages
 
-| Page | Features |
-|------|----------|
-| **Home / Landing** | Market overview, Tickers, "Start Trading" CTA. |
-| **Authentication** | Login, Register, Forgot Password. |
-| **Trading Interface** | **(Core)** K-Line Chart, OrderBook, Trade History, Order Form, Depth Chart. |
-| **Assets / Wallet** | Balance overview, Deposit, Withdrawal, Asset History. |
-| **User Center** | API Key management, Password reset, Activity log. |
+| Page | Features | Backend Status |
+|------|----------|----------------|
+| **Home / Landing** | Market overview, Tickers, "Start Trading" CTA. | ⚠️ Mock Data (Public API part ready) |
+| **Authentication** | Login, Register, Forgot Password. | ⚠️ **Mock Required** (Auth Service Pending) |
+| **Trading Interface** | **(Core)** K-Line Chart, OrderBook, Trade History, Order Form. | ✅ **Ready** (Full API Support) |
+| **Assets / Wallet** | Balance overview, Deposit, Withdrawal, Asset History. | ⚠️ **Partial** (Read Only ready; Dep/Wdw Pending) |
+| **User Center** | API Key management, Password reset, Activity log. | ❌ **Coming Soon** (UI Only / Mock) |
 
 ### 2.2 Key Features & Requirements
 
@@ -189,13 +189,13 @@ npx @openapitools/openapi-generator-cli generate \
 
 ### 2.1 核心页面
 
-| 页面 | 功能点 |
-|------|________|
-| **首页** | 市场概览, 推荐币种, "开始交易"引导 |
-| **认证模块** | 登录, 注册, 找回密码 |
-| **交易界面** | **(核心)** K线图, 盘口(OrderBook), 最新成交, 下单面板, 深度图 |
-| **资产/钱包** | 资产总览, 充值, 提现, 资金流水 |
-| **用户中心** | API Key 管理, 密码修改, 活动日志 |
+| 页面 | 功能点 | 后端状态 |
+|------|________|----------|
+| **首页** | 市场概览, 推荐币种, "开始交易"引导 | ⚠️ Mock 数据 (部分公有API就绪) |
+| **认证模块** | 登录, 注册, 找回密码 | ⚠️ **需 Mock** (认证服务待定) |
+| **交易界面** | **(核心)** K线图, 盘口, 最新成交, 下单面板 | ✅ **完全就绪** (API 齐备) |
+| **资产/钱包** | 资产总览, 充值, 提现, 资金流水 | ⚠️ **部分就绪** (仅只读余额; 充提待定) |
+| **用户中心** | API Key 管理, 密码修改, 活动日志 | ❌ **即将提供** (仅开发 UI / Mock) |
 
 ### 2.2 关键特性与要求
 
