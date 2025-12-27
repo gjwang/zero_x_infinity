@@ -64,7 +64,7 @@ if [ "$QUICK_MODE" == "false" ]; then
 fi
 
 # 3. Admin E2E Tests
-run_test "Admin E2E Tests" "cd $PROJECT_ROOT && ./scripts/test_admin_e2e_ci.sh 2>&1 | tail -20"
+run_test "Admin E2E Tests" "cd $PROJECT_ROOT && ./scripts/run_admin_gateway_e2e.sh 2>&1 | tail -20"
 
 # Summary
 echo ""
