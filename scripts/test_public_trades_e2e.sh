@@ -26,6 +26,24 @@ pass() { echo -e "${GREEN}✅ $1${NC}"; }
 fail() { echo -e "${RED}❌ $1${NC}"; exit 1; }
 warn() { echo -e "${YELLOW}⚠️  $1${NC}"; }
 
+# Helper: Call API and ensure 200 OK
+call_api() {
+    local url="$1"
+    local response
+    local code
+    
+    # Capture both body and status code
+    response=$(curl -s -w "\n%{http_code}" "$url")
+    code=$(echo "$response" | tail -n1)
+    body=$(echo "$response" | sed '$d')
+    
+    if [ "$code" != "200" ]; then
+        fail "API call failed!\n   URL: $url\n   Code: $code\n   Body: $body"
+    fi
+    
+    echo "$body"
+}
+
 # Cleanup function
 cleanup() {
     if [ -n "$GATEWAY_PID" ]; then
@@ -79,7 +97,22 @@ if ! curl -sf "$BASE_URL/api/v1/health" > /dev/null 2>&1; then
     fi
     
     # Use pre-built binary (faster than cargo run)
+    USE_RELEASE_BIN=false
     if [ -f "./target/release/zero_x_infinity" ]; then
+        # Stale Binary Check: If source is newer than binary, force cargo run
+        # Find any files in src/ newer than the binary
+        NEWER_SRC=$(find src/ -type f -newer ./target/release/zero_x_infinity -print -quit)
+        if [ -n "$NEWER_SRC" ]; then
+            warn "Checking binary freshness: ⚠️  Source code is newer than release binary!"
+            echo "   Found modified file: $NEWER_SRC"
+            echo "   Switching to 'cargo run --release' to ensure recompilation..."
+            USE_RELEASE_BIN=false
+        else
+            USE_RELEASE_BIN=true
+        fi
+    fi
+
+    if [ "$USE_RELEASE_BIN" = "true" ]; then
         ./target/release/zero_x_infinity --gateway $ENV_FLAG --port 8080 --input "$TEST_DIR" > /tmp/gateway.log 2>&1 &
     else
         cargo run --release -- --gateway $ENV_FLAG --port 8080 --input "$TEST_DIR" > /tmp/gateway.log 2>&1 &
@@ -108,7 +141,7 @@ echo ""
 # Step 1: Get initial trade count
 # ============================================================
 echo "Step 1: Getting initial trade count..."
-INITIAL_RESP=$(curl -s "$BASE_URL/api/v1/public/trades?limit=1000")
+INITIAL_RESP=$(call_api "$BASE_URL/api/v1/public/trades?limit=1000")
 INITIAL_COUNT=$(echo "$INITIAL_RESP" | jq '.data | length')
 echo "   Initial trades: $INITIAL_COUNT"
 
@@ -155,7 +188,7 @@ sleep 3
 # ============================================================
 echo ""
 echo "Step 3: TC-API-001 - Basic Fetch..."
-TRADES_RESP=$(curl -s "$BASE_URL/api/v1/public/trades?limit=5")
+TRADES_RESP=$(call_api "$BASE_URL/api/v1/public/trades?limit=5")
 echo "$TRADES_RESP" | jq '.'
 
 # Verify response code
@@ -218,7 +251,7 @@ echo ""
 echo "Step 5: TC-API-003 - Testing pagination..."
 
 # Get first page
-PAGE1=$(curl -s "$BASE_URL/api/v1/public/trades?limit=2")
+PAGE1=$(call_api "$BASE_URL/api/v1/public/trades?limit=2")
 PAGE1_LEN=$(echo "$PAGE1" | jq '.data | length')
 echo "   Page 1: $PAGE1_LEN trades"
 
@@ -228,7 +261,7 @@ if [ "$PAGE1_LEN" -gt "0" ]; then
     echo "   Last ID on page 1: $LAST_ID"
     
     # Get page 2 using fromId
-    PAGE2=$(curl -s "$BASE_URL/api/v1/public/trades?fromId=$LAST_ID&limit=2")
+    PAGE2=$(call_api "$BASE_URL/api/v1/public/trades?fromId=$LAST_ID&limit=2")
     PAGE2_LEN=$(echo "$PAGE2" | jq '.data | length')
     echo "   Page 2 (fromId=$LAST_ID): $PAGE2_LEN trades"
     
@@ -252,7 +285,7 @@ fi
 # ============================================================
 echo ""
 echo "Step 6: TC-API-004 - Testing limit cap..."
-LARGE_LIMIT_RESP=$(curl -s "$BASE_URL/api/v1/public/trades?limit=2000")
+LARGE_LIMIT_RESP=$(call_api "$BASE_URL/api/v1/public/trades?limit=2000")
 LARGE_LIMIT_LEN=$(echo "$LARGE_LIMIT_RESP" | jq '.data | length')
 echo "   Requested limit=2000, got: $LARGE_LIMIT_LEN trades"
 
