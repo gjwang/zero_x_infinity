@@ -7,11 +7,13 @@ FastAPI Best Practices:
 - Dependency injection for DB sessions
 - Lifespan events for startup/shutdown
 - Proper middleware ordering
+- UX-10: Trace ID logging with loguru
 
 Run with:
-    uvicorn main:app --host 0.0.0.0 --port 8001
+    uvicorn main:app --host 0.0.0.0 --port 8002
 """
 from contextlib import asynccontextmanager
+from loguru import logger
 
 from fastapi import FastAPI
 from fastapi_amis_admin.admin.settings import Settings as AdminSettings
@@ -21,6 +23,10 @@ from settings import settings
 from database import init_db, close_db
 from admin import AssetAdmin, SymbolAdmin, VIPLevelAdmin, AuditLogAdmin
 from auth import AuditLogMiddleware
+from logging_config import setup_logging
+
+# Initialize logging with trace_id support
+setup_logging(log_dir="./logs", level="INFO")
 
 
 @asynccontextmanager
@@ -31,12 +37,14 @@ async def lifespan(app: FastAPI):
     """
     # Startup
     await init_db(settings.database_url)
-    print(f"[Admin] Started at http://{settings.admin_host}:{settings.admin_port}/admin")
-    print(f"[Admin] Database: PostgreSQL")
+    logger.info(f"Started at http://{settings.admin_host}:{settings.admin_port}/admin")
+    logger.info(f"Database: PostgreSQL")
+    logger.info(f"Logs: ./logs/admin.log, ./logs/admin_audit.log")
     yield
     # Shutdown
     await close_db()
-    print("[Admin] Shutdown complete")
+    logger.info("Shutdown complete")
+
 
 
 # Create FastAPI app with lifespan

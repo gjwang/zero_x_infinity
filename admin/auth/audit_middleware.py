@@ -14,6 +14,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response as StarletteResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
+from loguru import logger
 
 from models import AdminAuditLog
 
@@ -56,7 +57,7 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
         trace_id_var.set(trace_id)
         
         # Log for all requests (with trace_id)
-        print(f"[{trace_id}] {request.method} {request.url.path}")
+        logger.info(f"{request.method} {request.url.path}")
         
         # Only audit modifying operations on specific paths
         if not self._should_audit(request):
@@ -65,7 +66,7 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
             response.headers["X-Trace-ID"] = trace_id
             return response
         
-        print(f"[{trace_id}] AUDIT START: {request.method} {request.url.path}")
+        logger.info(f"AUDIT START: {request.method} {request.url.path}")
         
         # Capture body through receive wrapper
         body_bytes = b""
@@ -84,7 +85,7 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
         # Execute the request
         response = await call_next(request)
         
-        print(f"[{trace_id}] RESPONSE: status={response.status_code}")
+        logger.info(f"RESPONSE: status={response.status_code}")
         
         # Log after successful operations
         if 200 <= response.status_code < 300:
@@ -95,7 +96,7 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
                 except Exception:
                     body = None
             await self._create_audit_log(request, body, trace_id)
-            print(f"[{trace_id}] AUDIT LOG CREATED")
+            logger.info(f"AUDIT LOG CREATED: {request.url.path}")
         
         # UX-10: Add trace_id to response header
         response.headers["X-Trace-ID"] = trace_id
