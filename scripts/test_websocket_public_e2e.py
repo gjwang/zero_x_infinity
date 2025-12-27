@@ -30,11 +30,15 @@ except ImportError:
 GATEWAY_WS = "ws://localhost:8080/ws"
 GATEWAY_URL = "http://localhost:8080"
 
+# ANSI escape codes for colors
+GREEN = "\033[92m"
+RESET = "\033[0m"
+
 async def test_websocket_stream():
     print(f"🔌 Connecting to {GATEWAY_WS}...")
     
-    async with websockets.connect(f"{GATEWAY_WS}?user_id=9999") as websocket:
-        print("✅ Connected!")
+    async with websockets.connect(f"{GATEWAY_WS}?user_id=0") as websocket:
+        print(f"{GREEN}✅ Connected!{RESET}")
 
         # 1. Subscribe
         sub_msg = {
