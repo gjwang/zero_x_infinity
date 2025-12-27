@@ -661,16 +661,86 @@ jobs:
         continue-on-error: true
 
   test-admin-ui-e2e:
-    name: Admin UI E2E (Minimal)
+    name: Admin UI E2E (Playwright)
     needs: [test-admin-api-e2e]
     runs-on: ubuntu-latest
-    if: false # TODO: Enable in Phase 0x11 (Playwright)
+    services:
+      postgres:
+        image: postgres:18
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_DB: exchange_info_db
+          POSTGRES_USER: trading
+          POSTGRES_PASSWORD: trading123
+        options: >-
+          --health-cmd "pg_isready -U trading -d exchange_info_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
-      - run: |
-          echo "Placeholder for Playwright UI End-to-End Test"
-          echo "Scope: Longest Path Verification (Happy Path Only)"
-          echo "Flow: UI Input -> Admin Backend -> DB -> Gateway API Verification"
-          echo "Note: Edge cases are covered by 'Admin API E2E', this test focuses on UI integrity."
+      - uses: actions/checkout@v4
+
+      - name: Download Gateway Binary
+        uses: actions/download-artifact@v4
+        with:
+          name: gateway-binary
+          path: target/release
+
+      - name: Make Gateway Executable
+        run: chmod +x target/release/zero_x_infinity
+
+      - name: Initialize PostgreSQL
+        run: ./scripts/db/init.sh pg
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Admin Dependencies
+        run: |
+          cd admin
+          pip install -r requirements.txt
+          pip install playwright pytest-playwright requests
+          playwright install chromium --with-deps
+
+      - name: Initialize Admin DB
+        run: |
+          cd admin
+          python init_db.py
+
+      - name: Start Admin Service
+        run: |
+          cd admin
+          nohup uvicorn main:app --host 0.0.0.0 --port 8002 > /tmp/admin.log 2>&1 &
+          echo "Waiting for Admin..."
+          for i in {1..30}; do
+            curl -s http://localhost:8002/health && break
+            sleep 1
+          done
+
+      - name: Start Gateway
+        run: |
+          nohup ./target/release/zero_x_infinity --gateway --env ci --port 8080 > /tmp/gateway.log 2>&1 &
+          echo "Waiting for Gateway..."
+          for i in {1..30}; do
+            curl -s http://localhost:8080/api/v1/health && break
+            sleep 1
+          done
+
+      - name: Run Playwright UI Test
+        run: |
+          cd admin
+          ADMIN_URL=http://localhost:8002 GATEWAY_API=http://localhost:8080 pytest test_ui_poc.py -v --tb=short
+        continue-on-error: true  # First run - verify it works
+
+      - name: Upload Logs on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: admin-ui-e2e-logs
+          path: /tmp/*.log
 
 
   test-openapi:
