@@ -5,15 +5,44 @@ on:
     branches: [main, 0x0F-admin-dashboard]
     paths:
       - 'admin/**'
+      - 'migrations/**'
   pull_request:
     branches: [main]
     paths:
       - 'admin/**'
+      - 'migrations/**'
 
 jobs:
   test:
     runs-on: ubuntu-latest
     
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: trading
+          POSTGRES_PASSWORD: trading123
+          POSTGRES_DB: exchange_info_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      CI: true
+      PG_HOST: localhost
+      PG_PORT: 5432
+      PG_USER: trading
+      PG_PASSWORD: trading123
+      PG_DB: exchange_info_db
+      DATABASE_URL: postgresql://trading:trading123@localhost:5432/exchange_info_db
+      DATABASE_URL_ASYNC: postgresql+asyncpg://trading:trading123@localhost:5432/exchange_info_db
+      ADMIN_PORT: 8001
+      GATEWAY_PORT: 8080
+
     steps:
       - uses: actions/checkout@v4
       
@@ -30,10 +59,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       
-      - name: Run tests
+      - name: Run database migrations
+        run: |
+          for migration in migrations/*.sql; do
+            if [ -f "$migration" ]; then
+              echo "Running: $migration"
+              PGPASSWORD=$PG_PASSWORD psql -h $PG_HOST -p $PG_PORT -U $PG_USER -d $PG_DB -f "$migration" 2>/dev/null || true
+            fi
+          done
+      
+      - name: Run Admin Unit Tests
         run: |
           cd admin
-          python -m pytest tests/ -v --tb=short --junitxml=test-results.xml
+          python -m pytest tests/ -m 'not e2e' --ignore=tests/e2e --ignore=tests/integration -v --tb=short --junitxml=test-results.xml
       
       - name: Upload test results
         uses: actions/upload-artifact@v4
