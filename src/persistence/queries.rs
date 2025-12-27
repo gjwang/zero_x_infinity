@@ -95,6 +95,22 @@ pub struct TradeApiData {
     pub created_at: String,
 }
 
+/// Public Trade API response data (for public market data endpoints)
+///
+/// This struct is used for public trade history endpoints and does NOT expose
+/// sensitive information like user_id or order_id.
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct PublicTradeApiData {
+    pub id: i64,              // Trade ID
+    pub price: String,        // Formatted with price_display_decimal
+    pub qty: String,          // Formatted with base_asset.display_decimals
+    pub quote_qty: String,    // price * qty (formatted with quote_asset.display_decimals)
+    pub time: i64,            // Unix milliseconds
+    pub is_buyer_maker: bool, // true if buyer is maker (sell order matched)
+    pub is_best_match: bool,  // Always true for our matching engine
+}
+
 /// Balance record from TDengine
 #[derive(Debug, Deserialize)]
 struct BalanceRow {
@@ -383,6 +399,107 @@ pub async fn query_trades(
                 fee_asset,
                 role: if row.role == 1 { "TAKER" } else { "MAKER" }.to_string(),
                 created_at: row.ts,
+            }
+        })
+        .collect())
+}
+
+/// Query public trades for a symbol (for public API endpoints)
+///
+/// This function returns trade history WITHOUT exposing user_id or order_id.
+/// Supports pagination via from_id parameter.
+pub async fn query_public_trades(
+    taos: &Taos,
+    symbol_id: u32,
+    limit: usize,
+    from_id: Option<i64>,
+    symbol_mgr: &SymbolManager,
+) -> Result<Vec<PublicTradeApiData>> {
+    // Build WHERE clause with optional from_id filter
+    let where_clause = if let Some(from_id) = from_id {
+        format!("symbol_id = {} AND trade_id > {}", symbol_id, from_id)
+    } else {
+        format!("symbol_id = {}", symbol_id)
+    };
+
+    // Query trades (only select fields needed for public API)
+    let trades_sql = format!(
+        "SELECT ts, trade_id, side, price, qty FROM trading.trades WHERE {} ORDER BY trade_id DESC LIMIT {}",
+        where_clause, limit
+    );
+
+    let mut result = taos
+        .query(&trades_sql)
+        .await
+        .map_err(|e| anyhow::anyhow!("Query public trades failed: {}", e))?;
+
+    // Define a minimal row struct for public trades
+    #[derive(Debug, Deserialize)]
+    struct PublicTradeRow {
+        ts: String,
+        trade_id: i64,
+        side: i8,
+        price: i64,
+        qty: i64,
+    }
+
+    let rows: Vec<PublicTradeRow> = result
+        .deserialize()
+        .try_collect()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to deserialize public trades: {}", e))?;
+
+    // Get symbol info for formatting
+    let symbol_info = symbol_mgr.get_symbol_info_by_id(symbol_id).unwrap();
+    let base_decimals = symbol_mgr
+        .get_asset_decimal(symbol_info.base_asset_id)
+        .unwrap();
+    let base_display_decimals = symbol_mgr
+        .get_asset_display_decimals(symbol_info.base_asset_id)
+        .unwrap();
+    let quote_decimals = symbol_mgr
+        .get_asset_decimal(symbol_info.quote_asset_id)
+        .unwrap();
+    let quote_display_decimals = symbol_mgr
+        .get_asset_display_decimals(symbol_info.quote_asset_id)
+        .unwrap();
+
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            let is_buy = row.side == 0;
+
+            // Calculate quote_qty = price * qty
+            // price is in price_decimal units, qty is in base_decimals units
+            // Result should be in quote_decimals units
+            let price_u64 = row.price as u64;
+            let qty_u64 = row.qty as u64;
+
+            // quote_qty = (price * qty) / 10^base_decimals
+            // This gives us the quote amount in internal units (×10^quote_decimals)
+            let quote_qty_internal = (price_u64 * qty_u64) / 10u64.pow(base_decimals);
+
+            // Parse timestamp to milliseconds
+            let time_ms = chrono::DateTime::parse_from_rfc3339(&row.ts)
+                .map(|dt| dt.timestamp_millis())
+                .unwrap_or(0);
+
+            PublicTradeApiData {
+                id: row.trade_id,
+                price: format_amount(
+                    price_u64,
+                    symbol_info.price_decimal,
+                    symbol_info.price_display_decimal,
+                ),
+                qty: format_amount(qty_u64, base_decimals, base_display_decimals),
+                quote_qty: format_amount(
+                    quote_qty_internal,
+                    quote_decimals,
+                    quote_display_decimals,
+                ),
+                time: time_ms,
+                is_buyer_maker: !is_buy, // If side is SELL (1), then buyer is maker
+                is_best_match: true,     // Always true for our matching engine
             }
         })
         .collect())

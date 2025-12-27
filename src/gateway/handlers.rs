@@ -699,6 +699,75 @@ pub async fn get_trades(
     }
 }
 
+/// Get public trades list (for public market data)
+///
+/// GET /api/v1/public/trades?symbol=BTC_USDT&limit=500&fromId=12345
+#[utoipa::path(
+    get,
+    path = "/api/v1/public/trades",
+    params(
+        ("symbol" = Option<String>, Query, description = "Trading pair (e.g., BTC_USDT)"),
+        ("limit" = Option<u32>, Query, description = "Number of trades (default: 500, max: 1000)"),
+        ("fromId" = Option<i64>, Query, description = "Fetch trades with ID > fromId (pagination)")
+    ),
+    responses(
+        (status = 200, description = "List of public trades", content_type = "application/json"),
+        (status = 400, description = "Invalid parameters"),
+        (status = 503, description = "Service unavailable")
+    ),
+    tag = "Market Data"
+)]
+pub async fn get_public_trades(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Result<
+    (
+        StatusCode,
+        Json<ApiResponse<Vec<crate::persistence::queries::PublicTradeApiData>>>,
+    ),
+    (StatusCode, Json<ApiResponse<()>>),
+> {
+    // Check if persistence is enabled
+    let db_client = state.db_client.as_ref().ok_or_else(|| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ApiResponse::<()>::error(
+                error_codes::SERVICE_UNAVAILABLE,
+                "Persistence not enabled",
+            )),
+        )
+    })?;
+
+    // Parse query parameters
+    let limit: usize = params
+        .get("limit")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(500)
+        .min(1000); // Cap at 1000
+
+    let from_id: Option<i64> = params.get("fromId").and_then(|s| s.parse().ok());
+
+    // Query public trades from TDengine
+    match crate::persistence::queries::query_public_trades(
+        db_client.taos(),
+        state.active_symbol_id,
+        limit,
+        from_id,
+        &state.symbol_mgr,
+    )
+    .await
+    {
+        Ok(trades) => Ok((StatusCode::OK, Json(ApiResponse::success(trades)))),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error(
+                error_codes::SERVICE_UNAVAILABLE,
+                format!("Query failed: {}", e),
+            )),
+        )),
+    }
+}
+
 /// Get user balance
 ///
 /// GET /api/v1/private/balances?asset_id=1

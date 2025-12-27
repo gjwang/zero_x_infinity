@@ -233,7 +233,8 @@ pub async fn run_server(
         .route("/assets", get(handlers::get_assets))
         .route("/symbols", get(handlers::get_symbols))
         .route("/depth", get(handlers::get_depth))
-        .route("/klines", get(handlers::get_klines));
+        .route("/klines", get(handlers::get_klines))
+        .route("/trades", get(handlers::get_public_trades));
 
     // ==========================================================================
     // Private Routes (auth required)
