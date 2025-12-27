@@ -10,8 +10,9 @@
 
 ## 🇺🇸 English
 
-> **📅 Status**: 📝 Draft
+> **📅 Status**: ✅ Verified (E2E 4/4 Pass)
 > **Branch**: `0x0F-admin-dashboard`
+> **Updated**: 2024-12-27
 
 ---
 
@@ -708,17 +709,58 @@ admin/
 
 ---
 
-## 3. 实现计划
+## 4. 配置与脚本统一 (2024-12-27)
 
-**Phase 1 范围**: 登录 + 配置管理 CRUD
+### 4.1 配置单一源 (Single Source of Truth)
 
-| 功能 | 表 |
-|------|-----|
-| Asset 管理 | `assets_tb` |
-| Symbol 管理 | `symbols_tb` |
-| VIP 等级管理 | `vip_levels_tb` |
+所有环境配置统一从 `scripts/lib/db_env.sh` 导出：
 
-目标：替换目前 hardcoded 的基础配置。
+```bash
+# 数据库
+export PG_HOST, PG_PORT, PG_USER, PG_PASSWORD, PG_DB
+export DATABASE_URL, DATABASE_URL_ASYNC
+
+# 服务端口
+export GATEWAY_PORT  # 8080
+export ADMIN_PORT    # Dev: 8002, CI: 8001
+export ADMIN_URL, GATEWAY_URL
+```
+
+**端口约定**：
+| 环境 | Gateway | Admin |
+|------|---------|-------|
+| Dev (本地) | 8080 | 8002 |
+| CI | 8080 | 8001 |
+| QA | 8080 | 8001 |
+
+### 4.2 测试脚本命名规范
+
+| 脚本 | 用途 |
+|------|------|
+| `run_admin_full_suite.sh` | 统一入口（Rust + Admin Unit + E2E） |
+| `run_admin_gateway_e2e.sh` | Admin → Gateway 传播E2E测试 |
+| `run_admin_tests_standalone.sh` | 一键完整测试（安装deps+启动server） |
+
+命名规范：`run_<scope>_<type>.sh`
+
+### 4.3 测试结构
+
+```
+admin/tests/
+├── unit/           # pytest 单元测试
+├── e2e/            # pytest E2E测试 (需service running)
+└── integration/    # 独立脚本 (通过CI运行)
+    └── test_admin_gateway_e2e.py
+```
+
+**运行方式**：
+```bash
+# 运行全部
+./scripts/run_admin_full_suite.sh
+
+# 快速模式（跳过unit tests）
+./scripts/run_admin_full_suite.sh --quick
+```
 
 ---
 
