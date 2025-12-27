@@ -31,7 +31,23 @@ pub async fn ws_handler(
     State(state): State<Arc<AppState>>,
 ) -> Response {
     let manager = state.ws_manager.clone();
-    let user_id = params.user_id.unwrap_or(0); // 0 = Anonymous
+
+    // CRITICAL SECURITY FIX: Strictly enforce Anonymous Mode (user_id=0)
+    // We currently lack a WS authentication mechanism (e.g. JWT/Ed25519 handshake).
+    // Therefore, we MUST NOT accept any user_id claim from query parameters.
+    // Any attempt to spoof a user (user_id != 0) is rejected.
+    if let Some(uid) = params.user_id
+        && uid != 0
+    {
+        return Response::builder()
+            .status(axum::http::StatusCode::UNAUTHORIZED)
+            .body(axum::body::Body::from(
+                "Authentication required for non-anonymous connection",
+            ))
+            .unwrap();
+    }
+
+    let user_id = 0; // Force Anonymous
     ws.on_upgrade(move |socket| handle_socket(socket, user_id, manager))
 }
 
