@@ -200,7 +200,9 @@ mod tests {
 
     #[test]
     fn test_ws_message_connected_serialization() {
-        let msg = WsMessage::Connected { user_id: 1001 };
+        let msg = WsMessage::Connected {
+            user_id: Some(1001),
+        };
         let json = serde_json::to_string(&msg).unwrap();
 
         assert!(json.contains(r#""type":"connected""#));

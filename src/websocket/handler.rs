@@ -36,17 +36,17 @@ pub async fn ws_handler(
     // authenticate
     let user_id = if let Some(token) = params.token {
         match user_auth.verify_token(&token) {
-            Ok(claims) => {
-                match claims.sub.parse::<u64>() {
-                    Ok(uid) => Some(uid),
-                    Err(_) => return Response::builder()
+            Ok(claims) => match claims.sub.parse::<u64>() {
+                Ok(uid) => Some(uid),
+                Err(_) => {
+                    return Response::builder()
                         .status(axum::http::StatusCode::UNAUTHORIZED)
                         .body(axum::body::Body::from("Invalid user ID in token"))
-                        .unwrap(),
+                        .unwrap();
                 }
-            }
+            },
             Err(_) => {
-                 return Response::builder()
+                return Response::builder()
                     .status(axum::http::StatusCode::UNAUTHORIZED)
                     .body(axum::body::Body::from("Invalid or expired token"))
                     .unwrap();
@@ -98,7 +98,9 @@ async fn handle_socket(socket: WebSocket, user_id: Option<u64>, manager: Arc<Con
                                 let mut subscribed = Vec::new();
                                 for topic in &args {
                                     // Permission Check: Private topics require Authentication
-                                    if (topic.starts_with("order.") || topic.starts_with("execution.") || topic.starts_with("balance."))
+                                    if (topic.starts_with("order.")
+                                        || topic.starts_with("execution.")
+                                        || topic.starts_with("balance."))
                                         && user_id.is_none()
                                     {
                                         // Skip private topics for anonymous users
