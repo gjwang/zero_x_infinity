@@ -12,7 +12,9 @@
 
 **Key Metrics**:
 - **Availability**: Public endpoints must be cache-friendly and high-availability.
-- **Latency**: WebSocket `trade` push < 10ms from matching.
+- **ADR-001**: WebSocket Security (Strict Anonymous Mode).
+- **ADR-002**: WebSocket Authentication (Listen Key Pattern).
+- **AR-001**: Response provided via ADR-002.from matching.
 - **Precision**: 100% adherence to `String` format for all prices/quantities.
 
 ## 📋 Implementation Plan Summary (Phase 0x10.5)
@@ -23,8 +25,22 @@
 - Task 1.3: Add pagination support (`limit`, `fromId`).
 
 ### Phase 2: WebSocket Broadcast (Priority P0)
-- Task 2.1: Refactor `WebSocket` session to separate "Private" (User) from "Public" (Market) subscriptions.
-- Task 2.2: Implement `market.trade.{symbol}` stream.
+- Task 2.1**Goal**: Deliver real-time market data (public) and User Data Stream (private).
+
+### 2.1 Public Channels (Priority P0)
+- `market.trade.{symbol}`
+- `market.ticker.{symbol}`
+- `market.depth.{symbol}`
+
+### 2.2 Authentication (Priority P0 - Unblocks Private Channels)
+- **Design**: See `ADR-002-websocket-authentication.md` (Listen Key).
+- **New Endpoints**:
+    - `POST /api/v1/userDataStream` -> `{ "listenKey": "..." }`
+    - `PUT /api/v1/userDataStream?listenKey=...`
+    - `DELETE /api/v1/userDataStream?listenKey=...`
+- **WS Logic**:
+    - Handler checks `?listenKey=...` against `ListenKeyManager`.
+    - If valid, bind session to `user_id`..
 - Task 2.3: Implement `market.ticker` 24h stats rolling aggregator.
 
 ## 🔑 Key Design Decisions
