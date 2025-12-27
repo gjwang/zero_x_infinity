@@ -848,8 +848,11 @@ jobs:
             sleep 1
           done
 
+      - name: Make Script Executable
+        run: chmod +x scripts/test_openapi_e2e.sh
+
       - name: Run OpenAPI E2E Tests
-        run: python3 scripts/test_openapi_e2e.py --ci -v
+        run: ./scripts/test_openapi_e2e.sh --ci -v
         id: run-test
 
       - name: Stop Gateway
