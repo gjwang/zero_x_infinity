@@ -6,26 +6,31 @@
 ## 🚨 P0 - Critical Blockers (Trading Loop)
 *Without these, the Frontend cannot perform the core "Register -> Deposit -> Trade" loop.*
 
-### 1. **User Authentication Service** ❌ MISSING
+### 1. **User Authentication Service** ✅ **IMPLEMENTED**
+*   **Status**: ✅ Verified (0x10.6)
 *   **Problem**: Current `src/api_auth` only handles *API Key Verification* (Ed25519). There is NO Way for a human to:
     *   Register (Sign Up).
     *   Login (Username/Password).
     *   Obtain a Session/JWT.
+*   **Solution**: Implemented `src/user_auth` with Argon2id + JWT.
 *   **Requirement**:
     *   `POST /api/v1/user/register`: Email, Password.
     *   `POST /api/v1/user/login`: Returns Session Token / JWT.
     *   `POST /api/v1/user/logout`
 
-### 2. **User Center & API Key Management** ❌ MISSING
+### 2. **User Center & API Key Management** ✅ **IMPLEMENTED**
+*   **Status**: ✅ Verified (0x10.6)
 *   **Problem**: Users cannot create the `Ed25519` keys required to trade.
+*   **Solution**: Implemented `POST /api/v1/user/apikeys` (Show Secret Once).
 *   **Requirement**:
     *   `POST /api/v1/user/apikeys`: Create new API Key (Generate Key Pair or Upload PubKey).
     *   `GET /api/v1/user/apikeys`: List keys.
     *   `DELETE /api/v1/user/apikeys/{id}`: Revoke.
 
-### 3. **WebSocket Private Channels** ⚠️ BLOCKED
+### 3. **WebSocket Private Channels** ⚠️ DESIGN NEEDED
 *   **Problem**: Code exists (`src/websocket/service.rs`) but is blocked by "Strict Anonymous Mode".
-*   **Requirement**: Implement **Auth Strategy** (e.g., Ticket/ListenKey) to unblock `ws_handler`.
+*   **Requirement**: Implement **Auth Strategy** (JWT in Query Params?) to unblock `ws_handler`.
+*   **Action**: Create `docs/src/0x10-websocket-auth.md`.
 
 ---
 
@@ -63,6 +68,6 @@
 ---
 
 ## 📋 Recommended Roadmap
-1.  **Immediate Next (Phase 0x10.6?)**: Implement **User Auth & API Key Mgmt** (Unblocks Frontend "User Center" & Trading).
-2.  **Next (Phase 0x11)**: Deposit & Withdraw (Unblocks "Assets" page).
-3.  **Finally**: Admin & Operations.
+1.  **Phase 0x10.6 (Essential Services)**: ✅ **COMPLETED** (User Loop Unblocked).
+2.  **Phase 0x11 (Deposit & Withdraw)**: 🔄 **IN PROGRESS** (Research & Design).
+3.  **Phase 0x10.5 (WebSocket Auth)**: ⚠️ **BLOCKED** (Pending Design).
