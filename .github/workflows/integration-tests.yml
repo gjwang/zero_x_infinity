@@ -708,11 +708,12 @@ jobs:
       - name: Initialize Admin DB
         run: |
           cd admin
-          python init_db.py
+          DATABASE_URL=postgresql://trading:trading123@localhost:5432/exchange_info_db python init_db.py
 
       - name: Start Admin Service
         run: |
           cd admin
+          export DATABASE_URL=postgresql://trading:trading123@localhost:5432/exchange_info_db
           nohup uvicorn main:app --host 0.0.0.0 --port 8002 > /tmp/admin.log 2>&1 &
           echo "Waiting for Admin..."
           for i in {1..30}; do
