@@ -71,6 +71,22 @@ export TDENGINE_DSN="taos+ws://${TD_USER}:${TD_PASSWORD}@${TD_HOST}:${TD_PORT_RE
 export TD_REST_URL="http://${TD_HOST}:${TD_PORT_REST}"
 
 # -----------------------------------------------------------------------------
+# Service Ports Configuration
+# -----------------------------------------------------------------------------
+# Gateway - Rust API server
+export GATEWAY_PORT="${GATEWAY_PORT:-8080}"
+export GATEWAY_URL="http://localhost:${GATEWAY_PORT}"
+
+# Admin Dashboard - Python FastAPI server
+# CI uses 8001, Dev uses 8002 to avoid conflict
+if [ "$CI" = "true" ]; then
+    export ADMIN_PORT="${ADMIN_PORT:-8001}"
+else
+    export ADMIN_PORT="${ADMIN_PORT:-8002}"
+fi
+export ADMIN_URL="http://localhost:${ADMIN_PORT}"
+
+# -----------------------------------------------------------------------------
 # Derived URLs (convenience)
 # -----------------------------------------------------------------------------
 export PG_CONN_STRING="host=${PG_HOST} port=${PG_PORT} user=${PG_USER} password=${PG_PASSWORD} dbname=${PG_DB}"

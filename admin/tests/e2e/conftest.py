@@ -9,9 +9,11 @@ import httpx
 import asyncio
 import os
 
-# Environment configuration
-ADMIN_URL = os.getenv("ADMIN_URL", "http://localhost:8001")
-GATEWAY_URL = os.getenv("GATEWAY_URL", "http://localhost:8080")
+# Environment configuration - ports default to dev values (db_env.sh is source of truth)
+ADMIN_PORT = os.getenv("ADMIN_PORT", "8002")
+GATEWAY_PORT = os.getenv("GATEWAY_PORT", "8080")
+ADMIN_URL = os.getenv("ADMIN_URL", f"http://localhost:{ADMIN_PORT}")
+GATEWAY_URL = os.getenv("GATEWAY_URL", f"http://localhost:{GATEWAY_PORT}")
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5433/zero_x_infinity")
 
 # SLA Configuration

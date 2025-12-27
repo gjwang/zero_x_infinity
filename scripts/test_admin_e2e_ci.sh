@@ -24,8 +24,8 @@ mkdir -p "$LOG_DIR"
 source "$PROJECT_ROOT/scripts/lib/db_env.sh"
 print_db_config
 
-export GATEWAY_PORT=${GATEWAY_PORT:-8081}  # Dev port to avoid conflict with QA on 8080
-export ADMIN_PORT=${ADMIN_PORT:-8002}     # Dev port to avoid conflict with QA on 8001
+# GATEWAY_PORT and ADMIN_PORT are now exported by db_env.sh
+echo "Using ports: Gateway=$GATEWAY_PORT, Admin=$ADMIN_PORT"
 
 echo "🚀 Starting Admin <-> Gateway E2E Automation..."
 

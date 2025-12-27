@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     
     # Server - defaults OK for development
     admin_host: str = "0.0.0.0"
-    admin_port: int = 8001
+    admin_port: int = Field(default=8002, validation_alias="ADMIN_PORT")  # Dev default, CI overrides
     
     # Session security (per GAP-05)
     access_token_expire_minutes: int = 15
