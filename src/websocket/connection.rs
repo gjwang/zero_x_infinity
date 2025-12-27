@@ -128,7 +128,7 @@ impl ConnectionManager {
     /// Broadcast a message to all subscribers of a topic
     pub fn broadcast(&self, topic: &str, message: WsMessage) {
         if let Some(subscribers) = self.subscriptions.get(topic) {
-            let json = serde_json::to_string(&message).unwrap_or_default();
+            let _json = serde_json::to_string(&message).unwrap_or_default();
             for conn_id in subscribers.iter() {
                 if let Some(entry) = self.conn_lookup.get(&conn_id) {
                     let (tx, _user_id) = entry.value();

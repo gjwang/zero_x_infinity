@@ -99,8 +99,7 @@ pub struct TradeApiData {
 ///
 /// This struct is used for public trade history endpoints and does NOT expose
 /// sensitive information like user_id or order_id.
-#[derive(Debug, Serialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct PublicTradeApiData {
     pub id: i64,              // Trade ID
     pub price: String,        // Formatted with price_display_decimal

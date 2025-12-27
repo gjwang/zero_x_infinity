@@ -26,7 +26,7 @@ pub struct DepthService {
     qty_decimals: u32,
     price_display_decimals: u32,
     qty_display_decimals: u32,
-    quote_display_decimals: u32, // For completeness, though maybe unused here
+    _quote_display_decimals: u32, // For completeness, though maybe unused here
 }
 
 impl DepthService {
@@ -57,7 +57,7 @@ impl DepthService {
             qty_decimals: symbol_info.base_decimals,
             price_display_decimals,
             qty_display_decimals,
-            quote_display_decimals,
+            _quote_display_decimals: quote_display_decimals,
         }
     }
 

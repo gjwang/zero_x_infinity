@@ -6,7 +6,6 @@
 
 use crossbeam_queue::ArrayQueue;
 use rust_decimal::Decimal;
-use rust_decimal::prelude::FromPrimitive;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -243,7 +242,7 @@ impl WsService {
                     // Let's reuse format_amount.
 
                     // We need quote_decimals.
-                    let (quote_decimals, quote_display_decimals) = symbol_info
+                    let (_quote_decimals, quote_display_decimals) = symbol_info
                         .and_then(|s| {
                             let dec = self.symbol_mgr.get_asset_decimal(s.quote_asset_id)?;
                             let disp = self
