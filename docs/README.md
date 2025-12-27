@@ -38,10 +38,10 @@
 - [0x0C 经济模型](src/0x0C-fee-system.md) - 手续费计算
 - [0x0D 快照与恢复](src/0x0D-snapshot-recovery.md) - 优雅停机
 
-### Part III: 极致优化 (0x10-0x12)
-- [0x10 零拷贝](src/0x10-zero-copy.md)
-- [0x11 CPU 亲和性](src/0x11-cpu-affinity.md)
-- [0x12 SIMD 撮合](src/0x12-simd-matching.md)
+### Part III: 极致优化 (0x12-0x14)
+- [0x12 零拷贝](src/0x12-zero-copy.md)
+- [0x13 CPU 亲和性](src/0x13-cpu-affinity.md)
+- [0x14 SIMD 撮合](src/0x14-simd-matching.md)
 
 ---
 

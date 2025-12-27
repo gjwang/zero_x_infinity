@@ -61,9 +61,9 @@ This project documents the complete journey of building a **1.3M orders/sec** ma
 
 | Chapter | Title | Description |
 |---------|-------|-------------|
-| 0x10 | [Zero-Copy](./0x10-zero-copy.md) | Zero-copy deserialization |
-| 0x11 | [CPU Affinity](./0x11-cpu-affinity.md) | Cache-friendly optimization |
-| 0x12 | [SIMD Matching](./0x12-simd-matching.md) | Vectorized acceleration |
+| 0x12 | [Zero-Copy](./0x12-zero-copy.md) | Zero-copy deserialization |
+| 0x13 | [CPU Affinity](./0x13-cpu-affinity.md) | Cache-friendly optimization |
+| 0x14 | [SIMD Matching](./0x14-simd-matching.md) | Vectorized acceleration |
 
 ---
 
