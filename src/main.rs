@@ -168,10 +168,17 @@ fn main() {
         let queues = std::sync::Arc::new(zero_x_infinity::MultiThreadQueues::new());
         let symbol_mgr = std::sync::Arc::new(symbol_mgr);
 
+        // Create WebSocket connection manager (scope: shared between Gateway and DepthService)
+        let ws_manager = std::sync::Arc::new(zero_x_infinity::websocket::ConnectionManager::new());
+
         // Create DepthService
-        let depth_service = std::sync::Arc::new(
-            zero_x_infinity::market::depth_service::DepthService::new(queues.clone()),
-        );
+        let depth_service =
+            std::sync::Arc::new(zero_x_infinity::market::depth_service::DepthService::new(
+                queues.clone(),
+                Some(ws_manager.clone()),
+                symbol_mgr.clone(),
+                active_symbol_id,
+            ));
 
         // Create tokio runtime and initialize TDengine in main thread
         // This allows sharing db_client with both Gateway and Pipeline
@@ -413,7 +420,8 @@ fn main() {
                     _pg_db.clone(),
                     _pg_assets.clone(),
                     _pg_symbols.clone(),
-                    Some(transfer_sender), // Connect TradingAdapter to UBSCore
+                    Some(transfer_sender), // Connect UBSCore to receive internal transfer commands
+                    ws_manager.clone(),
                 )
                 .await;
             });

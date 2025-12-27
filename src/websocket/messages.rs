@@ -6,6 +6,18 @@
 use crate::models::{OrderStatus, Side};
 use serde::{Deserialize, Serialize};
 
+/// Incoming WebSocket command from client
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "op")]
+pub enum WsCommand {
+    /// Subscribe to topics
+    #[serde(rename = "subscribe")]
+    Subscribe { args: Vec<String> },
+    /// Unsubscribe from topics
+    #[serde(rename = "unsubscribe")]
+    Unsubscribe { args: Vec<String> },
+}
+
 /// WebSocket message sent to clients
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -22,7 +34,7 @@ pub enum WsMessage {
         filled_qty: String,
         avg_price: Option<String>,
     },
-    /// Trade notification
+    /// Trade notification (Private)
     #[serde(rename = "trade")]
     Trade {
         trade_id: u64,
@@ -35,6 +47,44 @@ pub enum WsMessage {
         fee_asset: String, // Asset in which fee was paid
         role: String,      // "MAKER" or "TAKER"
     },
+    /// Public Trade Stream
+    #[serde(rename = "public_trade")]
+    PublicTrade {
+        symbol: String,
+        price: String,
+        qty: String,
+        quote_qty: String,
+        time: i64,
+        is_buyer_maker: bool,
+    },
+    /// Market Ticker Stream (24h Stats)
+    #[serde(rename = "ticker")]
+    Ticker {
+        symbol: String,
+        price_change: String,
+        price_change_percent: String,
+        last_price: String,
+        high_price: String,
+        low_price: String,
+        volume: String,
+        quote_volume: String,
+        time: u64,
+    },
+    #[serde(rename = "depthUpdate")]
+    Depth {
+        #[serde(rename = "e")]
+        event_type: String, // "depthUpdate"
+        #[serde(rename = "E")]
+        event_time: u64,
+        #[serde(rename = "s")]
+        symbol: String,
+        #[serde(rename = "u")]
+        update_id: u64,
+        #[serde(rename = "b")]
+        bids: Vec<(String, String)>, // [["price", "qty"], ...]
+        #[serde(rename = "a")]
+        asks: Vec<(String, String)>, // [["price", "qty"], ...]
+    },
     /// Balance update
     #[serde(rename = "balance.update")]
     BalanceUpdate {
@@ -45,6 +95,15 @@ pub enum WsMessage {
     /// Pong response to ping
     #[serde(rename = "pong")]
     Pong,
+    /// Subscription success
+    #[serde(rename = "subscribed")]
+    Subscribed { topics: Vec<String> },
+    /// Unsubscription success
+    #[serde(rename = "unsubscribed")]
+    Unsubscribed { topics: Vec<String> },
+    /// Error message
+    #[serde(rename = "error")]
+    Error { message: String },
 }
 
 /// Push event (internal queue message)
@@ -154,5 +213,24 @@ mod tests {
         let json = serde_json::to_string(&msg).unwrap();
 
         assert!(json.contains(r#""type":"pong""#));
+    }
+
+    #[test]
+    fn test_ws_message_ticker_serialization() {
+        let msg = WsMessage::Ticker {
+            symbol: "BTC_USDT".to_string(),
+            price_change: "2000.00".to_string(),
+            price_change_percent: "5.00".to_string(),
+            last_price: "42000.00".to_string(),
+            high_price: "43000.00".to_string(),
+            low_price: "40000.00".to_string(),
+            volume: "100.50".to_string(),
+            quote_volume: "4200000.00".to_string(),
+            time: 1700000000,
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains(r#""type":"ticker""#));
+        assert!(json.contains(r#""symbol":"BTC_USDT""#));
+        assert!(json.contains(r#""last_price":"42000.00""#));
     }
 }

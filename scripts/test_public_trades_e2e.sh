@@ -1,8 +1,11 @@
 #!/bin/bash
 # Public Trades E2E Test Script
-# Tests the complete flow: Order -> Trade -> TDengine -> Public Trades API
+# Tests the GET /api/v1/public/trades endpoint with data injection via Gateway
 
 set -e
+
+# Use specific database URL for testing (must match seeded DB)
+export DATABASE_URL="postgres://trading:trading123@localhost:5432/exchange_info_db"
 
 BASE_URL="${1:-http://localhost:8080}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

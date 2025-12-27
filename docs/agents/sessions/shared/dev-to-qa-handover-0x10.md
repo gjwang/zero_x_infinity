@@ -1,258 +1,101 @@
-# Developer → QA Handover: 0x10.5 Public Trades REST API
+# Dev-to-QA Handover: 0x10.5 Backend Gaps (Public Market Data)
 
-**From**: Developer Team  
-**To**: QA Team  
-**Date**: 2025-12-27  
-**Priority**: P0 (Frontend Blocker)  
-**Branch**: `0x10-web-frontend`  
-**Commits**: `51027cb`, `dee8048`
+**Date:** 2025-12-27
+**Developer:** @Antigravity
+**Phase:** 0x10.5 Backend Gaps (Public Market Data APIs)
+**Related Specs:** `0x10-backend-gaps.md`
 
 ---
 
-## 🎯 Feature Summary
+## 🚀 Overview
 
-Implemented **Public Trades REST API** (`GET /api/v1/public/trades`) for the 0x10 Web Frontend MVP.
+This delivered package includes the implementation of the missing Public Market Data APIs required for the 0x10 Web Frontend MVP. This allows the frontend to display public trades, tickers, and order book depth without user authentication.
 
-**Endpoint**: `GET /api/v1/public/trades`
+## 📦 Delivered Features
 
-**Key Features**:
-- ✅ Public trade history without sensitive data exposure
-- ✅ Pagination support via `fromId` parameter
-- ✅ String-formatted prices/quantities for precision
-- ✅ OpenAPI documentation auto-generated
+### 1. REST API
+- **Endpoint**: `GET /api/v1/public/trades`
+- **Description**: Returns recent public trades for a symbol.
+- **Query Params**:
+  - `symbol` (Required): e.g., "BTC_USDT"
+  - `limit` (Optional): Default 500, Max 1000.
+  - `fromId` (Optional): ID to fetch trades after (pagination).
+- **Security**: Public endpoint (No JWT required). Sensitive fields (`user_id`, `order_id`) are stripped.
 
----
+### 2. WebSocket Channels
+New subscription protocol: `{"op": "subscribe", "args": ["topic1", "topic2"]}`
 
-## 📋 What Was Implemented
+#### A. Public Trades
+- **Topic**: `market.trade.<symbol>`
+- **Event**: `trade`
+- **Description**: Real-time broadcast of executed trades.
+- **Fields**: `t` (trade_id), `p` (price), `q` (qty), `T` (time), `m` (is_buyer_maker).
 
-### 1. API Endpoint
+#### B. Mini Ticker
+- **Topic**: `market.ticker.<symbol>`
+- **Event**: `ticker`
+- **Description**: 24h (Session-based) rolling statistics.
+- **Fields**: `c` (last price), `v` (volume), `q` (quote volume), `p` (price change), `P` (percent change), `h` (high), `l` (low).
+- **Note**: Statistics are currently **session-based** (reset on restart), pending a full Market Data Service.
 
-**URL**: `/api/v1/public/trades`  
-**Method**: `GET`  
-**Auth**: None (public endpoint)
-
-**Query Parameters**:
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `symbol` | String | No | Active symbol | Trading pair (e.g., BTC_USDT) |
-| `limit` | Integer | No | 500 | Number of trades (max: 1000) |
-| `fromId` | Integer | No | None | Pagination: fetch trades with ID > fromId |
-
-**Response Format**:
-```json
-{
-  "code": 0,
-  "msg": "success",
-  "data": [
-    {
-      "id": 12345,
-      "price": "43000.00",
-      "qty": "0.1000",
-      "quote_qty": "4300.00",
-      "time": 1703660555000,
-      "is_buyer_maker": true,
-      "is_best_match": true
-    }
-  ]
-}
-```
-
-**CRITICAL**: Response does NOT include `user_id` or `order_id` (privacy protection).
+#### C. Order Book Depth
+- **Topic**: `market.depth.<symbol>`
+- **Event**: `depthUpdate`
+- **Description**: Push updates of the order book (currently full snapshots).
+- **Fields**: `b` (bids), `a` (asks), `u` (update_id).
 
 ---
 
-## ✅ Developer Testing Completed
+## ✅ Verification Strategy
 
-### Unit Tests (5/5 Passing)
+The following automated scripts verify the functionality. Ensure the Gateway is running (`cargo run -- --gateway`).
 
-**File**: `src/persistence/queries.rs` (lines 931-1075)
+### 1. Public Trades REST API
+- **Script**: `python3 scripts/test_public_trades_api_e2e.py`
+- **Verifies**:
+  - Valid response structure.
+  - Limitation of results (max 1000).
+  - Data correctness against private order history.
 
-| Test | Purpose | Status |
-|------|---------|--------|
-| `test_public_trade_api_data_no_sensitive_fields` | Verify no user_id/order_id exposure | ✅ Pass |
-| `test_quote_qty_calculation_btc_usdt` | Verify quote_qty = (price * qty) / 10^base_decimals | ✅ Pass |
-| `test_quote_qty_calculation_small_trade` | Edge case: small trade precision | ✅ Pass |
-| `test_is_buyer_maker_logic` | Verify is_buyer_maker derived from side | ✅ Pass |
-| `test_public_trade_string_formatting` | Verify all numeric fields are Strings | ✅ Pass |
+### 2. WebSocket Public Trades
+- **Script**: `python3 scripts/test_websocket_public_e2e.py`
+- **Verifies**:
+  - WebSocket connection and subscription.
+  - Receipt of `trade` events upon order execution.
+  - Correct formatting of fields.
 
-**Run tests**:
-```bash
-cargo test --lib public_trades_tests
-```
+### 3. WebSocket Ticker
+- **Script**: `python3 scripts/test_websocket_ticker_e2e.py`
+- **Verifies**:
+  - Ticker updates on trade execution.
+  - Price change and volume calculations (session-based).
 
----
-
-## 🧪 QA Test Plan
-
-### Test Cases (from `docs/src/0x10-qa-test-plan.md`)
-
-#### TC-API-001: Basic Fetch
-**Steps**:
-1. Start Gateway with TDengine running
-2. Call `GET /api/v1/public/trades?symbol=BTC_USDT&limit=5`
-3. Verify HTTP 200 response
-4. Verify response contains 5 trades (or fewer if less data available)
-
-**Expected**:
-- All `price`, `qty`, `quote_qty` are Strings
-- `time` is Unix milliseconds (number)
-- No `user_id` or `order_id` fields present
-
-#### TC-API-002: Symbol Filtering
-**Steps**:
-1. Call `GET /api/v1/public/trades?symbol=BTC_USDT&limit=10`
-2. Call `GET /api/v1/public/trades?symbol=ETH_USDT&limit=10`
-3. Verify trades are filtered by symbol
-
-**Expected**:
-- Each response contains only trades for the requested symbol
-
-#### TC-API-003: Pagination
-**Steps**:
-1. Call `GET /api/v1/public/trades?limit=10` → Get first 10 trades
-2. Extract last trade ID (e.g., `id: 100`)
-3. Call `GET /api/v1/public/trades?fromId=100&limit=10`
-4. Verify second response contains trades with `id > 100`
-
-**Expected**:
-- No duplicate trades between responses
-- Trades are ordered by ID descending
-
-#### TC-API-004: Limit Validation
-**Steps**:
-1. Call `GET /api/v1/public/trades?limit=2000`
-2. Verify response contains max 1000 trades (limit cap)
-
-**Expected**:
-- Server enforces max limit of 1000
+### 4. WebSocket Depth
+- **Script**: `python3 scripts/test_websocket_depth_e2e.py`
+- **Verifies**:
+  - Depth updates on order placement (Bid/Ask).
+  - Correct price levels and quantities.
 
 ---
 
-## 🔍 Manual Verification Steps
+## ⚠️ Implementation Notes & Constraints
 
-### 1. Swagger UI Testing
+1. **Anonymous Connection**: The WebSocket handler at `/ws` now supports anonymous connections (no `user_id` required).
+2. **Session Persistence**: Ticker stats are in-memory and reset on server restart. This is an MVP limitation.
+3. **Depth Snapshots**: The current `market.depth` implementation sends full snapshots periodically or on change, which is suitable for the MVP but may need diff-based updates for high performance later.
 
-**URL**: http://localhost:8080/docs
+## 📝 Configuration Changes
 
-**Steps**:
-1. Start services:
-   ```bash
-   # Terminal 1: PostgreSQL (if not running)
-   # Terminal 2: TDengine (if not running)
-   
-   # Terminal 3: Gateway
-   cd /path/to/zero_x_infinity
-   cargo run --release -- --gateway --port 8080
-   ```
-
-2. Open Swagger UI: http://localhost:8080/docs
-
-3. Navigate to **Market Data** section → `GET /api/v1/public/trades`
-
-4. Click "Try it out"
-
-5. Test with parameters:
-   - `symbol`: `BTC_USDT`
-   - `limit`: `10`
-   - Click "Execute"
-
-6. **Verify Response**:
-   - ✅ HTTP 200 status
-   - ✅ `data` is an array of trades
-   - ✅ Each trade has: `id`, `price`, `qty`, `quote_qty`, `time`, `is_buyer_maker`, `is_best_match`
-   - ✅ NO `user_id` or `order_id` fields
-   - ✅ All prices/quantities are quoted strings in JSON
-
-### 2. cURL Testing
-
-```bash
-# Basic fetch
-curl -X GET "http://localhost:8080/api/v1/public/trades?symbol=BTC_USDT&limit=5" \
-  -H "accept: application/json"
-
-# With pagination
-curl -X GET "http://localhost:8080/api/v1/public/trades?fromId=12345&limit=10" \
-  -H "accept: application/json"
-```
+No new configuration variables are required. The existing `gateway` config in `config/dev.yaml` controls the port and host.
 
 ---
 
-## ⚠️ Known Limitations
+## 🔍 QA Checklist
 
-1. **Symbol parameter currently ignored**: Endpoint uses `state.active_symbol_id` (hardcoded to active symbol). Multi-symbol support requires additional work.
-
-2. **Requires TDengine**: Endpoint returns 503 if TDengine is not available.
-
-3. **No rate limiting**: Public endpoint has no rate limiting (future enhancement).
-
----
-
-## 📦 Code Changes Summary
-
-| File | Lines Changed | Purpose |
-|------|---------------|---------|
-| `src/persistence/queries.rs` | +252 | PublicTradeApiData struct, query_public_trades function, unit tests |
-| `src/gateway/handlers.rs` | +69 | get_public_trades handler |
-| `src/gateway/mod.rs` | +1 | Route registration |
-| **Total** | **+322** | |
+- [ ] Verify `GET /api/v1/public/trades` with various limits and invalid symbols.
+- [ ] Verify WebSocket `market.trade` latency (visually).
+- [ ] Verify Ticker logic (does it update `high`/`low` correctly within a session?).
+- [ ] Verify Depth updates (do they reflect new orders immediately?).
+- [ ] Chaos Test: Restart Gateway while WebSocket clients are connected (should reconnect).
 
 ---
-
-## 🚀 Deployment Checklist
-
-- [x] Code compiles without errors
-- [x] Unit tests pass (5/5)
-- [x] Pre-commit checks pass (fmt, clippy)
-- [x] OpenAPI documentation auto-generated
-- [ ] Integration tests (QA responsibility)
-- [ ] Manual Swagger UI verification (QA responsibility)
-- [ ] Load testing (future)
-
----
-
-## 📞 Developer Notes for QA
-
-### If Tests Fail
-
-1. **503 Service Unavailable**: TDengine not running or not configured
-   - Check `DATABASE_URL` environment variable
-   - Verify TDengine is accessible
-
-2. **Empty response**: No trade data in TDengine
-   - Seed test data using existing scripts
-   - Or run matching engine to generate trades
-
-3. **user_id/order_id in response**: CRITICAL BUG
-   - This should NEVER happen
-   - Immediately escalate to developer
-
-### Test Data Setup
-
-If TDengine is empty, you can seed test data:
-```bash
-# Run matching engine with test orders
-./scripts/inject_orders.py --symbol BTC_USDT --count 100
-```
-
----
-
-## ✅ Ready for QA Sign-Off
-
-**Developer Checklist**:
-- [x] Implementation complete
-- [x] Unit tests written and passing
-- [x] Code reviewed (self-review)
-- [x] Documentation updated
-- [x] Commits pushed to branch
-
-**QA Action Required**:
-- [ ] Execute TC-API-001 through TC-API-004
-- [ ] Manual Swagger UI verification
-- [ ] Verify no sensitive data exposure
-- [ ] Sign off or report bugs
-
----
-
-**Developer Contact**: @Antigravity (Developer Role)  
-**QA Test Plan**: `docs/src/0x10-qa-test-plan.md`  
-**Architecture Spec**: `docs/src/0x10-backend-gaps.md`

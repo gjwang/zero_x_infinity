@@ -8,12 +8,16 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::mpsc;
 
 use super::messages::WsMessage;
+use dashmap::DashSet;
 
 /// WebSocket sender channel type
 pub type WsSender = mpsc::UnboundedSender<WsMessage>;
 
 /// Unique connection identifier
 pub type ConnectionId = u64;
+
+/// Topic for public data streams
+pub type Topic = String;
 
 /// WebSocket connection manager
 ///
@@ -22,6 +26,11 @@ pub type ConnectionId = u64;
 pub struct ConnectionManager {
     /// user_id -> list of (connection_id, sender)
     connections: DashMap<u64, Vec<(ConnectionId, WsSender)>>,
+    /// topic -> set of connection_ids subscribed to it
+    subscriptions: DashMap<Topic, DashSet<ConnectionId>>,
+    /// connection_id -> (sender, user_id)
+    /// Used for quick lookup when broadcasting by connection_id
+    conn_lookup: DashMap<ConnectionId, (WsSender, u64)>,
     /// Next connection ID
     next_conn_id: AtomicU64,
 }
@@ -31,6 +40,8 @@ impl ConnectionManager {
     pub fn new() -> Self {
         Self {
             connections: DashMap::new(),
+            subscriptions: DashMap::new(),
+            conn_lookup: DashMap::new(),
             next_conn_id: AtomicU64::new(1),
         }
     }
@@ -45,12 +56,22 @@ impl ConnectionManager {
         self.connections
             .entry(user_id)
             .or_default()
-            .push((conn_id, tx));
+            .push((conn_id, tx.clone()));
 
         tracing::info!(
             user_id,
             conn_id,
             total_connections = self.connections.get(&user_id).map(|v| v.len()).unwrap_or(0),
+            "WebSocket connection added"
+        );
+
+        // Index for quick lookup
+        self.conn_lookup.insert(conn_id, (tx, user_id));
+
+        tracing::info!(
+            user_id,
+            conn_id,
+            total_connections = self.conn_lookup.len(),
             "WebSocket connection added"
         );
 
@@ -61,6 +82,15 @@ impl ConnectionManager {
     ///
     /// Called when a connection is closed. Cleans up empty user entries.
     pub fn remove_connection(&self, user_id: u64, conn_id: ConnectionId) {
+        // Remove from lookup
+        self.conn_lookup.remove(&conn_id);
+
+        // Remove from all subscriptions
+        // Note: This is O(Topics), could be optimized with reverse map if needed
+        for mut entry in self.subscriptions.iter_mut() {
+            entry.value_mut().remove(&conn_id);
+        }
+
         if let Some(mut senders) = self.connections.get_mut(&user_id) {
             // Remove the connection with matching ID
             senders.retain(|(id, _)| *id != conn_id);
@@ -78,6 +108,41 @@ impl ConnectionManager {
                     "WebSocket connection removed"
                 );
             }
+        }
+    }
+
+    /// Subscribe a connection to a topic
+    pub fn subscribe(&self, conn_id: ConnectionId, topic: String) {
+        if self.conn_lookup.contains_key(&conn_id) {
+            self.subscriptions.entry(topic).or_default().insert(conn_id);
+        }
+    }
+
+    /// Unsubscribe a connection from a topic
+    pub fn unsubscribe(&self, conn_id: ConnectionId, topic: &str) {
+        if let Some(subscribers) = self.subscriptions.get(topic) {
+            subscribers.remove(&conn_id);
+        }
+    }
+
+    /// Broadcast a message to all subscribers of a topic
+    pub fn broadcast(&self, topic: &str, message: WsMessage) {
+        if let Some(subscribers) = self.subscriptions.get(topic) {
+            let json = serde_json::to_string(&message).unwrap_or_default();
+            for conn_id in subscribers.iter() {
+                if let Some(entry) = self.conn_lookup.get(&conn_id) {
+                    let (tx, _user_id) = entry.value();
+                    if tx.send(message.clone()).is_err() {
+                        // Cleanup handled by handler on close, or we could lazy cleanup here
+                    }
+                }
+            }
+            // tracing::debug!(
+            //     topic,
+            //     recipients = subscribers.len(),
+            //     message_type = ?json.split('"').nth(3).unwrap_or("unknown"),
+            //     "Broadcast sent"
+            // );
         }
     }
 

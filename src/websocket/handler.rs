@@ -19,7 +19,7 @@ use crate::gateway::state::AppState;
 /// WebSocket connection query parameters
 #[derive(Debug, Deserialize)]
 pub struct WsQuery {
-    pub user_id: u64,
+    pub user_id: Option<u64>,
 }
 
 /// WebSocket upgrade handler
@@ -31,7 +31,8 @@ pub async fn ws_handler(
     State(state): State<Arc<AppState>>,
 ) -> Response {
     let manager = state.ws_manager.clone();
-    ws.on_upgrade(move |socket| handle_socket(socket, params.user_id, manager))
+    let user_id = params.user_id.unwrap_or(0); // 0 = Anonymous
+    ws.on_upgrade(move |socket| handle_socket(socket, user_id, manager))
 }
 
 /// Handle WebSocket connection lifecycle
@@ -61,12 +62,36 @@ async fn handle_socket(socket: WebSocket, user_id: u64, manager: Arc<ConnectionM
 
     // Handle incoming messages (ping/pong, close)
     let tx_for_recv = tx.clone();
+    let manager_for_task = manager.clone();
     let mut recv_task = tokio::spawn(async move {
         while let Some(Ok(msg)) = receiver.next().await {
             match msg {
                 Message::Text(text) => {
-                    // Handle ping
-                    if text.contains("\"type\"") && text.contains("\"ping\"") {
+                    // Try to parse command
+                    if let Ok(cmd) = serde_json::from_str::<super::messages::WsCommand>(&text) {
+                        match cmd {
+                            super::messages::WsCommand::Subscribe { args } => {
+                                let mut subscribed = Vec::new();
+                                for topic in &args {
+                                    manager_for_task.subscribe(conn_id, topic.clone());
+                                    subscribed.push(topic.clone());
+                                }
+                                let _ =
+                                    tx_for_recv.send(WsMessage::Subscribed { topics: subscribed });
+                            }
+                            super::messages::WsCommand::Unsubscribe { args } => {
+                                let mut unsubscribed = Vec::new();
+                                for topic in &args {
+                                    manager_for_task.unsubscribe(conn_id, topic);
+                                    unsubscribed.push(topic.clone());
+                                }
+                                let _ = tx_for_recv.send(WsMessage::Unsubscribed {
+                                    topics: unsubscribed,
+                                });
+                            }
+                        }
+                    } else if text.contains("\"type\"") && text.contains("\"ping\"") {
+                        // Keep legacy ping support just in case
                         let _ = tx_for_recv.send(WsMessage::Pong);
                     }
                 }

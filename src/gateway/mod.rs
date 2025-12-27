@@ -153,9 +153,10 @@ pub async fn run_server(
     pg_symbols: Arc<Vec<Symbol>>,
     // Phase 0x0B-a: Optional channel to UBSCore for TradingAdapter
     transfer_sender: Option<TransferSender>,
+    // WebSocket manager for broadcasting
+    ws_manager: Arc<ConnectionManager>,
 ) {
-    // Create WebSocket connection manager
-    let ws_manager = Arc::new(ConnectionManager::new());
+    // WebSocket connection manager is passed in
 
     // Start WebSocket push service
     let ws_service =
