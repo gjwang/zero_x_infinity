@@ -1,11 +1,27 @@
 # 💻 Developer Current Task
 
 ## Session Info
-- **Date**: 2025-12-26
+- **Date**: 2025-12-27
 - **Role**: Developer
-- **Status**: ✅ **Ready for QA Handover**
+- **Status**: ⏳ **Pending Pickup (0x10.5)**
 
 ## Completed Work
+
+## 🆕 New Handover: 0x10.5 Backend Gaps
+
+**Handover Document**: [`arch-to-dev-handover.md`](../shared/arch-to-dev-handover.md)
+
+### Quick Summary
+- **From**: Architect
+- **Status**: ⏳ Pending Pickup
+- **Goal**: Implement Public Market Data API & WebSocket
+- **Priority**: P0 (Frontend Blocker)
+
+### Deliverables for QA
+- `GET /public/trades` API
+- `market.*` WebSocket channels
+
+## Previous Work (Completed)
 
 ### ✅ 0x0D Phase 3: Settlement WAL & Snapshot
 - 9 unit tests in `settlement_wal/` module
@@ -31,7 +47,7 @@ Clippy: 0 warnings
 Fmt: clean
 ```
 
-## Deliverables for QA
+## Deliverables for QA (Previous)
 
 | Document | Path |
 |----------|------|

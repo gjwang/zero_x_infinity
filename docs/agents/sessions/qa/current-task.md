@@ -3,9 +3,23 @@
 ## Session Info
 - **Date**: 2025-12-26
 - **Role**: QA Engineer
-- **Task**: 0x0E OpenAPI Integration Testing (NEW HANDOVER)
+- **Task**: 0x10.5 Backend Gaps Test Planning
 
-## 🆕 New Handover: 0x0E OpenAPI Integration
+## 🆕 New Handover: 0x10.5 Backend Gaps
+
+**Handover Document**: [`arch-to-qa-handover.md`](../shared/arch-to-qa-handover.md)
+
+### Quick Summary
+- **From**: Architect
+- **Status**: ⏳ Pending Review
+- **Goal**: Verify Public Market Data & WebSocket Security
+- **Priority**: P0
+
+### P0 Actions
+1. Review `docs/src/0x10-qa-test-plan.md`
+2. Prepare `test_market_data_e2e.py`
+
+## Previous Handover: 0x0E OpenAPI Integration
 
 **Handover Document**: [`0x0E-openapi-handover.md`](./0x0E-openapi-handover.md)
 
