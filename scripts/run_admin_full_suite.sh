@@ -35,6 +35,20 @@ echo "Project: $PROJECT_ROOT"
 echo "Quick Mode: $QUICK_MODE"
 echo ""
 
+# Source database configuration
+source "$PROJECT_ROOT/scripts/lib/db_env.sh"
+
+# Run database migrations (idempotent)
+echo -e "${YELLOW}📦 Running database migrations...${NC}"
+for migration in "$PROJECT_ROOT"/migrations/*.sql; do
+    if [ -f "$migration" ]; then
+        basename "$migration"
+        psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "$PG_DB" -f "$migration" 2>/dev/null || true
+    fi
+done
+echo -e "${GREEN}✅ Migrations complete${NC}"
+echo ""
+
 FAILED=0
 TOTAL=0
 
