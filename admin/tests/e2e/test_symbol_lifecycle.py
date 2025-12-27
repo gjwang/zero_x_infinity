@@ -21,11 +21,14 @@ import asyncio
 import time
 import httpx
 import pytest
+import os
 from typing import Optional
 
-# Configuration
-ADMIN_URL = "http://localhost:8001"
-GATEWAY_URL = "http://localhost:8080"
+# Ports from environment (db_env.sh is source of truth)
+ADMIN_PORT = os.getenv("ADMIN_PORT", "8002")
+GATEWAY_PORT = os.getenv("GATEWAY_PORT", "8080")
+ADMIN_URL = f"http://localhost:{ADMIN_PORT}"
+GATEWAY_URL = f"http://localhost:{GATEWAY_PORT}"
 HOT_RELOAD_SLA_SECONDS = 5
 
 

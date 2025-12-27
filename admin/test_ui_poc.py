@@ -4,9 +4,11 @@ import requests
 import time
 import os
 
-# Configuration
-ADMIN_URL = os.getenv("ADMIN_URL", "http://localhost:8001")
-GATEWAY_API = os.getenv("GATEWAY_API", "http://localhost:8080")
+# Ports from environment (db_env.sh is source of truth)
+ADMIN_PORT = os.getenv("ADMIN_PORT", "8002")
+GATEWAY_PORT = os.getenv("GATEWAY_PORT", "8080")
+ADMIN_URL = os.getenv("ADMIN_URL", f"http://localhost:{ADMIN_PORT}")
+GATEWAY_API = os.getenv("GATEWAY_API", f"http://localhost:{GATEWAY_PORT}")
 
 def test_admin_ui_create_asset_propagation(page: Page):
     """

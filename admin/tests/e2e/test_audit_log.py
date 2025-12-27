@@ -21,9 +21,12 @@ Prerequisites:
 import asyncio
 import httpx
 import pytest
+import os
 from datetime import datetime, timedelta
 
-ADMIN_URL = "http://localhost:8001"
+# Ports from environment (db_env.sh is source of truth)
+ADMIN_PORT = os.getenv("ADMIN_PORT", "8002")
+ADMIN_URL = f"http://localhost:{ADMIN_PORT}"
 
 
 class TestAuditLogCapture:

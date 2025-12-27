@@ -37,7 +37,7 @@ echo -e "\n[2/3] Checking DB Schema & Propagation..."
 echo "Cleaning up any stale test data..."
 python cleanup_test_data.py
 
-uvicorn main:app --host 127.0.0.1 --port 8001 > /tmp/admin_verified.log 2>&1 &
+uvicorn main:app --host 127.0.0.1 --port $ADMIN_PORT > /tmp/admin_verified.log 2>&1 &
 ADMIN_PID=$!
 
 # Ensure cleanup
