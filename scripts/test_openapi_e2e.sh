@@ -9,7 +9,7 @@ rm -rf "$SCRIPT_DIR/lib/__pycache__"
 
 # Use uv to explicitly manage environment (ensuring pynacl/requests are available)
 if command -v uv >/dev/null 2>&1; then
-    uv run python3 - << 'EOF'
+    uv run --with requests --with pynacl python3 - << 'EOF'
 import sys
 import os
 
