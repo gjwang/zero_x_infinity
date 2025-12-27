@@ -429,6 +429,96 @@ def serialize_status(self, value: int) -> str:
 
 ---
 
+### 🔒 6.10 Full Lifecycle Trace ID (UX-10) - CRITICAL
+
+**Requirement**: Every admin operation MUST carry a **unique `trace_id` (ULID)** from entry to exit.
+
+**Why**: Admin Dashboard is critical infrastructure. Full observability is mandatory for:
+- Audit compliance
+- Debugging production issues
+- Security forensics
+- Performance monitoring
+
+**Trace Lifecycle**:
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  Request Entry                                                   │
+│  trace_id: 01HRC5K8F1ABCDEFG... (ULID generated)                 │
+├──────────────────────────────────────────────────────────────────┤
+│  [LOG] trace_id=01HRC5K8F1... action=START endpoint=/asset       │
+│  [LOG] trace_id=01HRC5K8F1... action=VALIDATE input={...}        │
+│  [LOG] trace_id=01HRC5K8F1... action=DB_QUERY sql=SELECT...      │
+│  [LOG] trace_id=01HRC5K8F1... action=DB_UPDATE before={} after={}│
+│  [LOG] trace_id=01HRC5K8F1... action=AUDIT_LOG written           │
+│  [LOG] trace_id=01HRC5K8F1... action=END status=200 duration=45ms│
+├──────────────────────────────────────────────────────────────────┤
+│  Response Exit                                                   │
+│  X-Trace-ID: 01HRC5K8F1ABCDEFG... (returned in header)           │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**Implementation**:
+
+```python
+import ulid
+from fastapi import Request
+from contextvars import ContextVar
+
+# Context variable for trace_id
+trace_id_var: ContextVar[str] = ContextVar("trace_id", default="")
+
+@app.middleware("http")
+async def trace_middleware(request: Request, call_next):
+    # Generate ULID for each request
+    trace_id = str(ulid.new())
+    trace_id_var.set(trace_id)
+    
+    # Log entry
+    logger.info(f"trace_id={trace_id} action=START endpoint={request.url.path}")
+    
+    response = await call_next(request)
+    
+    # Log exit
+    logger.info(f"trace_id={trace_id} action=END status={response.status_code}")
+    
+    # Return trace_id in response header
+    response.headers["X-Trace-ID"] = trace_id
+    return response
+
+# Audit log includes trace_id
+class AuditLog(Base):
+    trace_id = Column(String(26), nullable=False)  # ULID is 26 chars
+    admin_id = Column(BigInteger, nullable=False)
+    action = Column(String(32), nullable=False)
+    ...
+```
+
+**Log Format** (structured JSON):
+
+```json
+{
+  "timestamp": "2025-12-27T10:25:00Z",
+  "trace_id": "01HRC5K8F1ABCDEFGHIJK",
+  "admin_id": 1001,
+  "action": "DB_UPDATE",
+  "entity": "Asset",
+  "entity_id": 5,
+  "before": {"status": 1},
+  "after": {"status": 0},
+  "duration_ms": 12
+}
+```
+
+**Verification**:
+- [ ] Every request generates unique ULID trace_id
+- [ ] All log lines include trace_id
+- [ ] Audit log table has trace_id column
+- [ ] Response includes `X-Trace-ID` header
+- [ ] Local log files are rotated and retained
+
+---
+
 ### UX Priority Implementation
 
 | Feature | Priority | Phase |
@@ -437,6 +527,7 @@ def serialize_status(self, value: int) -> str:
 | **UX-07 ID Auto-Gen** | 🔴 P0 | **MVP** (standard practice) |
 | **UX-08 Status Strings** | 🔴 P0 | **MVP** (usability) |
 | **UX-09 Default Sorting** | 🔴 P0 | **MVP** (usability) |
+| **UX-10 Trace ID** | 🔴 P0 | **MVP** (observability) |
 | UX-01 Asset display | P1 | Post-MVP |
 | UX-02 Fee format | P1 | Post-MVP |
 | UX-03 Confirm dialog | P1 | Post-MVP |
