@@ -6,8 +6,8 @@
 | **Context** | Unblock QA Testing for Private Channels |
 
 ## 1. Problem Statement
-*   **Current State**: WebSocket handler forces `user_id = 0` (Strict Anonymous Mode) to prevent Identity Spoofing.
-*   **Impact**: Private channels (`order.update`, `execution.report`) are unreachable because they trigger only for `user_id > 0`.
+*   **Current State**: WebSocket handler lacks an **Authentication Mechanism**. All connections are treated as **Anonymous**.
+*   **Impact**: Private channels (`order.update`, `execution.report`) are unreachable because they require an **Authenticated Session**.
 *   **New Capability**: Phase 0x10.6 introduced **JWT** (via `src/user_auth`). We can now use these tokens for secure identification.
 
 ## 2. Proposed Solution: JWT via Query Parameter
