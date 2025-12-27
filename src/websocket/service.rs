@@ -148,7 +148,7 @@ impl WsService {
                     avg_price: avg_price
                         .map(|p| format_amount(p, price_decimals, price_display_decimals)),
                 };
-                self.manager.send_to_user(user_id, message);
+                self.manager.send_to_user(Some(user_id), message);
             }
             PushEvent::Trade {
                 user_id,
@@ -209,7 +209,7 @@ impl WsService {
                     fee_asset: fee_asset_name,
                     role: if is_maker { "MAKER" } else { "TAKER" }.to_string(),
                 };
-                self.manager.send_to_user(user_id, message);
+                self.manager.send_to_user(Some(user_id), message);
 
                 // PUBLIC BROADCAST
                 // We broadcast only one event per trade (on the Maker side, or if we decide otherwise)
@@ -405,7 +405,7 @@ impl WsService {
                     avail: format_amount(avail, asset_decimals, asset_display_decimals),
                     frozen: format_amount(frozen, asset_decimals, asset_display_decimals),
                 };
-                self.manager.send_to_user(user_id, message);
+                self.manager.send_to_user(Some(user_id), message);
             }
         }
     }

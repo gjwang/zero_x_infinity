@@ -14,94 +14,165 @@ import time
 
 GATEWAY_WS_BASE = "ws://localhost:8080/ws"
 
+async def register_and_login():
+    """Helper to get a valid JWT"""
+    import aiohttp
+    import random
+    
+    suffix = random.randint(1000, 9999)
+    email = f"user{suffix}@example.com"
+    password = "password123"
+    username = f"user{suffix}"
+    
+    async with aiohttp.ClientSession() as session:
+        # Register
+        reg_url = "http://localhost:8080/api/v1/auth/register"
+        async with session.post(reg_url, json={"username": username, "email": email, "password": password}) as resp:
+            if resp.status not in [200, 201]:
+                print(f"   ⚠️ Register failed: {resp.status} {await resp.text()}")
+                return None
+            
+        # Login
+        login_url = "http://localhost:8080/api/v1/auth/login"
+        async with session.post(login_url, json={"email": email, "password": password}) as resp:
+            if resp.status != 200:
+                print(f"   ⚠️ Login failed: {resp.status}")
+                return None
+            data = await resp.json()
+        if "data" in data and "token" in data["data"]:
+             return data["data"]["token"]
+        return data.get("token") # Fallback just in case
+
 async def test_identity_spoofing():
     """
-    SECURITY TEST: Can I connect as user_id=1001 without a token?
-    If yes, and if I can receive private data (future), this is a critical vuln.
-    For now, we verify if the server accepts the identity.
+    SECURITY TEST: Can I connect as verify token logic?
+    Expect: Anonymous (old user_id param ignored) or 401 if we send bad token.
+    Authentication logic now strictly uses ?token=JWT.
+    Any other param like ?user_id=... should be ignored and treated as Anonymous key.
     """
-    print("\n🕵️  TEST: Identity Spoofing (Connection w/o Token)")
+    print("\n🕵️  TEST: Legacy user_id param (Spoofing)")
     uri = f"{GATEWAY_WS_BASE}?user_id=1001"
     
     try:
         async with websockets.connect(uri) as ws:
-            # Expect welcome message
+            # Expect welcome message with user_id=null (Anonymous)
             msg = await ws.recv()
             data = json.loads(msg)
             print(f"   Response: {data}")
             
-            if data.get("type") == "connected" and data.get("user_id") == 1001:
-                print("   ❌ VULNERABILITY CONFIRMED: Server accepted unauthenticated identity 1001")
+            # WsMessage::Connected { user_id: Option<u64> }
+            # If user_id is null, it's anonymous.
+            if data.get("type") == "connected" and data.get("user_id") is None:
+                print("   ✅ Server correctly treated as Anonymous (ignored user_id param)")
+                return True
+            elif data.get("user_id") == 1001:
+                print("   ❌ VULNERABILITY: Server accepted user_id param!")
                 return False
             else:
-                print("   ✅ Server rejected or sanitized identity")
-                return True
+                 print(f"   ⚠️ Unexpected behavior: {data}")
+                 return False
     except Exception as e:
-        print(f"   ⚠️ Connection failed (might be good): {e}")
-        return True
+        print(f"   ⚠️ Connection failed (unexpected): {e}")
+        return False
 
-async def test_malformed_handshake():
-    """
-    ROBUSTNESS TEST: What happens if user_id is garbage?
-    """
-    print("\n🔨 TEST: Malformed Handshake")
-    # Case 1: String instead of int
-    uri = f"{GATEWAY_WS_BASE}?user_id=admin"
+async def test_jwt_auth():
+    print("\n🔐 TEST: JWT Authentication")
+    token = await register_and_login()
+    if not token:
+        print("   ⚠️ Skipping JWT test (auth service unreachable?)")
+        return False
+
+    # 1. Valid Token
+    uri = f"{GATEWAY_WS_BASE}?token={token}"
     try:
         async with websockets.connect(uri) as ws:
-            print("   ❌ Connected with invalid type")
-            return False
-    except websockets.exceptions.InvalidStatusCode as e:
-        print(f"   ✅ Server rejected invalid type: {e.status_code}")
-        if e.status_code == 400:
-            return True
-        return False
-    except Exception as e:
-        print(f"   ✅ Connection failed: {e}")
-        return True
-
-async def test_topic_fuzzing():
-    """
-    ROBUSTNESS TEST: Subscribe to garbage topics
-    """
-    print("\n🤪 TEST: Topic Fuzzing")
-    uri = f"{GATEWAY_WS_BASE}?user_id=0"
-    async with websockets.connect(uri) as ws:
-        await ws.recv() # Welcome
-        
-        # Payload 1: Null args
-        bad_msg = {"op": "subscribe", "args": None}
-        await ws.send(json.dumps(bad_msg))
-        # Logic: Should not crash backend.
-        
-        # Payload 2: Huge topic
-        huge_topic = "A" * 10000
-        bad_msg_2 = {"op": "subscribe", "args": [huge_topic]}
-        await ws.send(json.dumps(bad_msg_2))
-        
-        # Check if still alive (send valid ping)
-        ping = {"op": "ping"} # technically not supported yet? Or standard ping?
-        # Let's try valid subscribe
-        valid = {"op": "subscribe", "args": ["market.trade.BTC_USDT"]}
-        await ws.send(json.dumps(valid))
-        
-        try:
-            # We expect a "subscribed" response eventually
-            resp = await asyncio.wait_for(ws.recv(), timeout=2.0)
-            print(f"   Alive check: {resp}")
+            msg = await ws.recv()
+            data = json.loads(msg)
+            if data.get("user_id") is not None:
+                print(f"   ✅ Authenticated as user {data['user_id']}")
+            else:
+                print("   ❌ Failed to authenticate with valid token")
+                return False
+            
+            # Subscribe Private
+            await ws.send(json.dumps({"op": "subscribe", "args": ["order.update"]}))
+            resp = await ws.recv()
             if "subscribed" in resp:
-                print("   ✅ Server survived fuzzing")
-                return True
-        except:
-             print("   ❌ Server unresponsive after fuzzing")
+                 print("   ✅ Private subscription allowed")
+            else:
+                 print(f"   ❌ Private subscription failed: {resp}")
+                 return False
+
+    except Exception as e:
+        print(f"   ❌ Valid token connection failed: {e}")
+        return False
+
+    # 2. Invalid Token
+    print("   Testing Invalid Token...")
+    uri_bad = f"{GATEWAY_WS_BASE}?token=bad.token.123"
+    try:
+        async with websockets.connect(uri_bad) as ws:
+             print("   ❌ Should have rejected invalid token")
              return False
-    return False
+    except getattr(websockets.exceptions, "InvalidStatus", websockets.exceptions.InvalidStatusCode) as e:
+        # Check status code (attribute might differ slightly or be same)
+        status = getattr(e, "status_code", getattr(e, "response", None).status_code if hasattr(e, "response") else 0)
+        # Actually InvalidStatus has .response which has .status_code? No, usually .status_code property exists.
+        # Let's inspect e.
+        code = 0
+        if hasattr(e, "status_code"):
+            code = e.status_code
+        elif hasattr(e, "response") and hasattr(e.response, "status_code"):
+             code = e.response.status_code
+        
+        if code == 401:
+            print("   ✅ Rejected invalid token (401)")
+        else:
+            print(f"   ❌ Rejected with wrong code: {code} (Error: {e})")
+            return False
+            
+    return True
+
+async def test_private_channel_permissions():
+    print("\n🚫 TEST: Private Channel Permissions (Anonymous)")
+    uri = f"{GATEWAY_WS_BASE}" # No token
+    try:
+        async with websockets.connect(uri) as ws:
+            # Welcome
+            await ws.recv()
+            
+            # Try to subscribe to private channel
+            await ws.send(json.dumps({"op": "subscribe", "args": ["order.update"]}))
+            
+            # Expect generic error or silence or no 'subscribed'
+            # Implementation sends WsMessage::Error
+            resp = await ws.recv()
+            print(f"   Response to private sub: {resp}")
+            if "error" in resp.lower() and "login required" in resp.lower():
+                print("   ✅ Private subscription denied (Correct Error)")
+                return True
+            elif "subscribed" in resp:
+                print("   ❌ VULNERABILITY: Anonymous user subscribed to private channel!")
+                return False
+            else:
+                print("   ⚠️ Unexpected response")
+                return False
+    except Exception as e:
+        print(f"   Connection failed: {e}")
+        return False
 
 async def main():
     results = []
+    # Ensure aiohttp installed
+    try:
+        import aiohttp
+    except ImportError:
+        print("Please install aiohttp: pip install aiohttp")
+        sys.exit(1)
+
     results.append(await test_identity_spoofing())
-    # results.append(await test_malformed_handshake())
-    # results.append(await test_topic_fuzzing())
+    results.append(await test_jwt_auth())
+    results.append(await test_private_channel_permissions())
     
     if all(results):
         print("\n✅ ALL SYSTEM CHECKS PASSED (Secure/Robust)")

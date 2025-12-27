@@ -25,12 +25,13 @@ pub type Topic = String;
 /// WebSocket connections. Uses DashMap for lock-free concurrent access.
 pub struct ConnectionManager {
     /// user_id -> list of (connection_id, sender)
-    connections: DashMap<u64, Vec<(ConnectionId, WsSender)>>,
+    /// user_id -> list of (connection_id, sender)
+    connections: DashMap<Option<u64>, Vec<(ConnectionId, WsSender)>>,
     /// topic -> set of connection_ids subscribed to it
     subscriptions: DashMap<Topic, DashSet<ConnectionId>>,
     /// connection_id -> (sender, user_id)
     /// Used for quick lookup when broadcasting by connection_id
-    conn_lookup: DashMap<ConnectionId, (WsSender, u64)>,
+    conn_lookup: DashMap<ConnectionId, (WsSender, Option<u64>)>,
     /// Next connection ID
     next_conn_id: AtomicU64,
 }
@@ -50,7 +51,11 @@ impl ConnectionManager {
     ///
     /// Returns the unique connection ID for this connection.
     /// Supports multiple connections per user (e.g., mobile app + web browser).
-    pub fn add_connection(&self, user_id: u64, tx: WsSender) -> ConnectionId {
+    /// Add a new WebSocket connection for a user
+    ///
+    /// Returns the unique connection ID for this connection.
+    /// Supports multiple connections per user (e.g., mobile app + web browser).
+    pub fn add_connection(&self, user_id: Option<u64>, tx: WsSender) -> ConnectionId {
         let conn_id = self.next_conn_id.fetch_add(1, Ordering::Relaxed);
 
         self.connections
@@ -81,7 +86,10 @@ impl ConnectionManager {
     /// Remove a WebSocket connection by ID
     ///
     /// Called when a connection is closed. Cleans up empty user entries.
-    pub fn remove_connection(&self, user_id: u64, conn_id: ConnectionId) {
+    /// Remove a WebSocket connection by ID
+    ///
+    /// Called when a connection is closed. Cleans up empty user entries.
+    pub fn remove_connection(&self, user_id: Option<u64>, conn_id: ConnectionId) {
         // Remove from lookup
         self.conn_lookup.remove(&conn_id);
 
@@ -149,7 +157,10 @@ impl ConnectionManager {
     /// Send a message to all connections of a specific user
     ///
     /// Automatically removes failed connections (client disconnected).
-    pub fn send_to_user(&self, user_id: u64, message: WsMessage) {
+    /// Send a message to all connections of a specific user
+    ///
+    /// Automatically removes failed connections (client disconnected).
+    pub fn send_to_user(&self, user_id: Option<u64>, message: WsMessage) {
         if let Some(senders) = self.connections.get(&user_id) {
             let json = serde_json::to_string(&message).unwrap_or_default();
             for (_, tx) in senders.iter() {
@@ -197,11 +208,11 @@ mod tests {
         let (tx, _rx) = mpsc::unbounded_channel();
 
         // Add connection
-        let conn_id = manager.add_connection(1001, tx);
+        let conn_id = manager.add_connection(Some(1001), tx);
         assert_eq!(manager.stats(), (1, 1));
 
         // Remove connection
-        manager.remove_connection(1001, conn_id);
+        manager.remove_connection(Some(1001), conn_id);
         assert_eq!(manager.stats(), (0, 0));
     }
 
@@ -212,16 +223,18 @@ mod tests {
         let (tx2, _rx2) = mpsc::unbounded_channel();
 
         // Add two connections for same user
-        let conn_id1 = manager.add_connection(1001, tx1);
-        let conn_id2 = manager.add_connection(1001, tx2);
+        // Add two connections for same user
+        let conn_id1 = manager.add_connection(Some(1001), tx1);
+        let conn_id2 = manager.add_connection(Some(1001), tx2);
         assert_eq!(manager.stats(), (1, 2));
 
         // Remove one connection
-        manager.remove_connection(1001, conn_id1);
+        // Remove one connection
+        manager.remove_connection(Some(1001), conn_id1);
         assert_eq!(manager.stats(), (1, 1));
 
         // Remove second connection
-        manager.remove_connection(1001, conn_id2);
+        manager.remove_connection(Some(1001), conn_id2);
         assert_eq!(manager.stats(), (0, 0));
     }
 
@@ -230,13 +243,20 @@ mod tests {
         let manager = ConnectionManager::new();
         let (tx, mut rx) = mpsc::unbounded_channel();
 
-        manager.add_connection(1001, tx);
+        manager.add_connection(Some(1001), tx);
 
-        let message = WsMessage::Connected { user_id: 1001 };
-        manager.send_to_user(1001, message.clone());
+        let message = WsMessage::Connected {
+            user_id: Some(1001),
+        };
+        manager.send_to_user(Some(1001), message.clone());
 
         // Verify message received
         let received = rx.try_recv().unwrap();
-        matches!(received, WsMessage::Connected { user_id: 1001 });
+        matches!(
+            received,
+            WsMessage::Connected {
+                user_id: Some(1001)
+            }
+        );
     }
 }

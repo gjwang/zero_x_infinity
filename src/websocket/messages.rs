@@ -24,7 +24,7 @@ pub enum WsCommand {
 pub enum WsMessage {
     /// Connection established
     #[serde(rename = "connected")]
-    Connected { user_id: u64 },
+    Connected { user_id: Option<u64> },
     /// Order status update
     #[serde(rename = "order.update")]
     OrderUpdate {
