@@ -44,15 +44,15 @@ This project documents the complete journey of building a **1.3M orders/sec** ma
 
 ## 🔶 Phase III: Resilience & Funding
 
-*Status: **In Progress** (0x0E Complete)*
+*Status: **In Progress** (0x0F Complete)*
 
 | Chapter | Title | Description |
 |---------|-------|--------------|
 | 0x0D | [Snapshot & Recovery](./0x0D-snapshot-recovery.md) | ✅ State snapshot, crash recovery |
 | 0x0E | [OpenAPI Integration](./0x0E-openapi-integration.md) | ✅ Swagger UI, SDK generation |
-| 0x0F | Deposit & Withdraw | Blockchain integration (planned) |
-| 0x10 | Frontend | Trading UI (planned) |
-
+| 0x0F | [Admin Dashboard](./0x0F-admin-dashboard.md) | ✅ Ops Panel, KYC, hot-reload |
+| 0x10 | [Web Frontend](./0x10-web-frontend.md) | 🚧 Trading UI (In Progress) |
+| 0x11 | Deposit & Withdraw | Blockchain integration (planned) |
 ---
 
 ## ⏳ Phase IV: Extreme Optimization
@@ -78,6 +78,7 @@ This project documents the complete journey of building a **1.3M orders/sec** ma
 | `v0.0C-trade-fee` | 0x0C | Maker/Taker fee system |
 | `v0.0D-persistence` | 0x0D | Universal WAL & Snapshot persistence |
 | `v0.0E-openapi` | 0x0E | OpenAPI 3.0 + Swagger UI |
+| `v0.0F-admin-dashboard` | 0x0F | Admin Operations Dashboard |
 
 ---
 
