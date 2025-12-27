@@ -1,70 +1,27 @@
-# 💻 Developer Current Task
+# Current Task: Phase 0x10.6 Essential Services
 
 ## Session Info
 - **Date**: 2025-12-27
 - **Role**: Developer
-- **Status**: ⚠️ **Partial Pickup (Public Only)**
+- **Status**: ⏳ **Pending Pickup**
 
-## Completed Work
+## 🎯 Objective
+Implement **User Authentication** and **API Key Management** to unblock the Frontend User Loop.
 
-## 🆕 New Handover: 0x10.5 Backend Gaps
+## 🔗 References
+- **Handover Doc**: `docs/agents/sessions/shared/arch-to-dev-handover-0x10-6.md`
+- **Design Doc**: `docs/src/0x10-6-essential-services.md`
 
-**Handover Document**: [`arch-to-dev-handover.md`](../shared/arch-to-dev-handover.md)
+## 🛠️ Tasks
+1.  **Database**: Apply `migrations/0x10_06_users_auth.sql` (Add password fields).
+2.  **Auth Service**: Implement `src/user_auth` (Register/Login/JWT).
+3.  **User Center**: Implement `POST /api/v1/user/apikeys` (Ed25519 Key Gen).
 
-### Quick Summary
-- **From**: Architect
-- **Status**: ⏳ Pending Pickup
-- **Goal**: Implement Public Market Data API & WebSocket
-- **Priority**: P0 (Frontend Blocker)
+## 🚨 Constraints
+- **Security**: Do NOT store API Private Keys. Store Public Key only. Show Private Key once.
+- **Strict Separation**: Do not mix `user_auth` code into `api_auth`.
 
-### Deliverables for QA
-- ✅ `GET /public/trades` API (EXECUTE)
-- ✅ `market.*` WebSocket channels (EXECUTE)
-- 🛑 `private.*` channels (SKIP - Auth Rejected)
-- 🛑 `ListenKey` logic (SKIP - Auth Rejected)
-
-## Previous Work (Completed)
-
-### ✅ 0x0D Phase 3: Settlement WAL & Snapshot
-- 9 unit tests in `settlement_wal/` module
-- `SettlementService::new_with_persistence()` constructor
-- `SettlementPersistenceConfig` in `config.rs`
-- Full pipeline integration
-
-### ✅ 0x0D Phase 4: Replay Protocol
-- `MatchingService::replay_trades()` API
-
-### ✅ E2E Crash Recovery Test (v2)
-- 14-step test with proper assertions
-- WAL content validation
-- Mandatory recovery log verification
-- **One-shot pass verified**
-
-## Test Results
-```
-Unit tests: 286 passed; 0 failed
-Settlement WAL: 9 passed
-E2E Recovery: 14 passed; 0 failed
-Clippy: 0 warnings
-Fmt: clean
-```
-
-## Deliverables for QA (Previous)
-
-| Document | Path |
-|----------|------|
-| QA Handover | `docs/agents/sessions/shared/dev-to-qa-handover-settlement.md` |
-| E2E Test | `scripts/test_settlement_recovery_e2e.sh` |
-
-## Quick Verification
-
-```bash
-# Full verification
-cargo test --lib                    # 286 passed
-cargo test settlement_wal --lib     # 9 passed
-./scripts/test_settlement_recovery_e2e.sh  # 14 passed
-```
-
----
-
-*Ready for QA handover. All tests verified passing.*
+## ✅ Definition of Done
+- User can Register & Login via REST API.
+- User can Generate an API Key Set.
+- User can use that API Key to call `GET /private/balances`.
