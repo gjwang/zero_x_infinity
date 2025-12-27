@@ -40,7 +40,7 @@ Build an admin dashboard for exchange operations using **FastAPI Amis Admin + Fa
 | **🔢 ID 由 DB 生成** | `asset_id`, `symbol_id` 使用 PostgreSQL `SERIAL` 自动生成，防止人为输入冲突或错误。 |
 | **📝 状态显示为字符串** | 用户看到 `Active`/`Disabled` 而非 `1`/`0`，避免操作人员记忆负担和误解。 |
 | **🚫 Base ≠ Quote** | 禁止创建 `BTC_BTC` 这样的无效交易对，这是逻辑 BUG 而非 UX 问题。 |
-| **🔍 Trace ID 全链路** | 每个操作携带 ULID trace_id，从入口到出口全程追踪，出问题时能快速定位。 |
+| **🔍 Trace ID 证据链** | **金融合规基本要求**。每个操作携带 ULID trace_id，形成完整的审计证据链 (Evidence Chain)。出问题时可追溯、可举证、可复现。 |
 | **📜 强制审计日志** | 所有操作前后状态都记录，满足合规要求，支持事故回溯。 |
 | **🔄 Gateway 热加载** | 配置变更后 5 秒内生效，无需重启服务，应对紧急下线等场景。 |
 | **⬇️ 默认降序排列** | 列表默认最新在前，运维人员通常关注最近的操作。 |
