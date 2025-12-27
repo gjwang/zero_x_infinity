@@ -106,6 +106,7 @@ graph TD
 | 0x0D | [Snapshot & Recovery](./docs/src/0x0D-snapshot-recovery.md) | Universal WAL & Snapshot Persistence |
 | 0x0E | [OpenAPI Integration](./docs/src/0x0E-openapi-integration.md) | Swagger UI & SDK Generation |
 | 0x0F | [Admin Dashboard](./docs/src/0x0F-admin-dashboard.md) | FastAPI Amis Admin + Trace ID |
+| 0x10 | [Web Frontend](./docs/src/0x10-web-frontend.md) | Frontend Outsourcing Requirement |
 
 ---
 
@@ -280,6 +281,7 @@ graph TD
 | 0x0D | [Snapshot & Recovery](./docs/src/0x0D-snapshot-recovery.md) | 通用 WAL & 快照持久化 |
 | 0x0E | [OpenAPI Integration](./docs/src/0x0E-openapi-integration.md) | Swagger UI 与 SDK 生成 |
 | 0x0F | [Admin Dashboard](./docs/src/0x0F-admin-dashboard.md) | 管理后台 + Trace ID 证据链 |
+| 0x10 | [Web Frontend](./docs/src/0x10-web-frontend.md) | 前端外包需求文档 |
 
 ---
 
