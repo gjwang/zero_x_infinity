@@ -48,18 +48,13 @@ class AssetCreateSchema(BaseModel):
     @field_validator('status', mode='before')
     @classmethod
     def validate_status(cls, v):
-        """Accept string or int input and convert to integer for DB storage"""
+        """Accept string or int input and convert to integer for DB storage
+        Note: Field(ge=0, le=1) handles range validation - no ValueError needed
+        """
         if isinstance(v, str):
             mapping = {"ACTIVE": 1, "DISABLED": 0}
-            upper_v = v.upper()
-            if upper_v not in mapping:
-                raise ValueError(f"Status must be ACTIVE or DISABLED, got: {v}")
-            return mapping[upper_v]
-        if isinstance(v, int):
-            if v not in (0, 1):
-                raise ValueError(f"Status must be 0 (DISABLED) or 1 (ACTIVE), got: {v}")
-            return v
-        raise ValueError(f"Invalid status type: {type(v).__name__}")
+            return mapping.get(v.upper(), v)  # Return as-is if invalid, let Field validate
+        return v  # Let Field constraints validate the value
     
     # Note: No serializer - keep status as int for DB compatibility
     
@@ -97,18 +92,13 @@ class AssetUpdateSchema(BaseModel):
     @field_validator('status', mode='before')
     @classmethod
     def validate_status(cls, v):
-        """Accept string or int input and convert to integer for DB storage"""
+        """Accept string or int input and convert to integer for DB storage
+        Note: Field(ge=0, le=1) handles range validation - no ValueError needed
+        """
         if isinstance(v, str):
             mapping = {"ACTIVE": 1, "DISABLED": 0}
-            upper_v = v.upper()
-            if upper_v not in mapping:
-                raise ValueError(f"Status must be ACTIVE or DISABLED, got: {v}")
-            return mapping[upper_v]
-        if isinstance(v, int):
-            if v not in (0, 1):
-                raise ValueError(f"Status must be 0 (DISABLED) or 1 (ACTIVE), got: {v}")
-            return v
-        raise ValueError(f"Invalid status type: {type(v).__name__}")
+            return mapping.get(v.upper(), v)  # Return as-is if invalid, let Field validate
+        return v  # Let Field constraints validate the value
     
     # Note: No serializer - keep status as int for DB compatibility
     

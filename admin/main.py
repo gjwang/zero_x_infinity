@@ -98,7 +98,68 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
 
 
-# Add middleware BEFORE mounting (correct order)
+class SecuritySanitizationMiddleware:
+    """
+    Middleware to sanitize all responses for security (SEC-05/08)
+    Removes framework information from error responses regardless of which handler produced them.
+    """
+    def __init__(self, app):
+        self.app = app
+    
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        
+        # Capture response body
+        response_body = []
+        send_wrapper = self._make_send_wrapper(send, response_body)
+        await self.app(scope, receive, send_wrapper)
+    
+    def _make_send_wrapper(self, send, response_body):
+        import json
+        
+        async def send_wrapper(message):
+            if message["type"] == "http.response.body":
+                body = message.get("body", b"")
+                if body:
+                    try:
+                        # Try to parse and sanitize JSON response
+                        data = json.loads(body.decode())
+                        sanitized = self._sanitize_response(data)
+                        message = {**message, "body": json.dumps(sanitized).encode()}
+                    except (json.JSONDecodeError, UnicodeDecodeError):
+                        pass  # Not JSON, pass through
+            await send(message)
+        return send_wrapper
+    
+    def _sanitize_response(self, data):
+        """Remove pydantic.dev URLs and framework info from response"""
+        if isinstance(data, dict):
+            # Remove pydantic URL field from errors
+            if "errors" in data and isinstance(data["errors"], list):
+                for error in data["errors"]:
+                    if isinstance(error, dict):
+                        error.pop("url", None)  # Remove pydantic.dev URL
+                        if "msg" in error:
+                            error["msg"] = sanitize_error_message(str(error["msg"]))
+            if "detail" in data and isinstance(data["detail"], list):
+                for error in data["detail"]:
+                    if isinstance(error, dict):
+                        error.pop("url", None)
+                        if "msg" in error:
+                            error["msg"] = sanitize_error_message(str(error["msg"]))
+            # Recursively process nested dicts
+            return {k: self._sanitize_response(v) for k, v in data.items()}
+        elif isinstance(data, list):
+            return [self._sanitize_response(item) for item in data]
+        return data
+
+
+# Add security middleware FIRST (outermost)
+app.add_middleware(SecuritySanitizationMiddleware)
+
+# Add audit middleware
 app.add_middleware(AuditLogMiddleware)
 
 # Create admin site with PostgreSQL
@@ -120,6 +181,41 @@ app.add_middleware(site.db.asgi_middleware)
 
 # Mount to app (AFTER adding db middleware)
 site.mount_app(app)
+
+# SEC-05/08: OVERRIDE fastapi-amis-admin exception handlers AFTER mount
+# This is CRITICAL - mount_app registers its own handlers that leak framework info
+
+async def secure_validation_handler(request: Request, exc: RequestValidationError):
+    """Sanitized validation error handler (SEC-05/08)"""
+    safe_errors = []
+    for error in exc.errors():
+        safe_errors.append({
+            "loc": error.get("loc", []),
+            "msg": sanitize_error_message(str(error.get("msg", "Invalid input"))),
+            "type": "validation_error"
+        })
+    return JSONResponse(
+        status_code=200,  # Amis expects HTTP 200 with status in body
+        content={"status": 422, "msg": "Validation Error", "detail": safe_errors}
+    )
+
+async def secure_pydantic_handler(request: Request, exc: ValidationError):
+    """Sanitized Pydantic error handler (SEC-05/08)"""
+    safe_errors = []
+    for error in exc.errors():
+        safe_errors.append({
+            "loc": list(error.get("loc", [])),
+            "msg": sanitize_error_message(str(error.get("msg", "Invalid input"))),
+            "type": "validation_error"
+        })
+    return JSONResponse(
+        status_code=200,  # Amis expects HTTP 200 with status in body
+        content={"status": 422, "msg": "Validation Error", "detail": safe_errors}
+    )
+
+# Register on main app
+app.add_exception_handler(RequestValidationError, secure_validation_handler)
+app.add_exception_handler(ValidationError, secure_pydantic_handler)
 
 
 @app.get("/health")

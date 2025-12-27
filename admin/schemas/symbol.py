@@ -65,18 +65,14 @@ class SymbolCreateSchema(BaseModel):
     @field_validator('status', mode='before')
     @classmethod
     def validate_status(cls, v):
-        """Accept string or int input and convert to integer for DB storage"""
+        """Accept string or int input and convert to integer for DB storage
+        Note: Field(ge=0, le=2) handles range validation - no ValueError needed
+        """
         if isinstance(v, str):
             normalized = v.upper().replace('-', '_')
             mapping = {"ONLINE": 1, "OFFLINE": 0, "CLOSE_ONLY": 2}
-            if normalized not in mapping:
-                raise ValueError(f"Status must be ONLINE, OFFLINE, or CLOSE_ONLY, got: {v}")
-            return mapping[normalized]
-        if isinstance(v, int):
-            if v not in (0, 1, 2):
-                raise ValueError(f"Status must be 0, 1, or 2, got: {v}")
-            return v
-        raise ValueError(f"Invalid status type: {type(v).__name__}")
+            return mapping.get(normalized, v)  # Return as-is if invalid, let Field validate
+        return v  # Let Field constraints validate the value
     
     # Note: No serializer - keep status as int for DB compatibility
     
@@ -139,20 +135,16 @@ class SymbolUpdateSchema(BaseModel):
     @field_validator('status', mode='before')
     @classmethod
     def validate_status(cls, v):
-        """Accept string or int input and convert to integer for DB storage"""
+        """Accept string or int input and convert to integer for DB storage
+        Note: Field(ge=0, le=2) handles range validation - no ValueError needed
+        """
         if v is None:
             return None
         if isinstance(v, str):
             normalized = v.upper().replace('-', '_')
             mapping = {"ONLINE": 1, "OFFLINE": 0, "CLOSE_ONLY": 2}
-            if normalized not in mapping:
-                raise ValueError(f"Status must be ONLINE, OFFLINE, or CLOSE_ONLY, got: {v}")
-            return mapping[normalized]
-        if isinstance(v, int):
-            if v not in (0, 1, 2):
-                raise ValueError(f"Status must be 0, 1, or 2, got: {v}")
-            return v
-        raise ValueError(f"Invalid status type: {type(v).__name__}")
+            return mapping.get(normalized, v)  # Return as-is if invalid, let Field validate
+        return v  # Let Field constraints validate the value
     
     # Note: No serializer - keep status as int for DB compatibility
     

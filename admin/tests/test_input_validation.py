@@ -76,8 +76,8 @@ class TestAssetValidation:
                 decimals=8,
                 status="INVALID",  # Only 0 or 1 allowed
             )
-        # Pydantic IntEnum with custom validator (UX-08)
-        assert "status must be active or disabled" in str(exc_info.value).lower()
+        # Pydantic returns generic integer parsing error (no custom ValueError for security)
+        assert "status" in str(exc_info.value).lower()
 
 
 class TestSymbolValidation:
