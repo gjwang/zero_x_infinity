@@ -52,7 +52,7 @@ pytest tests/e2e/ -v
 PYTEST_E2E=$?
 
 # Run the real E2E verifies
-python test_admin_gateway_e2e.py
+python tests/integration/test_admin_gateway_e2e.py
 E2E_RESULT=$?
 
 if [ $PYTEST_E2E -ne 0 ] || [ $E2E_RESULT -ne 0 ]; then

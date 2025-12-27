@@ -94,7 +94,7 @@ done
 echo "🧪 Running E2E Test Script..."
 set +e # Allow test failure to handle cleanup
 cd "$ADMIN_DIR"
-$VENV_PYTHON test_admin_gateway_e2e.py
+$VENV_PYTHON tests/integration/test_admin_gateway_e2e.py
 EXIT_CODE=$?
 cd "$PROJECT_ROOT"
 
