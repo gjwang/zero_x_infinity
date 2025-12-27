@@ -266,6 +266,7 @@ pub mod error_codes {
     pub const RATE_LIMITED: i32 = 4291;
 
     // Server errors (5xxx)
+    pub const INTERNAL_ERROR: i32 = 5000;
     pub const SERVICE_UNAVAILABLE: i32 = 5001;
 }
 

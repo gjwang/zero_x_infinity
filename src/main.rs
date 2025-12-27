@@ -422,6 +422,8 @@ fn main() {
                     _pg_symbols.clone(),
                     Some(transfer_sender), // Connect UBSCore to receive internal transfer commands
                     ws_manager.clone(),
+                    std::env::var("JWT_SECRET")
+                        .unwrap_or_else(|_| "dev-secret-do-not-use-in-prod".to_string()),
                 )
                 .await;
             });
