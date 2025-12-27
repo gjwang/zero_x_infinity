@@ -41,7 +41,7 @@ description: 交付前检查清单 - 确保文档和代码的一致性
 
 ## 7. 命名规范
 - [ ] Part II 章节使用 0x0A-0x0D 格式
-- [ ] Part III 章节使用 0x10-0x12 格式
+- [ ] Part III 章节使用 0x12-0x14 格式
 - [ ] assets 表字段: `asset` (不是 symbol)
 - [ ] symbols 表字段: `symbol` (不是 name)
 

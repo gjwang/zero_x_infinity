@@ -1,4 +1,4 @@
-# 0x11 CPU Affinity & Cache
+# 0x13 CPU Affinity & Cache
 
 <h3>
   <a href="#-english">🇺🇸 English</a>

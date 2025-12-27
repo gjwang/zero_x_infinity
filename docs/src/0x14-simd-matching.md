@@ -1,4 +1,4 @@
-# 0x12 SIMD Matching Acceleration
+# 0x14 SIMD Matching Acceleration
 
 <h3>
   <a href="#-english">🇺🇸 English</a>

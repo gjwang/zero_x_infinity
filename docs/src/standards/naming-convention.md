@@ -97,7 +97,7 @@ CREATE TABLE symbols_tb (... symbol_flags INT ...);
 |------|------|------|
 | Part I | 0x01-0x09 | 核心引擎 |
 | Part II | 0x0A-0x0D | 产品化 |
-| Part III | 0x10-0x12 | 极致优化 |
+| Part III | 0x12-0x14 | 极致优化 |
 
 ---
 
