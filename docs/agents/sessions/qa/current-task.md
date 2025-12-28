@@ -1,17 +1,15 @@
-# Current Task: Phase 0x11 Test Planning
+# QA Current Task (Phase 0x10.6)
 
-**Objective**: Prepare Test Plan and Automation for Deposit/Withdraw.
+**Status**: ✅ **VERIFIED**
 
-## Status
-*   **Design**: COMPLETE.
-*   **Dev**: STARTING.
+## Achievements
+1.  **WebSocket Auth**: Verified Private Channels & 401 Rejection.
+2.  **Essential Services**:
+    -   Verified Registration/Login Flow.
+    -   Verified API Key Generation/Listing/Deletion.
 
-## Action Items
-1.  **Review Design**: `docs/src/0x11-deposit-withdraw.md`.
-2.  **Review Checklist**: `docs/src/0x11-acceptance-checklist.md`.
-    *   Create Test Cases for each item in the checklist.
-    *   Focus on: **Idempotency** (Double Spend) and **Race Conditions**.
-3.  **Prepare Chaos Tests**:
-    *   How will we simulate a "Re-org"? (Mock Chain API requirement?)
+## Reports
+- `docs/agents/sessions/qa/0x10-5-verification-report.md`
 
-**Waiting for Developer to implement `POST /internal/mock/deposit` endpoint.**
+## Next
+Proceed to Phase 0x11 Test Planning.

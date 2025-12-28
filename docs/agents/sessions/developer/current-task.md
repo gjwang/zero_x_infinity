@@ -1,17 +1,13 @@
-# Current Task: Phase 0x11 Implementation
+# Developer Current Task (Phase 0x10.6)
 
-**Objective**: Implement Deposit & Withdraw System with Mock Chain Support.
+**Status**: ✅ **COMPLETE**
 
-## Core Tasks
-1.  **Scaffold Module**: `src/funding/`
-2.  **Database Migration**: `deposit_history`, `withdraw_history`, `user_addresses`.
-3.  **Mock Chain Adapter**:
-    -   Trait `ChainClient`.
-    -   Impl `MockBtcChain`, `MockEvmChain`.
-4.  **Service Logic**:
-    -   `FundingService::process_deposit()` (Idempotent!).
-    -   `FundingService::process_withdraw()` (Atomic Check!).
+## Achievements
+1.  **WebSocket Auth**: Implemented `strict Option<u64>` logic.
+2.  **Essential Services**:
+    -   Implemented `UserService`.
+    -   Implemented `ApiKeyService`.
+    -   Migrated Database (Argon2id Support).
 
-## Resources
-- Design: `docs/src/0x11-deposit-withdraw.md`
-- Checklist: `docs/src/0x11-acceptance-checklist.md` (MUST READ)
+## Next
+Proceed to Phase 0x11 Funding Module.
