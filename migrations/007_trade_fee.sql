@@ -12,7 +12,7 @@ COMMENT ON COLUMN symbols_tb.base_taker_fee IS 'Base taker fee rate (10^6 precis
 CREATE TABLE IF NOT EXISTS vip_levels_tb (
     level           SMALLINT PRIMARY KEY,
     discount_percent SMALLINT NOT NULL DEFAULT 100,  -- 100 = no discount, 50 = 50% off
-    min_volume      DECIMAL(30, 8) DEFAULT 0,        -- Trading volume for upgrade
+    min_volume      NUMERIC(40, 0) DEFAULT 0,        -- Trading volume for upgrade
     description     VARCHAR(64)
 );
 

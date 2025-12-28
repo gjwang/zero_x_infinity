@@ -380,6 +380,22 @@ main() {
     # Check dependencies
     check_dependencies || exit 2
     
+    # ========== Phase 0: Static Analysis (Schema Lint) ==========
+    echo "═══════════════════════════════════════════════════════════════"
+    echo "Phase 0: Static Analysis"
+    echo "═══════════════════════════════════════════════════════════════"
+    
+    log_test_start "Schema Lint"
+    if python3 scripts/test_schema_lint.py > "$LOG_DIR/schema_lint.log" 2>&1; then
+        log_test_pass
+    else
+        log_test_fail "(see $LOG_DIR/schema_lint.log)"
+        echo "--- Schema Lint Errors ---"
+        cat "$LOG_DIR/schema_lint.log"
+        echo "--------------------------"
+        exit 1 # Fail fast
+    fi
+
     # ========== Phase 1: Unit Tests ==========
     if [ "$RUN_UNIT" = "true" ]; then
         echo "═══════════════════════════════════════════════════════════════"
