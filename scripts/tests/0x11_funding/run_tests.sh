@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+cd "$(dirname "$0")"
 
 echo "=========================================================="
 echo "🛡️  0x11 RELEASE VERIFICATION: DEPOSIT & WITHDRAW"
