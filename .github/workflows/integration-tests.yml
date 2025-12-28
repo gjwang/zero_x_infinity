@@ -16,6 +16,7 @@ env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
   CI: true
+  CI_LOG_DIR: logs  # Ensure test_ci.sh runs output logs here
   SQLX_OFFLINE: true
 
 jobs:
@@ -221,14 +222,10 @@ jobs:
         if: steps.run-test.outcome == 'failure'
         run: |
           echo "=== Gateway E2E Log ==="
-          if ls logs/*.log 1> /dev/null 2>&1; then
-            cat logs/*.log
-          else
-            echo "No gateway logs found."
-          fi
+          if [ -f logs/Gateway_E2E.log ]; then cat logs/Gateway_E2E.log; else echo "No Gateway_E2E.log found"; fi
           echo ""
           echo "=== Gateway Output Log ==="
-          cat /tmp/gateway.log || true
+          if [ -f test_gateway/gateway.log ]; then cat test_gateway/gateway.log; else echo "No test_gateway/gateway.log found"; fi
           exit 1
 
       - name: Upload Logs
@@ -300,14 +297,11 @@ jobs:
         if: steps.run-test.outcome == 'failure'
         run: |
           echo "=== K-Line E2E Log ==="
-          if ls logs/*.log 1> /dev/null 2>&1; then
-            cat logs/*.log
-          else
-            echo "No K-Line logs found."
-          fi
+          if [ -f logs/KLine_E2E.log ]; then cat logs/KLine_E2E.log; else echo "No KLine_E2E.log found"; fi
           echo ""
           echo "=== Gateway Output Log ==="
-          cat /tmp/gateway.log || true
+          # kline script uses /tmp/gateway.log
+          if [ -f /tmp/gateway.log ]; then cat /tmp/gateway.log; else echo "No /tmp/gateway.log found"; fi
           exit 1
 
       - name: Upload Logs
@@ -379,14 +373,11 @@ jobs:
         if: steps.run-test.outcome == 'failure'
         run: |
           echo "=== Depth API Log ==="
-          if ls logs/*.log 1> /dev/null 2>&1; then
-            cat logs/*.log
-          else
-            echo "No Depth API logs found."
-          fi
+          if [ -f logs/Depth_API.log ]; then cat logs/Depth_API.log; else echo "No Depth_API.log found"; fi
           echo ""
           echo "=== Gateway Output Log ==="
-          cat /tmp/gateway.log || true
+          # depth script uses /tmp/gateway_depth.log
+          if [ -f /tmp/gateway_depth.log ]; then cat /tmp/gateway_depth.log; else echo "No /tmp/gateway_depth.log found"; fi
           exit 1
 
       - name: Upload Logs
@@ -458,14 +449,10 @@ jobs:
         if: steps.run-test.outcome == 'failure'
         run: |
           echo "=== Account Integration Log ==="
-          if ls logs/*.log 1> /dev/null 2>&1; then
-            cat logs/*.log
-          else
-            echo "No Account Integration logs found."
-          fi
+          if [ -f logs/Account_Integration.log ]; then cat logs/Account_Integration.log; else echo "No Account_Integration.log found"; fi
           echo ""
           echo "=== Gateway Output Log ==="
-          cat /tmp/gateway.log || true
+          if [ -f /tmp/gateway.log ]; then cat /tmp/gateway.log; else echo "No /tmp/gateway.log found"; fi
           exit 1
 
       - name: Upload Logs
@@ -543,10 +530,21 @@ jobs:
         if: steps.run-test.outcome == 'failure'
         run: |
           echo "=== Funding/Trading E2E Log ==="
+          # verify_funding_trading_flow runs run_qa_full.sh (gateway_qa_0x11.log) and run_poc.sh (gateway_poc_0x12.log)
+          if [ -f logs/gateway_qa_0x11.log ]; then 
+             echo "--- Phase 0x11 Log ---"
+             cat logs/gateway_qa_0x11.log
+          fi
+          if [ -f logs/gateway_poc_0x12.log ]; then
+             echo "--- Phase 0x12 Log ---"
+             cat logs/gateway_poc_0x12.log
+          fi
+          # Also check for any other python script output caught in logs/
           if ls logs/*.log 1> /dev/null 2>&1; then
-            cat logs/*.log
+             # Avoid re-catting if specific ones matched? Just cat everything in logs/ for this one as fallback
+             : 
           else
-            echo "No log files found in logs/ (Test might have failed before Gateway start)"
+             echo "No logs found in logs/"
           fi
           exit 1
 
@@ -622,14 +620,10 @@ jobs:
         if: steps.run-test.outcome == 'failure'
         run: |
           echo "=== Transfer E2E Log ==="
-          if [ -f /tmp/integration_tests/Transfer_E2E.log ]; then
-            cat /tmp/integration_tests/Transfer_E2E.log
-          else
-            echo "No Transfer E2E logs found."
-          fi
+          if [ -f logs/Transfer_E2E.log ]; then cat logs/Transfer_E2E.log; else echo "No Transfer_E2E.log found (check CI_LOG_DIR)"; fi
           echo ""
           echo "=== Gateway Output Log ==="
-          cat /tmp/gw_test.log || true
+          if [ -f /tmp/gw_test.log ]; then cat /tmp/gw_test.log; else echo "No /tmp/gw_test.log found"; fi
           exit 1
 
       - name: Upload Logs
