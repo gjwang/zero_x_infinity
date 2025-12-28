@@ -36,7 +36,7 @@ def test_deposit_replay_attack(user_id, token, headers):
     # 2. Launch Concurrent Requests (Internal API - Valid without auth for mock in dev)
     def send_deposit(_):
         try:
-            return requests.post(f"{INTERNAL_URL}/deposit", json=payload)
+            return requests.post(f"{INTERNAL_URL}/deposit", json=payload, headers={"X-Internal-Secret": "dev-secret"})
         except Exception as e:
             return e
 
@@ -66,8 +66,8 @@ def test_deposit_replay_attack(user_id, token, headers):
     resp = requests.get(f"{BASE_URL}/api/v1/capital/deposit/history", params={"asset": "USDT"}, headers=headers)
     
     if resp.status_code != 200:
-        print(f"⚠️ Failed to get history: {resp.status_code} (Assuming 404/Missing). Trusting Error Codes.")
-        matches = [] # Skip
+        print(f"⚠️ Failed to get history: {resp.text} (Skipping integrity check)")
+        matches = []
     else:
         history = resp.json().get("data", [])
         matches = [h for h in history if h["tx_hash"] == tx_hash]
@@ -92,7 +92,7 @@ def test_withdrawal_race_condition(user_id, token, headers):
     setup_tx = f"tx_seed_{int(time.time())}"
     requests.post(f"{INTERNAL_URL}/deposit", json={
         "user_id": user_id, "asset": "USDT", "amount": "50.00", "tx_hash": setup_tx, "chain": "ETH"
-    })
+    }, headers={"X-Internal-Secret": "dev-secret"})
     time.sleep(3) # Wait for persist (increased safety)
     
     # Check balance? (Skipping implicit check, just try to drain)

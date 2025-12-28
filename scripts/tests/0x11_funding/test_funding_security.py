@@ -68,11 +68,8 @@ def test_internal_endpoint_protection(headers_a):
     resp = requests.post(f"{INTERNAL_URL}/deposit", json=payload, headers=headers_a)
     
     if resp.status_code == 200:
-        print("   ⚠️  Notice: Mock endpoint is accessible with User Token (or ignores it).")
-        print("       Risk: Anyone with network access to internal port can inject deposits.")
-        # We don't fail MVP for this if documented as "Mock/Debug" feature.
-        # But Agent C marks it as Warning.
-        return True 
+        print("❌ CRITICAL: Mock endpoint is accessible WITHOUT Secret Header!")
+        return False
         
     print(f"   ✅ Access Denied: {resp.status_code}")
     return True
@@ -105,6 +102,11 @@ def test_withdrawal_input_sanitization(headers_a):
     }, headers=headers_a)
     
     # Should be 400 or 200 (if simple string, but sanitized). 500 is bad but blocks injection.
+    # Should be 400 (Bad Request). 500 is technically safe but undesirable.
+    if resp.status_code == 400:
+        print(f"   ✅ Handled gracefully ({resp.status_code})")
+        return True
+    
     if resp.status_code == 500:
         print("⚠️ Warning: Internal Server Error (Safely Crashed/Rejected). Injection blocked.")
         return True
