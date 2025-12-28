@@ -55,10 +55,22 @@ def test_btc_deposit_lifecycle(btc: BtcRpc, gateway: GatewayClient):
         btc_addr = gateway.get_deposit_address(headers, "BTC", "BTC")
         print(f"   ✅ Step 1: Deposit address: {btc_addr}")
         
-        # Validate address format
-        if not (btc_addr.startswith("bc1") or btc_addr.startswith("bcrt1") or btc_addr.startswith("1") or btc_addr.startswith("3")):
-            print(f"   ❌ Invalid BTC address format: {btc_addr}")
+        # Validate address format (DEF-001: Strict Checksum Check)
+        if not btc_addr.startswith("bcrt1"):
+            print(f"   ❌ Invalid BTC address format (Preifx): {btc_addr}")
             return False
+
+        try:
+            import bech32
+            # Decode: returns (hrp, data) or (None, None) if invalid checksum
+            hrp, data = bech32.bech32_decode(btc_addr)
+            if hrp != "bcrt" or data is None:
+                print(f"   ❌ Invalid Bech32 Checksum/Format: {btc_addr}")
+                return False
+            print(f"   ✅ Address Checksum Valid (Bech32)")
+        except ImportError:
+            # Fallback if bech32 lib missing (though it should be in dev-deps)
+            print("   ⚠️  Skipping strict checksum check (bech32 lib missing)")
         
         # === STEP 2: Send deposit ===
         btc.mine_blocks(101)  # Ensure maturity
