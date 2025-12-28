@@ -95,6 +95,10 @@ fn use_gateway_mode() -> bool {
     std::env::args().any(|a| a == "--gateway")
 }
 
+fn use_sentinel_mode() -> bool {
+    std::env::args().any(|a| a == "--sentinel")
+}
+
 /// Get port override from command line (--port argument)
 fn get_port_override() -> Option<u16> {
     let args: Vec<String> = std::env::args().collect();
@@ -140,12 +144,19 @@ fn run() -> anyhow::Result<()> {
     let pipeline_mode = use_pipeline_mode();
     let pipeline_mt_mode = use_pipeline_mt_mode();
     let gateway_mode = use_gateway_mode();
+    let sentinel_mode = use_sentinel_mode();
 
     let env = get_env();
     let app_config = zero_x_infinity::config::AppConfig::load(&env)?;
     let _log_guard = zero_x_infinity::logging::init_logging(&app_config);
 
     tracing::info!("Starting 0xInfinity Engine in {} mode", env);
+
+    // Sentinel mode: Blockchain scanner service
+    if sentinel_mode {
+        println!("=== 0xInfinity: Phase 0x11-a - Sentinel Mode ===");
+        return run_sentinel(&app_config);
+    }
 
     // Gateway mode: HTTP + Trading Core
     if gateway_mode {
@@ -1028,5 +1039,107 @@ Samples: {}
     println!("Perf baseline written to {}", perf_path);
 
     println!("\n=== Done ===");
+    Ok(())
+}
+
+/// Run the Sentinel blockchain scanner service
+fn run_sentinel(app_config: &zero_x_infinity::config::AppConfig) -> anyhow::Result<()> {
+    use zero_x_infinity::sentinel::{
+        BtcChainConfig, BtcScanner, ConfirmationMonitor, DepositPipeline, EthChainConfig,
+        EthScanner, SentinelConfig, SentinelWorker,
+    };
+
+    println!("\n[1] Loading Sentinel configuration...");
+
+    // Load sentinel config
+    let sentinel_config = SentinelConfig::from_file("config/sentinel_config.yaml")
+        .map_err(|e| anyhow::anyhow!("Failed to load sentinel config: {}", e))?;
+
+    println!("  Service: {}", sentinel_config.service.name);
+    println!(
+        "  Poll interval: {}ms",
+        sentinel_config.service.poll_interval_ms
+    );
+
+    println!("\n[2] Connecting to PostgreSQL...");
+
+    // Connect to PostgreSQL
+    let Some(ref postgres_url) = app_config.postgres_url else {
+        return Err(anyhow::anyhow!(
+            "PostgreSQL URL not configured (postgres_url in config)"
+        ));
+    };
+
+    let rt = tokio::runtime::Runtime::new().context("Failed to create tokio runtime")?;
+
+    let pool = rt
+        .block_on(async { sqlx::PgPool::connect(postgres_url).await })
+        .context("Failed to connect to PostgreSQL")?;
+
+    println!("  ✅ Connected to PostgreSQL");
+
+    println!("\n[3] Initializing scanners...");
+
+    // Create worker
+    let mut worker = SentinelWorker::new(pool.clone(), sentinel_config.service.poll_interval_ms);
+
+    // Initialize BTC scanner if enabled
+    if let Some(ref btc_ref) = sentinel_config.chains.btc
+        && btc_ref.enabled
+    {
+        println!("  Loading BTC config from: {}", btc_ref.config_path);
+        let btc_config = BtcChainConfig::from_file(&btc_ref.config_path)
+            .map_err(|e| anyhow::anyhow!("Failed to load BTC config: {}", e))?;
+
+        let scanner = BtcScanner::new_mock(btc_config);
+        worker.add_scanner(Box::new(scanner));
+        println!("  ✅ BTC Scanner initialized (mock mode)");
+    }
+
+    // Initialize ETH scanner if enabled
+    if let Some(ref eth_ref) = sentinel_config.chains.eth
+        && eth_ref.enabled
+    {
+        println!("  Loading ETH config from: {}", eth_ref.config_path);
+        let eth_config = EthChainConfig::from_file(&eth_ref.config_path)
+            .map_err(|e| anyhow::anyhow!("Failed to load ETH config: {}", e))?;
+
+        let scanner = EthScanner::new_mock(eth_config);
+        worker.add_scanner(Box::new(scanner));
+        println!("  ✅ ETH Scanner initialized (mock mode)");
+    }
+
+    println!("\n  Total scanners: {}", worker.scanner_count());
+
+    if worker.scanner_count() == 0 {
+        return Err(anyhow::anyhow!(
+            "No scanners enabled. Check sentinel_config.yaml"
+        ));
+    }
+
+    // Create confirmation monitor and pipeline (for future integration)
+    let _confirmation_monitor = ConfirmationMonitor::new(pool.clone());
+    let _deposit_pipeline = DepositPipeline::new(pool.clone());
+
+    println!("\n[4] Starting Sentinel service...");
+    println!("  Press Ctrl+C to stop\n");
+
+    // Run the main loop
+    rt.block_on(async {
+        // For now, just run a single scan cycle for demonstration
+        // The full run() loop would run indefinitely
+        match worker.scan_once().await {
+            Ok(deposits) => {
+                println!("  Scanned all chains. Deposits detected: {}", deposits);
+            }
+            Err(e) => {
+                eprintln!("  Scan error: {:?}", e);
+            }
+        }
+
+        println!("\n✅ Sentinel demo complete");
+        println!("  To run continuously, implement worker.run() loop");
+    });
+
     Ok(())
 }
