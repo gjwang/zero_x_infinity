@@ -4,6 +4,26 @@
 
 ---
 
+## 🚨 0. 关键警告：禁止使用 `pkill -f`
+
+### 问题描述
+在 Antigravity IDE 中执行 `pkill -f "zero_x_infinity"` 会**导致 IDE 崩溃**。
+因为 IDE 的 language_server 进程参数中包含项目路径，会被 `pkill -f` 误杀。
+
+### 正确做法
+**永远使用 PID 或精确匹配：**
+
+```bash
+# ✅ 方法 1: 启动时记录 PID (推荐)
+./target/release/zero_x_infinity --gateway &
+GW_PID=$!
+# ...
+kill "$GW_PID"
+
+# ✅ 方法 2: 精确匹配进程名
+pkill "^zero_x_infinity$"
+```
+
 ## 1. 服务容器 (Service Containers)
 
 ### 1.1 禁止使用 `docker exec`
@@ -194,7 +214,43 @@ done
 
 ---
 
-## 6. 快速参考
+---
+
+## 6. 配置与端口对齐 (Config & Port Parity)
+
+### 6.1 5433 vs 5432 端口陷阱
+
+- **本地 (Dev)**: 默认端口 **5433** (`config/dev.yaml`)。
+- **CI 环境**: 标准端口 **5432** (`config/ci.yaml`)。
+- **解决方案**: 测试脚本必须检测 `CI=true` 并传递 `--env ci`。
+
+```bash
+if [ "$CI" = "true" ]; then
+    GATEWAY_ARGS="--gateway --env ci"
+fi
+```
+
+### 6.2 标准化脚本模板
+
+请复用标准模板：`scripts/templates/test_integration_template.sh`。
+
+---
+
+## 7. Python 环境规范 (uv)
+
+### 7.1 禁止裸跑 Python
+CI 环境中直接运行 `python3` 可能找不到依赖。
+
+### 7.2 解决方案
+使用 `uv run` 显式管理依赖：
+
+```bash
+uv run --with requests --with pynacl python3 scripts/tests/my_test.py
+```
+
+---
+
+## 8. 快速参考
 
 | 场景 | 本地 | CI |
 |------|------|-----|

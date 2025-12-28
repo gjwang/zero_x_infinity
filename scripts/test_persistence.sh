@@ -180,7 +180,13 @@ if lsof -Pi :8080 -sTCP:LISTEN -t >/dev/null 2>&1; then
 fi
 
 print_test "Starting Gateway server..."
-./target/release/zero_x_infinity --gateway --env dev > /tmp/gateway.log 2>&1 &
+GATEWAY_ARGS="--gateway"
+if [ "$CI" = "true" ]; then
+    GATEWAY_ARGS="$GATEWAY_ARGS --env ci"
+else
+    GATEWAY_ARGS="$GATEWAY_ARGS --env dev"
+fi
+./target/release/zero_x_infinity $GATEWAY_ARGS > /tmp/gateway.log 2>&1 &
 GATEWAY_PID=$!
 print_info "Gateway PID: $GATEWAY_PID"
 
