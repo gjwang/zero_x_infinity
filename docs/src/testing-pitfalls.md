@@ -184,4 +184,49 @@ services:
 
 ---
 
-*最后更新：2024-12-24*
+*最后更新：2024-12-28*
+
+---
+
+### 4. Python 环境管理与 `uv` 使用规范
+
+#### 问题描述
+在 CI/CD 中，如果直接使用 `python3 scripts/foo.py` 命令，会调用 Runner 系统的默认 Python 环境，而不是 `uv sync` 安装好的虚拟环境。这导致本地开发（通常在 venv 中）能跑通的脚本，在 CI 上报 `ModuleNotFoundError`。此外，如果各个 Job 使用不同的调用方式（有的用 Wrapper 脚本，有的直接调 Python），会导致环境不一致，难以排查。
+
+#### 解决方案
+
+1.  **禁止裸跑 Python**：
+    在 CI `.yaml` 文件中，**永远不要**写 `run: python3 ...`。
+    必须使用 `run: uv run python3 ...`，或者封装在 shell 脚本中。
+
+2.  **统一入口 (Wrapper Scripts)**：
+    所有测试应封装在 `scripts/` 下的 shell 脚本中（如 `test_openapi_e2e.sh`）。
+    Shell 脚本内部统一负责：
+    - 使用 `uv run` 调用 Python。
+    - 导出必要的环境变量（如 `export SCRIPT_DIR`）。
+    - 处理命令行参数传递（使用 `"$@"`）。
+
+3.  **Shell 脚本最佳实践**：
+    Wrapper 脚本必须包含以下要素，以确保作为“中间层”的透明性：
+    ```bash
+    #!/bin/bash
+    set -e
+    # 1. 显式导出脚本路径，供 Python 子进程使用
+    export SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    
+    # 2. 检查 uv 是否存在，优先使用 uv 环境
+    if command -v uv >/dev/null 2>&1; then
+        # 3. 使用 --with 显式声明依赖 (可选但推荐)，并传递所有参数 "$@"
+        uv run --with requests --with pynacl python3 - "$@" << 'EOF'
+    import sys
+    # ... python code ...
+    EOF
+    else
+        # 4. 降级方案 (或直接报错)
+        python3 "$SCRIPT_DIR/target_script.py" "$@"
+    fi
+    ```
+
+4.  **本地复现技巧**：
+    不要只运行 `./scripts/test.sh`，尝试模拟 CI 的“裸环境”故障：使用系统 Python 直接运行脚本（如 `/usr/bin/python3 scripts/test.py`），观察是否报错。这能帮你快速定位是否依赖了隐式的 venv 环境。
+
