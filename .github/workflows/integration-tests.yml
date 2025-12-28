@@ -221,7 +221,11 @@ jobs:
         if: steps.run-test.outcome == 'failure'
         run: |
           echo "=== Gateway E2E Log ==="
-          cat logs/Gateway_E2E.log || true
+          if ls logs/*.log 1> /dev/null 2>&1; then
+            cat logs/*.log
+          else
+            echo "No gateway logs found."
+          fi
           echo ""
           echo "=== Gateway Output Log ==="
           cat /tmp/gateway.log || true
@@ -296,7 +300,11 @@ jobs:
         if: steps.run-test.outcome == 'failure'
         run: |
           echo "=== K-Line E2E Log ==="
-          cat logs/KLine_E2E.log || true
+          if ls logs/*.log 1> /dev/null 2>&1; then
+            cat logs/*.log
+          else
+            echo "No K-Line logs found."
+          fi
           echo ""
           echo "=== Gateway Output Log ==="
           cat /tmp/gateway.log || true
@@ -371,7 +379,11 @@ jobs:
         if: steps.run-test.outcome == 'failure'
         run: |
           echo "=== Depth API Log ==="
-          cat logs/Depth_API.log || true
+          if ls logs/*.log 1> /dev/null 2>&1; then
+            cat logs/*.log
+          else
+            echo "No Depth API logs found."
+          fi
           echo ""
           echo "=== Gateway Output Log ==="
           cat /tmp/gateway.log || true
@@ -446,7 +458,11 @@ jobs:
         if: steps.run-test.outcome == 'failure'
         run: |
           echo "=== Account Integration Log ==="
-          cat logs/Account_Integration.log || true
+          if ls logs/*.log 1> /dev/null 2>&1; then
+            cat logs/*.log
+          else
+            echo "No Account Integration logs found."
+          fi
           echo ""
           echo "=== Gateway Output Log ==="
           cat /tmp/gateway.log || true
@@ -527,7 +543,11 @@ jobs:
         if: steps.run-test.outcome == 'failure'
         run: |
           echo "=== Funding/Trading E2E Log ==="
-          cat logs/*.log || true
+          if ls logs/*.log 1> /dev/null 2>&1; then
+            cat logs/*.log
+          else
+            echo "No log files found in logs/ (Test might have failed before Gateway start)"
+          fi
           exit 1
 
       - name: Upload Logs
@@ -602,7 +622,11 @@ jobs:
         if: steps.run-test.outcome == 'failure'
         run: |
           echo "=== Transfer E2E Log ==="
-          cat /tmp/integration_tests/Transfer_E2E.log || true
+          if [ -f /tmp/integration_tests/Transfer_E2E.log ]; then
+            cat /tmp/integration_tests/Transfer_E2E.log
+          else
+            echo "No Transfer E2E logs found."
+          fi
           echo ""
           echo "=== Gateway Output Log ==="
           cat /tmp/gw_test.log || true
@@ -681,7 +705,11 @@ jobs:
         if: failure() && steps.run-test.outcome == 'failure'
         run: |
           echo "=== Fee E2E Log ==="
-          cat /tmp/gateway_fee_e2e.log || true
+          if [ -f /tmp/gateway_fee_e2e.log ]; then
+            cat /tmp/gateway_fee_e2e.log
+          else
+             echo "No Fee E2E logs found."
+          fi
 
       - name: Upload Logs
         if: always()
