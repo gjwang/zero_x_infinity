@@ -127,6 +127,9 @@ Run the master script to verify the full lifecycle:
 *   **Address Validation**: Strict Regex for `0x...` (ETH) and `1/3/bc1...` (BTC).
 *   **Internal Auth**: Mock endpoints protected by `X-Internal-Secret`.
 
+> [!WARNING]
+> **SECURITY ADVISORY**: The `/internal/mock/deposit` endpoint is a major security risk as it allows direct balance manipulation. It is currently protected by a secret but MUST be removed entirely once the Phase 0x11-a Sentinel (blockchain scanner) is fully integrated and stable.
+
 ---
 
 ## Summary
@@ -266,6 +269,9 @@ pub async fn process_deposit(...) {
 ### 4.2 安全性验证
 *   **地址验证**: 针对 `0x...` (ETH) 和 `1/3/bc1...` (BTC) 的严格正则校验。
 *   **内部鉴权**: Mock 端点受 `X-Internal-Secret` 保护。
+
+> [!CAUTION]
+> **安全警告**：`/internal/mock/deposit` 接口存在重大安全隐患，因为它允许直接修改用户余额。虽然目前增加了 Secret 校验，但在 Phase 0x11-a Sentinel（区块链扫描器）完全集成并稳定后，**必须彻底移除此接口**。
 
 ---
 

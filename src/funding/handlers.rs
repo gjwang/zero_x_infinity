@@ -57,6 +57,11 @@ pub struct WithdrawResponse {
 // --- Handlers ---
 
 /// Internal Mock Deposit (Debug/Scanner Trigger)
+///
+/// [SECURITY WARNING] This endpoint is for development/testing ONLY.
+/// It allows direct injection of funds into user balances without real blockchain transactions.
+/// FIXME: REMOVE THIS ENDPOINT once Phase 0x11-a Real Chain (Sentinel) is fully stable.
+///
 /// POST /internal/mock/deposit
 pub async fn mock_deposit(
     State(state): State<Arc<AppState>>,
