@@ -5,6 +5,7 @@
 | **Date** | 2025-12-28 |
 | **Context** | P1 Feature: Asset Inflow/Outflow |
 | **Reviewers** | PM, Architect, Security Expert |
+| **Deliverables** | [📄 Strict Acceptance Checklist](./0x11-acceptance-checklist.md) |
 
 ## 1. Product Manager View (Business Logic & UX)
 
