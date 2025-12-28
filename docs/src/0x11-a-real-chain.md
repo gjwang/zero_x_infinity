@@ -273,3 +273,42 @@ These parameters MUST be loadable from configuration (e.g., `Settings.toml` or D
     ```
 *   **Purpose**: Prevents Sentinel from scanning a stale local chain while the real world has moved on.
 
+## 10. Wallet & Address Management (HD Architecture)
+
+To ensure security, we strictly follow the **Watch-Only Wallet** pattern using BIP32/BIP44/BIP84 standards.
+
+### 10.1 The Master Key (Security Strategy)
+
+#### Production (Cold)
+*   **Generation**: Created offline (Air-gapped) or via Hardware Wallet (Ledger/Trezor).
+*   **Export**: Only the **Extended Public Key (`xpub`/`zpub`)** is exported to the production server.
+*   **Security Guarantee**: Even if the entire DB and Sentinel are compromised, **attackers cannot steal funds** (they can't sign withdrawals).
+
+#### Stage/Dev (Hot)
+*   **Simplification**: We will use a **Hot Master Key** (Mnemonic stored in `.env` or Config) to facilitate rapid testing of withdrawals and consolidation during development.
+*   **Risk**: Acceptable for Testnet/Regtest coins only.
+
+### 10.2 Address Derivation (On-Demand Allocation)
+*   **Path Standard**:
+    *   BTC (Segwit): `m/84'/0'/0'/0/{index}` (BIP84)
+    *   ETH: `m/44'/60'/0'/0/{index}` (BIP44)
+*   **Allocation Logic**:
+    1.  User requests `GET /deposit/address`.
+    2.  DB: Atomic Increment `address_index` for the Chain.
+    3.  Service: Derive address from `xpub` at new `index`.
+    4.  DB: Store mapping `user_id <-> address <-> index`.
+
+### 10.3 The "Gap Limit" Problem
+*   **Issue**: HD Wallets usually stop scanning if they see 20 unused addresses. We allocate addresses randomly to users.
+*   **Solution**: **Full Index Scanning**.
+    *   The Sentinel does NOT rely on Gap Limits.
+    *   The Sentinel loads **ALL** active allocated addresses from the `user_addresses` table into a **Bloom Filter** or **HashSet**.
+    *   When scanning a block, it checks every output against this Set.
+    *   *Scale*: A Rust `HashSet` of 10 million addresses consumes ~300MB RAM. Totally acceptable for Phase I-III.
+
+### 10.4 Key Rotation
+*   **Scenario**: The cold key is compromised or we want to migrate.
+*   **Action**:
+    1.  Admin configures new `xpub_v2`.
+    2.  New users get addresses from `xpub_v2`.
+    3.  Sentinel scans **BOTH** `xpub_v1` addresses and `xpub_v2` addresses.
