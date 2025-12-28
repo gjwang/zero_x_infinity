@@ -56,7 +56,7 @@ def test_btc_deposit_lifecycle(btc: BtcRpc, gateway: GatewayClient):
         print(f"   ✅ Step 1: Deposit address: {btc_addr}")
         
         # Validate address format
-        if not (btc_addr.startswith("bc1") or btc_addr.startswith("1") or btc_addr.startswith("3")):
+        if not (btc_addr.startswith("bc1") or btc_addr.startswith("bcrt1") or btc_addr.startswith("1") or btc_addr.startswith("3")):
             print(f"   ❌ Invalid BTC address format: {btc_addr}")
             return False
         
