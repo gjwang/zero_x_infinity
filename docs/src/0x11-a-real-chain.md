@@ -10,334 +10,275 @@
 
 ## 🇺🇸 English
 
-| Status | 🚧 **CONSTRUCTION** (Detailed Design Phase) |
-| :--- | :--- |
-| **Date** | 2025-12-28 |
-| **Context** | Phase 0x11 Extension: From Mock to Reality |
-| **Goal** | Integrate real Blockchain Nodes (Regtest/Testnet) and handle distributed system failures (Re-orgs, Network Partition). |
+> **📦 Code Changes**: [View Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.11-deposit-withdraw...v0.11-a-real-chain)
+
+> **Core Objective**: Transition from a simulated "Mock Chain" to a true blockchain integration using **Sentinel Pull-Model** architecture.
 
 ---
 
-## 1. Core Architecture Change: Pull vs Push
+## 1. Background: Why This Phase?
 
-The "Mock" phase (0x11) relied on a **Push Model** (API Call -> Deposit).
-Real Chain Integration (0x11-a) requires a **Pull Model** (Sentinel -> DB).
+In [Phase 0x11](./0x11-deposit-withdraw.md), we built a complete Deposit and Withdraw system using a "Mock Chain". While this was excellent for validating internal logic (idempotency, balance crediting, risk checks), it had a critical limitation:
 
-### 1.1 The Sentinel (New Service)
-A dedicated, independent service loop responsible for "watching" the blockchain.
+> **The system waited for _external API calls_ to tell it about deposits.**
 
-*   **Block Scanning**: Polls `getblockchaininfo` / `eth_blockNumber`.
-*   **Filter**: Index `user_addresses` in memory. Scan every transaction in new blocks against this filter.
-*   **State Tracking**: Updates confirmation counts for existing `CONFIRMING` deposits.
+In the real world, this is backwards. Blockchains don't call your API. **You must actively watch the blockchain for incoming transactions.**
 
-## 2. Critical Challenge: Re-org (Chain Reorganization)
+This phase, **0x11-a**, introduces the **Sentinel Service**—an independent process that continuously scans blockchain nodes and pulls deposit information into our system.
 
-In a real blockchain, the "latest" block is not final. It can be orphaned.
+### 1.1 The Fundamental Shift: Push vs. Pull
 
-### 2.1 Confirmation State Machine
-We must expand the Deposit Status flow to handle volatility.
+| Aspect | 0x11 (Mock) | 0x11-a (Real) |
+| :--- | :--- | :--- |
+| **Data Source** | API Call (`/internal/mock/deposit`) | Blockchain Node (`bitcoind`, `anvil`) |
+| **Initiation** | External System Pushes | Internal Sentinel Pulls |
+| **Trust Model** | Trust the Caller | Trust the Consensus |
+| **Finality** | Instant | Requires N Confirmations |
 
-| Status | Confirmations | Action | UI Display |
+### 1.2 Key Questions This Phase Answers
+
+1.  **How do we know a deposit happened?** By scanning every new block.
+2.  **How do we know a deposit is "real"?** By waiting for enough confirmations.
+3.  **What if the blockchain forks (re-org)?** By tracking block hashes and rolling back.
+
+---
+
+## 2. The Sentinel Service: Core Concepts
+
+The **Sentinel** is a dedicated, continuously-running service with one job: **Watch the blockchain and record deposits.**
+
+### 2.1 Why a Separate Service?
+
+The Matching Engine must be deterministic and fast. It should never block on network I/O. By isolating the blockchain-scanning logic into the Sentinel, we achieve:
+
+*   **Decoupling**: Engine knows nothing about `bitcoind`. Sentinel knows nothing about order matching.
+*   **Resilience**: If the Sentinel crashes, the Engine continues trading. When the Sentinel restarts, it picks up where it left off using the `chain_cursor`.
+*   **Scalability**: We can run multiple Sentinels for different chains without affecting Engine performance.
+
+### 2.2 The Sentinel Loop (Simplified)
+
+```text
+loop forever:
+  1. Get the current block height from the node.
+  2. Compare with "chain_cursor" (our last known position).
+  3. If new blocks exist:
+     a. Fetch the next block.
+     b. Check: Does this block's parent hash match our last scanned hash?
+        - YES: Proceed.
+        - NO:  A RE-ORG happened! Roll back and rescan.
+     c. For each transaction in the block:
+        - Does any output match a user's deposit address?
+        - If YES, record it as a "DETECTED" deposit.
+     d. Update chain_cursor atomically.
+  4. Sleep for a configured interval (e.g., 10 seconds).
+```
+
+---
+
+## 3. The Challenge: Blockchain Finality & Re-orgs
+
+Unlike a traditional database where a `COMMIT` is final, blockchains are **probabilistically final**. A block that exists now might be orphaned a minute later.
+
+### 3.1 Why Re-orgs Happen
+
+In Proof-of-Work (Bitcoin), two miners might find a valid block at roughly the same time. The network temporarily has two competing chains. Eventually, one chain becomes longer, and the shorter one is abandoned—its transactions are "orphaned."
+
+This means: **A deposit you saw in block 100 might disappear if block 100 gets replaced.**
+
+### 3.2 The Confirmation State Machine
+
+To handle this, we don't credit a deposit immediately. Instead, we track its **confirmation count**.
+
+| Status | Confirmations | User Balance Impact | UI Display |
 | :--- | :--- | :--- | :--- |
-| **DETECTED** | 0 | Log Tx. Do **NOT** credit balance. | "Confirming (0/X)" |
-| **CONFIRMING** | 1 to (X-1) | Update confirmation count. Check for Re-org (BlockHash mismatch). | "Confirming (N/X)" |
-| **FINALIZED** | >= X | **Action**: Push `OrderAction::Deposit` to Pipeline. | "Success" |
+| **DETECTED** | 0 | ❌ No credit | "Confirming (0/X)" |
+| **CONFIRMING** | 1 to (X-1) | ❌ No credit | "Confirming (N/X)" |
+| **FINALIZED** | >= X | ✅ Balance credited | "Success" |
+| **ORPHANED** | N/A (Re-org) | ❌ No impact (never credited) | "Failed - Re-org" |
 
 > [!IMPORTANT]
-> **X** represents the `REQUIRED_CONFIRMATIONS` parameter, which **MUST** be configured individually for each chain (e.g., BTC, ETH, SOL) based on their specific finality characteristics. Hardcoding these values is strictly forbidden.
+> **X (Required Confirmations)** is a per-chain configuration. Bitcoin typically uses 6. Ethereum uses 12-35. Solana might use 1 (due to different finality model). **Hardcoding is forbidden.**
 
-### 2.2 Re-org Detection Logic
-1.  Sentinel remembers `Block(Height H) = Hash A`.
-2.  Sentinel scans `Height H` again later.
-3.  If `Hash != A`, a Re-org happened.
-4.  **Action**: Rollback scan cursor, re-evaluate all affected deposits.
+### 3.3 Re-org Detection: Parent Hash Validation
 
-## 3. Supported Chains (Phase I)
+The Sentinel detects a re-org by checking if the **parent hash** of the new block matches the hash of the block we last scanned.
 
-We focus "Deep & Robust" on the two archetypes:
+```text
+Stored Cursor: { height: 100, hash: "ABC" }
+New Block 101: { parent_hash: "ABC", hash: "DEF" }
+-> Parent matches! Proceed normally.
 
-### 3.1 Bitcoin (The UTXO Archetype)
-*   **Node**: `bitcoind` (Regtest Mode).
-*   **Key Challenge**: **UTXO Management**. A deposit is not a "balance update", it's a new Unspent Output. Re-orgs can invalidate specific inputs.
+Stored Cursor: { height: 100, hash: "ABC" }
+New Block 101: { parent_hash: "XYZ", hash: "QRS" }
+-> Parent MISMATCH! Block 100 was replaced. Trigger RE-ORG RECOVERY.
+```
+
+**Recovery Action**:
+1.  Roll back `chain_cursor` to a known-good height (e.g., 99).
+2.  Mark all deposits from block 100+ as `ORPHANED` (if not yet finalized).
+3.  Rescan from the rolled-back height.
+
+---
+
+## 4. Infrastructure: Supported Chains
+
+We focus on two archetypes to ensure robust, generalized design.
+
+### 4.1 Bitcoin (UTXO Model)
+
+*   **Node**: `bitcoind` running in Regtest mode for local testing.
+*   **RPC**: `getblockcount`, `getblockhash`, `getblock` (verbosity=2 for full tx details).
+*   **Challenge**: Deposits are new Unspent Transaction Outputs (UTXOs), not balance increments. We scan `vout` arrays and match `scriptPubKey` to addresses.
 *   **Docker**: `ruimarinho/bitcoin-core:24`
 
-### 3.2 Ethereum (The Account/EVM Archetype)
-*   **Node**: `anvil` (from Foundry-rs).
-*   **Reason**: Faster than Geth, built-in snapshot/restore, `eth_setBalance` cheats for testing.
-*   **Key Challenge**: **Event Log Parsing**. ERC20 deposits are `Transfer` events in receipt logs, not native ETH transfers.
+### 4.2 Ethereum (Account Model)
+
+*   **Node**: `anvil` (Foundry's local EVM node) for fast, feature-rich local testing.
+*   **RPC**: `eth_blockNumber`, `eth_getBlockByNumber`, `eth_getLogs`.
+*   **Challenge**: ERC-20 token deposits are `Transfer` event logs, not native ETH transfers. We must filter by `topic0` (event signature) and `topic2` (recipient address).
 *   **Docker**: `ghcr.io/foundry-rs/foundry:latest`
 
-## 4. Sentinel Architecture (Detailed)
+---
 
-The `Sentinel` service runs two parallel processes (or async tasks):
+## 5. Financial Safety: The Reconciliation Equation
 
-### 4.1 `BtcSentinel`
-1.  `getblockhash(height)` -> `getblock(hash, 2)` (Verbosity 2 for full Tx details).
-2.  Iterate inputs `vin`: Detect **Double Spends** (if we were tracking mempool).
-3.  Iterate outputs `vout`: Match `scriptPubKey` against `user_addresses` (Bloom Filter or HashMap).
-4.  **Re-org Check**: Keep a rolling window of last 10 block hashes. If `previousblockhash` mismatch, trigger **Rollback**.
+A core principle of exchange engineering: **Your liabilities (user balances) must always equal your assets (wallet balances) minus system profit.**
 
-### 4.2 `EthSentinel`
-1.  `eth_getLogs` (Range: `LastScanned` to `Latest - SafeDepth`).
-    *   Topic0: `Transfer(address,address,uint256)` signature.
-    *   Topic2 (To): Matches our Hot Wallet or User Deposit Contracts.
-2.  **Native ETH**: Must also scan block transactions for `value > 0` and `to` matches.
-3.  **Re-org Check**: Check `blockHash` of confirmed logs.
+### 5.1 The "Truncation Protocol"
 
-## 5. Reconciliation & Safety (The Financial Firewall)
+Blockchains use high precision (BTC: 8 decimals, ETH: 18 decimals). To prevent floating-point errors from causing reconciliation mismatches, we enforce a **Truncation Protocol**:
 
-### 5.1 The "Truncation Protocol" (100% Match)
-To solve the "Floating Point Curse" on-chain:
+1.  **On Ingress**: `Credited_Amount = Truncate(RawAmount, SystemPrecision)`
+2.  **Residue**: Any sub-precision dust remains in the wallet as "System Dust."
 
-*   **Precision Constraint**: The system supports `N` decimals as defined in **Asset Configuration** (e.g., `ETH`=12 or 18).
-*   **Ingress Logic**:
-    *   `Deposit_Credited = Truncate(Deposit_Raw, Configured_Precision)`
-    *   *Residue*: `Deposit_Raw - Deposit_Credited` remains in the wallet as "System Dust".
-*   **Reconciliation Equation**:
-    ```text
-    Truncate(Wallet_Start + Deposits - Withdrawals - GasFees, N) 
-    == 
-    Sum(User_Balances)
-    ```
-*   **Alerting**: **Zero Tolerance**. Any deviation triggers **P0 Alert** and suspends withdrawals.
+This ensures that when we sum all user balances and compare to the wallet balance, the equation holds exactly (no floating-point drift).
 
-### 5.2 Re-org Recovery Protocol
-We must handle two types of Re-orgs:
+### 5.2 The Triangular Reconciliation
 
-#### 5.2.1 Shallow Re-org (Before Finalization)
-*   **Scenario**: Block 100 (Hash A) -> Block 100 (Hash B).
-*   **Action**: Sentinel detects hash mismatch, rolls back `chain_cursor`, and marks orphaned deposits as `ORPHANED`. No user balance impact.
+We verify solvency using three independent data sources:
 
-#### 5.2.2 Deep Re-org (The "Clawback")
-*   **Scenario**: User credited after `REQUIRED_CONFIRMATIONS`, but chain re-orgs deeper than `MAX_REORG_DEPTH` (51% attack/network split).
-*   **Action**:
-    1.  Sentinel detects deep re-org.
-    2.  Engine injects `OrderAction::ForceDeduct` (Administrative Correction).
-    3.  User balance might go negative. Account frozen until settled.
+| Source | Alias | Data Point |
+| :--- | :--- | :--- |
+| **Blockchain RPC** | Proof of Assets (PoA) | `getbalance()` or sum of UTXOs |
+| **Internal Ledger** | Proof of Liabilities (PoL) | `SUM(user.available + user.frozen)` |
+| **Transaction History** | Proof of Flow (PoF) | `SUM(deposits) - SUM(withdrawals) - SUM(fees)` |
 
-## 6. Detailed Architectural Design
+**The Equation**: `PoA == PoL + SystemProfit`
 
-### 6.1 Database Schema Extensions
+Any deviation triggers a **Circuit Breaker** that halts all withdrawals until manually investigated.
 
-We need to track the "Chain Tip" state reliably to detect gaps and re-orgs.
+---
+
+## 6. Database Schema Extensions
+
+To support the Sentinel, we extend the database with new tables and columns.
+
+### 6.1 `chain_cursor` Table
+
+Tracks how far the Sentinel has scanned for each chain. This enables resumption after restarts.
 
 ```sql
--- Track scanning progress per chain
 CREATE TABLE chain_cursor (
     chain_id VARCHAR(16) PRIMARY KEY, -- 'BTC', 'ETH'
     last_scanned_height BIGINT NOT NULL,
     last_scanned_hash VARCHAR(128) NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+```
 
--- Enhanced Deposit History
+### 6.2 `deposit_history` Enhancements
+
+We add on-chain metadata to enable re-org detection and confirmation tracking.
+
+```sql
 ALTER TABLE deposit_history 
 ADD COLUMN chain_id VARCHAR(16),
 ADD COLUMN block_height BIGINT,
 ADD COLUMN block_hash VARCHAR(128),
-ADD COLUMN tx_index INT, -- Position in block
+ADD COLUMN tx_index INT,
 ADD COLUMN confirmations INT DEFAULT 0;
 
--- Index for efficient re-org checking
 CREATE INDEX idx_deposit_reorg ON deposit_history(chain_id, block_height);
 ```
 
-### 6.2 The `ChainScanner` Trait
+---
 
-We abstract the specific RPC calls behind a unified scanner interface.
+## 7. Configuration: No Hardcoding
 
-```rust
-#[async_trait]
-pub trait ChainScanner: Send + Sync {
-    // 1. Metadata
-    fn chain_id(&self) -> &str;
-    
-    // 2. Head Check
-    async fn get_latest_block_number(&self) -> Result<u64, ChainError>;
-    
-    // 3. Block Fetching
-    async fn fetch_block(&self, height: u64) -> Result<ScannedBlock, ChainError>;
-    
-    // 4. Re-org Validation
-    // Returns true if block at `height` still has `hash`
-    async fn verify_canonical(&self, height: u64, hash: &str) -> Result<bool, ChainError>;
-}
+All chain-specific parameters must be loaded from configuration files, not hardcoded.
 
-pub struct ScannedBlock {
-    pub height: u64,
-    pub hash: String,
-    pub parent_hash: String,
-    pub deposits: Vec<DetectedDeposit>,
-}
+### 7.1 Key Parameters
 
-pub struct DetectedDeposit {
-    pub tx_hash: String,
-    pub user_id: UserId,
-    pub asset: String,
-    pub amount: Decimal,
-    pub index: u32,
-}
+| Parameter | Description | Example (BTC Mainnet) | Example (ETH) |
+| :--- | :--- | :--- | :--- |
+| `REQUIRED_CONFIRMATIONS` | Blocks needed before crediting | 6 | 12 |
+| `MAX_REORG_DEPTH` | Depth beyond which manual intervention is required | 10 | 35 |
+| `MIN_DEPOSIT_THRESHOLD` | Ignore deposits below this value (dust protection) | 0.0001 BTC | 0.001 ETH |
+| `MAX_BLOCK_LAG_SECONDS` | Alert if node is stale | 3600 (1 hour) | 600 (10 min) |
+
+### 7.2 Config File Structure
+
+```yaml
+# config/chains/btc_regtest.yaml
+chain_id: BTC
+rpc_url: http://127.0.0.1:18443
+rpc_user: admin
+rpc_password: admin
+required_confirmations: 1  # Regtest: fast testing
+max_reorg_depth: 10
+min_deposit_threshold: 0.00001
 ```
-
-### 6.3 The Sentinel Loop (Architecture Policy)
-
-The Sentinel MUST follow the **Atomic Check-and-Update** pattern to prevent double-processing:
-
-1.  **Cursor Check**: Fetch `(height, hash)` from `chain_cursor`.
-2.  **Parent Validation**: If `new_block.parent_hash != cursor.hash` -> **TRIGGER RE-ORG PROTOCOL**.
-3.  **Scalable Scanning**:
-    *   Perform exact lookup in `user_addresses` HashMap for detected block outputs. (Bloom Filter optimization moved to future work).
-4.  **Deterministic Injection**:
-    *   `FINALIZED` deposits are converted to `OrderAction::Deposit`.
-    *   A unique `ref_id` (e.g., `hash_to_u64(tx_hash)`) is used for Core-level idempotency.
-5.  **Atomic Commit**: `INSERT deposit_history` + `UPDATE chain_cursor` in a single SQL transaction.
-
-### 6.4 The Triangular Reconciliation Strategy
-
-We verify system solvency daily through three independent data sources:
-
-| Source | Component | Data Point |
-| :--- | :--- | :--- |
-| **Blockchain (PoA)** | Proof of Assets | `RPC.getbalance()` |
-| **Ledger (PoL)** | Proof of Liabilities | `SUM(accounts.balance)` |
-| **History (PoF)** | Proof of Flow | `SUM(deposits) - SUM(withdrawals) - Fees` |
-
-**The Equation of Truth**:  
-`PoA == PoL + System_Profit`
-
-Any breach of this equation (Delta > 0) will trigger a **Circuit Breaker** (suspending all withdrawals).
-
-## 7. Re-org Recovery (Shallow)
-
-Sentinel handles shallow re-orgs by rolling back the `chain_cursor` to the last known canonical height.
-
-## 8. Future Work & Recommendations (Out of Scope for 0x11-a)
-
-### 8.1 Advanced Performance: Bloom Filters
-Load million-user addresses into a Bloom Filter for O(1) transaction pre-checking.
-
-### 8.2 Deep Re-org Recovery: Automated Clawback
-While shallow re-orgs are handled by cursor rollback, a **Deep Re-org (Depth > 10)** currently requires manual audit. Future implementation will include:
-1.  **Freeze**: Automatic `SystemControl::FreezeWithdrawals`.
-2.  **Clawback**: Deterministic `ForceDeduct` for invalidated deposits.
-
-### 6.4 Confirmation Monitor Logic
-
-Separate from the scanner (or running sequentially), we must advance the state of existing deposits.
-
-1.  Query `SELECT * FROM deposit_history WHERE status = 'CONFIRMING'`.
-2.  For each deposit: `current_confs = latest_height - deposit.block_height + 1`.
-3.  **Threshold Check**:
-    *   Compare `current_confs` against the chain-specific `REQUIRED_CONFIRMATIONS` configuration.
-    *   If `current_confs >= config.required_confirmations` -> Push `OrderAction::Deposit`.
-4.  **Terminal State**: Update DB status to `SUCCESS`.
-
-## 7. Pipeline Integration Specifics
-
-The `Sentinel` converts `DetectedDeposit` into the engine's native language using the **Ring Buffer**:
-
-```rust
-// In src/sentinel/worker.rs
-if deposit.ready_to_finalize() {
-    let internal_tx = BalanceUpdate {
-        user_id: deposit.user_id,
-        asset: deposit.asset,
-        amount: deposit.amount,
-        // Unique ID ensures idempotency in Core
-        trade_id: hash_to_u64(&deposit.tx_hash), 
-    };
-    
-    logger.info("Sent deposit {} to matching engine", deposit.tx_hash);
-}
-```
-
-## 8. Operational Roadmap (Future Consideration)
-
-### 8.1 T+1 Reconciliation Bot (The Financial Audit)
-
-We implement a **Triangular Reconciliation Strategy** to ensure the exchange is solvent and leakage-free.
-
-#### 8.1.1 The Equation of Truth
-We must solve this equation daily:
-`Delta(Liabilities) == Delta(Assets) + Fees`
-
-To break it down:
-```text
-(Sum(User_End) - Sum(User_Start))  
-== 
-(Sum(Wallet_End) - Sum(Wallet_Start)) + (Sum(Withdrawals) - Sum(Deposits))
-```
-
-#### 8.1.2 Three-Way Match Components
-1.  **Proof of Liabilities (PoL)**:
-    *   `SELECT SUM(available + frozen) FROM accounts WHERE asset = 'BTC'`
-2.  **Proof of Assets (PoA)**:
-    *   `RPC.getbalance()` (or `listunspent` sum)
-3.  **Proof of Flow (PoF)**:
-    *   `SELECT SUM(amount) FROM deposit_history WHERE status='SUCCESS' AND time > T-1`
-    *   `SELECT SUM(amount + fee) FROM withdraw_history WHERE status='SUCCESS' AND time > T-1`
-
-## 9. Configuration & Tunables (Operational Safety)
-
-### 9.1 The "Dust Wall" (Anti-Spam)
-*   **Parameter**: `MIN_DEPOSIT_THRESHOLD` (e.g., set per-asset).
-*   **Purpose**: Prevents "Dust Attacks" where consolidating inputs costs more than the deposit value.
-
-### 9.2 The "Dead Man Switch" (Node Health)
-*   **Parameter**: `MAX_BLOCK_LAG_SECONDS` (e.g., set based on expected block time).
-*   **Purpose**: Prevents Sentinel from scanning a stale local chain while the real world has moved on.
-
-## 10. Wallet & Address Management (HD Architecture)
-
-To ensure security, we strictly follow the **Watch-Only Wallet** pattern using BIP32/BIP44/BIP84 standards.
-
-### 10.1 The Master Key (Cold Storage)
-*   **Export**: Only the **Extended Public Key (`xpub`/`zpub`)** is exported to the production server.
-*   **Security Guarantee**: Even if the entire DB and Sentinel are compromised, **attackers cannot steal funds**.
-
-### 10.2 Address Derivation (Hot Allocation)
-*   **Path Standard**:
-    *   BTC (Segwit): `m/84'/0'/0'/0/{index}` (BIP84)
-    *   ETH: `m/44'/60'/0'/0/{index}` (BIP44)
-*   **Allocation Logic**:
-    1.  User requests `GET /deposit/address`.
-    2.  DB: Atomic Increment `address_index` for the Chain.
-    3.  Service: Derive address from `xpub` at new `index`.
-    4.  DB: Store mapping `user_id <-> address <-> index`.
-
-### 10.3 Wallet Lifecycle Diagram
-
-```mermaid
-sequenceDiagram
-    participant Admin as Admin (Cold)
-    participant Srv as Server (Hot)
-    participant DB as Database
-    participant User as User
-    participant Sen as Sentinel
-
-    Note over Admin, Srv: 1. Setup Phase
-    Admin->>Admin: Generate Mnemonic (Offline)
-    Admin->>Srv: Deploy XPUB (Prod) or Mnemonic (Stage)
-    
-    Note over User, DB: 2. Allocation Phase
-    User->>Srv: GET /deposit/address
-    Srv->>DB: Increment Index (Atomic)
-    Srv->>Srv: Derive Address (BIP84/44)
-    Srv->>DB: Insert {User, Asset, Addr, Index}
-    Srv-->>User: Return Address
-    
-    Note over Sen, DB: 3. Sync Phase
-    loop Every 10s
-        Sen->>DB: Load ALL Addresses
-        Sen->>Sen: Update Bloom Filter
-        Sen->>Sen: Scan Block vs Filter
-    end
-```
-
-### 10.4 The "Gap Limit" Solution
-*   **Solution**: **Full Index Scanning**. Sentinel loads **ALL** active allocated addresses from the `user_addresses` table into a **Bloom Filter**.
 
 ---
+
+## 8. Security: HD Wallet Architecture
+
+To protect user funds, we use a **Watch-Only** wallet pattern.
+
+### 8.1 Key Storage
+
+*   **Cold Storage (Offline)**: The master private key (mnemonic) is NEVER on any server.
+*   **Hot Server**: Only the **Extended Public Key (XPUB)** is deployed. This allows address generation but NOT spending.
+
+### 8.2 Address Derivation
+
+We follow BIP32/BIP44/BIP84 standards:
+
+*   **BTC (SegWit)**: `m/84'/0'/0'/0/{index}` (BIP84)
+*   **ETH**: `m/44'/60'/0'/0/{index}` (BIP44)
+
+When a user requests a deposit address, the server:
+1.  Atomically increments the `address_index` counter for that chain.
+2.  Derives the address from the XPUB at that index.
+3.  Stores the `{user_id, asset, address, index}` mapping.
+
+**Security Guarantee**: Even if the entire database and server are compromised, attackers cannot steal funds without the offline private key.
+
+---
+
+## 9. Future Work (Out of Scope for 0x11-a)
+
+The following are recognized as important but are deferred to later phases:
+
+1.  **Bloom Filters**: For million-user address matching. Current implementation uses HashMap (sufficient for <10k addresses).
+2.  **Automated Clawback**: For deep re-orgs that invalidate already-credited deposits. Current implementation triggers a manual audit.
+3.  **Multi-Source Validation**: Checking block hashes against multiple nodes to detect compromised RPCs.
+
+---
+
+## Summary
+
+Phase 0x11-a transitions the Funding System from a simulated environment to production-ready blockchain integration.
+
+**Key Achievements**:
+1.  **Sentinel Service**: An independent, pull-based blockchain scanner.
+2.  **Confirmation State Machine**: Safe handling of blockchain's probabilistic finality.
+3.  **Re-org Recovery**: Automatic detection and rollback for shallow forks.
+4.  **Configuration-Driven**: All thresholds are per-chain, no hardcoding.
+5.  **Financial Safety**: Truncation Protocol + Triangular Reconciliation.
+
+**Next Step**:
+> **Phase 0x11-b**: Address DEF-002 (Sentinel SegWit parsing) and prepare for Mainnet deployment.
 
 <br>
 <div align="right"><a href="#-english">↑ Back to Top</a></div>
@@ -349,85 +290,132 @@ sequenceDiagram
 
 ## 🇨🇳 中文
 
-| 状态 | 🚧 **设计阶段** |
-| :--- | :--- |
-| **日期** | 2025-12-28 |
-| **上下文** | Phase 0x11 扩展: 从模拟到现实 |
-| **目标** | 集成真实区块链节点 (Regtest/Testnet) 并处理分布式系统故障 (重组, 网络分区)。 |
+> **📦 代码变更**: [查看 Diff](https://github.com/gjwang/zero_x_infinity/compare/v0.11-deposit-withdraw...v0.11-a-real-chain)
+
+> **核心目标**: 从模拟"Mock Chain"过渡到使用**哨兵拉取模型 (Sentinel Pull-Model)** 架构的真实区块链集成。
 
 ---
 
-## 1. 核心架构变更: Pull vs Push
+## 1. 背景：为什么需要这个阶段？
 
-Mock 阶段 (0x11) 依赖 **Push 模型** (API 调用 -> 充值)。
-真实链集成 (0x11-a) 需要 **Pull 模型** (哨兵 -> 数据库)。
+在 [Phase 0x11](./0x11-deposit-withdraw.md) 中，我们使用"Mock Chain"构建了完整的充值和提现系统。虽然这对于验证内部逻辑（幂等性、余额记账、风控检查）非常有效，但它有一个关键的局限性：
 
-### 1.1 哨兵服务 (Sentinel)
-一个独立的、死循环的服务，负责 "注视" 区块链。
+> **系统依赖于_外部 API 调用_来告知充值信息。**
 
-*   **区块扫描**: 轮询 `getblockchaininfo` / `eth_blockNumber`。
-*   **过滤器**: 内存中索引所有 `user_addresses`。
-*   **状态追踪**: 更新 `CONFIRMING` 状态存款的确认数。
+在现实世界中，这是本末倒置的。区块链不会主动调用你的 API。**你必须主动监控区块链以发现入账的交易。**
 
-## 2. 支持链 (第一阶段)
+本阶段 **0x11-a** 引入了 **哨兵服务 (Sentinel Service)**——一个独立的进程，持续扫描区块链节点并将充值信息拉取到我们的系统中。
 
-### 2.1 Bitcoin (UTXO 原型)
-*   **节点**: `bitcoind` (Regtest 模式)。
-*   **挑战**: **UTXO 管理**。存款是新的 UTXO，而不是余额数字更新。
-*   **Docker**: `ruimarinho/bitcoin-core:24`
+### 1.1 核心转变：Push vs. Pull
 
-### 2.2 Ethereum (账户/EVM 原型)
-*   **节点**: `anvil` (Foundry-rs)。
-*   **挑战**: **Event Log 解析**。ERC20 存款是 Log 中的 `Transfer` 事件。
-*   **Docker**: `ghcr.io/foundry-rs/foundry:latest`
+| 方面 | 0x11 (模拟) | 0x11-a (真实) |
+| :--- | :--- | :--- |
+| **数据来源** | API 调用 (`/internal/mock/deposit`) | 区块链节点 (`bitcoind`, `anvil`) |
+| **触发方式** | 外部系统推送 | 内部哨兵拉取 |
+| **信任模型** | 信任调用者 | 信任共识 |
+| **终局性** | 即时 | 需要 N 个确认 |
 
 ---
 
-## 3. 对账与安全 (金融防火墙)
+## 2. 哨兵服务：核心概念
 
-### 3.1 "截断协议" (100% 匹配)
-解决链上浮点数问题：
+**哨兵 (Sentinel)** 是一个专门的、持续运行的服务，只有一个任务：**监控区块链并记录充值。**
 
-*   **精度约束**: 系统仅支持配置定义的 `N` 位小数 (如 ETH=12)。
-*   **入金逻辑**: `入账金额 = Truncate(链上原始金额, N)`。
-*   **对账公式**:
-    ```text
-    Truncate(钱包初始 + 充值 - 提现 - Gas费, N) 
-    == 
-    Sum(用户余额)
-    ```
-*   **报警**: **零容忍**。任何偏差触发 P0 报警并暂停提现。
+### 2.1 为什么是独立服务？
 
-### 3.2 重组恢复协议 (Re-org Recovery)
+撮合引擎必须是确定性的且快速的。它不应该因网络 I/O 而阻塞。通过将区块链扫描逻辑隔离到哨兵中，我们实现了：
 
-#### 3.2.1 浅层重组 (Finalization 之前)
-*   **场景**: 区块 100 (Hash A) 变为 (Hash B)。
-*   **动作**: 哨兵发现 Hash 不匹配，回滚 `chain_cursor`，标记孤块存款为 `ORPHANED`。不影响用户余额。
-
-#### 3.2.2 深层重组 ("回撤" Clawback)
-*   **场景**: 确认数达到 `REQUIRED_CONFIRMATIONS` 后入账，但链发生超过 `MAX_REORG_DEPTH` 的深层重组。
-*   **动作**:
-    1.  哨兵检测到深层重组。
-    2.  引擎注入 `OrderAction::ForceDeduct` (行政冲正)。
-    3.  用户余额可能变为负数。账户冻结直至平账。
+*   **解耦**: 引擎不知道 `bitcoind`。哨兵不知道订单撮合。
+*   **弹性**: 如果哨兵崩溃，引擎继续交易。当哨兵重启时，它使用 `chain_cursor` 从上次的位置继续。
+*   **可扩展性**: 我们可以为不同的链运行多个哨兵，而不影响引擎性能。
 
 ---
 
-## 4. 钱包架构 (温/冷)
+## 3. 挑战：区块链终局性与重组
 
-### 4.1 地址派生
-*   **标准**: BIP32/BIP44/BIP84。
-*   **模式**: **Watch-Only** (只读)。
-    *   服务器仅持有 **扩展公钥 (`xpub`)**。
-    *   私钥保持离线 (冷存储)。
+与传统数据库中 `COMMIT` 是最终的不同，区块链是**概率性最终的**。现在存在的区块可能一分钟后就被孤立了。
 
-### 4.2 "Gap Limit" 解决方案
-*   **问题**: HD 钱包通常在遇到 20 个未使用地址后停止扫描。
-*   **方案**: **全索引扫描**。
-    *   哨兵将 **所有** 已分配地址加载到 **Bloom Filter**。
-    *   扫描每个区块的所有输出，忽略 Gap Limit。
+### 3.1 确认状态机
+
+为了处理这个问题，我们不会立即记账充值。相反，我们跟踪其**确认数**。
+
+| 状态 | 确认数 | 用户余额影响 | UI 显示 |
+| :--- | :--- | :--- | :--- |
+| **DETECTED** | 0 | ❌ 不记账 | "确认中 (0/X)" |
+| **CONFIRMING** | 1 到 (X-1) | ❌ 不记账 | "确认中 (N/X)" |
+| **FINALIZED** | >= X | ✅ 余额已记账 | "成功" |
+| **ORPHANED** | N/A (重组) | ❌ 无影响 (从未记账) | "失败 - 重组" |
+
+> [!IMPORTANT]
+> **X (所需确认数)** 是按链配置的。比特币通常使用 6，以太坊使用 12-35。**禁止硬编码。**
+
+### 3.2 重组检测：父哈希验证
+
+哨兵通过检查新区块的**父哈希**是否与我们上次扫描的区块的哈希匹配来检测重组。
+
+**恢复动作**:
+1.  将 `chain_cursor` 回滚到已知良好的高度。
+2.  将受影响区块的所有充值标记为 `ORPHANED`（如果尚未最终化）。
+3.  从回滚的高度重新扫描。
 
 ---
+
+## 4. 金融安全：对账方程
+
+交易所工程的核心原则：**你的负债（用户余额）必须始终等于你的资产（钱包余额）减去系统利润。**
+
+### 4.1 三方对账
+
+我们使用三个独立的数据源验证偿付能力：
+
+| 来源 | 别名 | 数据点 |
+| :--- | :--- | :--- |
+| **区块链 RPC** | 资产证明 (PoA) | `getbalance()` 或 UTXO 之和 |
+| **内部账本** | 负债证明 (PoL) | `SUM(user.available + user.frozen)` |
+| **交易历史** | 流水证明 (PoF) | `SUM(充值) - SUM(提现) - SUM(手续费)` |
+
+**方程**: `PoA == PoL + 系统利润`
+
+任何偏差都会触发**熔断器**，暂停所有提现直到人工调查。
+
+---
+
+## 5. 配置：禁止硬编码
+
+所有链特定的参数必须从配置文件加载，不能硬编码。
+
+| 参数 | 描述 | 示例 (BTC 主网) | 示例 (ETH) |
+| :--- | :--- | :--- | :--- |
+| `REQUIRED_CONFIRMATIONS` | 记账前所需区块数 | 6 | 12 |
+| `MAX_REORG_DEPTH` | 超过此深度需人工介入 | 10 | 35 |
+| `MIN_DEPOSIT_THRESHOLD` | 忽略低于此值的充值（防尘攻击） | 0.0001 BTC | 0.001 ETH |
+
+---
+
+## 6. 安全：HD 钱包架构
+
+为保护用户资金，我们使用**只读钱包 (Watch-Only)** 模式。
+
+*   **冷存储 (离线)**: 主私钥（助记词）**绝不**存储在任何服务器上。
+*   **热服务器**: 仅部署**扩展公钥 (XPUB)**。这允许生成地址但**无法**花费资金。
+
+**安全保证**: 即使整个数据库和服务器都被攻破，攻击者在没有离线私钥的情况下也无法盗取资金。
+
+---
+
+## 总结
+
+Phase 0x11-a 将资金系统从模拟环境过渡到生产就绪的区块链集成。
+
+**关键成就**:
+1.  **哨兵服务**: 独立的、基于拉取的区块链扫描器。
+2.  **确认状态机**: 安全处理区块链的概率性终局性。
+3.  **重组恢复**: 自动检测和回滚浅层分叉。
+4.  **配置驱动**: 所有阈值按链配置，无硬编码。
+5.  **金融安全**: 截断协议 + 三方对账。
+
+**下一步**:
+> **Phase 0x11-b**: 解决 DEF-002（哨兵 SegWit 解析）并准备主网部署。
 
 <br>
 <div align="right"><a href="#-chinese">↑ 回到顶部</a></div>
