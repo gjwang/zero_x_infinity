@@ -39,10 +39,12 @@ We must expand the Deposit Status flow to handle volatility.
 
 | Status | Confirmations | Action | UI Display |
 | :--- | :--- | :--- | :--- |
-| **DETECTED** | 0 | Log Tx. Do **NOT** credit balance. | "Confirming (0/6)" |
-| **CONFIRMING** | 1-5 | Update confirmation count. Check for Re-org (BlockHash mismatch). | "Confirming (N/6)" |
-| **FINALIZED** | >= 6 | **Action**: Push `OrderAction::Deposit` to Pipeline. | "Success" |
-| **ORPHANED** | N/A | Tx disappeared from chain. Mark as `FAILED`. | "Failed" |
+| **DETECTED** | 0 | Log Tx. Do **NOT** credit balance. | "Confirming (0/X)" |
+| **CONFIRMING** | 1 to (X-1) | Update confirmation count. Check for Re-org (BlockHash mismatch). | "Confirming (N/X)" |
+| **FINALIZED** | >= X | **Action**: Push `OrderAction::Deposit` to Pipeline. | "Success" |
+
+> [!IMPORTANT]
+> **X** represents the `REQUIRED_CONFIRMATIONS` parameter, which **MUST** be configured individually for each chain (e.g., BTC, ETH, SOL) based on their specific finality characteristics. Hardcoding these values is strictly forbidden.
 
 ### 2.2 Re-org Detection Logic
 1.  Sentinel remembers `Block(Height H) = Hash A`.
@@ -107,7 +109,7 @@ We must handle two types of Re-orgs:
 *   **Action**: Sentinel detects hash mismatch, rolls back `chain_cursor`, and marks orphaned deposits as `ORPHANED`. No user balance impact.
 
 #### 5.2.2 Deep Re-org (The "Clawback")
-*   **Scenario**: User credited after 6 confs, but chain re-orgs 10 blocks deep (51% attack/network split).
+*   **Scenario**: User credited after `REQUIRED_CONFIRMATIONS`, but chain re-orgs deeper than `MAX_REORG_DEPTH` (51% attack/network split).
 *   **Action**:
     1.  Sentinel detects deep re-org.
     2.  Engine injects `OrderAction::ForceDeduct` (Administrative Correction).
@@ -177,45 +179,47 @@ pub struct DetectedDeposit {
 }
 ```
 
-### 6.3 The Sentinel Loop (Pseudocode)
+### 6.3 The Sentinel Loop (Architecture Policy)
 
-```rust
-loop {
-    let latest = scanner.get_latest_block_number().await?;
-    let cursor = db.get_cursor(scanner.chain_id()).await?;
-    
-    // Case 1: Gap Detected (Fast Sync)
-    if latest > cursor.height {
-        let next_height = cursor.height + 1;
-        let block = scanner.fetch_block(next_height).await?;
-        
-        // RE-ORG CHECK: Does new block's parent match our cursor?
-        if block.parent_hash != cursor.hash {
-            warn!("Re-org detected at {}", cursor.height);
-            handle_reorg(cursor.height - 1).await?;
-            continue;
-        }
-        
-        // Batch Process Deposits (Performance)
-        // Avoid lock contention by inserting in chunks of 100
-        for chunk in block.deposits.chunks(100) {
-            db.transaction(|tx| {
-                for deposit in chunk {
-                    tx.insert_deposit(deposit, status="CONFIRMING");
-                }
-            });
-        }
-        
-        // Atomic Cursor Update
-        db.update_cursor(block.height, block.hash).await?;
-        
-        // Monitor Confirmations
-        update_confirmations(scanner).await?;
-    }
-    
-    sleep(Duration::from_secs(10));
-}
-```
+The Sentinel MUST follow the **Atomic Check-and-Update** pattern to prevent double-processing:
+
+1.  **Cursor Check**: Fetch `(height, hash)` from `chain_cursor`.
+2.  **Parent Validation**: If `new_block.parent_hash != cursor.hash` -> **TRIGGER RE-ORG PROTOCOL**.
+3.  **Scalable Scanning**:
+    *   Perform exact lookup in `user_addresses` HashMap for detected block outputs. (Bloom Filter optimization moved to future work).
+4.  **Deterministic Injection**:
+    *   `FINALIZED` deposits are converted to `OrderAction::Deposit`.
+    *   A unique `ref_id` (e.g., `hash_to_u64(tx_hash)`) is used for Core-level idempotency.
+5.  **Atomic Commit**: `INSERT deposit_history` + `UPDATE chain_cursor` in a single SQL transaction.
+
+### 6.4 The Triangular Reconciliation Strategy
+
+We verify system solvency daily through three independent data sources:
+
+| Source | Component | Data Point |
+| :--- | :--- | :--- |
+| **Blockchain (PoA)** | Proof of Assets | `RPC.getbalance()` |
+| **Ledger (PoL)** | Proof of Liabilities | `SUM(accounts.balance)` |
+| **History (PoF)** | Proof of Flow | `SUM(deposits) - SUM(withdrawals) - Fees` |
+
+**The Equation of Truth**:  
+`PoA == PoL + System_Profit`
+
+Any breach of this equation (Delta > 0) will trigger a **Circuit Breaker** (suspending all withdrawals).
+
+## 7. Re-org Recovery (Shallow)
+
+Sentinel handles shallow re-orgs by rolling back the `chain_cursor` to the last known canonical height.
+
+## 8. Future Work & Recommendations (Out of Scope for 0x11-a)
+
+### 8.1 Advanced Performance: Bloom Filters
+Load million-user addresses into a Bloom Filter for O(1) transaction pre-checking.
+
+### 8.2 Deep Re-org Recovery: Automated Clawback
+While shallow re-orgs are handled by cursor rollback, a **Deep Re-org (Depth > 10)** currently requires manual audit. Future implementation will include:
+1.  **Freeze**: Automatic `SystemControl::FreezeWithdrawals`.
+2.  **Clawback**: Deterministic `ForceDeduct` for invalidated deposits.
 
 ### 6.4 Confirmation Monitor Logic
 
@@ -224,8 +228,8 @@ Separate from the scanner (or running sequentially), we must advance the state o
 1.  Query `SELECT * FROM deposit_history WHERE status = 'CONFIRMING'`.
 2.  For each deposit: `current_confs = latest_height - deposit.block_height + 1`.
 3.  **Threshold Check**:
-    *   **BTC**: If `confs >= 1` (Regtest) or `6` (Mainnet) -> Push `OrderAction::Deposit`.
-    *   **ETH**: If `confs >= 12` -> Push `OrderAction::Deposit`.
+    *   Compare `current_confs` against the chain-specific `REQUIRED_CONFIRMATIONS` configuration.
+    *   If `current_confs >= config.required_confirmations` -> Push `OrderAction::Deposit`.
 4.  **Terminal State**: Update DB status to `SUCCESS`.
 
 ## 7. Pipeline Integration Specifics
@@ -276,11 +280,11 @@ To break it down:
 ## 9. Configuration & Tunables (Operational Safety)
 
 ### 9.1 The "Dust Wall" (Anti-Spam)
-*   **Parameter**: `MIN_DEPOSIT_THRESHOLD` (e.g., `0.001 BTC`).
+*   **Parameter**: `MIN_DEPOSIT_THRESHOLD` (e.g., set per-asset).
 *   **Purpose**: Prevents "Dust Attacks" where consolidating inputs costs more than the deposit value.
 
 ### 9.2 The "Dead Man Switch" (Node Health)
-*   **Parameter**: `MAX_BLOCK_LAG_SECONDS` (e.g., `3600`).
+*   **Parameter**: `MAX_BLOCK_LAG_SECONDS` (e.g., set based on expected block time).
 *   **Purpose**: Prevents Sentinel from scanning a stale local chain while the real world has moved on.
 
 ## 10. Wallet & Address Management (HD Architecture)
@@ -401,7 +405,7 @@ Mock 阶段 (0x11) 依赖 **Push 模型** (API 调用 -> 充值)。
 *   **动作**: 哨兵发现 Hash 不匹配，回滚 `chain_cursor`，标记孤块存款为 `ORPHANED`。不影响用户余额。
 
 #### 3.2.2 深层重组 ("回撤" Clawback)
-*   **场景**: 6 确认后入账，但链发生 10个块的深层重组。
+*   **场景**: 确认数达到 `REQUIRED_CONFIRMATIONS` 后入账，但链发生超过 `MAX_REORG_DEPTH` 的深层重组。
 *   **动作**:
     1.  哨兵检测到深层重组。
     2.  引擎注入 `OrderAction::ForceDeduct` (行政冲正)。
