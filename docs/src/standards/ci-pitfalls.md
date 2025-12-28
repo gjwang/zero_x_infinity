@@ -320,4 +320,28 @@ if err.to_string().contains("duplicate key") {
 
 ---
 
+---
+
+## 11. 测试数据与环境对齐 (Test Data Parity)
+
+### 11.1 手动 SQL 注入 vs API 初始化
+
+**问题描述**
+
+本地开发通常依赖 `run_poc.sh` (基于 API 的全流程验证)，而 CI 可能会运行更底层的 `test_e2e.sh` (基于 SQL 注入的快速验证)。
+如果两者逻辑不一致，会导致本地通过但 CI 失败。
+
+**典型案例**：
+*   API 充值逻辑：自动处理单位缩放 (Scaling)。
+*   手动 SQL 注入：**错误地**假设数据库存储 Scaled Integer (10^6)，手动插入了 `1000000`。
+*   结果：数据库里实际上存储了 1,000,000 USDT (而非 1 USDT)，导致后续余额检查逻辑完全失效。
+
+**解决方案**：
+
+1.  **首选 API 初始化**：尽可能在测试脚本中使用 `POST /api/v1/private/deposit` 等 API 进行数据准备，保证业务逻辑一致性。
+2.  **二次确认 Schema**：如果必须使用 SQL 注入，**务必**查阅 `migrations/` 或 `schema.rs` 确认字段类型 (Decimal vs BigInt)。
+3.  **共享 Helper**：使用统一的 Python/Bash 库处理数据注入，避免每个脚本重复造轮子且逻辑不一。
+
+---
+
 *最后更新：2025-12-28*
