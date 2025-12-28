@@ -158,7 +158,7 @@ services:
 - **强制重置模式**：使用 `scripts/db/init.sh --reset`。
     - **PostgreSQL**：会执行 `DROP SCHEMA public CASCADE`，彻底清空所有表和数据，然后重新运行 migration。
     - **TDengine**：会执行 `DROP DATABASE IF EXISTS`，确保时序数据库也是全新的。
-- **建议流程**：怀疑数据状态不一致时，先运行 `./scripts/db/init.sh --reset`。集成测试脚本在启动前会自动执行基础初始化，但不会自动 `reset`（以保护本地可能想保留的数据）。
+- **建议流程**：怀疑数据状态不一致时，先运行 `./scripts/db/init.sh --reset`。集成测试脚本在启动前会动执行基础初始化，但不会自动 `reset`（以保护本地可能想保留的数据）。
 
 ### 3. 端口占用与僵尸进程
 
@@ -229,4 +229,3 @@ services:
 
 4.  **本地复现技巧**：
     不要只运行 `./scripts/test.sh`，尝试模拟 CI 的“裸环境”故障：使用系统 Python 直接运行脚本（如 `/usr/bin/python3 scripts/test.py`），观察是否报错。这能帮你快速定位是否依赖了隐式的 venv 环境。
-
