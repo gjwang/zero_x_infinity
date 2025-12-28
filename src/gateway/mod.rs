@@ -316,8 +316,16 @@ pub async fn run_server(
                     get(crate::funding::handlers::get_deposit_address),
                 )
                 .route(
+                    "/deposit/history",
+                    get(crate::funding::handlers::get_deposit_history),
+                )
+                .route(
                     "/withdraw/apply",
                     post(crate::funding::handlers::apply_withdraw),
+                )
+                .route(
+                    "/withdraw/history",
+                    get(crate::funding::handlers::get_withdraw_history),
                 )
                 .layer(from_fn_with_state(
                     state.clone(),

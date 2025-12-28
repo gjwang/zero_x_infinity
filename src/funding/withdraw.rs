@@ -21,6 +21,20 @@ pub enum WithdrawError {
     Chain(String),
 }
 
+#[derive(Debug, serde::Serialize)]
+pub struct WithdrawRecord {
+    pub request_id: String,
+    pub user_id: i64,
+    pub asset: String,
+    pub amount: Decimal,
+    pub fee: Decimal,
+    pub to_address: String,
+    pub status: String,
+    pub tx_hash: Option<String>,
+    pub created_at: Option<chrono::NaiveDateTime>,
+    pub updated_at: Option<chrono::NaiveDateTime>,
+}
+
 pub struct WithdrawService {
     db: Arc<Database>,
     // For MVP, we use dynamic dispatch or generic for ChainClient.
@@ -165,5 +179,23 @@ impl WithdrawService {
                 )))
             }
         }
+    }
+
+    pub async fn get_history(&self, user_id: i64) -> Result<Vec<WithdrawRecord>, WithdrawError> {
+        let records = sqlx::query_as!(
+            WithdrawRecord,
+            r#"
+            SELECT request_id, user_id, asset, amount, fee, to_address, status, tx_hash, created_at, updated_at
+            FROM withdraw_history
+            WHERE user_id = $1
+            ORDER BY created_at DESC
+            LIMIT 50
+            "#,
+            user_id
+        )
+        .fetch_all(self.db.pool())
+        .await?;
+
+        Ok(records)
     }
 }

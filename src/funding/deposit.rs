@@ -16,6 +16,17 @@ pub enum DepositError {
     InvalidAmount,
 }
 
+#[derive(Debug, serde::Serialize)]
+pub struct DepositRecord {
+    pub tx_hash: String,
+    pub user_id: i64,
+    pub asset: String,
+    pub amount: Decimal,
+    pub status: String,
+    pub created_at: Option<chrono::NaiveDateTime>,
+    pub block_height: Option<i64>,
+}
+
 pub struct DepositService {
     db: Arc<Database>,
     // In strict mode, we might verify via ChainClient, but for now we trust the "Mock Scanner" input
@@ -147,5 +158,23 @@ impl DepositService {
         .address;
 
         Ok(final_addr)
+    }
+
+    pub async fn get_history(&self, user_id: i64) -> Result<Vec<DepositRecord>, DepositError> {
+        let records = sqlx::query_as!(
+            DepositRecord,
+            r#"
+            SELECT tx_hash, user_id, asset, amount, status, created_at, block_height
+            FROM deposit_history
+            WHERE user_id = $1
+            ORDER BY created_at DESC
+            LIMIT 50
+            "#,
+            user_id
+        )
+        .fetch_all(self.db.pool())
+        .await?;
+
+        Ok(records)
     }
 }

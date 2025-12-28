@@ -60,8 +60,23 @@ pub struct WithdrawResponse {
 /// POST /internal/mock/deposit
 pub async fn mock_deposit(
     State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
     Json(req): Json<MockDepositRequest>,
 ) -> Result<Json<ApiResponse<String>>, (StatusCode, Json<ApiResponse<()>>)> {
+    // QA-03: Internal Auth Check
+    let secret = headers
+        .get("X-Internal-Secret")
+        .and_then(|v| v.to_str().ok());
+    if secret != Some("dev-secret") {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<()>::error(
+                error_codes::AUTH_FAILED,
+                "Access Denied: Missing or Invalid X-Internal-Secret",
+            )),
+        ));
+    }
+
     // Check if PG DB is available
     let db = state.pg_db.as_ref().ok_or((
         StatusCode::SERVICE_UNAVAILABLE,
@@ -212,7 +227,11 @@ pub async fn apply_withdraw(
         Err(e) => {
             Err((
                 // Determine status code based on error
-                if e.to_string().contains("Insufficient") {
+                // Determine status code based on error
+                if e.to_string().contains("Insufficient")
+                    || e.to_string().contains("Invalid address")
+                    || e.to_string().contains("Invalid amount")
+                {
                     StatusCode::BAD_REQUEST
                 } else {
                     StatusCode::INTERNAL_SERVER_ERROR
@@ -223,5 +242,69 @@ pub async fn apply_withdraw(
                 )),
             ))
         }
+    }
+}
+
+/// Get Deposit History
+/// GET /api/v1/capital/deposit/history
+pub async fn get_deposit_history(
+    State(state): State<Arc<AppState>>,
+    axum::Extension(claims): axum::Extension<crate::user_auth::service::Claims>,
+) -> Result<
+    Json<ApiResponse<Vec<super::deposit::DepositRecord>>>,
+    (StatusCode, Json<ApiResponse<()>>),
+> {
+    let db = state.pg_db.as_ref().ok_or((
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(ApiResponse::<()>::error(
+            error_codes::INTERNAL_ERROR,
+            "DB unavailable",
+        )),
+    ))?;
+
+    let user_id = claims.sub.parse::<i64>().unwrap_or_default();
+    let service = DepositService::new(db.clone());
+
+    match service.get_history(user_id).await {
+        Ok(records) => Ok(Json(ApiResponse::success(records))),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error(
+                error_codes::INTERNAL_ERROR,
+                e.to_string(),
+            )),
+        )),
+    }
+}
+
+/// Get Withdraw History
+/// GET /api/v1/capital/withdraw/history
+pub async fn get_withdraw_history(
+    State(state): State<Arc<AppState>>,
+    axum::Extension(claims): axum::Extension<crate::user_auth::service::Claims>,
+) -> Result<
+    Json<ApiResponse<Vec<super::withdraw::WithdrawRecord>>>,
+    (StatusCode, Json<ApiResponse<()>>),
+> {
+    let db = state.pg_db.as_ref().ok_or((
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(ApiResponse::<()>::error(
+            error_codes::INTERNAL_ERROR,
+            "DB unavailable",
+        )),
+    ))?;
+
+    let user_id = claims.sub.parse::<i64>().unwrap_or_default();
+    let service = WithdrawService::new(db.clone());
+
+    match service.get_history(user_id).await {
+        Ok(records) => Ok(Json(ApiResponse::success(records))),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error(
+                error_codes::INTERNAL_ERROR,
+                e.to_string(),
+            )),
+        )),
     }
 }

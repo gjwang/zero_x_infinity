@@ -60,8 +60,8 @@ def run_test():
         "chain": "BTC"
     }
     
-    # Internal API (No Auth required for localhost mock)
-    resp = requests.post(f"{INTERNAL_URL}/deposit", json=mock_payload)
+    # Internal API (Auth required for localhost mock)
+    resp = requests.post(f"{INTERNAL_URL}/deposit", json=mock_payload, headers={"X-Internal-Secret": "dev-secret"})
     if resp.status_code != 200:
         print(f"❌ Mock Deposit Failed: {resp.text}")
         return False
