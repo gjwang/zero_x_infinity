@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS fsm_transfers_tb (
     -- Transfer details
     user_id       BIGINT NOT NULL,
     asset_id      INTEGER NOT NULL,
-    amount        NUMERIC(40, 0) NOT NULL,
+    amount        DECIMAL(30, 8) NOT NULL,
     
     -- Direction
     transfer_type SMALLINT NOT NULL,             -- 1 = Funding→Spot, 2 = Spot→Funding

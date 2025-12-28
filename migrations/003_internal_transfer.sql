@@ -42,8 +42,8 @@ CREATE TABLE IF NOT EXISTS transfers_tb (
     transfer_id BIGSERIAL PRIMARY KEY,
     req_id VARCHAR(64) NOT NULL, -- Idempotency Key
     user_id BIGINT NOT NULL,
-    asset VARCHAR(32) NOT NULL,
-    amount NUMERIC(40, 0) NOT NULL, -- Atomic units (Satoshis/Wei)
+    asset_id INTEGER NOT NULL,
+    amount DECIMAL(30, 8) NOT NULL, -- Logical amount (will be scaled in logic)
     from_type SMALLINT NOT NULL,
     to_type SMALLINT NOT NULL,
     status SMALLINT NOT NULL DEFAULT 0, -- 0=PENDING, 1=SUCCESS, 2=FAILED

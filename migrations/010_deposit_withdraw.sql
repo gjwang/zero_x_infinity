@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS deposit_history (
     tx_hash VARCHAR(128) PRIMARY KEY,
     user_id BIGINT NOT NULL,
     asset VARCHAR(32) NOT NULL,
-    amount NUMERIC(40, 0) NOT NULL,
+    amount DECIMAL(30, 8) NOT NULL,
     status VARCHAR(32) NOT NULL, -- CONFIRMING, SUCCESS
     block_height BIGINT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -22,8 +22,8 @@ CREATE TABLE IF NOT EXISTS withdraw_history (
     request_id VARCHAR(64) PRIMARY KEY, -- UUID
     user_id BIGINT NOT NULL,
     asset VARCHAR(32) NOT NULL,
-    amount NUMERIC(40, 0) NOT NULL,
-    fee NUMERIC(40, 0) NOT NULL,
+    amount DECIMAL(30, 8) NOT NULL,
+    fee DECIMAL(30, 8) NOT NULL,
     to_address VARCHAR(255) NOT NULL,
     tx_hash VARCHAR(128), -- Nullable initially
     status VARCHAR(32) NOT NULL, -- PENDING, PROCESSING, SUCCESS, FAILED
