@@ -9,18 +9,36 @@
 --   1 = Spot (UNUSED in PostgreSQL - UBSCore RAM manages Spot balances)
 --   2 = Funding (ACTIVE - deposit/withdraw, stored here)
 --
-ALTER TABLE balances_tb 
-ADD COLUMN account_type SMALLINT NOT NULL DEFAULT 1;
+-- 1. Add account_type to balances_tb (Idempotent)
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_name='balances_tb' AND column_name='account_type') THEN
+        ALTER TABLE balances_tb ADD COLUMN account_type SMALLINT NOT NULL DEFAULT 1;
+    END IF;
+END $$;
 
 -- 2. Update Unique Constraint
 -- Old: UNIQUE (user_id, asset_id)
 -- New: UNIQUE (user_id, asset_id, account_type)
-ALTER TABLE balances_tb DROP CONSTRAINT balances_tb_user_id_asset_id_key;
-ALTER TABLE balances_tb ADD CONSTRAINT balances_tb_user_id_asset_id_account_type_key UNIQUE (user_id, asset_id, account_type);
+-- 2. Update Unique Constraint (Idempotent)
+DO $$
+BEGIN
+    -- Drop old constraint if exists
+    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'balances_tb_user_id_asset_id_key') THEN
+        ALTER TABLE balances_tb DROP CONSTRAINT balances_tb_user_id_asset_id_key;
+    END IF;
+
+    -- Add new constraint if not exists
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'balances_tb_user_id_asset_id_account_type_key') THEN
+        ALTER TABLE balances_tb ADD CONSTRAINT balances_tb_user_id_asset_id_account_type_key UNIQUE (user_id, asset_id, account_type);
+    END IF;
+END $$;
 
 -- 3. Create transfers_tb table
 -- Tracks internal transfers between account types
-CREATE TABLE transfers_tb (
+-- 3. Create transfers_tb table (Idempotent)
+CREATE TABLE IF NOT EXISTS transfers_tb (
     transfer_id BIGSERIAL PRIMARY KEY,
     req_id VARCHAR(64) NOT NULL, -- Idempotency Key
     user_id BIGINT NOT NULL,
@@ -36,4 +54,5 @@ CREATE TABLE transfers_tb (
 );
 
 -- Index for querying user history
-CREATE INDEX idx_transfers_user_id ON transfers_tb(user_id);
+-- Index for querying user history
+CREATE INDEX IF NOT EXISTS idx_transfers_user_id ON transfers_tb(user_id);

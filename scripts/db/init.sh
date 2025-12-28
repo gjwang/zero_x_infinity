@@ -85,7 +85,7 @@ init_postgres() {
     # Verify
     # Reset sequences to match seeded data (Fixes "duplicate key value" on first insert)
     log_info "Fixing sequences..."
-    PGPASSWORD=$DB_PASS psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -t -c "
+    PGPASSWORD=$PG_PASSWORD psql -h $PG_HOST -p $PG_PORT -U $PG_USER -d $PG_DB -t -c "
         SELECT setval(c.oid, (SELECT MAX(user_id) FROM users_tb))
         FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE c.relname = 'users_tb_user_id_seq';

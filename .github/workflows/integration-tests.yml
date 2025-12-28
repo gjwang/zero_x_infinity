@@ -213,6 +213,9 @@ jobs:
       - name: Initialize TDengine
         run: ./scripts/db/init.sh td && sleep 5
 
+      - name: Create Log Directory
+        run: mkdir -p logs
+
       - name: Run Gateway E2E
         run: ./scripts/test_ci.sh --test-gateway-e2e
         id: run-test
@@ -287,6 +290,9 @@ jobs:
 
       - name: Initialize TDengine
         run: ./scripts/db/init.sh td && sleep 5
+
+      - name: Create Log Directory
+        run: mkdir -p logs
 
       - name: Run K-Line E2E
         run: ./scripts/test_ci.sh --test-kline
@@ -363,6 +369,9 @@ jobs:
 
       - name: Initialize TDengine
         run: ./scripts/db/init.sh td && sleep 5
+
+      - name: Create Log Directory
+        run: mkdir -p logs
 
       - name: Run Depth API
         run: ./scripts/test_ci.sh --test-depth
@@ -441,7 +450,9 @@ jobs:
         run: chmod +x target/release/zero_x_infinity
 
       - name: Run Account Integration
-        run: ./scripts/test_ci.sh --test-account
+        run: |
+          mkdir -p logs
+          ./scripts/test_ci.sh --test-account
         id: run-test
         continue-on-error: true
 
@@ -522,7 +533,9 @@ jobs:
       - name: Run Funding & Trading Verification
         env:
           GATEWAY_BINARY: ./target/release/zero_x_infinity
-        run: ./scripts/verify_funding_trading_flow.sh
+        run: |
+          mkdir -p logs
+          ./scripts/verify_funding_trading_flow.sh
         id: run-test
         continue-on-error: true
 
@@ -540,9 +553,9 @@ jobs:
              cat logs/gateway_poc_0x12.log
           fi
           # Also check for any other python script output caught in logs/
-          if ls logs/*.log 1> /dev/null 2>&1; then
-             # Avoid re-catting if specific ones matched? Just cat everything in logs/ for this one as fallback
-             : 
+          if [ -d logs ] && ls logs/*.log 1> /dev/null 2>&1; then
+             echo "--- Other logs ---"
+             cat logs/*.log
           else
              echo "No logs found in logs/"
           fi
@@ -612,7 +625,9 @@ jobs:
         run: chmod +x target/release/zero_x_infinity
 
       - name: Run Transfer E2E
-        run: ./scripts/test_ci.sh --test-transfer
+        run: |
+          mkdir -p logs
+          ./scripts/test_ci.sh --test-transfer
         id: run-test
         continue-on-error: true
 
