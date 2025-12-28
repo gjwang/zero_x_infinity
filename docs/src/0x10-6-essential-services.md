@@ -1,6 +1,6 @@
 # 0x10.6 Essential Services Design (Auth & User Center)
 
-| Status | **DRAFT** |
+| Status | **FINAL** |
 | :--- | :--- |
 | **Date** | 2025-12-27 |
 | **Context** | P0 Blocker Resolution for Frontend MVP |
