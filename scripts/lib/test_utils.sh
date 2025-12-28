@@ -48,19 +48,17 @@ cleanup_gateway_process() {
     local bin_name="zero_x_infinity"
     log_info "Cleaning up existing '$bin_name' processes..."
     
-    if pgrep -f "$bin_name" > /dev/null; then
+    # Use -x for exact binary name match to avoid killing scripts in directories
+    # named 'zero_x_infinity'. The -f flag matches the full command line, which
+    # incorrectly matches shell scripts running from /path/to/zero_x_infinity/.
+    if pgrep -x "$bin_name" > /dev/null; then
         if [ "$IS_CI" = "true" ]; then
-            # Aggressive cleanup in CI
-            pkill -9 -f "$bin_name" || true
+            # Aggressive cleanup in CI - use -x for exact match
+            pkill -9 -x "$bin_name" || true
             sleep 2
             log_info "Force killed lingering processes (CI mode)"
         else
             # Gentle cleanup locally to avoid killing IDE/Language Server
-            # Try to kill only recent processes or warn user?
-            # Actually, pkill -f matches full args. zero_x_infinity binary usually distinctive.
-            # But user warned about IDE crash.
-            # Safer: Only kill if we find a PID file or specific port user?
-            # For now, print warning locally.
             log_warn "Local cleanup: Please ensure no other Gateway instances are running."
             log_warn "Skipping 'pkill' locally to prevent IDE crashes."
             # Optional: Check port 8080
