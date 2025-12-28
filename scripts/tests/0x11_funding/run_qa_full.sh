@@ -25,7 +25,12 @@ error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 cleanup() {
     log "Cleaning up Gateway..."
-    pkill -x "zero_x_infinity" || true
+    if [ -n "$GATEWAY_PID" ]; then
+        kill "$GATEWAY_PID" 2>/dev/null || true
+        wait "$GATEWAY_PID" 2>/dev/null || true
+    else
+        pkill -x "zero_x_infinity" || true
+    fi
 }
 trap cleanup EXIT
 
