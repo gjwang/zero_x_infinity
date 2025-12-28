@@ -12,6 +12,11 @@ categories = ["finance", "algorithms", "concurrency"]
 readme = "README.md"
 default-run = "zero_x_infinity"
 
+# Feature Flags for Security Control
+[features]
+default = ["mock-api"]  # Enabled for dev/test by default
+mock-api = []  # SECURITY: Enable internal mock endpoints. MUST be disabled in production builds.
+
 [dependencies]
 rustc-hash = "2"
 serde = { version = "1", features = ["derive"] }

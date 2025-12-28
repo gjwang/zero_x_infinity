@@ -326,12 +326,17 @@ pub async fn run_server(
                     state.clone(),
                     crate::user_auth::middleware::jwt_auth_middleware,
                 )),
-        )
-        .nest(
-            "/internal/mock",
-            Router::new().route("/deposit", post(crate::funding::handlers::mock_deposit)), // Internal routes usually protected by IP or internal secret, strictly strictly locally accessible
-                                                                                           // For MVP/Sim, we expose it.
-        )
+        );
+
+    // [SECURITY] Mock API routes - only compiled when 'mock-api' feature is enabled.
+    // Production builds MUST be compiled with `--no-default-features` to exclude this.
+    #[cfg(feature = "mock-api")]
+    let app = app.nest(
+        "/internal/mock",
+        Router::new().route("/deposit", post(crate::funding::handlers::mock_deposit)),
+    );
+
+    let app = app
         .with_state(state)
         // Phase 0x0E: OpenAPI / Swagger UI (stateless, added after with_state)
         .merge(SwaggerUi::new("/docs").url("/api-docs/openapi.json", openapi::ApiDoc::openapi()));

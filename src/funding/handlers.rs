@@ -63,6 +63,7 @@ pub struct WithdrawResponse {
 /// FIXME: REMOVE THIS ENDPOINT once Phase 0x11-a Real Chain (Sentinel) is fully stable.
 ///
 /// POST /internal/mock/deposit
+#[cfg(feature = "mock-api")]
 pub async fn mock_deposit(
     State(state): State<Arc<AppState>>,
     headers: axum::http::HeaderMap,
