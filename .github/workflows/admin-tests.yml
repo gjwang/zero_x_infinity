@@ -2,12 +2,12 @@ name: Admin Dashboard Tests
 
 on:
   push:
-    branches: [main, 0x0F-admin-dashboard]
+    branches: [ main, 'feature/*', '0x*' ]
     paths:
       - 'admin/**'
       - 'migrations/**'
   pull_request:
-    branches: [main]
+    branches: [ main ]
     paths:
       - 'admin/**'
       - 'migrations/**'
