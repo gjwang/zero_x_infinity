@@ -341,19 +341,19 @@ pub fn dump_balances(
     manager: &SymbolManager,
     active_symbol_id: u32,
     path: &str,
-) {
-    let mut file = File::create(path).unwrap();
+) -> Result<()> {
+    let mut file = File::create(path).with_context(|| format!("Failed to create {}", path))?;
 
     // Note: 'version' column now contains lock_version for backward compatibility
     // settle_version is tracked separately in the Balance struct
-    writeln!(file, "user_id,asset_id,avail,frozen,version").unwrap();
+    writeln!(file, "user_id,asset_id,avail,frozen,version").context("Failed to write header")?;
 
     let mut user_ids: Vec<_> = accounts.keys().collect();
     user_ids.sort();
 
     let symbol_info = manager
         .get_symbol_info_by_id(active_symbol_id)
-        .expect("Active symbol not found");
+        .context("Active symbol not found")?;
     let base_id = symbol_info.base_asset_id;
     let quote_id = symbol_info.quote_asset_id;
 
@@ -370,7 +370,7 @@ pub fn dump_balances(
                 b.frozen(),
                 b.lock_version() // Now uses lock_version explicitly
             )
-            .unwrap();
+            .context("Failed to write balance row")?;
         }
 
         if let Some(b) = account.get_balance(quote_id) {
@@ -383,21 +383,22 @@ pub fn dump_balances(
                 b.frozen(),
                 b.lock_version() // Now uses lock_version explicitly
             )
-            .unwrap();
+            .context("Failed to write balance row")?;
         }
     }
     println!("Dumped balances to {}", path);
+    Ok(())
 }
 
 /// Dump complete ME orderbook snapshot
-pub fn dump_orderbook_snapshot(book: &OrderBook, path: &str) {
-    let mut file = File::create(path).unwrap();
+pub fn dump_orderbook_snapshot(book: &OrderBook, path: &str) -> Result<()> {
+    let mut file = File::create(path).with_context(|| format!("Failed to create {}", path))?;
 
     writeln!(
         file,
         "order_id,user_id,side,order_type,price,qty,filled_qty,status"
     )
-    .unwrap();
+    .context("Failed to write header")?;
 
     for order in book.all_orders() {
         let side_str = match order.side {
@@ -422,19 +423,20 @@ pub fn dump_orderbook_snapshot(book: &OrderBook, path: &str) {
             order.filled_qty,
             order.status
         )
-        .unwrap();
+        .context("Failed to write order row")?;
     }
     println!(
         "Dumped ME snapshot: {} active orders to {}",
         book.all_orders().len(),
         path
     );
+    Ok(())
 }
 
 /// Write final orderbook state (summary)
-pub fn write_final_orderbook(book: &OrderBook, path: &str) {
-    let mut file = File::create(path).unwrap();
-    writeln!(file, "best_bid,best_ask,bid_depth,ask_depth").unwrap();
+pub fn write_final_orderbook(book: &OrderBook, path: &str) -> Result<()> {
+    let mut file = File::create(path).with_context(|| format!("Failed to create {}", path))?;
+    writeln!(file, "best_bid,best_ask,bid_depth,ask_depth").context("Failed to write header")?;
 
     let (bid_depth, ask_depth) = book.depth();
     writeln!(
@@ -445,8 +447,9 @@ pub fn write_final_orderbook(book: &OrderBook, path: &str) {
         bid_depth,
         ask_depth
     )
-    .unwrap();
+    .context("Failed to write final stats")?;
     println!("Wrote final orderbook to {}", path);
+    Ok(())
 }
 
 /// Simple timestamp without external dependency

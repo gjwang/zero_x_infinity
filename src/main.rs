@@ -142,7 +142,7 @@ fn run() -> anyhow::Result<()> {
     let gateway_mode = use_gateway_mode();
 
     let env = get_env();
-    let app_config = zero_x_infinity::config::AppConfig::load(&env);
+    let app_config = zero_x_infinity::config::AppConfig::load(&env)?;
     let _log_guard = zero_x_infinity::logging::init_logging(&app_config);
 
     tracing::info!("Starting 0xInfinity Engine in {} mode", env);
@@ -534,7 +534,7 @@ fn run() -> anyhow::Result<()> {
 
     // Step 3: Snapshot after deposit
     println!("\n[3] Dumping balance snapshot after deposit...");
-    dump_balances(&accounts, &symbol_mgr, active_symbol_id, &balances_t1);
+    dump_balances(&accounts, &symbol_mgr, active_symbol_id, &balances_t1)?;
 
     // Step 4: Load orders
     println!("\n[4] Loading orders...");
@@ -899,9 +899,9 @@ fn run() -> anyhow::Result<()> {
 
     // Step 7: Dump final state
     println!("\n[7] Dumping final state...");
-    dump_balances(&final_accounts, &symbol_mgr, active_symbol_id, &balances_t2);
+    dump_balances(&final_accounts, &symbol_mgr, active_symbol_id, &balances_t2)?;
     if let Some(ref book) = final_book {
-        dump_orderbook_snapshot(book, &orderbook_t2);
+        dump_orderbook_snapshot(book, &orderbook_t2)?;
     } else {
         println!("    (OrderBook not available in multi-thread mode)");
     }
