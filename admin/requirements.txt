@@ -11,6 +11,7 @@ fastapi-user-auth==0.7.3
 
 # Database
 sqlalchemy[asyncio]>=2.0.0
+sqlmodel==0.0.16
 asyncpg>=0.29.0
 greenlet>=3.0.0
 
