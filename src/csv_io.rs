@@ -28,25 +28,38 @@ pub const ACTION_CANCEL: &str = "cancel";
 // Configuration Loading
 // ============================================================
 
+use anyhow::{Context, Result};
+
+// ============================================================
+// Configuration Loading
+// ============================================================
+
 /// Load SymbolManager from CSV files
 ///
 /// Returns (SymbolManager, active_symbol_id)
-pub fn load_symbol_manager() -> (SymbolManager, u32) {
+pub fn load_symbol_manager() -> Result<(SymbolManager, u32)> {
     let mut manager = SymbolManager::new();
 
     // Load assets first
-    let file = File::open(ASSETS_CONFIG_CSV).expect("Failed to open assets_config.csv");
+    let file = File::open(ASSETS_CONFIG_CSV)
+        .with_context(|| format!("Failed to open {}", ASSETS_CONFIG_CSV))?;
     let reader = BufReader::new(file);
     let mut asset_count = 0;
 
-    for line in reader.lines().skip(1) {
-        let line = line.unwrap();
+    for (line_num, line) in reader.lines().skip(1).enumerate() {
+        let line = line?;
         let parts: Vec<&str> = line.split(',').collect();
         if parts.len() >= 4 {
-            let asset_id: u32 = parts[0].parse().unwrap();
+            let asset_id: u32 = parts[0]
+                .parse()
+                .with_context(|| format!("Invalid asset_id at line {}", line_num + 2))?;
             let name = parts[1];
-            let decimals: u32 = parts[2].parse().unwrap();
-            let display_decimals: u32 = parts[3].parse().unwrap();
+            let decimals: u32 = parts[2]
+                .parse()
+                .with_context(|| format!("Invalid decimals at line {}", line_num + 2))?;
+            let display_decimals: u32 = parts[3]
+                .parse()
+                .with_context(|| format!("Invalid display_decimals at line {}", line_num + 2))?;
             manager.add_asset(asset_id, decimals, display_decimals, name);
             asset_count += 1;
         }
@@ -54,21 +67,30 @@ pub fn load_symbol_manager() -> (SymbolManager, u32) {
     println!("Loaded {} assets from {}", asset_count, ASSETS_CONFIG_CSV);
 
     // Load symbols
-    let file = File::open(SYMBOLS_CONFIG_CSV).expect("Failed to open symbols_config.csv");
+    let file = File::open(SYMBOLS_CONFIG_CSV)
+        .with_context(|| format!("Failed to open {}", SYMBOLS_CONFIG_CSV))?;
     let reader = BufReader::new(file);
     let mut symbol_count = 0;
     let mut first_symbol_id: Option<u32> = None;
 
-    for line in reader.lines().skip(1) {
-        let line = line.unwrap();
+    for (line_num, line) in reader.lines().skip(1).enumerate() {
+        let line = line?;
         let parts: Vec<&str> = line.split(',').collect();
         if parts.len() >= 8 {
-            let symbol_id: u32 = parts[0].parse().unwrap();
+            let symbol_id: u32 = parts[0]
+                .parse()
+                .with_context(|| format!("Invalid symbol_id at line {}", line_num + 2))?;
             let symbol = parts[1];
-            let base_asset_id: u32 = parts[2].parse().unwrap();
-            let quote_asset_id: u32 = parts[3].parse().unwrap();
-            let price_decimal: u32 = parts[4].parse().unwrap();
-            let price_display_decimal: u32 = parts[5].parse().unwrap();
+            let base_asset_id: u32 = parts[2]
+                .parse()
+                .with_context(|| format!("Invalid base_asset_id at line {}", line_num + 2))?;
+            let quote_asset_id: u32 = parts[3]
+                .parse()
+                .with_context(|| format!("Invalid quote_asset_id at line {}", line_num + 2))?;
+            let price_decimal: u32 = parts[4]
+                .parse()
+                .with_context(|| format!("Invalid price_decimal at line {}", line_num + 2))?;
+            let price_display_decimal: u32 = parts[5].parse().unwrap_or(2);
             let base_maker_fee: u64 = parts[6].parse().unwrap_or(0);
             let base_taker_fee: u64 = parts[7].parse().unwrap_or(0);
 
@@ -83,7 +105,10 @@ pub fn load_symbol_manager() -> (SymbolManager, u32) {
                     base_maker_fee,
                     base_taker_fee,
                 )
-                .expect("Failed to insert symbol - check asset exists");
+                .map_err(anyhow::Error::msg)
+                .with_context(|| {
+                    format!("Failed to insert symbol {} (check assets exist)", symbol)
+                })?;
 
             if first_symbol_id.is_none() {
                 first_symbol_id = Some(symbol_id);
@@ -98,8 +123,11 @@ pub fn load_symbol_manager() -> (SymbolManager, u32) {
     );
 
     // Use first symbol as active
-    let active_symbol_id = first_symbol_id.expect("No symbols configured");
-    let symbol_info = manager.get_symbol_info_by_id(active_symbol_id).unwrap();
+    let active_symbol_id =
+        first_symbol_id.context("No symbols configured in symbols_config.csv")?;
+    let symbol_info = manager
+        .get_symbol_info_by_id(active_symbol_id)
+        .context("Active symbol ID not found in manager")?;
 
     println!(
         "Active symbol: {} (base={}, quote={})",
@@ -114,7 +142,6 @@ pub fn load_symbol_manager() -> (SymbolManager, u32) {
     println!("  Internal decimals: base={}", symbol_info.base_decimals);
 
     // Calculate and display max tradeable value (overflow safety check)
-    // For price * qty to not overflow u64, we calculate max qty at a reference price
     let quote_decimals = manager
         .get_asset_decimal(symbol_info.quote_asset_id)
         .unwrap_or(6);
@@ -147,7 +174,7 @@ pub fn load_symbol_manager() -> (SymbolManager, u32) {
         );
     }
 
-    (manager, active_symbol_id)
+    Ok((manager, active_symbol_id))
 }
 
 // ============================================================
@@ -166,27 +193,35 @@ pub struct InputOrder {
 }
 
 /// Load balances from CSV and create user accounts with deposits
-pub fn load_balances_and_deposit(path: &str) -> FxHashMap<UserId, UserAccount> {
-    let file = File::open(path).expect("Failed to open balances.csv");
+pub fn load_balances_and_deposit(path: &str) -> Result<FxHashMap<UserId, UserAccount>> {
+    let file = File::open(path).with_context(|| format!("Failed to open {}", path))?;
     let reader = BufReader::new(file);
 
     let mut accounts: FxHashMap<UserId, UserAccount> = FxHashMap::default();
 
     // Row-based CSV format: user_id,asset_id,avail,frozen,version
-    for line in reader.lines().skip(1) {
-        let line = line.unwrap();
+    for (line_num, line) in reader.lines().skip(1).enumerate() {
+        let line = line?;
         let parts: Vec<&str> = line.split(',').collect();
         if parts.len() >= 5 {
-            let user_id: u64 = parts[0].parse().unwrap();
-            let asset_id: u32 = parts[1].parse().unwrap();
-            let avail: u64 = parts[2].parse().unwrap();
-            let _frozen: u64 = parts[3].parse().unwrap();
-            let _version: u64 = parts[4].parse().unwrap();
+            let user_id: u64 = parts[0]
+                .parse()
+                .with_context(|| format!("Invalid user_id at line {}", line_num + 2))?;
+            let asset_id: u32 = parts[1]
+                .parse()
+                .with_context(|| format!("Invalid asset_id at line {}", line_num + 2))?;
+            let avail: u64 = parts[2]
+                .parse()
+                .with_context(|| format!("Invalid avail at line {}", line_num + 2))?;
+            // frozen and version are ignored for init
 
             let account = accounts
                 .entry(user_id)
                 .or_insert_with(|| UserAccount::new(user_id));
-            account.deposit(asset_id, avail).unwrap();
+            account
+                .deposit(asset_id, avail)
+                .map_err(anyhow::Error::msg)
+                .context("Failed to deposit initial balance")?;
         }
     }
 
@@ -194,17 +229,21 @@ pub fn load_balances_and_deposit(path: &str) -> FxHashMap<UserId, UserAccount> {
         "Loaded balances for {} accounts (row-based format)",
         accounts.len()
     );
-    accounts
+    Ok(accounts)
 }
 
 /// Load orders from CSV and convert to internal format
-pub fn load_orders(path: &str, manager: &SymbolManager, active_symbol_id: u32) -> Vec<InputOrder> {
-    let file = File::open(path).expect("Failed to open orders.csv");
+pub fn load_orders(
+    path: &str,
+    manager: &SymbolManager,
+    active_symbol_id: u32,
+) -> Result<Vec<InputOrder>> {
+    let file = File::open(path).with_context(|| format!("Failed to open {}", path))?;
     let reader = BufReader::new(file);
 
     let symbol_info = manager
         .get_symbol_info_by_id(active_symbol_id)
-        .expect("Active symbol not found");
+        .context("Active symbol not found")?;
     let base_multiplier = symbol_info.qty_unit(); // 10^base_decimals
     let quote_multiplier = 10u64.pow(
         manager
@@ -214,15 +253,19 @@ pub fn load_orders(path: &str, manager: &SymbolManager, active_symbol_id: u32) -
 
     let mut orders = Vec::new();
 
-    for line in reader.lines().skip(1) {
-        let line = line.unwrap();
+    for (line_num, line) in reader.lines().skip(1).enumerate() {
+        let line = line?;
         let parts: Vec<&str> = line.split(',').collect();
         // Support both:
         // Legacy: order_id,user_id,side,price,qty
         // New:    order_id,user_id,action,side,price,qty
         if parts.len() >= 5 {
-            let order_id: u64 = parts[0].parse().unwrap();
-            let user_id: u64 = parts[1].parse().unwrap();
+            let order_id: u64 = parts[0]
+                .parse()
+                .with_context(|| format!("Invalid order_id at line {}", line_num + 2))?;
+            let user_id: u64 = parts[1]
+                .parse()
+                .with_context(|| format!("Invalid user_id at line {}", line_num + 2))?;
 
             let col2 = parts[2].trim().to_lowercase();
             let is_action = col2 == ACTION_PLACE || col2 == ACTION_CANCEL;
@@ -285,7 +328,7 @@ pub fn load_orders(path: &str, manager: &SymbolManager, active_symbol_id: u32) -
         "Loaded {} orders (converted from client format)",
         orders.len()
     );
-    orders
+    Ok(orders)
 }
 
 // ============================================================
@@ -298,19 +341,19 @@ pub fn dump_balances(
     manager: &SymbolManager,
     active_symbol_id: u32,
     path: &str,
-) {
-    let mut file = File::create(path).unwrap();
+) -> Result<()> {
+    let mut file = File::create(path).with_context(|| format!("Failed to create {}", path))?;
 
     // Note: 'version' column now contains lock_version for backward compatibility
     // settle_version is tracked separately in the Balance struct
-    writeln!(file, "user_id,asset_id,avail,frozen,version").unwrap();
+    writeln!(file, "user_id,asset_id,avail,frozen,version").context("Failed to write header")?;
 
     let mut user_ids: Vec<_> = accounts.keys().collect();
     user_ids.sort();
 
     let symbol_info = manager
         .get_symbol_info_by_id(active_symbol_id)
-        .expect("Active symbol not found");
+        .context("Active symbol not found")?;
     let base_id = symbol_info.base_asset_id;
     let quote_id = symbol_info.quote_asset_id;
 
@@ -327,7 +370,7 @@ pub fn dump_balances(
                 b.frozen(),
                 b.lock_version() // Now uses lock_version explicitly
             )
-            .unwrap();
+            .context("Failed to write balance row")?;
         }
 
         if let Some(b) = account.get_balance(quote_id) {
@@ -340,21 +383,22 @@ pub fn dump_balances(
                 b.frozen(),
                 b.lock_version() // Now uses lock_version explicitly
             )
-            .unwrap();
+            .context("Failed to write balance row")?;
         }
     }
     println!("Dumped balances to {}", path);
+    Ok(())
 }
 
 /// Dump complete ME orderbook snapshot
-pub fn dump_orderbook_snapshot(book: &OrderBook, path: &str) {
-    let mut file = File::create(path).unwrap();
+pub fn dump_orderbook_snapshot(book: &OrderBook, path: &str) -> Result<()> {
+    let mut file = File::create(path).with_context(|| format!("Failed to create {}", path))?;
 
     writeln!(
         file,
         "order_id,user_id,side,order_type,price,qty,filled_qty,status"
     )
-    .unwrap();
+    .context("Failed to write header")?;
 
     for order in book.all_orders() {
         let side_str = match order.side {
@@ -379,19 +423,20 @@ pub fn dump_orderbook_snapshot(book: &OrderBook, path: &str) {
             order.filled_qty,
             order.status
         )
-        .unwrap();
+        .context("Failed to write order row")?;
     }
     println!(
         "Dumped ME snapshot: {} active orders to {}",
         book.all_orders().len(),
         path
     );
+    Ok(())
 }
 
 /// Write final orderbook state (summary)
-pub fn write_final_orderbook(book: &OrderBook, path: &str) {
-    let mut file = File::create(path).unwrap();
-    writeln!(file, "best_bid,best_ask,bid_depth,ask_depth").unwrap();
+pub fn write_final_orderbook(book: &OrderBook, path: &str) -> Result<()> {
+    let mut file = File::create(path).with_context(|| format!("Failed to create {}", path))?;
+    writeln!(file, "best_bid,best_ask,bid_depth,ask_depth").context("Failed to write header")?;
 
     let (bid_depth, ask_depth) = book.depth();
     writeln!(
@@ -402,8 +447,9 @@ pub fn write_final_orderbook(book: &OrderBook, path: &str) {
         bid_depth,
         ask_depth
     )
-    .unwrap();
+    .context("Failed to write final stats")?;
     println!("Wrote final orderbook to {}", path);
+    Ok(())
 }
 
 /// Simple timestamp without external dependency

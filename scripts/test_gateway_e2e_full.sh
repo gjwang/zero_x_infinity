@@ -134,7 +134,14 @@ check_gateway() {
 
 if ! check_gateway; then
     echo "    Starting Gateway..."
-    nohup ./target/release/zero_x_infinity --gateway --port 8080 > /tmp/gateway_e2e.log 2>&1 &
+    # Use CI config when running in CI environment
+    if [ "$CI" = "true" ]; then
+        ENV_FLAG="--env ci"
+    else
+        ENV_FLAG=""
+    fi
+
+    nohup ./target/release/zero_x_infinity --gateway $ENV_FLAG --port 8080 > /tmp/gateway_e2e.log 2>&1 &
     
     # Wait for Gateway to be ready (up to 30 seconds)
     echo "    Waiting for Gateway to start..."

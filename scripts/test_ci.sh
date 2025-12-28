@@ -527,7 +527,11 @@ main() {
         
         # Start Gateway
         echo "   [SETUP] Starting Gateway for OpenAPI tests..."
-        ./target/release/zero_x_infinity --gateway --env ci > "$LOG_DIR/openapi_gateway.log" 2>&1 &
+        TARGET_ENV="ci"
+        if [ -z "$CI" ]; then
+            TARGET_ENV="dev"
+        fi
+        ./target/release/zero_x_infinity --gateway --env "$TARGET_ENV" > "$LOG_DIR/openapi_gateway.log" 2>&1 &
         GW_PID=$!
         
         # Wait for Gateway

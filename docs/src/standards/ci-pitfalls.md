@@ -4,6 +4,26 @@
 
 ---
 
+## 🚨 0. 关键警告：禁止使用 `pkill -f`
+
+### 问题描述
+在 Antigravity IDE 中执行 `pkill -f "zero_x_infinity"` 会**导致 IDE 崩溃**。
+因为 IDE 的 language_server 进程参数中包含项目路径，会被 `pkill -f` 误杀。
+
+### 正确做法
+**永远使用 PID 或精确匹配：**
+
+```bash
+# ✅ 方法 1: 启动时记录 PID (推荐)
+./target/release/zero_x_infinity --gateway &
+GW_PID=$!
+# ...
+kill "$GW_PID"
+
+# ✅ 方法 2: 精确匹配进程名
+pkill "^zero_x_infinity$"
+```
+
 ## 1. 服务容器 (Service Containers)
 
 ### 1.1 禁止使用 `docker exec`
@@ -89,35 +109,34 @@ fi
 
 ## 3. workflow 步骤条件
 
-### 3.1 continue-on-error 与 outcome
+### 3.1 正确的日志 Dump 模式
 
 **问题描述**
+如果不当使用 `continue-on-error: true`，会导致即使测试失败，Job 最终也被标记为成功（绿色），掩盖了错误。
 
-使用 `continue-on-error: true` 后，即使步骤失败，workflow 也继续。但后续步骤的条件判断可能出错。
+**❌ 错误做法**：
+```yaml
+- name: Run Test
+  run: ./test.sh
+  continue-on-error: true  # 导致测试失败也被忽略
+
+- name: Dump Logs
+  run: cat logs/*.log
+  # 结果：Job 变绿，错误被隐藏！
+```
+
+**✅ 正确做法**：
+不要使用 `continue-on-error`。利用 `if: failure()` 条件在失败时运行日志打印步骤。
 
 ```yaml
 - name: Run Test
   run: ./test.sh
-  id: run-test
-  continue-on-error: true
+  # 默认 behavior: 失败立即停止后续非 if: failure() 步骤
 
-# 问题：这个条件可能不按预期工作
-- name: Dump Logs on Failure
-  if: steps.run-test.outcome == 'failure'
-  run: |
-    cat /tmp/test.log
-    exit 1  # ← 会导致整个 job 失败！
-```
-
-**解决方案**
-
-使用 `failure()` 函数，移除 `exit 1`：
-
-```yaml
-- name: Dump Logs on Failure
-  if: failure() && steps.run-test.outcome == 'failure'
-  run: cat /tmp/test.log || true
-  # 不要 exit 1
+- name: Dump Logs
+  if: failure()  # 仅在之前步骤失败时运行
+  run: cat logs/*.log
+  # 注意：此步骤本身会成功，但 Job 状态仍由 Run Test 决定（红色）
 ```
 
 ### 3.2 日志文件路径一致性
@@ -194,7 +213,52 @@ done
 
 ---
 
-## 6. 快速参考
+---
+
+## 6. 配置与端口对齐 (Config & Port Parity)
+
+### 6.1 5433 vs 5432 端口陷阱
+
+- **本地 (Dev)**: 默认端口 **5433** (`config/dev.yaml`)。
+- **CI 环境**: 标准端口 **5432** (`config/ci.yaml`)。
+- **解决方案**: 测试脚本必须检测 `CI=true` 并传递 `--env ci`。
+
+```bash
+if [ "$CI" = "true" ]; then
+    GATEWAY_ARGS="--gateway --env ci"
+fi
+```
+
+### 6.2 标准化脚本模板
+
+请复用标准模板：`scripts/templates/test_integration_template.sh`。
+
+---
+
+## 7. Python 环境规范 (uv)
+
+### 7.1 禁止裸跑 Python
+CI 环境中直接运行 `python3` 可能找不到依赖。
+
+### 7.2 解决方案
+使用 `uv run` 显式管理依赖，并推荐使用 HEREDOC 模式以确保环境隔离：
+
+```bash
+#!/bin/bash
+# 统一入口 (Wrapper Scripts) 示例
+export SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# 使用 --with 显式声明依赖，并传递所有参数 "$@"
+uv run --with requests --with pynacl python3 - "$@" << 'EOF'
+import sys
+import os
+# ... python code ...
+EOF
+```
+
+---
+
+## 8. 快速参考
 
 | 场景 | 本地 | CI |
 |------|------|-----|
@@ -205,4 +269,55 @@ done
 
 ---
 
-*最后更新：2025-12-25*
+## 9. 竞态条件与资源清理 (Race Conditions)
+
+### 9.1 端口占用 ("Address already in use")
+
+**问题描述**
+在同一个 Job 中连续运行多个测试脚本（如 QA Suite + POC），前一个脚本可能未完全释放端口，导致后续脚本启动 Gateway 失败。
+
+**解决方案**
+在启动 Gateway 前，**必须**显式清理旧进程。在 CI 环境中（非本地 IDE），可以使用 `pkill`：
+
+```bash
+# Ensure clean slate
+echo "Cleaning up any existing Gateway processes..."
+pkill -9 -f "zero_x_infinity" || true
+sleep 2 # 等待内核释放端口
+```
+
+**关键点**：使用 `kill -9` 确保立即终止，防止僵尸进程。
+
+---
+
+## 10. 错误处理规范
+
+### 10.1 如果 Config 加载 Panic
+
+**禁止**：
+```rust
+File::open("config.yaml").unwrap(); // ❌ 导致 crash，无详细日志
+```
+
+**必须**：
+使用 `anyhow::Result` 并添加 Context：
+```rust
+File::open("config.yaml").with_context(|| "Failed to open config")?; // ✅
+```
+
+### 10.2 数据库唯一约束 (Duplicate Key)
+
+**问题**：重复注册用户导致 500 Panic 并在日志中打印堆栈跟踪，干扰排查。
+
+**解决方案**：捕获 "duplicate key" 错误，记录为 Warning，并返回 409 Conflict。
+
+```rust
+if err.to_string().contains("duplicate key") {
+    tracing::warn!("User already exists: {}", err);
+    return Err(StatusCode::CONFLICT);
+}
+```
+
+---
+
+*最后更新：2025-12-28*

@@ -176,18 +176,13 @@ pub async fn run_server(
 
     // Create User Auth Service (Phase 0x10.6)
     let user_auth = if let Some(ref db) = pg_db {
-        Arc::new(crate::user_auth::UserAuthService::new(
+        Some(Arc::new(crate::user_auth::UserAuthService::new(
             db.pool().clone(),
             jwt_secret,
-        ))
+        )))
     } else {
-        // Fallback or panic? If DB is missing, Auth is useless.
-        // For now, create a dummy or handle gracefully if possible.
-        // But AppState needs Arc<UserAuthService>.
-        // We will panic if DB is missing but Auth is expected.
-        // Or better: Change AppState to use Option? No, strict types.
-        // Assuming DB is present for this phase.
-        panic!("PostgreSQL required for User Auth Service");
+        println!("⚠️  User Auth Service disabled (PostgreSQL required)");
+        None
     };
 
     // ==========================================================================
@@ -308,6 +303,35 @@ pub async fn run_server(
         .nest("/api/v1/user", user_routes) // Phase 0x10.6 User Center
         .nest("/api/v1/public", public_routes)
         .nest("/api/v1/private", private_routes)
+        .nest(
+            "/api/v1/capital",
+            Router::new()
+                .route(
+                    "/deposit/address",
+                    get(crate::funding::handlers::get_deposit_address),
+                )
+                .route(
+                    "/deposit/history",
+                    get(crate::funding::handlers::get_deposit_history),
+                )
+                .route(
+                    "/withdraw/apply",
+                    post(crate::funding::handlers::apply_withdraw),
+                )
+                .route(
+                    "/withdraw/history",
+                    get(crate::funding::handlers::get_withdraw_history),
+                )
+                .layer(from_fn_with_state(
+                    state.clone(),
+                    crate::user_auth::middleware::jwt_auth_middleware,
+                )),
+        )
+        .nest(
+            "/internal/mock",
+            Router::new().route("/deposit", post(crate::funding::handlers::mock_deposit)), // Internal routes usually protected by IP or internal secret, strictly strictly locally accessible
+                                                                                           // For MVP/Sim, we expose it.
+        )
         .with_state(state)
         // Phase 0x0E: OpenAPI / Swagger UI (stateless, added after with_state)
         .merge(SwaggerUi::new("/docs").url("/api-docs/openapi.json", openapi::ApiDoc::openapi()));

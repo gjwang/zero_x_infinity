@@ -35,22 +35,29 @@ pub async fn ws_handler(
 
     // authenticate
     let user_id = if let Some(token) = params.token {
-        match user_auth.verify_token(&token) {
-            Ok(claims) => match claims.sub.parse::<u64>() {
-                Ok(uid) => Some(uid),
+        if let Some(auth_service) = user_auth.as_ref() {
+            match auth_service.verify_token(&token) {
+                Ok(claims) => match claims.sub.parse::<u64>() {
+                    Ok(uid) => Some(uid),
+                    Err(_) => {
+                        return Response::builder()
+                            .status(axum::http::StatusCode::UNAUTHORIZED)
+                            .body(axum::body::Body::from("Invalid user ID in token"))
+                            .unwrap();
+                    }
+                },
                 Err(_) => {
                     return Response::builder()
                         .status(axum::http::StatusCode::UNAUTHORIZED)
-                        .body(axum::body::Body::from("Invalid user ID in token"))
+                        .body(axum::body::Body::from("Invalid or expired token"))
                         .unwrap();
                 }
-            },
-            Err(_) => {
-                return Response::builder()
-                    .status(axum::http::StatusCode::UNAUTHORIZED)
-                    .body(axum::body::Body::from("Invalid or expired token"))
-                    .unwrap();
             }
+        } else {
+            return Response::builder()
+                .status(axum::http::StatusCode::SERVICE_UNAVAILABLE)
+                .body(axum::body::Body::from("Auth service unavailable"))
+                .unwrap();
         }
     } else {
         None

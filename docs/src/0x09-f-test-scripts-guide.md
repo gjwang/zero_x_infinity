@@ -20,6 +20,16 @@ This document explains how to run integration tests for the Zero X Infinity matc
    - `assets_config.csv` - Asset definitions
    - `symbols_config.csv` - Trading pair definitions
 
+4. **Python Environment (uv)**:
+   The project uses `uv` for dependency management.
+   ```bash
+   # Install uv (if missing)
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   
+   # Sync dependencies
+   uv sync
+   ```
+
 ---
 
 ## Order Injection Script
@@ -30,15 +40,17 @@ scripts/inject_orders.py
 ```
 
 ### Basic Usage
+> **Note**: Always use `uv run` to ensure dependencies are loaded.
+
 ```bash
 # Run all 100K orders
-python3 scripts/inject_orders.py --input fixtures/orders.csv --limit 0
+uv run python3 scripts/inject_orders.py --input fixtures/orders.csv --limit 0
 
 # Run first 10K orders only
-python3 scripts/inject_orders.py --input fixtures/orders.csv --limit 10000
+uv run python3 scripts/inject_orders.py --input fixtures/orders.csv --limit 10000
 
 # With rate limiting (500 orders/sec)
-python3 scripts/inject_orders.py --input fixtures/orders.csv --limit 0 --rate-limit 500
+uv run python3 scripts/inject_orders.py --input fixtures/orders.csv --limit 0 --rate-limit 500
 ```
 
 ### Options

@@ -1,10 +1,22 @@
 # 0x11-a Real Chain Integration
 
-| Status | **DRAFT** |
+<h3>
+  <a href="#-english">🇺🇸 English</a>
+  &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
+  <a href="#-chinese">🇨🇳 中文</a>
+</h3>
+
+<div id="-english"></div>
+
+## 🇺🇸 English
+
+| Status | 🚧 **CONSTRUCTION** (Detailed Design Phase) |
 | :--- | :--- |
 | **Date** | 2025-12-28 |
 | **Context** | Phase 0x11 Extension: From Mock to Reality |
-| **Goal** | Integrate real Blockchain Nodes (Regtest/Testnet) and handle distributed system failures. |
+| **Goal** | Integrate real Blockchain Nodes (Regtest/Testnet) and handle distributed system failures (Re-orgs, Network Partition). |
+
+---
 
 ## 1. Core Architecture Change: Pull vs Push
 
@@ -69,6 +81,37 @@ The `Sentinel` service runs two parallel processes (or async tasks):
     *   Topic2 (To): Matches our Hot Wallet or User Deposit Contracts.
 2.  **Native ETH**: Must also scan block transactions for `value > 0` and `to` matches.
 3.  **Re-org Check**: Check `blockHash` of confirmed logs.
+
+## 5. Reconciliation & Safety (The Financial Firewall)
+
+### 5.1 The "Truncation Protocol" (100% Match)
+To solve the "Floating Point Curse" on-chain:
+
+*   **Precision Constraint**: The system supports `N` decimals as defined in **Asset Configuration** (e.g., `ETH`=12 or 18).
+*   **Ingress Logic**:
+    *   `Deposit_Credited = Truncate(Deposit_Raw, Configured_Precision)`
+    *   *Residue*: `Deposit_Raw - Deposit_Credited` remains in the wallet as "System Dust".
+*   **Reconciliation Equation**:
+    ```text
+    Truncate(Wallet_Start + Deposits - Withdrawals - GasFees, N) 
+    == 
+    Sum(User_Balances)
+    ```
+*   **Alerting**: **Zero Tolerance**. Any deviation triggers **P0 Alert** and suspends withdrawals.
+
+### 5.2 Re-org Recovery Protocol
+We must handle two types of Re-orgs:
+
+#### 5.2.1 Shallow Re-org (Before Finalization)
+*   **Scenario**: Block 100 (Hash A) -> Block 100 (Hash B).
+*   **Action**: Sentinel detects hash mismatch, rolls back `chain_cursor`, and marks orphaned deposits as `ORPHANED`. No user balance impact.
+
+#### 5.2.2 Deep Re-org (The "Clawback")
+*   **Scenario**: User credited after 6 confs, but chain re-orgs 10 blocks deep (51% attack/network split).
+*   **Action**:
+    1.  Sentinel detects deep re-org.
+    2.  Engine injects `OrderAction::ForceDeduct` (Administrative Correction).
+    3.  User balance might go negative. Account frozen until settled.
 
 ## 6. Detailed Architectural Design
 
@@ -204,41 +247,7 @@ if deposit.ready_to_finalize() {
 }
 ```
 
-## 7. Critical Risk: The Re-org Recovery Protocol
-
-This is the most complex part of the system. We must handle two types of Re-orgs:
-
-### 7.1 Shallow Re-org (Before Finalization)
-*   **Scenario**: We saw Block 100 (Hash A), status `CONFIRMING`. Chain switches to Block 100 (Hash B).
-*   **Impact**: The Tx in Hash A might be missing in Hash B.
-*   **Resolution**:
-    1.  Sentinel detects `ParentHash` mismatch at Block 101.
-    2.  Sentinel walks back: 100 -> 99... until hashes match.
-    3.  **DB Action**:
-        *   Update `chain_cursor` to Common Ancestor (e.g., Block 99).
-        *   Update `deposit_history` for re-orged blocks: Set status `ORPHANED`.
-    4.  **Resume**: Sentinel scans new Block 100 (Hash B). If Tx is implicitly included, it creates a NEW row (idempotency key is `tx_hash`, so if it's the exact same Tx, we might just update metadata).
-    *   *Note*: Since we never sent `OrderAction::Deposit`, the Matching Engine is unaffected. Zero financial risk.
-
-### 7.2 Deep Re-org (After Finalization / 51% Attack)
-*   **Scenario**: We credited User at Block 100 (6 confs). At Block 110, a massive re-org replaces Block 100.
-*   **Impact**: User has been credited funds that no longer exist. User might have withdrawn or traded them.
-*   **Resolution (The "Clawback")**:
-    1.  Sentinel detects Deep Re-org (Alert Ops!).
-    2.  Sentinel identifies the `SUCCESS` deposit is now invalid.
-    3.  **Pipeline Action**:
-        *   Inject `OrderAction::ForceDeduct` (Administrative Correction).
-        *   **Reason**: "Chain Reorganization - Tx Invalidated".
-    4.  **UBSCore Logic**:
-        *   Deduct `amount` from `available`.
-        *   **Negative Balance**: If `available < 0`, allow it to go negative.
-        *   **Lockdown**: Trigger `UserAccount::freeze_all()` to prevent further trading/withdrawal until debt is settled.
-
-| **TRON** | 20 (Prod) | 1m |
-
 ## 8. Operational Roadmap (Future Consideration)
-
-While not part of the initial implementation, the following components are critical for a long-term production system.
 
 ### 8.1 T+1 Reconciliation Bot (The Financial Audit)
 
@@ -260,63 +269,18 @@ To break it down:
     *   `SELECT SUM(available + frozen) FROM accounts WHERE asset = 'BTC'`
 2.  **Proof of Assets (PoA)**:
     *   `RPC.getbalance()` (or `listunspent` sum)
-    *   *Note*: Must subtract "Unswept Dust" if we ignore it in DB.
 3.  **Proof of Flow (PoF)**:
     *   `SELECT SUM(amount) FROM deposit_history WHERE status='SUCCESS' AND time > T-1`
     *   `SELECT SUM(amount + fee) FROM withdraw_history WHERE status='SUCCESS' AND time > T-1`
 
-#### 8.1.3 The "Truncation Protocol" (100% Match)
-*   **Precision Constraint**: The system supports `N` decimals as defined in **Asset Configuration** (e.g., `ETH` might be configured to 12 or 18, `USDT` to 6).
-*   **Ingress Logic**:
-    *   `Deposit_Credited = Truncate(Deposit_Raw, Configured_Precision)`
-    *   *Residue*: `Deposit_Raw - Deposit_Credited` remains in the wallet as "System Dust".
-*   **Reconciliation Equation**:
-    ```text
-    Truncate(Wallet_Balance, N) 
-    == 
-    Sum(User_Balances) + Truncate(Unswept_Dust, N)
-    ```
-    *(Note: Gas Fees are deducted from Wallet Balance, so they are naturally accounted for if we track `NetFlow` correctly)*
-    
-    **Refined Equation**: 
-    `Truncate(Wallet_Start + Deposits - Withdrawals - GasFees, N) == Sum(User_Balances)`
-
-*   **Alerting**:
-    *   **Tolerance**: **0**. (Exact Integers).
-    *   **Action**: Any deviation implies code bug or theft. **P0 Alert**.
-
-3.  **Gas Management**: Manual gas funding for hot wallets.
-
 ## 9. Configuration & Tunables (Operational Safety)
-
-These parameters MUST be loadable from configuration (e.g., `Settings.toml` or DB) to respond to attack vectors without recompiling.
 
 ### 9.1 The "Dust Wall" (Anti-Spam)
 *   **Parameter**: `MIN_DEPOSIT_THRESHOLD` (e.g., `0.001 BTC`).
-*   **Logic**:
-    ```rust
-    if tx.amount < config.min_deposit {
-        warn!("Ignored dust deposit: {} < {}", tx.amount, config.min_deposit);
-        return; // Do not track, do not insert into DB
-    }
-    ```
 *   **Purpose**: Prevents "Dust Attacks" where consolidating inputs costs more than the deposit value.
 
 ### 9.2 The "Dead Man Switch" (Node Health)
 *   **Parameter**: `MAX_BLOCK_LAG_SECONDS` (e.g., `3600`).
-*   **Logic**:
-    ```rust
-    let block_time = block.timestamp();
-    let now = SystemTime::now();
-    if (now - block_time) > config.max_block_lag {
-        error!("CRITICAL: Node is stale! Block time: {}, Lag: {}s", block_time, lag);
-        std::process::exit(1); // Force Crash & Alert
-    }
-    ```
-*   **Purpose**: Prevents Sentinel from scanning a stale local chain while the real world has moved on.
-
-    }
-    ```
 *   **Purpose**: Prevents Sentinel from scanning a stale local chain while the real world has moved on.
 
 ## 10. Wallet & Address Management (HD Architecture)
@@ -324,9 +288,8 @@ These parameters MUST be loadable from configuration (e.g., `Settings.toml` or D
 To ensure security, we strictly follow the **Watch-Only Wallet** pattern using BIP32/BIP44/BIP84 standards.
 
 ### 10.1 The Master Key (Cold Storage)
-*   **Generation**: Created offline (Air-gapped) or via Hardware Wallet (Ledger/Trezor).
 *   **Export**: Only the **Extended Public Key (`xpub`/`zpub`)** is exported to the production server.
-*   **Security Guarantee**: Even if the entire DB and Sentinel are compromised, **attackers cannot steal funds** (they can't sign withdrawals).
+*   **Security Guarantee**: Even if the entire DB and Sentinel are compromised, **attackers cannot steal funds**.
 
 ### 10.2 Address Derivation (Hot Allocation)
 *   **Path Standard**:
@@ -367,28 +330,101 @@ sequenceDiagram
     end
 ```
 
-### 10.4 The "Gap Limit" Problem
-*   **Issue**: HD Wallets usually stop scanning if they see 20 unused addresses. We allocate addresses randomly to users.
-*   **Solution**: **Full Index Scanning**.
-    *   The Sentinel does NOT rely on Gap Limits.
-    *   The Sentinel loads **ALL** active allocated addresses from the `user_addresses` table into a **Bloom Filter** or **HashSet**.
-    *   When scanning a block, it checks every output against this Set.
-    *   *Scale*: A Rust `HashSet` of 10 million addresses consumes ~300MB RAM. Totally acceptable for Phase I-III.
+### 10.4 The "Gap Limit" Solution
+*   **Solution**: **Full Index Scanning**. Sentinel loads **ALL** active allocated addresses from the `user_addresses` table into a **Bloom Filter**.
 
-### 10.4 Key Rotation
-*   **Scenario**: The cold key is compromised or we want to migrate.
-*   **Action**:
-    1.  Admin configures new `xpub_v2`.
-    2.  New users get addresses from `xpub_v2`.
-    3.  Sentinel scans **BOTH** `xpub_v1` addresses and `xpub_v2` addresses.
+---
 
-### 10.5 Security Guards
-*   **Rate Limiting**: `GET /deposit/address` must be rate-limited (e.g., 10/min per user) to prevent **Address Poisoning** (bloating our scan index).
-*   **Sanity Check**: Reject derivation if `index > max_allowed_index` (e.g., 10 million).
+<br>
+<div align="right"><a href="#-english">↑ Back to Top</a></div>
+<br>
 
-## 11. Advanced Defense (The "Fake Re-org")
-*   **Risk**: Attacker compromises the local Bitcoin Node and feeds fake blocks.
-*   **Defense**: **Multi-Source Validation** (Phase II).
-    *   Before "Finalizing" any deposit > 1 BTC, Sentinel must verify the Block Hash against a secondary, trusted source (e.g., Blockstream API / Infura).
-    *   *Note*: Optional for Regtest/Phase I, Mandatory for Mainnet.
+---
 
+<div id="-chinese"></div>
+
+## 🇨🇳 中文
+
+| 状态 | 🚧 **设计阶段** |
+| :--- | :--- |
+| **日期** | 2025-12-28 |
+| **上下文** | Phase 0x11 扩展: 从模拟到现实 |
+| **目标** | 集成真实区块链节点 (Regtest/Testnet) 并处理分布式系统故障 (重组, 网络分区)。 |
+
+---
+
+## 1. 核心架构变更: Pull vs Push
+
+Mock 阶段 (0x11) 依赖 **Push 模型** (API 调用 -> 充值)。
+真实链集成 (0x11-a) 需要 **Pull 模型** (哨兵 -> 数据库)。
+
+### 1.1 哨兵服务 (Sentinel)
+一个独立的、死循环的服务，负责 "注视" 区块链。
+
+*   **区块扫描**: 轮询 `getblockchaininfo` / `eth_blockNumber`。
+*   **过滤器**: 内存中索引所有 `user_addresses`。
+*   **状态追踪**: 更新 `CONFIRMING` 状态存款的确认数。
+
+## 2. 支持链 (第一阶段)
+
+### 2.1 Bitcoin (UTXO 原型)
+*   **节点**: `bitcoind` (Regtest 模式)。
+*   **挑战**: **UTXO 管理**。存款是新的 UTXO，而不是余额数字更新。
+*   **Docker**: `ruimarinho/bitcoin-core:24`
+
+### 2.2 Ethereum (账户/EVM 原型)
+*   **节点**: `anvil` (Foundry-rs)。
+*   **挑战**: **Event Log 解析**。ERC20 存款是 Log 中的 `Transfer` 事件。
+*   **Docker**: `ghcr.io/foundry-rs/foundry:latest`
+
+---
+
+## 3. 对账与安全 (金融防火墙)
+
+### 3.1 "截断协议" (100% 匹配)
+解决链上浮点数问题：
+
+*   **精度约束**: 系统仅支持配置定义的 `N` 位小数 (如 ETH=12)。
+*   **入金逻辑**: `入账金额 = Truncate(链上原始金额, N)`。
+*   **对账公式**:
+    ```text
+    Truncate(钱包初始 + 充值 - 提现 - Gas费, N) 
+    == 
+    Sum(用户余额)
+    ```
+*   **报警**: **零容忍**。任何偏差触发 P0 报警并暂停提现。
+
+### 3.2 重组恢复协议 (Re-org Recovery)
+
+#### 3.2.1 浅层重组 (Finalization 之前)
+*   **场景**: 区块 100 (Hash A) 变为 (Hash B)。
+*   **动作**: 哨兵发现 Hash 不匹配，回滚 `chain_cursor`，标记孤块存款为 `ORPHANED`。不影响用户余额。
+
+#### 3.2.2 深层重组 ("回撤" Clawback)
+*   **场景**: 6 确认后入账，但链发生 10个块的深层重组。
+*   **动作**:
+    1.  哨兵检测到深层重组。
+    2.  引擎注入 `OrderAction::ForceDeduct` (行政冲正)。
+    3.  用户余额可能变为负数。账户冻结直至平账。
+
+---
+
+## 4. 钱包架构 (温/冷)
+
+### 4.1 地址派生
+*   **标准**: BIP32/BIP44/BIP84。
+*   **模式**: **Watch-Only** (只读)。
+    *   服务器仅持有 **扩展公钥 (`xpub`)**。
+    *   私钥保持离线 (冷存储)。
+
+### 4.2 "Gap Limit" 解决方案
+*   **问题**: HD 钱包通常在遇到 20 个未使用地址后停止扫描。
+*   **方案**: **全索引扫描**。
+    *   哨兵将 **所有** 已分配地址加载到 **Bloom Filter**。
+    *   扫描每个区块的所有输出，忽略 Gap Limit。
+
+---
+
+<br>
+<div align="right"><a href="#-chinese">↑ 回到顶部</a></div>
+<br>

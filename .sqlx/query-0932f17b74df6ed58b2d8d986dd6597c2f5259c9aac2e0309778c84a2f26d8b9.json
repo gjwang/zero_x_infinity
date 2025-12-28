@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO deposit_history (tx_hash, user_id, asset, amount, status, block_height)\n            VALUES ($1, $2, $3, $4, 'SUCCESS', 100)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Int8",
+        "Varchar",
+        "Numeric"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0932f17b74df6ed58b2d8d986dd6597c2f5259c9aac2e0309778c84a2f26d8b9"
+}

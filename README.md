@@ -74,6 +74,7 @@ graph TD
 | Stage | Title | Description |
 |-------|-------|-------------|
 | 0x01 | [Genesis](./docs/src/0x01-genesis.md) | Basic OrderBook Engine |
+| 0x11 | [Deposit & Withdraw](./docs/src/0x11-deposit-withdraw.md) | ✅ Mock Chain Integration (RC2 Released) |
 | 0x02 | [The Curse of Float](./docs/src/0x02-the-curse-of-float.md) | Float Curse → u64 Refactor |
 | 0x03 | [Decimal World](./docs/src/0x03-decimal-world.md) | Decimal System & Precision |
 | 0x04 | [BTree OrderBook](./docs/src/0x04-btree-orderbook.md) | BTreeMap Structure Refactor |
@@ -107,6 +108,8 @@ graph TD
 | 0x0E | [OpenAPI Integration](./docs/src/0x0E-openapi-integration.md) | Swagger UI & SDK Generation |
 | 0x0F | [Admin Dashboard](./docs/src/0x0F-admin-dashboard.md) | FastAPI Amis Admin + Trace ID |
 | 0x10 | [Web Frontend](./docs/src/0x10-web-frontend.md) | Frontend Outsourcing Requirement |
+| 0x11 | [Deposit & Withdraw](./docs/src/0x11-deposit-withdraw.md) | ✅ Mock Chain Integration |
+| 0x11-a | [Real Chain Integration](./docs/src/0x11-a-real-chain.md) | 🚧 Real-world Blockchain Integration |
 
 ---
 
@@ -282,6 +285,8 @@ graph TD
 | 0x0E | [OpenAPI Integration](./docs/src/0x0E-openapi-integration.md) | Swagger UI 与 SDK 生成 |
 | 0x0F | [Admin Dashboard](./docs/src/0x0F-admin-dashboard.md) | 管理后台 + Trace ID 证据链 |
 | 0x10 | [Web Frontend](./docs/src/0x10-web-frontend.md) | 前端外包需求文档 |
+| 0x11 | [Deposit & Withdraw](./docs/src/0x11-deposit-withdraw.md) | ✅ 充值与提现 (Mock Chain) |
+| 0x11-a | [Real Chain Integration](./docs/src/0x11-a-real-chain.md) | 🚧 真实区块链集成 |
 
 ---
 

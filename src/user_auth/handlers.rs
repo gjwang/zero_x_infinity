@@ -34,20 +34,29 @@ pub async fn register(
         ));
     }
 
-    match state.user_auth.register(req).await {
+    let user_auth = state.user_auth.as_ref().ok_or((
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(ApiResponse::<()>::error(
+            error_codes::INTERNAL_ERROR,
+            "Auth service unavailable",
+        )),
+    ))?;
+
+    match user_auth.register(req).await {
         Ok(user_id) => Ok((StatusCode::CREATED, Json(ApiResponse::success(user_id)))),
         Err(e) => {
-            tracing::error!("Registration failed: {:?}", e);
-            // Check for duplicate key error (generic way)
-            if e.to_string().contains("duplicate key") {
+            let err_msg = e.to_string();
+            if err_msg.contains("duplicate key") {
+                tracing::warn!("Registration attempt for existing user: {}", err_msg);
                 Err((
-                    StatusCode::BAD_REQUEST,
+                    StatusCode::CONFLICT,
                     Json(ApiResponse::<()>::error(
                         error_codes::INVALID_PARAMETER,
                         "Username or Email already exists",
                     )),
                 ))
             } else {
+                tracing::error!("Registration failed: {:?}", e);
                 Err((
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(ApiResponse::<()>::error(
@@ -78,7 +87,15 @@ pub async fn login(
     State(state): State<Arc<AppState>>,
     Json(req): Json<LoginRequest>,
 ) -> Result<(StatusCode, Json<ApiResponse<AuthResponse>>), (StatusCode, Json<ApiResponse<()>>)> {
-    match state.user_auth.login(req).await {
+    let user_auth = state.user_auth.as_ref().ok_or((
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(ApiResponse::<()>::error(
+            error_codes::INTERNAL_ERROR,
+            "Auth service unavailable",
+        )),
+    ))?;
+
+    match user_auth.login(req).await {
         Ok(resp) => Ok((StatusCode::OK, Json(ApiResponse::success(resp)))),
         Err(e) => {
             tracing::warn!("Login failed: {:?}", e);
@@ -133,7 +150,15 @@ pub async fn create_api_key(
 > {
     let user_id = claims.sub.parse::<i64>().unwrap_or_default();
 
-    match state.user_auth.generate_api_key(user_id, req.label).await {
+    let user_auth = state.user_auth.as_ref().ok_or((
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(ApiResponse::<()>::error(
+            error_codes::INTERNAL_ERROR,
+            "Auth service unavailable",
+        )),
+    ))?;
+
+    match user_auth.generate_api_key(user_id, req.label).await {
         Ok((api_key, api_secret)) => Ok((
             StatusCode::CREATED,
             Json(ApiResponse::success(CreateApiKeyResponse {
@@ -178,7 +203,15 @@ pub async fn list_api_keys(
 > {
     let user_id = claims.sub.parse::<i64>().unwrap_or_default();
 
-    match state.user_auth.list_api_keys(user_id).await {
+    let user_auth = state.user_auth.as_ref().ok_or((
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(ApiResponse::<()>::error(
+            error_codes::INTERNAL_ERROR,
+            "Auth service unavailable",
+        )),
+    ))?;
+
+    match user_auth.list_api_keys(user_id).await {
         Ok(keys) => Ok((StatusCode::OK, Json(ApiResponse::success(keys)))),
         Err(e) => {
             tracing::error!("Failed to list API Keys: {:?}", e);
@@ -216,7 +249,15 @@ pub async fn delete_api_key(
 ) -> Result<(StatusCode, Json<ApiResponse<()>>), (StatusCode, Json<ApiResponse<()>>)> {
     let user_id = claims.sub.parse::<i64>().unwrap_or_default();
 
-    match state.user_auth.delete_api_key(user_id, api_key).await {
+    let user_auth = state.user_auth.as_ref().ok_or((
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(ApiResponse::<()>::error(
+            error_codes::INTERNAL_ERROR,
+            "Auth service unavailable",
+        )),
+    ))?;
+
+    match user_auth.delete_api_key(user_id, api_key).await {
         Ok(_) => Ok((StatusCode::OK, Json(ApiResponse::success(())))),
         Err(e) => {
             // Check if not found
