@@ -11,6 +11,7 @@ on:
     paths:
       - 'admin/**'
       - 'migrations/**'
+  workflow_dispatch:
 
 jobs:
   admin-unit-test:
