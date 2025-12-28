@@ -83,6 +83,14 @@ init_postgres() {
     fi
     
     # Verify
+    # Reset sequences to match seeded data (Fixes "duplicate key value" on first insert)
+    log_info "Fixing sequences..."
+    PGPASSWORD=$DB_PASS psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -t -c "
+        SELECT setval(c.oid, (SELECT MAX(user_id) FROM users_tb))
+        FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relname = 'users_tb_user_id_seq';
+    " > /dev/null 2>&1 || true
+
     log_info "Verifying tables..."
     TABLES=$(psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "$PG_DB" -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'" | tr -d ' ')
     log_info "  Found $TABLES tables"

@@ -153,9 +153,12 @@ pub async fn run_server(
     pg_symbols: Arc<Vec<Symbol>>,
     // Phase 0x0B-a: Optional channel to UBSCore for TradingAdapter
     transfer_sender: Option<TransferSender>,
+    // WebSocket manager for broadcasting
+    ws_manager: Arc<ConnectionManager>,
+    // JWT Secret for User Auth (Phase 0x10.6)
+    jwt_secret: String,
 ) {
-    // Create WebSocket connection manager
-    let ws_manager = Arc::new(ConnectionManager::new());
+    // WebSocket connection manager is passed in
 
     // Start WebSocket push service
     let ws_service =
@@ -170,6 +173,17 @@ pub async fn run_server(
         ts_store: Arc::new(TsStore::new()),
         time_window_ms: 30_000, // 30 seconds
     });
+
+    // Create User Auth Service (Phase 0x10.6)
+    let user_auth = if let Some(ref db) = pg_db {
+        Some(Arc::new(crate::user_auth::UserAuthService::new(
+            db.pool().clone(),
+            jwt_secret,
+        )))
+    } else {
+        println!("⚠️  User Auth Service disabled (PostgreSQL required)");
+        None
+    };
 
     // ==========================================================================
     // Phase 0x0B-a: Initialize Internal Transfer FSM
@@ -215,6 +229,7 @@ pub async fn run_server(
         pg_assets,
         pg_symbols,
         auth_state,
+        user_auth.clone(),
     );
 
     // Wire TransferCoordinator to state
@@ -225,6 +240,28 @@ pub async fn run_server(
     let state = Arc::new(state);
 
     // ==========================================================================
+    // User Auth Routes (Phase 0x10.6)
+    // ==========================================================================
+    let auth_routes = Router::new()
+        .route("/register", post(crate::user_auth::handlers::register))
+        .route("/login", post(crate::user_auth::handlers::login));
+
+    // ==========================================================================
+    // User Routes (Phase 0x10.6) - Protected by JWT
+    // ==========================================================================
+    let user_routes = Router::new()
+        .route("/apikeys", post(crate::user_auth::handlers::create_api_key))
+        .route("/apikeys", get(crate::user_auth::handlers::list_api_keys))
+        .route(
+            "/apikeys/{api_key}",
+            axum::routing::delete(crate::user_auth::handlers::delete_api_key),
+        )
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            crate::user_auth::middleware::jwt_auth_middleware,
+        ));
+
+    // ==========================================================================
     // Public Routes (no auth required)
     // ==========================================================================
     let public_routes = Router::new()
@@ -233,7 +270,8 @@ pub async fn run_server(
         .route("/assets", get(handlers::get_assets))
         .route("/symbols", get(handlers::get_symbols))
         .route("/depth", get(handlers::get_depth))
-        .route("/klines", get(handlers::get_klines));
+        .route("/klines", get(handlers::get_klines))
+        .route("/trades", get(handlers::get_public_trades));
 
     // ==========================================================================
     // Private Routes (auth required)
@@ -261,8 +299,39 @@ pub async fn run_server(
         // Health check
         .route("/api/v1/health", get(handlers::health_check))
         // API Routes
+        .nest("/api/v1/auth", auth_routes)
+        .nest("/api/v1/user", user_routes) // Phase 0x10.6 User Center
         .nest("/api/v1/public", public_routes)
         .nest("/api/v1/private", private_routes)
+        .nest(
+            "/api/v1/capital",
+            Router::new()
+                .route(
+                    "/deposit/address",
+                    get(crate::funding::handlers::get_deposit_address),
+                )
+                .route(
+                    "/deposit/history",
+                    get(crate::funding::handlers::get_deposit_history),
+                )
+                .route(
+                    "/withdraw/apply",
+                    post(crate::funding::handlers::apply_withdraw),
+                )
+                .route(
+                    "/withdraw/history",
+                    get(crate::funding::handlers::get_withdraw_history),
+                )
+                .layer(from_fn_with_state(
+                    state.clone(),
+                    crate::user_auth::middleware::jwt_auth_middleware,
+                )),
+        )
+        .nest(
+            "/internal/mock",
+            Router::new().route("/deposit", post(crate::funding::handlers::mock_deposit)), // Internal routes usually protected by IP or internal secret, strictly strictly locally accessible
+                                                                                           // For MVP/Sim, we expose it.
+        )
         .with_state(state)
         // Phase 0x0E: OpenAPI / Swagger UI (stateless, added after with_state)
         .merge(SwaggerUi::new("/docs").url("/api-docs/openapi.json", openapi::ApiDoc::openapi()));

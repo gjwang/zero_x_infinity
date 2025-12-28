@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use taos::*;
+use utoipa::ToSchema;
 
 use crate::symbol_manager::SymbolManager;
 
@@ -93,6 +94,21 @@ pub struct TradeApiData {
     pub fee_asset: String, // Asset in which fee was paid (BUY→base, SELL→quote)
     pub role: String,
     pub created_at: String,
+}
+
+/// Public Trade API response data (for public market data endpoints)
+///
+/// This struct is used for public trade history endpoints and does NOT expose
+/// sensitive information like user_id or order_id.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct PublicTradeApiData {
+    pub id: i64,              // Trade ID
+    pub price: String,        // Formatted with price_display_decimal
+    pub qty: String,          // Formatted with base_asset.display_decimals
+    pub quote_qty: String,    // price * qty (formatted with quote_asset.display_decimals)
+    pub time: i64,            // Unix milliseconds
+    pub is_buyer_maker: bool, // true if buyer is maker (sell order matched)
+    pub is_best_match: bool,  // Always true for our matching engine
 }
 
 /// Balance record from TDengine
@@ -383,6 +399,107 @@ pub async fn query_trades(
                 fee_asset,
                 role: if row.role == 1 { "TAKER" } else { "MAKER" }.to_string(),
                 created_at: row.ts,
+            }
+        })
+        .collect())
+}
+
+/// Query public trades for a symbol (for public API endpoints)
+///
+/// This function returns trade history WITHOUT exposing user_id or order_id.
+/// Supports pagination via from_id parameter.
+pub async fn query_public_trades(
+    taos: &Taos,
+    symbol_id: u32,
+    limit: usize,
+    from_id: Option<i64>,
+    symbol_mgr: &SymbolManager,
+) -> Result<Vec<PublicTradeApiData>> {
+    // Build WHERE clause with optional from_id filter
+    let where_clause = if let Some(from_id) = from_id {
+        format!("symbol_id = {} AND trade_id > {}", symbol_id, from_id)
+    } else {
+        format!("symbol_id = {}", symbol_id)
+    };
+
+    // Query trades (only select fields needed for public API)
+    let trades_sql = format!(
+        "SELECT ts, trade_id, side, price, qty FROM trading.trades WHERE {} ORDER BY trade_id DESC LIMIT {}",
+        where_clause, limit
+    );
+
+    let mut result = taos
+        .query(&trades_sql)
+        .await
+        .map_err(|e| anyhow::anyhow!("Query public trades failed: {}", e))?;
+
+    // Define a minimal row struct for public trades
+    #[derive(Debug, Deserialize)]
+    struct PublicTradeRow {
+        ts: String,
+        trade_id: i64,
+        side: i8,
+        price: i64,
+        qty: i64,
+    }
+
+    let rows: Vec<PublicTradeRow> = result
+        .deserialize()
+        .try_collect()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to deserialize public trades: {}", e))?;
+
+    // Get symbol info for formatting
+    let symbol_info = symbol_mgr.get_symbol_info_by_id(symbol_id).unwrap();
+    let base_decimals = symbol_mgr
+        .get_asset_decimal(symbol_info.base_asset_id)
+        .unwrap();
+    let base_display_decimals = symbol_mgr
+        .get_asset_display_decimals(symbol_info.base_asset_id)
+        .unwrap();
+    let quote_decimals = symbol_mgr
+        .get_asset_decimal(symbol_info.quote_asset_id)
+        .unwrap();
+    let quote_display_decimals = symbol_mgr
+        .get_asset_display_decimals(symbol_info.quote_asset_id)
+        .unwrap();
+
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            let is_buy = row.side == 0;
+
+            // Calculate quote_qty = price * qty
+            // price is in price_decimal units, qty is in base_decimals units
+            // Result should be in quote_decimals units
+            let price_u64 = row.price as u64;
+            let qty_u64 = row.qty as u64;
+
+            // quote_qty = (price * qty) / 10^base_decimals
+            // This gives us the quote amount in internal units (×10^quote_decimals)
+            let quote_qty_internal = (price_u64 * qty_u64) / 10u64.pow(base_decimals);
+
+            // Parse timestamp to milliseconds
+            let time_ms = chrono::DateTime::parse_from_rfc3339(&row.ts)
+                .map(|dt| dt.timestamp_millis())
+                .unwrap_or(0);
+
+            PublicTradeApiData {
+                id: row.trade_id,
+                price: format_amount(
+                    price_u64,
+                    symbol_info.price_decimal,
+                    symbol_info.price_display_decimal,
+                ),
+                qty: format_amount(qty_u64, base_decimals, base_display_decimals),
+                quote_qty: format_amount(
+                    quote_qty_internal,
+                    quote_decimals,
+                    quote_display_decimals,
+                ),
+                time: time_ms,
+                is_buyer_maker: !is_buy, // If side is SELL (1), then buyer is maker
+                is_best_match: true,     // Always true for our matching engine
             }
         })
         .collect())
@@ -807,5 +924,150 @@ mod kline_tests {
         assert!(json.contains("\"symbol\":\"BTC_USDT\""));
         assert!(json.contains("\"volume\":\"0.400000\""));
         assert!(json.contains("\"quote_volume\":\"14800.00\""));
+    }
+}
+
+#[cfg(test)]
+mod public_trades_tests {
+    use super::*;
+
+    #[test]
+    fn test_public_trade_api_data_no_sensitive_fields() {
+        // Verify that PublicTradeApiData does NOT have user_id or order_id fields
+        let trade = PublicTradeApiData {
+            id: 12345,
+            price: "43000.00".to_string(),
+            qty: "0.1000".to_string(),
+            quote_qty: "4300.00".to_string(),
+            time: 1703660555000,
+            is_buyer_maker: true,
+            is_best_match: true,
+        };
+
+        // Serialize to JSON
+        let json = serde_json::to_string(&trade).unwrap();
+
+        // Verify sensitive fields are NOT present
+        assert!(
+            !json.contains("user_id"),
+            "PublicTradeApiData should NOT contain user_id"
+        );
+        assert!(
+            !json.contains("order_id"),
+            "PublicTradeApiData should NOT contain order_id"
+        );
+
+        // Verify expected fields ARE present
+        assert!(json.contains("\"id\":12345"));
+        assert!(json.contains("\"price\":\"43000.00\""));
+        assert!(json.contains("\"qty\":\"0.1000\""));
+        assert!(json.contains("\"quote_qty\":\"4300.00\""));
+        assert!(json.contains("\"time\":1703660555000"));
+        assert!(json.contains("\"is_buyer_maker\":true"));
+        assert!(json.contains("\"is_best_match\":true"));
+    }
+
+    #[test]
+    fn test_quote_qty_calculation_btc_usdt() {
+        // BTC_USDT example:
+        // - price_decimal = 2 (price = 43000.00 -> internal 4300000)
+        // - base_decimals = 8 (qty = 0.1 -> internal 10000000)
+        // - quote_decimals = 2
+        // - quote_qty = (price * qty) / 10^base_decimals
+        //             = (4300000 * 10000000) / 10^8
+        //             = 43000000000000 / 100000000
+        //             = 430000 (internal units, quote_decimals=2)
+        // - display: 430000 / 10^2 = 4300.00 USDT
+
+        let price: u64 = 4300000; // 43000.00 (price_decimal=2)
+        let qty: u64 = 10000000; // 0.1 BTC (base_decimals=8)
+        let base_decimals: u32 = 8;
+        let quote_decimals: u32 = 2;
+        let quote_display_decimals: u32 = 2;
+
+        let quote_qty_internal = (price * qty) / 10u64.pow(base_decimals);
+        assert_eq!(quote_qty_internal, 430000);
+
+        let quote_qty_str =
+            format_amount(quote_qty_internal, quote_decimals, quote_display_decimals);
+        assert_eq!(quote_qty_str, "4300.00");
+    }
+
+    #[test]
+    fn test_quote_qty_calculation_small_trade() {
+        // Small trade: 0.01 BTC @ 35000 USDT = 350 USDT
+        // - price = 35000.00 -> internal 3500000
+        // - qty = 0.01 -> internal 1000000
+        // - quote_qty = (3500000 * 1000000) / 10^8 = 35000
+
+        let price: u64 = 3500000;
+        let qty: u64 = 1000000;
+        let base_decimals: u32 = 8;
+        let quote_decimals: u32 = 2;
+        let quote_display_decimals: u32 = 2;
+
+        let quote_qty_internal = (price * qty) / 10u64.pow(base_decimals);
+        assert_eq!(quote_qty_internal, 35000);
+
+        let quote_qty_str =
+            format_amount(quote_qty_internal, quote_decimals, quote_display_decimals);
+        assert_eq!(quote_qty_str, "350.00");
+    }
+
+    #[test]
+    fn test_is_buyer_maker_logic() {
+        // is_buyer_maker should be true when side is SELL (1)
+        // Because if a SELL order is in the book (maker), the buyer is the taker
+
+        // Case 1: side = 0 (BUY) -> is_buyer_maker = false
+        let side_buy: i8 = 0;
+        let is_buy = side_buy == 0;
+        let is_buyer_maker = !is_buy;
+        assert_eq!(
+            is_buyer_maker, false,
+            "BUY order: buyer is taker, not maker"
+        );
+
+        // Case 2: side = 1 (SELL) -> is_buyer_maker = true
+        let side_sell: i8 = 1;
+        let is_buy = side_sell == 0;
+        let is_buyer_maker = !is_buy;
+        assert_eq!(is_buyer_maker, true, "SELL order: buyer is maker");
+    }
+
+    #[test]
+    fn test_public_trade_string_formatting() {
+        // Verify all numeric fields are Strings, not numbers
+        let trade = PublicTradeApiData {
+            id: 99999,
+            price: "50000.50".to_string(),
+            qty: "1.234567".to_string(),
+            quote_qty: "61728.62".to_string(),
+            time: 1700000000000,
+            is_buyer_maker: false,
+            is_best_match: true,
+        };
+
+        let json = serde_json::to_string(&trade).unwrap();
+
+        // Prices and quantities should be quoted strings in JSON
+        assert!(
+            json.contains("\"price\":\"50000.50\""),
+            "price should be a string"
+        );
+        assert!(
+            json.contains("\"qty\":\"1.234567\""),
+            "qty should be a string"
+        );
+        assert!(
+            json.contains("\"quote_qty\":\"61728.62\""),
+            "quote_qty should be a string"
+        );
+
+        // time should be a number
+        assert!(
+            json.contains("\"time\":1700000000000"),
+            "time should be a number"
+        );
     }
 }

@@ -107,7 +107,14 @@ if [ ! -f "target/release/zero_x_infinity" ]; then
 fi
 
 # Start Gateway
-nohup ./target/release/zero_x_infinity --gateway --port 8080 > /tmp/gateway_fee_e2e.log 2>&1 &
+# Use CI config when running in CI environment
+if [ "$CI" = "true" ]; then
+    ENV_FLAG="--env ci"
+else
+    ENV_FLAG=""
+fi
+
+nohup ./target/release/zero_x_infinity --gateway $ENV_FLAG --port 8080 > /tmp/gateway_fee_e2e.log 2>&1 &
 sleep 3
 
 # Wait for Gateway to be ready
@@ -136,7 +143,7 @@ STEP=4
 echo ""
 echo "[Step $STEP] Injecting orders through API..."
 
-if ! python3 "${SCRIPT_DIR}/inject_orders.py" --input fixtures/orders.csv --workers 10 --limit 1000 2>&1 | tail -5; then
+if ! uv run "${SCRIPT_DIR}/inject_orders.py" --input fixtures/orders.csv --workers 10 --limit 1000 2>&1 | tail -5; then
     fail_at_step "Order injection failed"
 fi
 echo -e "    ${GREEN}✓${NC} Orders injected"
@@ -152,7 +159,7 @@ echo ""
 echo "[Step $STEP] Querying trades API and verifying fee fields..."
 
 # Use Python script for authenticated API call
-TRADES_RESULT=$(python3 << 'EOF'
+TRADES_RESULT=$(uv run << 'EOF'
 import sys
 sys.path.insert(0, 'scripts')
 from lib.api_auth import get_test_client

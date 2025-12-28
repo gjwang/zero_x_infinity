@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE withdraw_history SET status = 'FAILED', updated_at = CURRENT_TIMESTAMP WHERE request_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a7e7cf0a4f39d1a2822a237b4ec7c5cdc6613dcf8a7f27c8a52fcb8bd7ceffb7"
+}

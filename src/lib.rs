@@ -77,6 +77,9 @@ pub mod fee;
 // Config Hot-Reload (Phase 0x0C)
 pub mod config_watcher;
 
+// User Authentication (Phase 0x10.6)
+pub mod user_auth;
+
 // Convenient re-exports at crate root
 pub use balance::Balance;
 pub use core_types::{AssetId, OrderId, SeqNum, TradeId, UserId};

@@ -266,6 +266,7 @@ pub mod error_codes {
     pub const RATE_LIMITED: i32 = 4291;
 
     // Server errors (5xxx)
+    pub const INTERNAL_ERROR: i32 = 5000;
     pub const SERVICE_UNAVAILABLE: i32 = 5001;
 }
 
@@ -368,7 +369,7 @@ mod tests {
 
     #[test]
     fn test_validate_limit_order_success() {
-        let (symbol_mgr, _) = load_symbol_manager();
+        let (symbol_mgr, _) = load_symbol_manager().unwrap();
         let order = ClientOrder {
             cid: Some("test-001".to_string()),
             symbol: "BTC_USDT".to_string(),
@@ -386,7 +387,7 @@ mod tests {
 
     #[test]
     fn test_validate_market_order_success() {
-        let (symbol_mgr, _) = load_symbol_manager();
+        let (symbol_mgr, _) = load_symbol_manager().unwrap();
         let order = ClientOrder {
             cid: None,
             symbol: "BTC_USDT".to_string(),
@@ -403,7 +404,7 @@ mod tests {
 
     #[test]
     fn test_validate_limit_missing_price_fails() {
-        let (symbol_mgr, _) = load_symbol_manager();
+        let (symbol_mgr, _) = load_symbol_manager().unwrap();
         let order = ClientOrder {
             cid: None,
             symbol: "BTC_USDT".to_string(),
@@ -419,7 +420,7 @@ mod tests {
 
     #[test]
     fn test_validate_zero_price_fails() {
-        let (symbol_mgr, _) = load_symbol_manager();
+        let (symbol_mgr, _) = load_symbol_manager().unwrap();
         let order = ClientOrder {
             cid: None,
             symbol: "BTC_USDT".to_string(),
@@ -435,7 +436,7 @@ mod tests {
 
     #[test]
     fn test_validate_negative_price_fails() {
-        let (symbol_mgr, _) = load_symbol_manager();
+        let (symbol_mgr, _) = load_symbol_manager().unwrap();
         let order = ClientOrder {
             cid: None,
             symbol: "BTC_USDT".to_string(),
@@ -451,7 +452,7 @@ mod tests {
 
     #[test]
     fn test_validate_zero_qty_fails() {
-        let (symbol_mgr, _) = load_symbol_manager();
+        let (symbol_mgr, _) = load_symbol_manager().unwrap();
         let order = ClientOrder {
             cid: None,
             symbol: "BTC_USDT".to_string(),
@@ -467,7 +468,7 @@ mod tests {
 
     #[test]
     fn test_validate_unknown_symbol_fails() {
-        let (symbol_mgr, _) = load_symbol_manager();
+        let (symbol_mgr, _) = load_symbol_manager().unwrap();
         let order = ClientOrder {
             cid: None,
             symbol: "UNKNOWN_SYMBOL".to_string(),

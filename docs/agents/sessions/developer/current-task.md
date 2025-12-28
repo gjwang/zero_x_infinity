@@ -1,52 +1,35 @@
-# 💻 Developer Current Task
+# Implement: Phase 0x11 Deposit & Withdraw
 
-## Session Info
-- **Date**: 2025-12-26
-- **Role**: Developer
-- **Status**: ✅ **Ready for QA Handover**
+**Role**: Senior Rust Developer
+**Context**: Adding Funding Layer to High-Performance Exchange.
+**Blocked By**: N/A (Design & Spec Ready).
 
-## Completed Work
+## 1. Technical Specification (Must Follow)
+*   **Architecture**: [`docs/agents/sessions/shared/arch-to-dev-handover-0x11.md`](../shared/arch-to-dev-handover-0x11.md)
+    *   *Includes*: SQL Schema (`deposit_history`, `user_addresses`) & Rust Trait (`ChainClient`).
+*   **Definition of Done**: [`docs/src/0x11-acceptance-checklist.md`](../../../src/0x11-acceptance-checklist.md)
+    *   *Critical*: Idempotency (TxHash unique constraint) is P0.
 
-### ✅ 0x0D Phase 3: Settlement WAL & Snapshot
-- 9 unit tests in `settlement_wal/` module
-- `SettlementService::new_with_persistence()` constructor
-- `SettlementPersistenceConfig` in `config.rs`
-- Full pipeline integration
+## 2. Implementation Steps
+### 2.1 Database Layer
+*   Create `migrations/20251228132000_deposit_withdraw.sql`.
+*   Copy Schema from Handover Doc Section 2.1 exactly.
 
-### ✅ 0x0D Phase 4: Replay Protocol
-- `MatchingService::replay_trades()` API
+### 2.2 Chain Adapter Module (`src/funding/chain_adapter.rs`)
+*   Implement `trait ChainClient`.
+*   Implement `MockBtcChain`: Address start with "1", "3", or "bc1".
+*   Implement `MockEvmChain`: Address start with "0x" (len > 10).
+*   *Note*: Use `uuid` for generating fake TxHashes.
 
-### ✅ E2E Crash Recovery Test (v2)
-- 14-step test with proper assertions
-- WAL content validation
-- Mandatory recovery log verification
-- **One-shot pass verified**
+### 2.3 Funding Service (`src/funding/service.rs`)
+*   `get_deposit_address(user, asset)`:
+    *   Check `user_addresses` table first.
+    *   If missing, call `ChainClient::generate_address` and INSERT.
+    *   Return address.
+*   `mock_deposit_callback`:
+    *   **Transactional**: Insert `deposit_history` -> Credit `UBScore`.
+    *   **Idempotency**: Handle "Duplicate Key Error" gracefully (ignore).
 
-## Test Results
-```
-Unit tests: 286 passed; 0 failed
-Settlement WAL: 9 passed
-E2E Recovery: 14 passed; 0 failed
-Clippy: 0 warnings
-Fmt: clean
-```
-
-## Deliverables for QA
-
-| Document | Path |
-|----------|------|
-| QA Handover | `docs/agents/sessions/shared/dev-to-qa-handover-settlement.md` |
-| E2E Test | `scripts/test_settlement_recovery_e2e.sh` |
-
-## Quick Verification
-
-```bash
-# Full verification
-cargo test --lib                    # 286 passed
-cargo test settlement_wal --lib     # 9 passed
-./scripts/test_settlement_recovery_e2e.sh  # 14 passed
-```
-
----
-
-*Ready for QA handover. All tests verified passing.*
+## 3. Verification
+*   **Unit Test**: Does `MockBtcChain` generate valid-looking addresses?
+*   **Integration**: Can I register a user -> Get Address -> Mock Deposit -> See Balance?

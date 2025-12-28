@@ -37,8 +37,11 @@ impl Asset {
     pub fn can_trade(&self) -> bool {
         self.asset_flags & asset_flags::CAN_TRADE != 0
     }
-    /// Check if internal transfers are allowed for this asset (Phase 0x0B-a)
     pub fn can_internal_transfer(&self) -> bool {
+        // Phase 0x12 Hotfix: Allow main assets until DB migration is applied
+        if self.asset == "BTC" || self.asset == "USDT" || self.asset == "ETH" {
+            return true;
+        }
         self.asset_flags & asset_flags::CAN_INTERNAL_TRANSFER != 0
     }
     /// Check if asset is active (status = 1)

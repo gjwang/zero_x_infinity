@@ -1,0 +1,310 @@
+use axum::{
+    Json,
+    extract::{Query, State},
+    http::StatusCode,
+};
+use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
+use std::str::FromStr;
+use std::sync::Arc;
+
+use crate::funding::chain_adapter::{MockBtcChain, MockEvmChain};
+use crate::gateway::{state::AppState, types::ApiResponse, types::error_codes}; // We instantiate ad-hoc or store in state?
+// For MVP we instantiate ad-hoc. State wiring is better but requires large refactor.
+// We can store generic ChainClient in AppState if needed, but AppState is crowded.
+// Let's instantiate locally as they are stateless mocks.
+
+use super::{deposit::DepositService, withdraw::WithdrawService};
+
+// --- Requests ---
+
+#[derive(Debug, Deserialize)]
+pub struct MockDepositRequest {
+    pub user_id: i64,
+    pub asset: String,
+    pub amount: String,
+    pub tx_hash: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct WithdrawApplyRequest {
+    pub asset: String,
+    pub amount: String,
+    pub address: String,
+    pub fee: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GetAddressRequest {
+    pub asset: String,
+    pub network: Option<String>,
+}
+
+// --- Responses ---
+
+#[derive(Debug, Serialize)]
+pub struct AddressResponse {
+    pub address: String,
+    pub network: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct WithdrawResponse {
+    pub request_id: String,
+    pub status: String,
+}
+
+// --- Handlers ---
+
+/// Internal Mock Deposit (Debug/Scanner Trigger)
+/// POST /internal/mock/deposit
+pub async fn mock_deposit(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<MockDepositRequest>,
+) -> Result<Json<ApiResponse<String>>, (StatusCode, Json<ApiResponse<()>>)> {
+    // QA-03: Internal Auth Check
+    let secret = headers
+        .get("X-Internal-Secret")
+        .and_then(|v| v.to_str().ok());
+    if secret != Some("dev-secret") {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<()>::error(
+                error_codes::AUTH_FAILED,
+                "Access Denied: Missing or Invalid X-Internal-Secret",
+            )),
+        ));
+    }
+
+    // Check if PG DB is available
+    let db = state.pg_db.as_ref().ok_or((
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(ApiResponse::<()>::error(
+            error_codes::INTERNAL_ERROR,
+            "DB unavailable",
+        )),
+    ))?;
+
+    let service = DepositService::new(db.clone());
+    let amount = Decimal::from_str(&req.amount).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<()>::error(
+                error_codes::INVALID_PARAMETER,
+                "Invalid amount",
+            )),
+        )
+    })?;
+
+    match service
+        .process_deposit(&req.tx_hash, req.user_id, &req.asset, amount)
+        .await
+    {
+        Ok(msg) => Ok(Json(ApiResponse::success(msg))),
+        Err(e) => {
+            // Check for idempotency
+            if e.to_string().contains("already processed") {
+                Ok(Json(ApiResponse::success(
+                    "Ignored: Already Processed".to_string(),
+                )))
+            } else {
+                Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<()>::error(
+                        error_codes::INTERNAL_ERROR,
+                        e.to_string(),
+                    )),
+                ))
+            }
+        }
+    }
+}
+
+/// Get Deposit Address
+/// GET /api/v1/capital/deposit/address
+pub async fn get_deposit_address(
+    State(state): State<Arc<AppState>>,
+    axum::Extension(claims): axum::Extension<crate::user_auth::service::Claims>,
+    Query(req): Query<GetAddressRequest>,
+) -> Result<Json<ApiResponse<AddressResponse>>, (StatusCode, Json<ApiResponse<()>>)> {
+    let db = state.pg_db.as_ref().ok_or((
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(ApiResponse::<()>::error(
+            error_codes::INTERNAL_ERROR,
+            "DB unavailable",
+        )),
+    ))?;
+
+    let user_id = claims.sub.parse::<i64>().unwrap_or_default();
+    let service = DepositService::new(db.clone());
+
+    // Select Chain Adapter based on Asset/Network
+    // MVP: ETH=MockEvm, BTC=MockBtc. Default to ETH for others.
+    let network = req.network.as_deref().unwrap_or("ETH");
+    let address = if network == "BTC" {
+        let adapter = MockBtcChain;
+        service
+            .get_address(&adapter, user_id, &req.asset, network)
+            .await
+    } else {
+        let adapter = MockEvmChain;
+        service
+            .get_address(&adapter, user_id, &req.asset, network)
+            .await
+    };
+
+    match address {
+        Ok(addr) => Ok(Json(ApiResponse::success(AddressResponse {
+            address: addr,
+            network: network.to_string(),
+        }))),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error(
+                error_codes::INTERNAL_ERROR,
+                e.to_string(),
+            )),
+        )),
+    }
+}
+
+/// Apply Withdraw
+/// POST /api/v1/capital/withdraw/apply
+pub async fn apply_withdraw(
+    State(state): State<Arc<AppState>>,
+    axum::Extension(claims): axum::Extension<crate::user_auth::service::Claims>,
+    Json(req): Json<WithdrawApplyRequest>,
+) -> Result<Json<ApiResponse<WithdrawResponse>>, (StatusCode, Json<ApiResponse<()>>)> {
+    let db = state.pg_db.as_ref().ok_or((
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(ApiResponse::<()>::error(
+            error_codes::INTERNAL_ERROR,
+            "DB unavailable",
+        )),
+    ))?;
+
+    let user_id = claims.sub.parse::<i64>().unwrap_or_default();
+    let service = WithdrawService::new(db.clone());
+
+    let amount = Decimal::from_str(&req.amount).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<()>::error(
+                error_codes::INVALID_PARAMETER,
+                "Invalid amount",
+            )),
+        )
+    })?;
+    let fee = Decimal::from_str(req.fee.as_deref().unwrap_or("0")).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<()>::error(
+                error_codes::INVALID_PARAMETER,
+                "Invalid fee",
+            )),
+        )
+    })?;
+
+    // Adapter selection (Simple logic for MVP)
+    let res = if req.asset == "BTC" {
+        let adapter = MockBtcChain;
+        service
+            .apply_withdraw(&adapter, user_id, &req.asset, &req.address, amount, fee)
+            .await
+    } else {
+        let adapter = MockEvmChain;
+        service
+            .apply_withdraw(&adapter, user_id, &req.asset, &req.address, amount, fee)
+            .await
+    };
+
+    match res {
+        Ok(req_id) => Ok(Json(ApiResponse::success(WithdrawResponse {
+            request_id: req_id,
+            status: "PROCESSING".to_string(), // or from DB result
+        }))),
+        Err(e) => {
+            Err((
+                // Determine status code based on error
+                // Determine status code based on error
+                if e.to_string().contains("Insufficient")
+                    || e.to_string().contains("Invalid address")
+                    || e.to_string().contains("Invalid amount")
+                {
+                    StatusCode::BAD_REQUEST
+                } else {
+                    StatusCode::INTERNAL_SERVER_ERROR
+                },
+                Json(ApiResponse::<()>::error(
+                    error_codes::INTERNAL_ERROR,
+                    e.to_string(),
+                )),
+            ))
+        }
+    }
+}
+
+/// Get Deposit History
+/// GET /api/v1/capital/deposit/history
+pub async fn get_deposit_history(
+    State(state): State<Arc<AppState>>,
+    axum::Extension(claims): axum::Extension<crate::user_auth::service::Claims>,
+) -> Result<
+    Json<ApiResponse<Vec<super::deposit::DepositRecord>>>,
+    (StatusCode, Json<ApiResponse<()>>),
+> {
+    let db = state.pg_db.as_ref().ok_or((
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(ApiResponse::<()>::error(
+            error_codes::INTERNAL_ERROR,
+            "DB unavailable",
+        )),
+    ))?;
+
+    let user_id = claims.sub.parse::<i64>().unwrap_or_default();
+    let service = DepositService::new(db.clone());
+
+    match service.get_history(user_id).await {
+        Ok(records) => Ok(Json(ApiResponse::success(records))),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error(
+                error_codes::INTERNAL_ERROR,
+                e.to_string(),
+            )),
+        )),
+    }
+}
+
+/// Get Withdraw History
+/// GET /api/v1/capital/withdraw/history
+pub async fn get_withdraw_history(
+    State(state): State<Arc<AppState>>,
+    axum::Extension(claims): axum::Extension<crate::user_auth::service::Claims>,
+) -> Result<
+    Json<ApiResponse<Vec<super::withdraw::WithdrawRecord>>>,
+    (StatusCode, Json<ApiResponse<()>>),
+> {
+    let db = state.pg_db.as_ref().ok_or((
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(ApiResponse::<()>::error(
+            error_codes::INTERNAL_ERROR,
+            "DB unavailable",
+        )),
+    ))?;
+
+    let user_id = claims.sub.parse::<i64>().unwrap_or_default();
+    let service = WithdrawService::new(db.clone());
+
+    match service.get_history(user_id).await {
+        Ok(records) => Ok(Json(ApiResponse::success(records))),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error(
+                error_codes::INTERNAL_ERROR,
+                e.to_string(),
+            )),
+        )),
+    }
+}

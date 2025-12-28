@@ -21,6 +21,8 @@
 ---
 
 ## 📖 Essential Reading
+> [!IMPORTANT]
+> **CRITICAL**: You MUST read [Testing Pitfalls](./docs/src/testing-pitfalls.md) BEFORE writing or running any test scripts. Violating the rules in this file (especially `pkill -f` and Stale Binary Trap) will cause severe system instability.
 
 Before making any changes, AI agents MUST read:
 
@@ -241,7 +243,7 @@ graph TD
 
 ### DO NOT
 
-- ❌ Use `pkill -f "zero_x_infinity"` (Causes IDE crash! See [Testing Pitfalls](./docs/src/testing-pitfalls.md))
+- ❌ Use `pkill -f "zero_x_infinity"` (**CRITICAL**: Causes IDE crash! See [Testing Pitfalls](./docs/src/testing-pitfalls.md))
 - ❌ Modify code during planning phase (Specification Mode)
 - ❌ Use `f64` for financial calculations (use `u64` with 10^6 precision)
 - ❌ Use `docker exec` in CI scripts (use REST API instead)

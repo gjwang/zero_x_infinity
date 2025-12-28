@@ -40,12 +40,12 @@ echo ""
 
 # Step 3: Verify balance events correctness
 echo "=== Step 3: Verify balance events correctness ==="
-python3 scripts/verify_balance_events.py
+uv run scripts/verify_balance_events.py
 echo ""
 
 # Step 4: Verify events baseline
 echo "=== Step 4: Verify events baseline ==="
-python3 scripts/verify_events_baseline.py
+uv run scripts/verify_events_baseline.py
 echo ""
 
 # Summary

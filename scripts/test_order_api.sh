@@ -160,15 +160,15 @@ log_step "Submitting test orders via inject_orders.py (Ed25519 auth)..."
 # Set PYTHONPATH so lib/auth.py is found
 export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
 
-# Detect Python: use system python3 in CI, venv otherwise
-if [ "$CI" = "true" ]; then
-    PYTHON_CMD="${PYTHON_CMD:-python3}"
+# Detect Python: use system uv run in CI, venv otherwise
+if command -v uv >/dev/null 2>&1; then
+    PYTHON_CMD="uv run python3"
 elif [ -f ".venv/bin/python3" ]; then
     PYTHON_CMD="${PYTHON_CMD:-.venv/bin/python3}"
 else
     PYTHON_CMD="${PYTHON_CMD:-python3}"
 fi
-if ! "$PYTHON_CMD" "$SCRIPT_DIR/inject_orders.py" --input "$TEST_DIR/test_orders.csv" --quiet; then
+if ! $PYTHON_CMD "$SCRIPT_DIR/inject_orders.py" --input "$TEST_DIR/test_orders.csv" --quiet; then
     log_error "Order injection failed"
     exit 1
 fi
@@ -190,7 +190,7 @@ log_step "Verifying balances via API..."
 
 # Query User 1001 balances
 log_info "Querying balances for User 1001..."
-USER1001_BALANCES=$("$PYTHON_CMD" "$SCRIPT_DIR/query_balances.py" --user 1001 --raw 2>&1)
+USER1001_BALANCES=$($PYTHON_CMD "$SCRIPT_DIR/query_balances.py" --user 1001 --raw 2>&1)
 if echo "$USER1001_BALANCES" | jq -e '.code == 0' > /dev/null 2>&1; then
     log_success "User 1001 balances retrieved"
     echo "$USER1001_BALANCES" | jq '.data'
@@ -200,7 +200,7 @@ fi
 
 # Query User 1002 balances
 log_info "Querying balances for User 1002..."
-USER1002_BALANCES=$("$PYTHON_CMD" "$SCRIPT_DIR/query_balances.py" --user 1002 --raw 2>&1)
+USER1002_BALANCES=$($PYTHON_CMD "$SCRIPT_DIR/query_balances.py" --user 1002 --raw 2>&1)
 if echo "$USER1002_BALANCES" | jq -e '.code == 0' > /dev/null 2>&1; then
     log_success "User 1002 balances retrieved"
     echo "$USER1002_BALANCES" | jq '.data'

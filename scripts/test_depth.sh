@@ -98,8 +98,8 @@ EOF
 
 # Determine Python command
 export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
-if [ "$CI" = "true" ]; then
-    PYTHON_CMD="${PYTHON_CMD:-python3}"
+if command -v uv >/dev/null 2>&1; then
+    PYTHON_CMD="uv run python3"
 elif [ -f "$PROJECT_DIR/.venv/bin/python3" ]; then
     PYTHON_CMD="${PYTHON_CMD:-$PROJECT_DIR/.venv/bin/python3}"
 else
@@ -113,7 +113,7 @@ if [ "$CI" = "true" ]; then
     "$PYTHON_CMD" -c "import nacl; print('   pynacl version:', nacl.__version__)" || echo "   WARN: pynacl not available"
 fi
 
-if ! "$PYTHON_CMD" "$SCRIPT_DIR/inject_orders.py" --input "$TEST_DIR/depth_orders.csv" --quiet; then
+if ! $PYTHON_CMD "$SCRIPT_DIR/inject_orders.py" --input "$TEST_DIR/depth_orders.csv" --quiet; then
     echo -e "${RED}Order injection failed${NC}"
     if [ "$CI" = "true" ]; then
         echo "   DEBUG: Gateway log:"

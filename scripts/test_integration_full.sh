@@ -106,7 +106,7 @@ else
 fi
 
 echo -n "[TEST] Balance Events Verification... "
-if python3 "$PROJECT_DIR/scripts/verify_balance_events.py" > "$LOG_DIR/balance_events.log" 2>&1; then
+if uv run "$PROJECT_DIR/scripts/verify_balance_events.py" > "$LOG_DIR/balance_events.log" 2>&1; then
     echo -e "${GREEN}PASSED${NC}"
     ((PASSED++))
 else

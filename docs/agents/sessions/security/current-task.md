@@ -1,29 +1,20 @@
-# 🔒 Security Reviewer Current Task
+# Security Current Task: Phase 0x11 Audit
 
-## Session Info
-- **Date**: 2024-12-25
-- **Role**: Security Reviewer
-- **Task**: Initial setup - No active task
+**Role**: Security Engineer
+**Status**: Reviewing Design
 
-## Original Goal
-*No active task assigned.*
+## 🎯 Current Focus: Funding Layer Risks
 
-## Progress Checklist
-- [ ] *Pending task assignment*
+### 1. The "Double Spend" Threat
+*   **Requirement**: Verify that the Developer implements *Strict Idempotency* using `tx_hash` Unique Key.
+*   **Action Plan**: Review PR for `src/funding/service.rs`.
 
-## Key Decisions Made
-*No decisions yet in this session.*
+### 2. The "Fake Deposit" Threat
+*   **Requirement**: Ensure `POST /internal/mock/deposit` does NOT exist in Production release build, OR is protected by Admin Auth.
+*   **Constraint**: Mock endpoints must be gated.
 
-## Blockers / Dependencies
-*No blockers.*
+### 3. Address Isolation
+*   **Requirement**: User A can never sweep funds from User B's address.
 
-## Handover Notes
-**System Ready**: The AI Agent system has been set up with:
-- Role definitions in `docs/agents/security-reviewer.md`
-- Working directory at `docs/agents/sessions/security/`
-- Shared coordination via `docs/agents/sessions/shared/`
-
-**Next Steps**: Await task assignment. When assigned:
-1. Read the user's request carefully
-2. Create a blueprint with goals and checklist
-3. Perform threat modeling and security analysis
+---
+*Synced with Architect on 2025-12-28*

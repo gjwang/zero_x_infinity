@@ -164,7 +164,7 @@ echo -e "${YELLOW}[4/6] Running transfer tests with balance verification...${NC}
 
 export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
 
-TEST_RESULT=$(python3 << 'PYTHON_EOF'
+TEST_RESULT=$(uv run python3 - << 'PYTHON_EOF'
 import sys
 sys.path.append('scripts/lib')
 from api_auth import get_test_client

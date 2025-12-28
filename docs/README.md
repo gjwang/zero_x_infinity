@@ -37,6 +37,9 @@
 - [0x0B 资金体系](src/0x0B-funding.md) - Funding/Spot 双账户
 - [0x0C 经济模型](src/0x0C-fee-system.md) - 手续费计算
 - [0x0D 快照与恢复](src/0x0D-snapshot-recovery.md) - 优雅停机
+- [0x0E OpenAPI Integration](src/0x0E-openapi-integration.md) - Swagger UI
+- [0x0F Admin Dashboard](src/0x0F-admin-dashboard.md) - 管理后台
+- [0x10 Web Frontend](src/0x10-web-frontend.md) - 前端外包需求 ⭐
 
 ### Part III: 极致优化 (0x12-0x14)
 - [0x12 零拷贝](src/0x12-zero-copy.md)

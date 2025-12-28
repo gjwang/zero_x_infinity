@@ -120,8 +120,8 @@ order_id,user_id,side,price,qty
 EOF
 # Use Python for Ed25519 authenticated order submission
 export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
-if [ "$CI" = "true" ]; then
-    PYTHON_CMD="${PYTHON_CMD:-python3}"
+if command -v uv >/dev/null 2>&1; then
+    PYTHON_CMD="uv run python3"
 elif [ -f "$PROJECT_DIR/.venv/bin/python3" ]; then
     PYTHON_CMD="${PYTHON_CMD:-$PROJECT_DIR/.venv/bin/python3}"
 else
@@ -138,7 +138,7 @@ if [ "$CI" = "true" ]; then
     cat "$TEST_DIR/kline_orders.csv"
 fi
 
-if ! "$PYTHON_CMD" "$SCRIPT_DIR/inject_orders.py" --input "$TEST_DIR/kline_orders.csv" --quiet; then
+if ! $PYTHON_CMD "$SCRIPT_DIR/inject_orders.py" --input "$TEST_DIR/kline_orders.csv" --quiet; then
     echo "   DEBUG: inject_orders.py failed, checking Gateway log:"
     cat /tmp/gateway.log 2>/dev/null | tail -20 || true
     fail "Order injection failed - check Ed25519 auth and pynacl installation"

@@ -107,11 +107,13 @@ impl Default for SettlementPersistenceConfig {
     }
 }
 
+use anyhow::{Context, Result};
+
 impl AppConfig {
-    pub fn load(env: &str) -> Self {
+    pub fn load(env: &str) -> Result<Self> {
         let config_path = format!("config/{}.yaml", env);
         let content = fs::read_to_string(&config_path)
-            .unwrap_or_else(|_| panic!("Failed to read config file: {}", config_path));
-        serde_yaml::from_str(&content).expect("Failed to parse config yaml")
+            .with_context(|| format!("Failed to read config file: {}", config_path))?;
+        serde_yaml::from_str(&content).context("Failed to parse config yaml")
     }
 }

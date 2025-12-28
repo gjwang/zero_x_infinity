@@ -8,9 +8,11 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  SQLX_OFFLINE: true
 
 jobs:
   check:
+    name: Verification
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,20 +22,36 @@ jobs:
         with:
           toolchain: 1.92.0
           components: rustfmt, clippy
-      
-      - name: Check formatting
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.5.11"
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      # 1. Fast Checks
+      - name: Check Formatting
         run: cargo fmt --check
-      
-      - name: Build
+
+      - name: Check Test Compilation (Fast Fail)
+        run: cargo test --workspace --no-run
+
+      - name: Clippy
+        run: cargo clippy -- -D warnings -A clippy::too_many_arguments -A clippy::collapsible_if -A clippy::unwrap_or_default -A clippy::doc_lazy_continuation -A clippy::manual_is_multiple_of -A clippy::implicit_saturating_sub -A clippy::redundant_pattern_matching -A clippy::derivable_impls
+
+      # 2. Heavy Lifting
+      - name: Build Release
         run: cargo build --release
-      
-      - name: Run tests
-        run: cargo test
-      
+
+      - name: Run Unit Tests
+        run: cargo test --workspace
+
+      # 3. Specific Logic Tests
       - name: WAL v2 E2E Test (Phase 0x0D)
         run: ./scripts/test_wal_v2_e2e.sh
 
-      # Phase 0x0D Persistence Layer Unit Tests (QA Verified)
       - name: Settlement Recovery Tests
         run: cargo test settlement_wal::recovery --lib -- --nocapture
 
@@ -45,6 +63,3 @@ jobs:
 
       - name: UBSCore Snapshot Tests
         run: cargo test ubscore_wal::snapshot --lib -- --nocapture
-
-      - name: Clippy
-        run: cargo clippy -- -D warnings -A clippy::too_many_arguments -A clippy::collapsible_if -A clippy::unwrap_or_default -A clippy::doc_lazy_continuation -A clippy::manual_is_multiple_of -A clippy::implicit_saturating_sub -A clippy::redundant_pattern_matching -A clippy::derivable_impls

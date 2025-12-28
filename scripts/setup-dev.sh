@@ -57,26 +57,20 @@ echo "  ✓ rustfmt and clippy installed"
 echo ""
 echo "[3/3] Verifying Python dependencies..."
 
-if ! command -v python3 &> /dev/null; then
-    echo "  ⚠ Python3 not found. Some test scripts may not work."
+if ! command -v uv &> /dev/null; then
+    echo "  ⚠ uv not found. Installing..."
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    # Add to PATH for current session if likely location
+    export PATH="$HOME/.local/bin:$PATH"
+fi
+
+if command -v uv &> /dev/null; then
+    echo "  ✓ uv installed: $(uv --version)"
+    echo "  Installing dependencies..."
+    uv sync
+    echo "  ✓ Python dependencies synced via uv"
 else
-    PYTHON_VERSION=$(python3 --version | awk '{print $2}')
-    echo "  ✓ Python version: $PYTHON_VERSION"
-    
-    # Check for required packages
-    MISSING_PKGS=""
-    for pkg in pandas pynacl requests psycopg2; do
-        if ! python3 -c "import $pkg" 2>/dev/null; then
-            MISSING_PKGS="$MISSING_PKGS $pkg"
-        fi
-    done
-    
-    if [ -n "$MISSING_PKGS" ]; then
-        echo "  ⚠ Missing Python packages:$MISSING_PKGS"
-        echo "  → Run: pip install$MISSING_PKGS"
-    else
-        echo "  ✓ Required Python packages installed"
-    fi
+    echo "  ❌ Failed to install uv. Please install manually: https://docs.astral.sh/uv/getting-started/installation/"
 fi
 
 # =============================================================================

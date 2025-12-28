@@ -107,12 +107,12 @@ setup_admin_venv() {
     fi
     
     # Last resort: Check if system Python is compatible
-    PYTHON_MAJOR=$(python3 -c 'import sys; print(sys.version_info.major)' 2>/dev/null || echo "0")
-    PYTHON_MINOR=$(python3 -c 'import sys; print(sys.version_info.minor)' 2>/dev/null || echo "0")
+    PYTHON_MAJOR=$(uv run python3 -c 'import sys; print(sys.version_info.major)' 2>/dev/null || echo "0")
+    PYTHON_MINOR=$(uv run python3 -c 'import sys; print(sys.version_info.minor)' 2>/dev/null || echo "0")
     
     if [ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -ge 10 ] && [ "$PYTHON_MINOR" -lt 13 ]; then
         echo -e "${YELLOW}Creating Python venv with python3...${NC}"
-        python3 -m venv venv
+        uv run python3 -m venv venv
         source venv/bin/activate
         pip install -r requirements.txt -q --upgrade
         return 0

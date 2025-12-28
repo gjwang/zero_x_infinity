@@ -3,7 +3,7 @@ set -e
 
 # 1. Reset DB (to ensure clean slate)
 echo "🔄 Resetting Database..."
-python3 scripts/db/manage_db.py init
+uv run scripts/db/manage_db.py init
 
 # 2. Start Gateway in background
 echo "🚀 Starting Gateway..."
@@ -21,7 +21,7 @@ sleep 10 # Give it time to compile if needed and start
 echo "🧪 Running Integration Test..."
 # Ensure PYTHONPATH allows finding lib
 export PYTHONPATH=$PYTHONPATH:$(pwd)/scripts
-python3 scripts/test_transfer.py
+uv run scripts/test_transfer.py
 
 RET=$?
 

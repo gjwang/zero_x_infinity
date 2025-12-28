@@ -33,7 +33,7 @@ echo "🚀 Starting Admin <-> Gateway E2E Automation..."
 VENV_PYTHON="$ADMIN_DIR/venv/bin/python"
 if [ ! -f "$VENV_PYTHON" ]; then
     echo "❌ Python venv not found at $ADMIN_DIR/venv"
-    echo "   Run: cd admin && python3 -m venv venv && pip install -r requirements.txt"
+    echo "   Run: cd admin && uv run python3 -m venv venv && pip install -r requirements.txt"
     exit 1
 fi
 

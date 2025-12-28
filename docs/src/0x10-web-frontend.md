@@ -34,10 +34,10 @@ We are looking for a professional development team to build the web frontend for
 | Page | Features | Backend Status |
 |------|----------|----------------|
 | **Home / Landing** | Market overview, Tickers, "Start Trading" CTA. | ⚠️ Mock Data (Public API part ready) |
-| **Authentication** | Login, Register, Forgot Password. | ⚠️ **Mock Required** (Auth Service Pending) |
+| **Authentication** | Login, Register, Forgot Password. | ✅ **Ready** (Phase 0x10.6 Implemented) |
 | **Trading Interface** | **(Core)** K-Line Chart, OrderBook, Trade History, Order Form. | ✅ **Ready** (Full API Support) |
 | **Assets / Wallet** | Balance overview, Deposit, Withdrawal, Asset History. | ⚠️ **Partial** (Read Only ready; Dep/Wdw Pending) |
-| **User Center** | API Key management, Password reset, Activity log. | ❌ **Coming Soon** (UI Only / Mock) |
+| **User Center** | API Key management, Password reset, Activity log. | ✅ **Backend Ready** (UI Pending) |
 
 ### 2.2 Key Features & Requirements
 
@@ -92,7 +92,7 @@ Base URL: `/api/v1/public`
 | `/symbols` | GET | List trading pairs | ✅ Ready |
 | `/depth` | GET | Order book depth | ✅ Ready |
 | `/klines` | GET | OHLCV candles | ✅ Ready |
-| `/trades` | GET | Public trade history | ❌ Missing (TODO) |
+| `/trades` | GET | Public trade history | ✅ Ready |
 
 ### 5.2 Private Trading (Requires Signature)
 Base URL: `/api/v1/private`
@@ -112,19 +112,19 @@ Endpoint: `ws://host:port/ws`
 
 | Channel | Type | Description | Status |
 |---------|------|-------------|--------|
-| `order.update` | Private | Order status change | ✅ Ready |
-| `trade` | Private | User trade execution | ✅ Ready |
-| `balance.update` | Private | Balance change | ✅ Ready |
-| `market.depth` | Public | Orderbook updates | ❌ Missing (TODO) |
-| `market.ticker` | Public | 24h ticker updates | ❌ Missing (TODO) |
-| `market.trade` | Public | Public trade stream | ❌ Missing (TODO) |
+| `order.update` | Private | Order status change | ✅ Ready (Authenticated) |
+| `trade` | Private | User trade execution | ✅ Ready (Authenticated) |
+| `balance.update` | Private | Balance change | ✅ Ready (Authenticated) |
+| `market.depth` | Public | Orderbook updates | ✅ Ready |
+| `market.ticker` | Public | 24h Ticker updates | ✅ Ready |
+| `market.trade` | Public | Public trade stream | ✅ Ready |
 
 ### 5.4 Authentication & User
 | Feature | Description | Status |
 |---------|-------------|--------|
-| **Sign-up/Login** | User registration & JWT | ❌ Missing (Need Auth Service) |
-| **User Profile** | KYC, Password reset | ❌ Missing |
-| **API Keys** | Manage API keys | ❌ Missing |
+| **Sign-up/Login** | User registration & JWT | ✅ Ready (Implemented) |
+| **User Profile** | KYC, Password reset | ⚠️ Partial (Password Reset Ready) |
+| **API Keys** | Manage API keys | ✅ Ready (Implemented) |
 
 ---
 
@@ -192,10 +192,10 @@ npx @openapitools/openapi-generator-cli generate \
 | 页面 | 功能点 | 后端状态 |
 |------|________|----------|
 | **首页** | 市场概览, 推荐币种, "开始交易"引导 | ⚠️ Mock 数据 (部分公有API就绪) |
-| **认证模块** | 登录, 注册, 找回密码 | ⚠️ **需 Mock** (认证服务待定) |
+| **认证模块** | 登录, 注册, 找回密码 | ✅ **后端就绪** (Phase 0x10.6 已完成) |
 | **交易界面** | **(核心)** K线图, 盘口, 最新成交, 下单面板 | ✅ **完全就绪** (API 齐备) |
 | **资产/钱包** | 资产总览, 充值, 提现, 资金流水 | ⚠️ **部分就绪** (仅只读余额; 充提待定) |
-| **用户中心** | API Key 管理, 密码修改, 活动日志 | ❌ **即将提供** (仅开发 UI / Mock) |
+| **用户中心** | API Key 管理, 密码修改, 活动日志 | ✅ **后端就绪** (UI 待开发) |
 
 ### 2.2 关键特性与要求
 
@@ -248,7 +248,7 @@ npx @openapitools/openapi-generator-cli generate \
 | `/symbols` | GET | 交易对列表 | ✅ 就绪 |
 | `/depth` | GET | 订单簿深度 | ✅ 就绪 |
 | `/klines` | GET | K线数据 | ✅ 就绪 |
-| `/trades` | GET | 公开成交历史 | ❌ 缺失 (待办) |
+| `/trades` | GET | 公开成交历史 | ✅ 就绪 |
 
 ### 5.2 私有交易 (需签名)
 基础 URL: `/api/v1/private`
@@ -268,19 +268,19 @@ npx @openapitools/openapi-generator-cli generate \
 
 | 频道 | 类型 | 描述 | 状态 |
 |------|------|------|------|
-| `order.update` | 私有 | 订单状态变更 | ✅ 就绪 |
-| `trade` | 私有 | 用户成交通知 | ✅ 就绪 |
-| `balance.update` | 私有 | 余额变更 | ✅ 就绪 |
-| `market.depth` | 公开 | 盘口深度更新 | ❌ 缺失 (待办) |
-| `market.ticker` | 公开 | 24h Ticker更新 | ❌ 缺失 (待办) |
-| `market.trade` | 公开 | 公开成交流 | ❌ 缺失 (待办) |
+| `order.update` | 私有 | 订单状态变更 | ✅ 就绪 (需鉴权) |
+| `trade` | 私有 | 用户成交通知 | ✅ 就绪 (需鉴权) |
+| `balance.update` | 私有 | 余额变更 | ✅ 就绪 (需鉴权) |
+| `market.depth` | 公开 | 盘口深度更新 | ✅ 就绪 |
+| `market.ticker` | 公开 | 24h Ticker更新 | ✅ 就绪 |
+| `market.trade` | 公开 | 公开成交流 | ✅ 就绪 |
 
 ### 5.4 认证与用户
 | 功能 | 描述 | 状态 |
 |------|------|------|
-| **注册/登录** | 用户注册 & JWT | ❌ 缺失 (需认证服务) |
-| **用户资料** | KYC, 密码重置 | ❌ 缺失 |
-| **API Key** | 管理 API Key | ❌ 缺失 |
+| **注册/登录** | 用户注册 & JWT | ✅ 就绪 (已实现) |
+| **用户资料** | KYC, 密码重置 | ⚠️ 部分就绪 (支持改密) |
+| **API Key** | 管理 API Key | ✅ 就绪 (已实现) |
 
 ---
 

@@ -9,7 +9,7 @@ ORDERS=${1:-100000}
 SEED=${2:-42}
 
 echo "Generating $ORDERS orders with seed $SEED..."
-python3 scripts/generate_orders.py --orders $ORDERS --price 85000 --seed $SEED
+uv run scripts/generate_orders.py --orders $ORDERS --price 85000 --seed $SEED
 
 echo ""
 echo "Generated files:"

@@ -77,6 +77,7 @@ RUN_KLINE=false
 RUN_DEPTH=false
 RUN_ACCOUNT=false
 RUN_TRANSFER=false
+RUN_OPENAPI=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -88,6 +89,7 @@ while [[ $# -gt 0 ]]; do
         --test-depth) RUN_DEPTH=true; RUN_ALL=false; shift ;;
         --test-account) RUN_ACCOUNT=true; RUN_ALL=false; shift ;;
         --test-transfer) RUN_TRANSFER=true; RUN_ALL=false; shift ;;
+        --test-openapi-e2e) RUN_OPENAPI=true; RUN_ALL=false; shift ;;
         --help|-h)
             head -30 "$0" | tail -28
             echo "Granular Test Options:"
@@ -97,6 +99,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --test-depth          Run only Depth API"
             echo "  --test-account        Run only Account Integration"
             echo "  --test-transfer       Run only Transfer E2E"
+            echo "  --test-openapi-e2e    Run only OpenAPI E2E"
             exit 0
             ;;
         *) echo "Unknown option: $1"; exit 1 ;;
@@ -111,6 +114,7 @@ if [ "$RUN_ALL" = "true" ]; then
     RUN_DEPTH=true
     RUN_ACCOUNT=true
     RUN_TRANSFER=true
+    RUN_OPENAPI=true
 fi
 
 # Also respect environment variable
@@ -236,13 +240,13 @@ check_dependencies() {
     
     # Python3
     echo -n "[DEP] Python3... "
-    if command -v python3 &> /dev/null; then
-        echo -e "${GREEN}OK${NC} ($(python3 --version 2>/dev/null | cut -d' ' -f2))"
+    if command -v uv run &> /dev/null; then
+        echo -e "${GREEN}OK${NC} ($(uv run python3 --version 2>/dev/null | cut -d' ' -f2))"
         # In CI, ensure required packages are present
         if [ "$CI" = "true" ]; then
             echo "    Installing Python dependencies..."
-            python3 -m pip install --upgrade pip &>/dev/null
-            python3 -m pip install pandas taos-ws-py &>/dev/null || echo "    Warning: Python dependency install failed"
+            uv run python3 -m pip install --upgrade pip &>/dev/null
+            uv run python3 -m pip install pandas taos-ws-py requests pynacl &>/dev/null || echo "    Warning: Python dependency install failed"
         fi
     else
         echo -e "${RED}MISSING${NC}"
@@ -355,7 +359,7 @@ clean_env() {
     fi
     
     if [ "$CI" = "true" ] && [ -f "scripts/ci_clean.py" ]; then
-         python3 scripts/ci_clean.py || echo "   [WARN] DB cleanup script failed"
+         uv run scripts/ci_clean.py || echo "   [WARN] DB cleanup script failed"
     fi
     sleep 2
 }
@@ -471,7 +475,7 @@ main() {
         
         POSTGRES_AVAILABLE=false
         if [ "$CI" = "true" ]; then
-            if python3 -c "import psycopg2; psycopg2.connect(host='localhost', dbname='exchange_info_db', user='trading', password='trading123').close()" 2>/dev/null; then
+            if uv run python3 -c "import psycopg2; psycopg2.connect(host='localhost', dbname='exchange_info_db', user='trading', password='trading123').close()" 2>/dev/null; then
                 POSTGRES_AVAILABLE=true
             fi
         elif docker ps --format '{{.Names}}' 2>/dev/null | grep -q "postgres"; then
@@ -497,7 +501,7 @@ main() {
         
         POSTGRES_AVAILABLE=false
         if [ "$CI" = "true" ]; then
-            if python3 -c "import psycopg2; psycopg2.connect(host='localhost', dbname='exchange_info_db', user='trading', password='trading123').close()" 2>/dev/null; then
+            if uv run python3 -c "import psycopg2; psycopg2.connect(host='localhost', dbname='exchange_info_db', user='trading', password='trading123').close()" 2>/dev/null; then
                 POSTGRES_AVAILABLE=true
             fi
         elif docker ps --format '{{.Names}}' 2>/dev/null | grep -q "postgres"; then
@@ -510,6 +514,53 @@ main() {
             log_test_start "Transfer_E2E"
             log_test_skip "(PostgreSQL not available)"
         fi
+    fi
+    
+    # ========== Phase 7: OpenAPI E2E ==========
+    if [ "$RUN_OPENAPI" = "true" ]; then
+        echo ""
+        echo "═══════════════════════════════════════════════════════════════"
+        echo "Phase 7: OpenAPI E2E"
+        echo "═══════════════════════════════════════════════════════════════"
+        
+        clean_env
+        
+        # Start Gateway
+        echo "   [SETUP] Starting Gateway for OpenAPI tests..."
+        TARGET_ENV="ci"
+        if [ -z "$CI" ]; then
+            TARGET_ENV="dev"
+        fi
+        ./target/release/zero_x_infinity --gateway --env "$TARGET_ENV" > "$LOG_DIR/openapi_gateway.log" 2>&1 &
+        GW_PID=$!
+        
+        # Wait for Gateway
+        GATEWAY_READY=false
+        for i in {1..30}; do
+            if curl -s http://localhost:8080/api/v1/health >/dev/null; then
+                GATEWAY_READY=true
+                break
+            fi
+            sleep 1
+        done
+        
+        if [ "$GATEWAY_READY" = "true" ]; then
+            run_test "OpenAPI_E2E" "scripts/test_openapi_e2e.sh --ci" 120
+        else
+            log_test_start "OpenAPI_E2E"
+            log_test_fail "(Gateway failed to start)"
+            echo "--- Gateway Log ---"
+            tail -n 10 "$LOG_DIR/openapi_gateway.log"
+            echo "-------------------"
+        fi
+        
+        # Stop Gateway
+        if [ -n "$GW_PID" ]; then
+            kill "$GW_PID" 2>/dev/null || true
+            wait "$GW_PID" 2>/dev/null || true
+        fi
+        
+        clean_env
     fi
     
     # ========== Summary ==========
