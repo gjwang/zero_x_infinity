@@ -24,14 +24,14 @@ for i in {1..30}; do
 done
 
 # Run Test
-# Run Test 1: Full Lifecycle (Deposit -> Transfer -> Trade)
-echo "[POC] Executing verify_full_lifecycle.py..."
-uv run python3 scripts/tests/0x12_integration/verify_full_lifecycle.py
-EXIT_CODE_1=$?
-
-# Run Test 2: Address Validation (Real Chain Formats)
+# Run Test 1: Address Validation (Real Chain Formats) - P0 Fix Verification
 echo "[POC] Executing test_address_validation.py..."
 uv run python3 scripts/tests/0x12_integration/test_address_validation.py
+EXIT_CODE_1=$?
+
+# Run Test 2: Full Lifecycle (Deposit -> Transfer -> Trade)
+echo "[POC] Executing verify_full_lifecycle.py..."
+uv run python3 scripts/tests/0x12_integration/verify_full_lifecycle.py
 EXIT_CODE_2=$?
 
 # Combine Exit Codes
