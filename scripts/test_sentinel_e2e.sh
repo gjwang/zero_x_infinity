@@ -111,9 +111,41 @@ echo "  Current block height: $CURRENT_HEIGHT"
 # Step 4: Run Sentinel (in background, since it's now a continuous loop)
 echo -e "\n${YELLOW}Step 4: Run Sentinel scanner (continuous mode)${RESET}"
 cd "$PROJECT_DIR"
+# Clear previous log
+rm -f /tmp/sentinel_output.log
+touch /tmp/sentinel_output.log
+
+# Export DATABASE_URL for Sentinel to pick up correct port
+export DATABASE_URL="postgres://$DB_USER:$DB_PASS@$DB_HOST:$DB_PORT/$DB_NAME"
+echo "  Using DATABASE_URL: $DATABASE_URL"
+
 cargo run -- --sentinel -e dev > /tmp/sentinel_output.log 2>&1 &
 SENTINEL_PID=$!
-echo "  Sentinel started with PID $SENTINEL_PID. Waiting 10s for scans..."
+echo "  Sentinel started with PID $SENTINEL_PID. Waiting for startup..."
+
+# Wait for startup (max 300s for compilation)
+MAX_RETRIES=300
+COUNT=0
+STARTED=false
+while [ $COUNT -lt $MAX_RETRIES ]; do
+    if grep -q "Starting Sentinel service" /tmp/sentinel_output.log; then
+        STARTED=true
+        break
+    fi
+    sleep 1
+    COUNT=$((COUNT+1))
+    echo -ne "."
+done
+echo ""
+
+if [ "$STARTED" = false ]; then
+    echo -e "${RED}✗ Sentinel failed to start within $MAX_RETRIES seconds${RESET}"
+    kill $SENTINEL_PID || true
+    cat /tmp/sentinel_output.log
+    exit 1
+fi
+
+echo -e "${GREEN}✓ Sentinel service running. Waiting 10s for scans...${RESET}"
 sleep 10
 kill $SENTINEL_PID || true
 wait $SENTINEL_PID 2>/dev/null || true
