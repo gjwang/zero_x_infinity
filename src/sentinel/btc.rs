@@ -5,15 +5,21 @@
 
 use super::config::BtcChainConfig;
 use super::error::ScannerError;
-use super::scanner::{ChainScanner, NodeHealth, ScannedBlock};
+use super::scanner::{ChainScanner, DetectedDeposit, NodeHealth, ScannedBlock};
 use async_trait::async_trait;
+use bitcoincore_rpc::{Auth, Client, RpcApi};
+use rust_decimal::Decimal;
 use std::collections::HashSet;
-use tracing::{debug, info};
+use std::str::FromStr;
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use tracing::{debug, info, warn};
 
 /// BTC Scanner that connects to bitcoind via JSON-RPC
 pub struct BtcScanner {
-    #[allow(dead_code)]
     config: BtcChainConfig,
+    /// RPC client (None in mock mode)
+    rpc_client: Option<Arc<Mutex<Client>>>,
     /// Set of monitored addresses (loaded from DB)
     watched_addresses: HashSet<String>,
     /// Mock mode for testing without real node
@@ -23,15 +29,35 @@ pub struct BtcScanner {
 }
 
 impl BtcScanner {
-    /// Create a new BTC scanner
+    /// Create a new BTC scanner with real RPC connection
     pub fn new(config: BtcChainConfig) -> Result<Self, ScannerError> {
         info!(
             "Initializing BTC scanner for {} network at {}",
             config.network, config.rpc.url
         );
 
+        // Create RPC client
+        let auth = Auth::UserPass(config.rpc.user.clone(), config.rpc.password.clone());
+        let client = Client::new(&config.rpc.url, auth).map_err(|e| {
+            ScannerError::RpcConnection(format!("Failed to create BTC RPC client: {}", e))
+        })?;
+
+        // Test connection
+        match client.get_blockchain_info() {
+            Ok(info) => {
+                info!(
+                    "Connected to Bitcoin node: chain={}, blocks={}, headers={}",
+                    info.chain, info.blocks, info.headers
+                );
+            }
+            Err(e) => {
+                warn!("BTC RPC connection test failed (will retry): {}", e);
+            }
+        }
+
         Ok(Self {
             config,
+            rpc_client: Some(Arc::new(Mutex::new(client))),
             watched_addresses: HashSet::new(),
             mock_mode: false,
             mock_blocks: Vec::new(),
@@ -42,6 +68,7 @@ impl BtcScanner {
     pub fn new_mock(config: BtcChainConfig) -> Self {
         Self {
             config,
+            rpc_client: None,
             watched_addresses: HashSet::new(),
             mock_mode: true,
             mock_blocks: Vec::new(),
@@ -68,6 +95,91 @@ impl BtcScanner {
     pub fn watched_count(&self) -> usize {
         self.watched_addresses.len()
     }
+
+    /// Get the config (for required_confirmations etc)
+    pub fn config(&self) -> &BtcChainConfig {
+        &self.config
+    }
+
+    /// Scan a block for deposits to watched addresses (real RPC)
+    fn scan_block_for_deposits(
+        &self,
+        client: &Client,
+        height: u64,
+    ) -> Result<ScannedBlock, ScannerError> {
+        // Get block hash at height
+        let block_hash = client.get_block_hash(height).map_err(|e| {
+            ScannerError::RpcConnection(format!("Failed to get block hash at {}: {}", height, e))
+        })?;
+
+        // Get full block with transactions
+        let block = client.get_block(&block_hash).map_err(|e| {
+            ScannerError::RpcConnection(format!("Failed to get block {}: {}", height, e))
+        })?;
+
+        let parent_hash = block.header.prev_blockhash.to_string();
+        let timestamp = block.header.time as i64;
+        let hash = block_hash.to_string();
+
+        let mut deposits = Vec::new();
+
+        // Scan each transaction
+        for (tx_index, tx) in block.txdata.iter().enumerate() {
+            let tx_hash = tx.compute_txid().to_string();
+
+            // Scan each output
+            for (vout_index, output) in tx.output.iter().enumerate() {
+                // Try to extract address from script_pubkey
+                if let Some(address) = self.extract_address(&output.script_pubkey) {
+                    // Check if this address is being watched
+                    if self.is_watched(&address) {
+                        let amount_btc = Decimal::from_str(&format!(
+                            "{:.8}",
+                            output.value.to_sat() as f64 / 100_000_000.0
+                        ))
+                        .unwrap_or_default();
+
+                        deposits.push(DetectedDeposit {
+                            tx_hash: tx_hash.clone(),
+                            tx_index: tx_index as u32,
+                            vout_index: vout_index as u32,
+                            to_address: address,
+                            asset: "BTC".to_string(),
+                            amount: amount_btc,
+                            raw_amount: output.value.to_sat().to_string(),
+                        });
+                    }
+                }
+            }
+        }
+
+        Ok(ScannedBlock {
+            height,
+            hash,
+            parent_hash,
+            timestamp,
+            deposits,
+        })
+    }
+
+    /// Extract address from script_pubkey (simplified - handles common types)
+    fn extract_address(&self, script: &bitcoincore_rpc::bitcoin::ScriptBuf) -> Option<String> {
+        use bitcoincore_rpc::bitcoin::Network;
+
+        // Determine network from config
+        let network = match self.config.network.as_str() {
+            "mainnet" | "main" => Network::Bitcoin,
+            "testnet" | "test" => Network::Testnet,
+            "regtest" => Network::Regtest,
+            "signet" => Network::Signet,
+            _ => Network::Regtest,
+        };
+
+        // Try to extract address
+        bitcoincore_rpc::bitcoin::Address::from_script(script, network)
+            .ok()
+            .map(|addr| addr.to_string())
+    }
 }
 
 #[async_trait]
@@ -81,11 +193,17 @@ impl ChainScanner for BtcScanner {
             return Ok(self.mock_blocks.len() as u64);
         }
 
-        // Real RPC call would go here
-        // For now, return error indicating real RPC not implemented
-        Err(ScannerError::RpcConnection(
-            "Real BTC RPC not yet implemented - use mock mode for testing".to_string(),
-        ))
+        let client = self
+            .rpc_client
+            .as_ref()
+            .ok_or_else(|| ScannerError::RpcConnection("No RPC client".to_string()))?;
+
+        let client_guard = client.lock().await;
+        let count = client_guard.get_block_count().map_err(|e| {
+            ScannerError::RpcConnection(format!("Failed to get block count: {}", e))
+        })?;
+
+        Ok(count)
     }
 
     async fn scan_block(&self, height: u64) -> Result<ScannedBlock, ScannerError> {
@@ -97,9 +215,13 @@ impl ChainScanner for BtcScanner {
                 .ok_or(ScannerError::BlockNotFound(height));
         }
 
-        Err(ScannerError::RpcConnection(
-            "Real BTC RPC not yet implemented".to_string(),
-        ))
+        let client = self
+            .rpc_client
+            .as_ref()
+            .ok_or_else(|| ScannerError::RpcConnection("No RPC client".to_string()))?;
+
+        let client_guard = client.lock().await;
+        self.scan_block_for_deposits(&client_guard, height)
     }
 
     async fn verify_block_hash(
@@ -114,9 +236,17 @@ impl ChainScanner for BtcScanner {
             return Err(ScannerError::BlockNotFound(height));
         }
 
-        Err(ScannerError::RpcConnection(
-            "Real BTC RPC not yet implemented".to_string(),
-        ))
+        let client = self
+            .rpc_client
+            .as_ref()
+            .ok_or_else(|| ScannerError::RpcConnection("No RPC client".to_string()))?;
+
+        let client_guard = client.lock().await;
+        let block_hash = client_guard
+            .get_block_hash(height)
+            .map_err(|e| ScannerError::RpcConnection(format!("Failed to get block hash: {}", e)))?;
+
+        Ok(block_hash.to_string() == expected_hash)
     }
 
     async fn health_check(&self) -> Result<NodeHealth, ScannerError> {
@@ -129,9 +259,40 @@ impl ChainScanner for BtcScanner {
             });
         }
 
-        Err(ScannerError::RpcConnection(
-            "Real BTC RPC not yet implemented".to_string(),
-        ))
+        let client = self
+            .rpc_client
+            .as_ref()
+            .ok_or_else(|| ScannerError::RpcConnection("No RPC client".to_string()))?;
+
+        let client_guard = client.lock().await;
+
+        let info = client_guard.get_blockchain_info().map_err(|e| {
+            ScannerError::RpcConnection(format!("Failed to get blockchain info: {}", e))
+        })?;
+
+        let network_info = client_guard.get_network_info().map_err(|e| {
+            ScannerError::RpcConnection(format!("Failed to get network info: {}", e))
+        })?;
+
+        // Get best block time
+        let best_block_hash = client_guard.get_best_block_hash().map_err(|e| {
+            ScannerError::RpcConnection(format!("Failed to get best block hash: {}", e))
+        })?;
+
+        let best_block = client_guard
+            .get_block_header(&best_block_hash)
+            .map_err(|e| {
+                ScannerError::RpcConnection(format!("Failed to get block header: {}", e))
+            })?;
+
+        let is_synced = info.blocks == info.headers && !info.initial_block_download;
+
+        Ok(NodeHealth {
+            is_synced,
+            block_height: info.blocks,
+            block_time: best_block.time as i64,
+            peers: network_info.connections as u32,
+        })
     }
 }
 

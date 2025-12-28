@@ -1091,9 +1091,19 @@ fn run_sentinel(app_config: &zero_x_infinity::config::AppConfig) -> anyhow::Resu
         let btc_config = BtcChainConfig::from_file(&btc_ref.config_path)
             .map_err(|e| anyhow::anyhow!("Failed to load BTC config: {}", e))?;
 
-        let scanner = BtcScanner::new_mock(btc_config);
-        worker.add_scanner(Box::new(scanner));
-        println!("  ✅ BTC Scanner initialized (mock mode)");
+        // Try real RPC first, fallback to mock if unavailable
+        let scanner: Box<dyn zero_x_infinity::sentinel::ChainScanner> =
+            match BtcScanner::new(btc_config.clone()) {
+                Ok(s) => {
+                    println!("  ✅ BTC Scanner initialized (real RPC mode)");
+                    Box::new(s)
+                }
+                Err(e) => {
+                    println!("  ⚠️ BTC real RPC failed: {}, using mock mode", e);
+                    Box::new(BtcScanner::new_mock(btc_config))
+                }
+            };
+        worker.add_scanner(scanner);
     }
 
     // Initialize ETH scanner if enabled
