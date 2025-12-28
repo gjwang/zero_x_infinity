@@ -10,7 +10,8 @@ export JWT_SECRET="dev_secret_key_for_testing_only_do_not_use_in_production"
 echo "[POC] Starting Gateway (Production Mode)..."
 cd "$PROJECT_ROOT"
 # Use existing debug binary (proven by QA runs)
-./target/debug/zero_x_infinity --gateway > logs/gateway_poc_0x12.log 2>&1 &
+GATEWAY_BIN="${GATEWAY_BINARY:-./target/debug/zero_x_infinity}"
+$GATEWAY_BIN --gateway > logs/gateway_poc_0x12.log 2>&1 &
 GATEWAY_PID=$!
 
 echo "[POC] Waiting for Gateway (PID $GATEWAY_PID)..."

@@ -36,8 +36,9 @@ log "Initializing DB..."
 # 2. Start Gateway
 log "Starting Gateway..."
 cd "$PROJECT_ROOT"
-# Use debug build since we just saw dev use it and it works/compiles fast
-./target/debug/zero_x_infinity --gateway > "$GATEWAY_LOG" 2>&1 &
+# Use GATEWAY_BINARY if set, otherwise default to debug build
+GATEWAY_BIN="${GATEWAY_BINARY:-./target/debug/zero_x_infinity}"
+$GATEWAY_BIN --gateway > "$GATEWAY_LOG" 2>&1 &
 GATEWAY_PID=$!
 
 log "Waiting for Gateway..."
