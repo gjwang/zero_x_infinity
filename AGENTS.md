@@ -245,7 +245,9 @@ graph TD
 
 - ❌ Use `pkill -f "zero_x_infinity"` (**CRITICAL**: Causes IDE crash! See [Testing Pitfalls](./docs/src/testing-pitfalls.md))
 - ❌ Modify code during planning phase (Specification Mode)
-- ❌ Use `f64` for financial calculations (use `u64` with 10^6 precision)
+- ❌ Use `f64` or `f32` for ANY financial calculations (Zero Tolerance).
+- ❌ Use `Decimal` types in business logic (Database storage may be Decimal, but application logic MUST use `u64` Fixed-Point).
+- ❌ Trust "Implicit Scaling" - ALWAYS verify the scaling factor (10^8 for BTC, 10^6 for USDT) against `assets_tb`.
 - ❌ Use `docker exec` in CI scripts (use REST API instead)
 - ❌ Commit without running `cargo fmt` and `cargo clippy`
 - ❌ Hardcode ports or credentials (use environment variables)

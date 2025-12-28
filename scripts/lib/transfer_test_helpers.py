@@ -118,17 +118,18 @@ class TransferTestHelpers:
         if not result:
             return 0.0
         
-        return float(result) / 1_000_000  # Scale from 10^6
+        return float(result)  # DB returns Unit Amount
     
     def setup_user_balance(self, user_id: int, asset_id: int, account_type: int, amount: float):
         """Setup user balance in database"""
-        amount_scaled = int(amount * 1_000_000)
+        # DB stores Unit Amounts (Decimal), no scaling needed
+        # e.g. 10.0 means 10.0 coins
         
         sql = f"""
             INSERT INTO balances_tb (user_id, asset_id, account_type, available, frozen, status)
-            VALUES ({user_id}, {asset_id}, {account_type}, {amount_scaled}, 0, 1)
+            VALUES ({user_id}, {asset_id}, {account_type}, {amount}, 0, 1)
             ON CONFLICT (user_id, asset_id, account_type) 
-            DO UPDATE SET available = {amount_scaled}, frozen = 0;
+            DO UPDATE SET available = {amount}, frozen = 0;
         """
         self.db_query(sql)
     
@@ -255,7 +256,7 @@ def get_balance_db(user_id: int, asset_id: int, account_type: int,
     try:
         result = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=5)
         if result.returncode == 0 and result.stdout.strip():
-            return float(result.stdout.strip()) / 1_000_000
+            return float(result.stdout.strip())
     except Exception:
         pass
     
