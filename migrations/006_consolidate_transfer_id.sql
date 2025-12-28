@@ -14,7 +14,7 @@ CREATE TABLE fsm_transfers_tb (
     
     user_id       BIGINT NOT NULL,
     asset_id      INTEGER NOT NULL,
-    amount        DECIMAL(30, 8) NOT NULL,
+    amount        BIGINT NOT NULL,
     
     transfer_type SMALLINT NOT NULL,           -- 1=Funding→Spot, 2=Spot→Funding
     source_type   SMALLINT NOT NULL,           -- 1=Funding, 2=Trading

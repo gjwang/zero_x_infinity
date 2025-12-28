@@ -87,7 +87,7 @@ class VIPLevel(Base):
     
     level: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
     discount_percent: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=100)  # 100 = no discount
-    min_volume: Mapped[Optional[Decimal]] = mapped_column(Numeric(30, 8), default=0)
+    min_volume: Mapped[Optional[int]] = mapped_column(BigInteger, default=0)
     description: Mapped[Optional[str]] = mapped_column(String(64))
 
 

@@ -29,8 +29,9 @@ echo "🚀 Starting Dev Environment..."
 
 # 1. DB Init
 echo "📦 Reseting Database..."
-PGPASSWORD=$PG_PASSWORD psql -h $PG_HOST -p $PG_PORT -U $PG_USER -d $PG_DB -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
-$ADMIN_DIR/.venv/bin/python $ADMIN_DIR/init_db.py
+# Use the robust init script which runs all migrations (including Core & Admin)
+# and ensures balances_tb, etc. exist for the Gateway.
+"$PROJECT_ROOT/scripts/db/init.sh" --reset pg
 
 # 2. Patch Gateway Config (if needed)
 if [ -f "config/ci.yaml" ]; then

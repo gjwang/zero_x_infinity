@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS transfers_tb (
     req_id VARCHAR(64) NOT NULL, -- Idempotency Key
     user_id BIGINT NOT NULL,
     asset_id INTEGER NOT NULL,
-    amount DECIMAL(30, 8) NOT NULL, -- Logical amount (will be scaled in logic)
+    amount BIGINT NOT NULL, -- Logical amount (scaled)
     from_type SMALLINT NOT NULL,
     to_type SMALLINT NOT NULL,
     status SMALLINT NOT NULL DEFAULT 0, -- 0=PENDING, 1=SUCCESS, 2=FAILED

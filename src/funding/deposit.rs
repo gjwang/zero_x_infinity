@@ -1,6 +1,6 @@
 use super::chain_adapter::ChainClient;
 use crate::account::{AssetManager, Database};
-use rust_decimal::Decimal;
+use rust_decimal::prelude::*;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -21,7 +21,7 @@ pub struct DepositRecord {
     pub tx_hash: String,
     pub user_id: i64,
     pub asset: String,
-    pub amount: Decimal,
+    pub amount: i64, // Stored as scaled integer (e.g. Satoshi)
     pub status: String,
     pub created_at: Option<chrono::NaiveDateTime>,
     pub block_height: Option<i64>,
@@ -70,6 +70,16 @@ impl DepositService {
             .map_err(DepositError::Database)?
             .ok_or_else(|| DepositError::AssetNotFound(asset_name.to_string()))?;
 
+        // Scale to i64
+        let scale_factor = Decimal::from(10u64.pow(asset.decimals as u32));
+        let amount_scaled = (amount * scale_factor)
+            .to_i64()
+            .ok_or(DepositError::InvalidAmount)?;
+
+        if amount_scaled <= 0 {
+            return Err(DepositError::InvalidAmount);
+        }
+
         // 3. Insert Deposit Record (CONFIRMING -> SUCCESS immediately for Mock)
         // In real system, scanner might set CONFIRMING, then update later.
         // Here we do atomic Instant Deposit for MVP.
@@ -81,7 +91,7 @@ impl DepositService {
             tx_hash,
             user_id,
             asset_name,
-            amount
+            amount_scaled // Use scaled i64
         )
         .execute(&mut *tx)
         .await?;
@@ -98,7 +108,7 @@ impl DepositService {
             "#,
             user_id,
             asset.asset_id,
-            amount
+            amount_scaled // Use scaled i64
         )
         .execute(&mut *tx)
         .await?;

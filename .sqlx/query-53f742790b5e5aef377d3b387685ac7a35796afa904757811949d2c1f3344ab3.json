@@ -8,8 +8,8 @@
         "Varchar",
         "Int8",
         "Varchar",
-        "Numeric",
-        "Numeric",
+        "Int8",
+        "Int8",
         "Varchar"
       ]
     },

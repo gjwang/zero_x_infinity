@@ -7,7 +7,7 @@
       "Left": [
         "Int8",
         "Int4",
-        "Numeric"
+        "Int8"
       ]
     },
     "nullable": []

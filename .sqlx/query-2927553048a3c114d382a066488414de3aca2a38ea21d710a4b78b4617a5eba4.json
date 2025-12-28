@@ -6,7 +6,7 @@
       {
         "ordinal": 0,
         "name": "available",
-        "type_info": "Numeric"
+        "type_info": "Int8"
       },
       {
         "ordinal": 1,

@@ -32,15 +32,8 @@ impl TransferService {
             .map_err(TransferError::DatabaseError)?
             .ok_or_else(|| TransferError::InvalidAsset(req.asset.clone()))?;
 
-        // Parse amount (string -> decimal -> raw i64 based on asset precision?)
-        // OR standard float?
-        // Project uses `i64` scaled. Default scale 1e18? Or asset specific?
-        // Asset struct usually has `decimals`.
-        // Let's assume we need to parse based on asset decimals.
-        // For simplicity in this iteration, assuming input is raw string representation or we parse standard logic.
-        // Let's use string parsing to float then scale? NO, float is bad.
-        // Use RustDecimal.
-
+        // Scale Amount: String -> i64
+        // Logic: Parse as Decimal first to handle "1.23", then multiply by 10^decimals, then round/truncate to i64
         let amount_decimal =
             Decimal::from_str(&req.amount).map_err(|_| TransferError::InvalidAmountFormat)?;
 
@@ -48,7 +41,6 @@ impl TransferService {
             return Err(TransferError::InvalidAmount);
         }
 
-        // Scale to i64 (e.g. 1.5 * 10^8)
         let scale_factor = Decimal::from(10u64.pow(asset.decimals as u32));
         let amount_scaled = (amount_decimal * scale_factor)
             .to_i64()
@@ -73,12 +65,12 @@ impl TransferService {
         .fetch_optional(&mut *tx)
         .await?;
 
-        let available = from_balance_row
+        let available: i64 = from_balance_row
             .as_ref()
-            .map(|r| r.get::<Decimal, _>("available"))
-            .unwrap_or(Decimal::ZERO);
+            .map(|r| r.get("available"))
+            .unwrap_or(0);
 
-        if available < amount_decimal {
+        if available < amount_scaled {
             return Err(TransferError::InsufficientBalance);
         }
 
@@ -87,7 +79,7 @@ impl TransferService {
             "UPDATE balances_tb SET available = available - $1, version = version + 1
              WHERE user_id = $2 AND asset_id = $3 AND account_type = $4",
         )
-        .bind(amount_decimal)
+        .bind(amount_scaled)
         .bind(user_id)
         .bind(asset.asset_id)
         .bind(from_account as i16)
@@ -104,7 +96,7 @@ impl TransferService {
         .bind(user_id)
         .bind(asset.asset_id)
         .bind(to_account as i16)
-        .bind(amount_decimal)
+        .bind(amount_scaled)
         .execute(&mut *tx)
         .await?;
 
@@ -148,7 +140,7 @@ impl TransferService {
                    a.asset as asset_name, a.decimals
             FROM balances_tb b
             JOIN assets_tb a ON b.asset_id = a.asset_id
-            WHERE b.user_id = $1 AND b.status = 1
+            WHERE b.user_id = $1
             ORDER BY b.asset_id, b.account_type
             "#,
         )
@@ -160,8 +152,9 @@ impl TransferService {
         for row in rows {
             let asset_id: i32 = row.get("asset_id");
             let account_type: i16 = row.get("account_type");
-            let available: Decimal = row.get("available");
-            let frozen: Decimal = row.get("frozen");
+            // READ as i64 (BIGINT)
+            let available: i64 = row.get("available");
+            let frozen: i64 = row.get("frozen");
             let asset_name: String = row.get("asset_name");
             let decimals: i16 = row.get("decimals");
 
@@ -175,8 +168,8 @@ impl TransferService {
                 asset_id: asset_id as u32,
                 asset: asset_name,
                 account_type: account_type_name.to_string(),
-                available: format_decimal(available, decimals as u32),
-                frozen: format_decimal(frozen, decimals as u32),
+                available: unscale_amount(available, decimals as u32),
+                frozen: unscale_amount(frozen, decimals as u32),
             });
         }
 
@@ -194,13 +187,12 @@ pub struct BalanceInfo {
     pub frozen: String,
 }
 
-/// Format decimal: convert from stored scaled value to human-readable
-/// e.g., stored=1000000000, decimals=6 -> "1000.000000" USDT
-fn format_decimal(stored: Decimal, decimals: u32) -> String {
-    // Divide by 10^decimals to get human-readable value
-    let divisor = Decimal::from(10u64.pow(decimals));
-    let human_value = stored / divisor;
-
-    // Format with proper precision
-    format!("{:.prec$}", human_value, prec = decimals as usize)
+/// Unscale amount: convert from stored i64 scaled value to human-readable string
+/// e.g., stored=100000000, decimals=8 -> "1.00000000"
+fn unscale_amount(stored: i64, decimals: u32) -> String {
+    let scale_factor = Decimal::from(10u64.pow(decimals));
+    let stored_decimal = Decimal::from(stored);
+    let human_val = stored_decimal / scale_factor;
+    // Format with fixed precision matching the asset decimals
+    format!("{:.prec$}", human_val, prec = decimals as usize)
 }

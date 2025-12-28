@@ -8,7 +8,7 @@
         "Varchar",
         "Int8",
         "Varchar",
-        "Numeric"
+        "Int8"
       ]
     },
     "nullable": []

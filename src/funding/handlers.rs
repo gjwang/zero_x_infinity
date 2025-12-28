@@ -104,7 +104,11 @@ pub async fn mock_deposit(
         Ok(msg) => Ok(Json(ApiResponse::success(msg))),
         Err(e) => {
             // Check for idempotency
-            if e.to_string().contains("already processed") {
+            let err_str = e.to_string();
+            // Log the error for debugging
+            println!("Mock Deposit Error: {:?}", err_str);
+
+            if err_str.contains("already processed") || err_str.contains("AlreadyProcessed") {
                 Ok(Json(ApiResponse::success(
                     "Ignored: Already Processed".to_string(),
                 )))

@@ -1,6 +1,6 @@
 use super::chain_adapter::ChainClient;
 use crate::account::{AssetManager, Database};
-use rust_decimal::Decimal;
+use rust_decimal::prelude::*;
 use std::sync::Arc;
 use thiserror::Error;
 use uuid::Uuid;
@@ -26,8 +26,8 @@ pub struct WithdrawRecord {
     pub request_id: String,
     pub user_id: i64,
     pub asset: String,
-    pub amount: Decimal,
-    pub fee: Decimal,
+    pub amount: i64, // Scaled integer
+    pub fee: i64,    // Scaled integer
     pub to_address: String,
     pub status: String,
     pub tx_hash: Option<String>,
@@ -79,6 +79,19 @@ impl WithdrawService {
             .map_err(WithdrawError::Database)?
             .ok_or_else(|| WithdrawError::AssetNotFound(asset_name.to_string()))?;
 
+        // Scale to i64
+        let scale_factor = Decimal::from(10u64.pow(asset.decimals as u32));
+        let amount_scaled = (amount * scale_factor)
+            .to_i64()
+            .ok_or(WithdrawError::InvalidAmount)?;
+        let fee_scaled = (fee * scale_factor)
+            .to_i64()
+            .ok_or(WithdrawError::InvalidAmount)?;
+
+        if amount_scaled <= 0 {
+            return Err(WithdrawError::InvalidAmount);
+        }
+
         // 2. Lock & Check Balance
         // We act on Funding Account (type=2)
         let balance_row = sqlx::query!(
@@ -88,12 +101,10 @@ impl WithdrawService {
         .fetch_optional(&mut *tx)
         .await?;
 
-        let available = balance_row
-            .as_ref()
-            .map(|r| r.available)
-            .unwrap_or(Decimal::ZERO);
+        // Read as i64
+        let available: i64 = balance_row.as_ref().map(|r| r.available).unwrap_or(0);
 
-        if available < amount {
+        if available < amount_scaled {
             return Err(WithdrawError::InsufficientFunds);
         }
 
@@ -101,7 +112,7 @@ impl WithdrawService {
         // "Immediate Deduction" per spec
         sqlx::query!(
             "UPDATE balances_tb SET available = available - $1, version = version + 1 WHERE user_id = $2 AND asset_id = $3 AND account_type = 2",
-            amount, user_id, asset.asset_id
+            amount_scaled, user_id, asset.asset_id
         )
         .execute(&mut *tx)
         .await?;
@@ -113,7 +124,7 @@ impl WithdrawService {
             INSERT INTO withdraw_history (request_id, user_id, asset, amount, fee, to_address, status)
             VALUES ($1, $2, $3, $4, $5, $6, 'PROCESSING')
             "#,
-            request_id, user_id, asset_name, amount, fee, to_address
+            request_id, user_id, asset_name, amount_scaled, fee_scaled, to_address
         )
         .execute(&mut *tx)
         .await?;
@@ -159,7 +170,7 @@ impl WithdrawService {
                 let mut tx_refund = self.db.pool().begin().await?;
                 sqlx::query!(
                     "UPDATE balances_tb SET available = available + $1, version = version + 1 WHERE user_id = $2 AND asset_id = $3 AND account_type = 2",
-                    amount, user_id, asset.asset_id
+                    amount_scaled, user_id, asset.asset_id
                 )
                 .execute(&mut *tx_refund)
                 .await?;

@@ -21,12 +21,12 @@
       {
         "ordinal": 3,
         "name": "amount",
-        "type_info": "Numeric"
+        "type_info": "Int8"
       },
       {
         "ordinal": 4,
         "name": "fee",
-        "type_info": "Numeric"
+        "type_info": "Int8"
       },
       {
         "ordinal": 5,

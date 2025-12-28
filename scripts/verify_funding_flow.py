@@ -76,7 +76,7 @@ def verify_funding_flow():
         "asset": "USDT",
         "amount": deposit_amount,
         "tx_hash": tx_hash
-    })
+    }, headers={"X-Internal-Secret": "dev-secret"})
     
     if resp.status_code != 200:
         print(f"Mock Deposit failed: {resp.text}")
@@ -153,7 +153,7 @@ def verify_funding_flow():
         "asset": "USDT",
         "amount": deposit_amount,
         "tx_hash": tx_hash # Same hash
-    })
+    }, headers={"X-Internal-Secret": "dev-secret"})
     # Our handler returns 200 OK with "Ignored" message or similar success
     if resp.status_code == 200:
         data = resp.json()['data']
