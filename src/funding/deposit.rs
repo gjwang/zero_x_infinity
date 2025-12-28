@@ -86,13 +86,13 @@ impl DepositService {
         .execute(&mut *tx)
         .await?;
 
-        // 4. Credit User Balance (Spot Account)
+        // 4. Credit User Balance (Funding Account)
         // We insert or update balance (+amount)
-        // account_type = 1 (Spot)
+        // account_type = 2 (Funding)
         sqlx::query!(
             r#"
             INSERT INTO balances_tb (user_id, asset_id, account_type, available, frozen, version)
-            VALUES ($1, $2, 1, $3, 0, 1)
+            VALUES ($1, $2, 2, $3, 0, 1)
             ON CONFLICT (user_id, asset_id, account_type) 
             DO UPDATE SET available = balances_tb.available + EXCLUDED.available, version = balances_tb.version + 1
             "#,
