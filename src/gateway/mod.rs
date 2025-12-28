@@ -308,6 +308,27 @@ pub async fn run_server(
         .nest("/api/v1/user", user_routes) // Phase 0x10.6 User Center
         .nest("/api/v1/public", public_routes)
         .nest("/api/v1/private", private_routes)
+        .nest(
+            "/api/v1/capital",
+            Router::new()
+                .route(
+                    "/deposit/address",
+                    get(crate::funding::handlers::get_deposit_address),
+                )
+                .route(
+                    "/withdraw/apply",
+                    post(crate::funding::handlers::apply_withdraw),
+                )
+                .layer(from_fn_with_state(
+                    state.clone(),
+                    crate::user_auth::middleware::jwt_auth_middleware,
+                )),
+        )
+        .nest(
+            "/internal/mock",
+            Router::new().route("/deposit", post(crate::funding::handlers::mock_deposit)), // Internal routes usually protected by IP or internal secret, strictly strictly locally accessible
+                                                                                           // For MVP/Sim, we expose it.
+        )
         .with_state(state)
         // Phase 0x0E: OpenAPI / Swagger UI (stateless, added after with_state)
         .merge(SwaggerUi::new("/docs").url("/api-docs/openapi.json", openapi::ApiDoc::openapi()));
