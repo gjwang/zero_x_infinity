@@ -20,23 +20,11 @@ done
 echo "[POC] Starting Gateway (Production Mode)..."
 echo "[POC] Using DB: $DATABASE_URL"
 
-# Ensure Port 8080 is free from previous tests
-if lsof -Pi :8080 -sTCP:LISTEN -t >/dev/null ; then
-    echo "[POC] Waiting for port 8080 to be released..."
-    for i in {1..10}; do
-        if ! lsof -Pi :8080 -sTCP:LISTEN -t >/dev/null ; then
-            break
-        fi
-        sleep 1
-    done
-    # Force kill if still occupied
-    PID=$(lsof -Pi :8080 -sTCP:LISTEN -t)
-    if [ -n "$PID" ]; then
-         echo "[POC] Killing lingering process on port 8080 (PID $PID)..."
-         kill -9 "$PID" 2>/dev/null || true
-         sleep 1
-    fi
-fi
+# Ensure Port 8080 is free by killing any zero_x_infinity process
+echo "[POC] Cleaning up any existing Gateway processes..."
+pkill -9 -f "zero_x_infinity" || true
+# Wait for sockets to close
+sleep 2
 
 GATEWAY_ARGS="--gateway"
 if [ "$CI" = "true" ]; then

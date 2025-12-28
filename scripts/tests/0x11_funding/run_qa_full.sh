@@ -59,6 +59,10 @@ fi
 
 # 2. Start Gateway
 log "Starting Gateway..."
+# Ensure clean slate
+pkill -9 -f "zero_x_infinity" || true
+sleep 1
+
 cd "$PROJECT_ROOT"
 # Determine Gateway environment arguments
 GATEWAY_ARGS="--gateway"
