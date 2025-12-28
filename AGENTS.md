@@ -249,6 +249,7 @@ graph TD
 - ❌ Use `docker exec` in CI scripts (use REST API instead)
 - ❌ Commit without running `cargo fmt` and `cargo clippy`
 - ❌ Hardcode ports or credentials (use environment variables)
+- ❌ **Switch Roles AUTONOMOUSLY**: You are FORBIDDEN from switching roles (e.g., Architect -> Developer) without explicit user approval. Architect stops at Handover.
 
 ### MUST DO
 

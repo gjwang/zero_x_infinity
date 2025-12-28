@@ -265,17 +265,25 @@ To break it down:
     *   `SELECT SUM(amount) FROM deposit_history WHERE status='SUCCESS' AND time > T-1`
     *   `SELECT SUM(amount + fee) FROM withdraw_history WHERE status='SUCCESS' AND time > T-1`
 
-#### 8.1.3 The Alert Thresholds
-*   **Precision**: We use `Decimal` / `u64` (Fixed Point). There is **NO** floating point error.
-*   **Gas Tracking**: Every on-chain transaction (Withdrawal, Consolidation) MUST record the exact `tx_fee` in the database.
-*   **Equation**: `Delta(Assets) + GasSpent == Delta(Liabilities) + NetFlow`
-*   **Allowed Variance**:
-    *   **Unswept Dust**: Sum of deposits < `MIN_DEPOSIT_THRESHOLD` (tracked in separate DB counter).
-    *   **Nothing Else**.
-*   **Action**:
-    *   `Diff != Dust` -> **P0 Alert**.
-    *   **Zero Tolerance** for calculation errors.
-    *   If `Diff > 0`: **Suspend Withdrawals**. Call Ops.
+#### 8.1.3 The "Truncation Protocol" (100% Match)
+*   **Precision Constraint**: The system supports `N` decimals as defined in **Asset Configuration** (e.g., `ETH` might be configured to 12 or 18, `USDT` to 6).
+*   **Ingress Logic**:
+    *   `Deposit_Credited = Truncate(Deposit_Raw, Configured_Precision)`
+    *   *Residue*: `Deposit_Raw - Deposit_Credited` remains in the wallet as "System Dust".
+*   **Reconciliation Equation**:
+    ```text
+    Truncate(Wallet_Balance, N) 
+    == 
+    Sum(User_Balances) + Truncate(Unswept_Dust, N)
+    ```
+    *(Note: Gas Fees are deducted from Wallet Balance, so they are naturally accounted for if we track `NetFlow` correctly)*
+    
+    **Refined Equation**: 
+    `Truncate(Wallet_Start + Deposits - Withdrawals - GasFees, N) == Sum(User_Balances)`
+
+*   **Alerting**:
+    *   **Tolerance**: **0**. (Exact Integers).
+    *   **Action**: Any deviation implies code bug or theft. **P0 Alert**.
 
 3.  **Gas Management**: Manual gas funding for hot wallets.
 
