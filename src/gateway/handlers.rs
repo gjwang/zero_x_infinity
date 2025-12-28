@@ -330,12 +330,13 @@ pub async fn create_transfer(
     match crate::funding::service::TransferService::execute(db, user_id as i64, req).await {
         Ok(resp) => Ok((StatusCode::OK, Json(ApiResponse::success(resp)))),
         Err(e) => {
-            tracing::error!("Transfer failed: {:?}", e);
+            let err_msg = e.to_string();
+            tracing::error!("Transfer failed: {}", err_msg);
             Err((
                 StatusCode::BAD_REQUEST,
                 Json(ApiResponse::<()>::error(
                     error_codes::INVALID_PARAMETER,
-                    e.to_string(),
+                    err_msg,
                 )),
             ))
         }
