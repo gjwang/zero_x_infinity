@@ -45,17 +45,18 @@ pub async fn register(
     match user_auth.register(req).await {
         Ok(user_id) => Ok((StatusCode::CREATED, Json(ApiResponse::success(user_id)))),
         Err(e) => {
-            tracing::error!("Registration failed: {:?}", e);
-            // Check for duplicate key error (generic way)
-            if e.to_string().contains("duplicate key") {
+            let err_msg = e.to_string();
+            if err_msg.contains("duplicate key") {
+                tracing::warn!("Registration attempt for existing user: {}", err_msg);
                 Err((
-                    StatusCode::BAD_REQUEST,
+                    StatusCode::CONFLICT,
                     Json(ApiResponse::<()>::error(
                         error_codes::INVALID_PARAMETER,
                         "Username or Email already exists",
                     )),
                 ))
             } else {
+                tracing::error!("Registration failed: {:?}", e);
                 Err((
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(ApiResponse::<()>::error(
