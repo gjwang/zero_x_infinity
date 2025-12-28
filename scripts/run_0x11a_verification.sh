@@ -37,12 +37,12 @@ echo "Initializing DB..."
 
 # 3. Start Services
 echo "Starting Gateway..."
-./target/debug/zero_x_infinity --gateway -e dev > /tmp/gateway.log 2>&1 &
+./target/release/zero_x_infinity --gateway -e dev > /tmp/gateway.log 2>&1 &
 GW_PID=$!
 echo "Gateway PID: $GW_PID"
 
 echo "Starting Sentinel..."
-./target/debug/zero_x_infinity --sentinel -e dev > /tmp/sentinel.log 2>&1 &
+./target/release/zero_x_infinity --sentinel -e dev > /tmp/sentinel.log 2>&1 &
 SENT_PID=$!
 echo "Sentinel PID: $SENT_PID"
 

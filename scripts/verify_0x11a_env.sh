@@ -49,12 +49,12 @@ echo "Applying Migrations..."
 
 # Pre-build to ensure we run the latest code
 echo "Building binary..."
-cargo build --bin zero_x_infinity
+cargo build --release --bin zero_x_infinity
 
 # 3. Start Gateway (Background)
 echo "--------------------------------------------------------"
 echo "Starting Gateway..."
-./target/debug/zero_x_infinity --gateway -e dev > /tmp/gateway.log 2>&1 &
+./target/release/zero_x_infinity --gateway -e dev > /tmp/gateway.log 2>&1 &
 GATEWAY_PID=$!
 echo "Gateway PID: $GATEWAY_PID"
 
@@ -81,7 +81,7 @@ echo "--------------------------------------------------------"
 echo "Starting Sentinel..."
 # Sentinel needs the same DATABASE_URL
 export DATABASE_URL
-./target/debug/zero_x_infinity --sentinel -e dev > /tmp/sentinel.log 2>&1 &
+./target/release/zero_x_infinity --sentinel -e dev > /tmp/sentinel.log 2>&1 &
 SENTINEL_PID=$!
 echo "Sentinel PID: $SENTINEL_PID"
 

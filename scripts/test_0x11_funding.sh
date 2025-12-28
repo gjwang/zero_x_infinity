@@ -37,7 +37,7 @@ log_info "Initializing Database (PostgreSQL)..."
 # 2. Build (Ensure fresh binary)
 log_info "Building Binary..."
 cd "${PROJECT_ROOT}"
-cargo build --bin zero_x_infinity
+cargo build --release --bin zero_x_infinity
 
 # 3. Start Gateway
 log_info "Starting Gateway..."
@@ -45,7 +45,7 @@ log_info "Starting Gateway..."
 source "${SCRIPT_DIR}/lib/db_env.sh"
 
 # Start in background
-./target/debug/zero_x_infinity --gateway ${GATEWAY_ARGS} > "${GATEWAY_LOG}" 2>&1 &
+./target/release/zero_x_infinity --gateway ${GATEWAY_ARGS} > "${GATEWAY_LOG}" 2>&1 &
 GATEWAY_PID=$!
 
 # Wait for Health Check
