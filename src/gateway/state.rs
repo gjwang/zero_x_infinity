@@ -43,7 +43,7 @@ pub struct AppState {
     /// Authentication state (Phase 0x0A-b)
     pub auth_state: Arc<AuthState>,
     /// User Authentication Service (Phase 0x10.6)
-    pub user_auth: Arc<crate::user_auth::UserAuthService>,
+    pub user_auth: Option<Arc<crate::user_auth::UserAuthService>>,
     /// Transfer coordinator (Phase 0x0B-a) - optional until fully integrated
     pub transfer_coordinator: Option<Arc<TransferCoordinator>>,
 }
@@ -61,7 +61,7 @@ impl AppState {
         pg_assets: Arc<Vec<Asset>>,
         pg_symbols: Arc<Vec<Symbol>>,
         auth_state: Arc<AuthState>,
-        user_auth: Arc<crate::user_auth::UserAuthService>,
+        user_auth: Option<Arc<crate::user_auth::UserAuthService>>,
     ) -> Self {
         Self {
             order_queue,

@@ -176,18 +176,13 @@ pub async fn run_server(
 
     // Create User Auth Service (Phase 0x10.6)
     let user_auth = if let Some(ref db) = pg_db {
-        Arc::new(crate::user_auth::UserAuthService::new(
+        Some(Arc::new(crate::user_auth::UserAuthService::new(
             db.pool().clone(),
             jwt_secret,
-        ))
+        )))
     } else {
-        // Fallback or panic? If DB is missing, Auth is useless.
-        // For now, create a dummy or handle gracefully if possible.
-        // But AppState needs Arc<UserAuthService>.
-        // We will panic if DB is missing but Auth is expected.
-        // Or better: Change AppState to use Option? No, strict types.
-        // Assuming DB is present for this phase.
-        panic!("PostgreSQL required for User Auth Service");
+        println!("⚠️  User Auth Service disabled (PostgreSQL required)");
+        None
     };
 
     // ==========================================================================

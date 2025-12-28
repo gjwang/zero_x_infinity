@@ -55,7 +55,15 @@ pub async fn jwt_auth_middleware(
     // Better: Validation logic belongs in Service.
     // state.user_auth.verify_token(token)?
 
-    match state.user_auth.verify_token(token) {
+    let user_auth = state.user_auth.as_ref().ok_or((
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(ApiResponse::<()>::error(
+            error_codes::INTERNAL_ERROR,
+            "Auth service unavailable",
+        )),
+    ))?;
+
+    match user_auth.verify_token(token) {
         Ok(claims) => {
             // 3. Inject User ID
             request.extensions_mut().insert(claims);
