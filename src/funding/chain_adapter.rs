@@ -67,11 +67,10 @@ pub struct MockBtcChain;
 #[async_trait]
 impl ChainClient for MockBtcChain {
     async fn generate_address(&self, _user_id: i64) -> Result<String, ChainError> {
-        // Simulate Legacy BTC address: 1 + 26-34 alphanumeric
-        // Using Base58 charset (excluding 0, O, I, l) is ideal, but standard alphanumeric is fine for mock
-        // We'll generate a random length between 26 and 34
-        let len = rand::thread_rng().gen_range(26..=34);
-        let charset = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+        // Simulate Regtest Bech32 address: bcrt1 + alphanumeric
+        // This satisfies DEF-001 (Gateway generating Mainnet addresses)
+        let len = rand::thread_rng().gen_range(30..=50);
+        let charset = b"023456789acdefghjklmnpqrstuvwxyz"; // Bech32 charset
         let mut rng = rand::thread_rng();
 
         let suffix: String = (0..len)
@@ -81,7 +80,7 @@ impl ChainClient for MockBtcChain {
             })
             .collect();
 
-        Ok(format!("1{}", suffix))
+        Ok(format!("bcrt1{}", suffix))
     }
 
     fn validate_address(&self, address: &str) -> bool {

@@ -1136,19 +1136,10 @@ fn run_sentinel(app_config: &zero_x_infinity::config::AppConfig) -> anyhow::Resu
 
     // Run the main loop
     rt.block_on(async {
-        // For now, just run a single scan cycle for demonstration
-        // The full run() loop would run indefinitely
-        match worker.scan_once().await {
-            Ok(deposits) => {
-                println!("  Scanned all chains. Deposits detected: {}", deposits);
-            }
-            Err(e) => {
-                eprintln!("  Scan error: {:?}", e);
-            }
+        // Run continuous scanning loop
+        if let Err(e) = worker.run().await {
+            eprintln!("  Sentinel service error: {:?}", e);
         }
-
-        println!("\n✅ Sentinel demo complete");
-        println!("  To run continuously, implement worker.run() loop");
     });
 
     Ok(())

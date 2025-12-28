@@ -108,10 +108,16 @@ CURRENT_HEIGHT=$(docker exec bitcoind bitcoin-cli -regtest -rpcuser=$BTC_USER -r
     getblockcount)
 echo "  Current block height: $CURRENT_HEIGHT"
 
-# Step 4: Run Sentinel
-echo -e "\n${YELLOW}Step 4: Run Sentinel scanner${RESET}"
+# Step 4: Run Sentinel (in background, since it's now a continuous loop)
+echo -e "\n${YELLOW}Step 4: Run Sentinel scanner (continuous mode)${RESET}"
 cd "$PROJECT_DIR"
-cargo run -- --sentinel -e dev 2>&1 | tee /tmp/sentinel_output.log
+cargo run -- --sentinel -e dev > /tmp/sentinel_output.log 2>&1 &
+SENTINEL_PID=$!
+echo "  Sentinel started with PID $SENTINEL_PID. Waiting 10s for scans..."
+sleep 10
+kill $SENTINEL_PID || true
+wait $SENTINEL_PID 2>/dev/null || true
+echo -e "${GREEN}✓ Sentinel cycle completed${RESET}"
 
 # Step 5: Verify cursor
 echo -e "\n${YELLOW}Step 5: Verify chain_cursor${RESET}"
