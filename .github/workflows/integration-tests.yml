@@ -158,7 +158,9 @@ jobs:
       
       - name: Run Unit Tests
         env:
-          SKIP_LARGE_DATASET: 1
+          # Only run full 1.3M dataset tests on 'main' branch or if manually requested.
+          # For PRs and other branches, we skip it to keep CI fast.
+          SKIP_LARGE_DATASET: ${{ (github.ref == 'refs/heads/main' || inputs.run_full_tests == 'true') && '' || '1' }}
         run: ./scripts/test_ci.sh --test-unit
 
   # ============================================================================
