@@ -6,46 +6,35 @@ export RUST_LOG=info,gateway=debug,zero_x_infinity=debug
 # DATABASE_URL and TDENGINE_DSN are exported by db_env.sh
 export JWT_SECRET="dev_secret_key_for_testing_only_do_not_use_in_production"
 
+# Source unified test utilities
+source "$PROJECT_ROOT/scripts/lib/test_utils.sh"
+# db_env.sh is sourced above for DATABASE_URL
+
+LOG_DIR="${PROJECT_ROOT}/logs"
+
+# Setup
+ensure_log_dir "$LOG_DIR"
+
 # Wait for DB
-echo "[POC] Waiting for PostgreSQL..."
-for i in {1..30}; do
-    if pg_check; then
-        echo "[POC] PostgreSQL is ready"
-        break
-    fi
-    sleep 2
-done
+wait_for_postgres
+
+# Cleanup old processes
+cleanup_gateway_process
 
 # Start Gateway
-echo "[POC] Starting Gateway (Production Mode)..."
+echo "[POC] Starting Gateway..."
 echo "[POC] Using DB: $DATABASE_URL"
-
-# Ensure Port 8080 is free by killing any zero_x_infinity process
-echo "[POC] Cleaning up any existing Gateway processes..."
-pkill -9 -f "zero_x_infinity" || true
-# Wait for sockets to close
-sleep 2
-
-GATEWAY_ARGS="--gateway"
-if [ "$CI" = "true" ]; then
-    GATEWAY_ARGS="$GATEWAY_ARGS --env ci"
-fi
+echo "[POC] Args: $GATEWAY_ARGS"
 
 cd "$PROJECT_ROOT"
 # Use existing debug binary (proven by QA runs)
 GATEWAY_BIN="${GATEWAY_BINARY:-./target/debug/zero_x_infinity}"
-$GATEWAY_BIN $GATEWAY_ARGS > logs/gateway_poc_0x12.log 2>&1 &
+# Redirect both stdout and stderr
+$GATEWAY_BIN $GATEWAY_ARGS > "${LOG_DIR}/gateway_poc_0x12.log" 2>&1 &
 GATEWAY_PID=$!
 
 echo "[POC] Waiting for Gateway (PID $GATEWAY_PID)..."
-# Simple wait loop
-for i in {1..30}; do
-    if grep -q "Gateway listening" logs/gateway_poc_0x12.log; then
-        echo "[POC] Gateway UP!"
-        break
-    fi
-    sleep 1
-done
+wait_for_gateway 8080
 
 # Run Test
 # Run Test 1: Address Validation (Real Chain Formats) - P0 Fix Verification

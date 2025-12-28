@@ -67,78 +67,48 @@ echo "╔═══════════════════════�
 echo "║    Integration Test: [Feature Name]                       ║"
 echo "╚════════════════════════════════════════════════════════════╝"
 
-# =============================================================================
-# Step 1: Environment Preparation
-# =============================================================================
-log_info "Step 1: Preparing Environment"
 
-# 1.1 Stop existing Gateway (Safe Method)
-# DO NOT use `pkill -f zero_x_infinity` - it kills the IDE!
-EXISTING_PID=$(pgrep -f "target/release/zero_x_infinity" | head -1)
-if [ -n "$EXISTING_PID" ]; then
-    log_warn "Stopping existing Gateway (PID $EXISTING_PID)..."
-    kill "$EXISTING_PID" 2>/dev/null || true
-    sleep 2
-fi
 
-# 1.2 Check Port Availability
-if lsof -Pi :8080 -sTCP:LISTEN -t >/dev/null ; then
-    log_err "Port 8080 is still in use! Please free it manually."
+# ==============================================================================
+# 2. Setup Environment
+# ==============================================================================
+# Source unified test utilities for shared checks
+source "$PROJECT_DIR/scripts/lib/test_utils.sh"
+
+# Define Log Directory (Absolute)
+LOG_DIR="${PROJECT_DIR}/logs"
+# Export for test_utils.sh to use if needed
+export LOG_DIR
+
+# Ensure log directory
+ensure_log_dir "$LOG_DIR"
+
+# Wait for DB
+wait_for_postgres
+
+# Cleanup any existing instances
+cleanup_gateway_process
+
+# ==============================================================================
+# 3. Start Gateway
+# ==============================================================================
+echo "[TEST] Starting Gateway..."
+export RUST_LOG=info,gateway=debug,zero_x_infinity=debug
+
+# Config parities handled by test_utils.sh (detect_ci_env -> GATEWAY_ARGS)
+
+CMD="${GATEWAY_BINARY:-./target/release/zero_x_infinity}"
+# Redirect stdout/stderr to log file
+$CMD $GATEWAY_ARGS > "$LOG_FILE" 2>&1 &
+GATEWAY_PID=$!
+echo "[TEST] Gateway PID: $GATEWAY_PID"
+
+# Wait for readiness
+if ! wait_for_gateway 8080; then
+    echo "Logs:"
+    tail -n 20 "$LOG_FILE"
     exit 1
 fi
-
-# =============================================================================
-# Step 2: Database Initialization (Optional)
-# =============================================================================
-# log_info "Step 2: Resetting Database..."
-# ./scripts/db/init.sh pg  # Use standard init scripts
-
-# =============================================================================
-# Step 3: Start Gateway
-# =============================================================================
-log_info "Step 3: Starting Gateway"
-
-# CRITICAL: Switch Config based on CI Environment
-# CI uses config/ci.yaml (Port 5432)
-# Dev uses config/dev.yaml (Port 5433)
-GATEWAY_ARGS="--gateway"
-if [ "$CI" = "true" ]; then
-    log_info "CI Environment Detected: Using 'ci' profile"
-    GATEWAY_ARGS="$GATEWAY_ARGS --env ci"
-else
-    log_info "Dev Environment Detected: Using default profile"
-    # Default is 'dev', no flag needed, or explicit --env dev
-fi
-
-# Build binary (skip in CI to save time)
-if [ "$CI" != "true" ] && [ ! -f "./target/release/zero_x_infinity" ]; then
-    log_info "Building release binary..."
-    cargo build --release --quiet
-fi
-
-# Start Process
-nohup ./target/release/zero_x_infinity $GATEWAY_ARGS > /tmp/gateway_test.log 2>&1 &
-GW_PID=$!
-log_info "Gateway started with PID $GW_PID"
-
-# Wait for Readiness (Health Check Loop)
-log_info "Waiting for Gateway readiness..."
-READY=false
-for i in {1..30}; do
-    if curl -s "${BASE_URL}/api/v1/health" | grep -q "ok"; then
-        READY=true
-        log_info "Gateway is READY!"
-        break
-    fi
-    sleep 1
-done
-
-if [ "$READY" = "false" ]; then
-    log_err "Gateway failed to start!"
-    cat /tmp/gateway_test.log
-    exit 1
-fi
-
 # =============================================================================
 # Step 4: Run Tests
 # =============================================================================

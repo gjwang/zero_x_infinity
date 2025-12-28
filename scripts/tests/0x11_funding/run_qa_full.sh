@@ -16,79 +16,46 @@ GATEWAY_LOG="${LOG_DIR}/gateway_qa_0x11.log"
 
 mkdir -p "$LOG_DIR"
 
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-NC='\033[0m'
+# Source unified test utilities
+source "$PROJECT_ROOT/scripts/lib/test_utils.sh"
+# Source DB vars
+source "$PROJECT_ROOT/scripts/lib/db_env.sh"
 
-log() { echo -e "${GREEN}[QA-WRAPPER]${NC} $1"; }
-error() { echo -e "${RED}[ERROR]${NC} $1"; }
+LOG_DIR="${PROJECT_ROOT}/logs"
+GATEWAY_LOG="${LOG_DIR}/gateway_qa_0x11.log"
+
+ensure_log_dir "$LOG_DIR"
 
 cleanup() {
-    log "Cleaning up Gateway..."
+    log_info "Cleaning up..."
     if [ -n "$GATEWAY_PID" ]; then
         kill "$GATEWAY_PID" 2>/dev/null || true
         wait "$GATEWAY_PID" 2>/dev/null || true
-    else
-        pkill -x "zero_x_infinity" || true
     fi
 }
 trap cleanup EXIT
 
-# Source DB environment variables
-source "$PROJECT_ROOT/scripts/lib/db_env.sh"
-
 # 1. Init DB
-log "Initializing DB..."
+log_info "Initializing DB..."
 "$PROJECT_ROOT/scripts/db/init.sh" pg
 
-# Wait for DB to be ready
-log "Waiting for PostgreSQL to be ready..."
-for i in {1..30}; do
-    if pg_check; then
-        log "PostgreSQL is ready"
-        break
-    fi
-    log "Waiting for PostgreSQL... ($i/30)"
-    sleep 2
-done
-
-if ! pg_check; then
-    error "PostgreSQL failed to become ready."
-    exit 1
-fi
+# Wait for DB
+wait_for_postgres
 
 # 2. Start Gateway
-log "Starting Gateway..."
-# Ensure clean slate
-pkill -9 -f "zero_x_infinity" || true
-sleep 1
+cleanup_gateway_process
 
+log_info "Starting Gateway..."
 cd "$PROJECT_ROOT"
-# Determine Gateway environment arguments
-GATEWAY_ARGS="--gateway"
-if [ "$CI" = "true" ]; then
-    GATEWAY_ARGS="$GATEWAY_ARGS --env ci"
-fi
 
-# Use GATEWAY_BINARY if set, otherwise default to debug build
+# Use GATEWAY_BINARY if set, otherwise default to debug build (for QA)
 GATEWAY_BIN="${GATEWAY_BINARY:-./target/debug/zero_x_infinity}"
+# Redirect to log file
 $GATEWAY_BIN $GATEWAY_ARGS > "$GATEWAY_LOG" 2>&1 &
 GATEWAY_PID=$!
+log_info "Gateway PID: $GATEWAY_PID"
 
-log "Waiting for Gateway..."
-for i in $(seq 1 30); do
-    if curl -s http://localhost:8080/api/v1/health >/dev/null; then
-        log "Gateway UP!"
-        break
-    fi
-    sleep 1
-done
-
-if ! curl -s http://localhost:8080/api/v1/health >/dev/null; then
-    error "Gateway failed to start. Logs:"
-    tail -n 20 "$GATEWAY_LOG"
-    exit 1
-fi
+wait_for_gateway 8080
 
 # 3. Run QA Suite
 log "Executing QA Master Suite..."
