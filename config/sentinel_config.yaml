@@ -1,0 +1,16 @@
+# Sentinel Service Configuration
+service:
+  name: "sentinel"
+  poll_interval_ms: 5000
+  health_check_interval_ms: 30000
+
+chains:
+  btc:
+    enabled: true
+    config_path: "./config/chains/btc_regtest.yaml"
+  eth:
+    enabled: true
+    config_path: "./config/chains/eth_anvil.yaml"
+
+database:
+  url: "${DATABASE_URL:-postgres://postgres:postgres@localhost:5432/exchange}"

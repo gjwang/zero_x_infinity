@@ -1,0 +1,17 @@
+chain_id: "ETH"
+network: "anvil"
+
+rpc:
+  url: "http://127.0.0.1:8545"
+
+scanning:
+  required_confirmations: 1
+  max_reorg_depth: 10
+
+health:
+  max_block_lag_seconds: 3600
+
+assets:
+  - name: "ETH"
+    decimals: 18
+    min_deposit: "0.001"

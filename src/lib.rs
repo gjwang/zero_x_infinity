@@ -80,6 +80,9 @@ pub mod config_watcher;
 // User Authentication (Phase 0x10.6)
 pub mod user_auth;
 
+// Sentinel Service (Phase 0x11-a: Real Chain Integration)
+pub mod sentinel;
+
 // Convenient re-exports at crate root
 pub use balance::Balance;
 pub use core_types::{AssetId, OrderId, SeqNum, TradeId, UserId};
