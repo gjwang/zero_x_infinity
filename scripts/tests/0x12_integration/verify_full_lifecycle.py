@@ -144,13 +144,73 @@ def test_full_lifecycle():
         
         if status_2 == "NEW" or status_2 == "FILLED":
              print(f"   ✅ Order {status_2}. Trading Balance Verified!")
-             return True
+             # Proceed to Step 5
         else:
              print(f"   ❌ Order {status_2}. Still failing? (Maybe transfer didn't complete?)")
              return False
     else:
          print(f"   ❌ Order Request Failed: {resp_ord_2.status_code} | {resp_ord_2.text}")
          return False
+
+    # 7. Cancel Order to Free Funds
+    print("\n[Step 5] Cancelling Order to Unlock Funds...")
+    # Assuming order_id_2 from Step 4 exists and is OPEN (NEW/FILLED?)
+    # If FILLED, we have USDT. If NEW, we have locked BTC.
+    # Since we don't have a matching engine counterparty, it should be NEW.
+    
+    cancel_payload = {
+        "order_id": order_id_2,
+        "symbol": "BTC_USDT"
+    }
+    # Correct endpoint is /api/v1/private/cancel based on Gateway router
+    resp_cancel = client.post("/api/v1/private/cancel", json_body=cancel_payload)
+    
+    if resp_cancel.status_code == 200:
+        print("   ✅ Order Cancelled. Funds Unlocked.")
+    else:
+        print(f"   ❌ Cancel Failed: {resp_cancel.status_code} | {resp_cancel.text}")
+        # Proceed anyway? If cancel fails, transfer back might fail.
+        return False
+
+    # 8. Transfer Back (Trading -> Funding)
+    print("\n[Step 6] Transferring 10.0 BTC Back to Funding...")
+    time.sleep(1) # Wait for unlocking
+    
+    transfer_back_payload = {
+        "from": "Trading", 
+        "to": "Funding",
+        "asset": "BTC",
+        "amount": "10.00000000",
+        "cid": f"trans_back_{int(time.time())}"
+    }
+    
+    resp_trans_back = client.post("/api/v1/private/transfer", json_body=transfer_back_payload)
+    
+    if resp_trans_back.status_code == 200:
+        print("   ✅ Transfer Back Accepted.")
+    else:
+        print(f"   ❌ Transfer Back Failed: {resp_trans_back.status_code} | {resp_trans_back.text}")
+        return False
+
+    # 9. Withdraw Funds (Funding -> External)
+    print("\n[Step 7] Withdrawing 10.0 BTC (Full Cycle)...")
+    WITHDRAW_URL = f"{BASE_URL}/api/v1/capital/withdraw/apply"
+    withdraw_payload = {
+        "asset": "BTC",
+        "amount": "9.90000000", # Less fee? Or fee deducted? Let's leave some dust.
+        "address": "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh", # Valid Address
+        "fee": "0.1"
+    }
+    
+    resp_withdraw = requests.post(WITHDRAW_URL, json=withdraw_payload, headers=jwt_headers)
+    
+    if resp_withdraw.status_code == 200:
+        req_id = resp_withdraw.json()["data"]["request_id"]
+        print(f"   ✅ Withdrawal Applied. Request ID: {req_id}")
+        return True
+    else:
+        print(f"   ❌ Withdrawal Failed: {resp_withdraw.status_code} | {resp_withdraw.text}")
+        return False
 
 def poll_order_status(client, order_id):
     for _ in range(5):
