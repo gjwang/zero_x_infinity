@@ -55,9 +55,15 @@ fi
 # 2. Start Gateway
 log "Starting Gateway..."
 cd "$PROJECT_ROOT"
+# Determine Gateway environment arguments
+GATEWAY_ARGS="--gateway"
+if [ "$CI" = "true" ]; then
+    GATEWAY_ARGS="$GATEWAY_ARGS --env ci"
+fi
+
 # Use GATEWAY_BINARY if set, otherwise default to debug build
 GATEWAY_BIN="${GATEWAY_BINARY:-./target/debug/zero_x_infinity}"
-$GATEWAY_BIN --gateway > "$GATEWAY_LOG" 2>&1 &
+$GATEWAY_BIN $GATEWAY_ARGS > "$GATEWAY_LOG" 2>&1 &
 GATEWAY_PID=$!
 
 log "Waiting for Gateway..."

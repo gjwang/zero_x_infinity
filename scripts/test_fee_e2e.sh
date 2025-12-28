@@ -107,7 +107,14 @@ if [ ! -f "target/release/zero_x_infinity" ]; then
 fi
 
 # Start Gateway
-nohup ./target/release/zero_x_infinity --gateway --port 8080 > /tmp/gateway_fee_e2e.log 2>&1 &
+# Use CI config when running in CI environment
+if [ "$CI" = "true" ]; then
+    ENV_FLAG="--env ci"
+else
+    ENV_FLAG=""
+fi
+
+nohup ./target/release/zero_x_infinity --gateway $ENV_FLAG --port 8080 > /tmp/gateway_fee_e2e.log 2>&1 &
 sleep 3
 
 # Wait for Gateway to be ready

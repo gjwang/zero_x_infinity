@@ -19,10 +19,16 @@ done
 # Start Gateway
 echo "[POC] Starting Gateway (Production Mode)..."
 echo "[POC] Using DB: $DATABASE_URL"
+
+GATEWAY_ARGS="--gateway"
+if [ "$CI" = "true" ]; then
+    GATEWAY_ARGS="$GATEWAY_ARGS --env ci"
+fi
+
 cd "$PROJECT_ROOT"
 # Use existing debug binary (proven by QA runs)
 GATEWAY_BIN="${GATEWAY_BINARY:-./target/debug/zero_x_infinity}"
-$GATEWAY_BIN --gateway > logs/gateway_poc_0x12.log 2>&1 &
+$GATEWAY_BIN $GATEWAY_ARGS > logs/gateway_poc_0x12.log 2>&1 &
 GATEWAY_PID=$!
 
 echo "[POC] Waiting for Gateway (PID $GATEWAY_PID)..."
