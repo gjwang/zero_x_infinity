@@ -113,13 +113,17 @@ pub async fn mock_deposit(
                     "Ignored: Already Processed".to_string(),
                 )))
             } else {
-                Err((
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<()>::error(
+                let (status, code) = match e {
+                    super::deposit::DepositError::InvalidAmount
+                    | super::deposit::DepositError::AssetNotFound(_) => {
+                        (StatusCode::BAD_REQUEST, error_codes::INVALID_PARAMETER)
+                    }
+                    _ => (
+                        StatusCode::INTERNAL_SERVER_ERROR,
                         error_codes::INTERNAL_ERROR,
-                        e.to_string(),
-                    )),
-                ))
+                    ),
+                };
+                Err((status, Json(ApiResponse::<()>::error(code, e.to_string()))))
             }
         }
     }
@@ -229,22 +233,21 @@ pub async fn apply_withdraw(
             status: "PROCESSING".to_string(), // or from DB result
         }))),
         Err(e) => {
-            Err((
-                // Determine status code based on error
-                // Determine status code based on error
-                if e.to_string().contains("Insufficient")
-                    || e.to_string().contains("Invalid address")
-                    || e.to_string().contains("Invalid amount")
-                {
-                    StatusCode::BAD_REQUEST
-                } else {
-                    StatusCode::INTERNAL_SERVER_ERROR
-                },
-                Json(ApiResponse::<()>::error(
+            let (status, code) = match e {
+                super::withdraw::WithdrawError::InsufficientFunds => {
+                    (StatusCode::BAD_REQUEST, error_codes::INSUFFICIENT_BALANCE)
+                }
+                super::withdraw::WithdrawError::InvalidAddress
+                | super::withdraw::WithdrawError::InvalidAmount
+                | super::withdraw::WithdrawError::AssetNotFound(_) => {
+                    (StatusCode::BAD_REQUEST, error_codes::INVALID_PARAMETER)
+                }
+                _ => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
                     error_codes::INTERNAL_ERROR,
-                    e.to_string(),
-                )),
-            ))
+                ),
+            };
+            Err((status, Json(ApiResponse::<()>::error(code, e.to_string()))))
         }
     }
 }
