@@ -48,3 +48,5 @@ data/
 admin/admin_auth.db
 cookies.txt
 admin/.venv/
+
+tmp/
