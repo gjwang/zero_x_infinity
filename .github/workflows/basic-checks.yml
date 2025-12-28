@@ -63,3 +63,17 @@ jobs:
 
       - name: UBSCore Snapshot Tests
         run: cargo test ubscore_wal::snapshot --lib -- --nocapture
+
+  schema-lint:
+    name: Schema Design Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          
+      - name: Run Schema Linter
+        run: python3 scripts/test_schema_lint.py
