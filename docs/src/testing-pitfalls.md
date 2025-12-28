@@ -184,6 +184,40 @@ services:
 
 ---
 
+## 5. 配置与端口对齐 (Config & Port Parity)
+
+### 1. 5433 vs 5432 端口陷阱
+
+#### 问题描述
+- **本地开发 (Dev)**：为了避免与系统 Postgres 冲突，默认 `config/dev.yaml` 使用端口 **5433**。
+- **CI 环境**：GitHub Actions Service 默认映射标准端口 **5432** (`config/ci.yaml`)。
+- **陷阱**：如果不显式指定 `--env ci`，Gateway 在 CI 中会默认加载 `dev.yaml`，尝试连接 `127.0.0.1:5433`，导致即便是 `pg_check` (检查的 5432) 通过了，Gateway 依然连接超时。
+
+#### 解决方案
+在所有集成测试脚本中，**必须**检测 `CI` 环境变量并切换 Gateway 参数：
+
+```bash
+GATEWAY_ARGS="--gateway"
+if [ "$CI" = "true" ]; then
+    # 强制使用 ci.yaml (Port 5432)
+    GATEWAY_ARGS="$GATEWAY_ARGS --env ci"
+fi
+./target/release/zero_x_infinity $GATEWAY_ARGS ...
+```
+
+### 2. 标准化脚本模板
+
+为避免重复造轮子和踩坑，请直接复制使用标准模板：
+`scripts/templates/test_integration_template.sh`
+
+该模板包含了：
+- ✅ CI/Dev 环境自动切换
+- ✅ 安全的进程管理 (Trap Cleanup)
+- ✅ 健壮的健康检查循环
+- ✅ 标准化的日志格式
+
+---
+
 *最后更新：2024-12-28*
 
 ---
