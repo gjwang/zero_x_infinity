@@ -80,9 +80,9 @@ impl WithdrawService {
             .ok_or_else(|| WithdrawError::AssetNotFound(asset_name.to_string()))?;
 
         // 2. Lock & Check Balance
-        // We act on Spot Account (type=1)
+        // We act on Funding Account (type=2)
         let balance_row = sqlx::query!(
-            "SELECT available, version FROM balances_tb WHERE user_id = $1 AND asset_id = $2 AND account_type = 1 FOR UPDATE",
+            "SELECT available, version FROM balances_tb WHERE user_id = $1 AND asset_id = $2 AND account_type = 2 FOR UPDATE",
             user_id, asset.asset_id
         )
         .fetch_optional(&mut *tx)
@@ -100,7 +100,7 @@ impl WithdrawService {
         // 3. Deduct Balance
         // "Immediate Deduction" per spec
         sqlx::query!(
-            "UPDATE balances_tb SET available = available - $1, version = version + 1 WHERE user_id = $2 AND asset_id = $3 AND account_type = 1",
+            "UPDATE balances_tb SET available = available - $1, version = version + 1 WHERE user_id = $2 AND asset_id = $3 AND account_type = 2",
             amount, user_id, asset.asset_id
         )
         .execute(&mut *tx)
@@ -158,7 +158,7 @@ impl WithdrawService {
 
                 let mut tx_refund = self.db.pool().begin().await?;
                 sqlx::query!(
-                    "UPDATE balances_tb SET available = available + $1, version = version + 1 WHERE user_id = $2 AND asset_id = $3 AND account_type = 1",
+                    "UPDATE balances_tb SET available = available + $1, version = version + 1 WHERE user_id = $2 AND asset_id = $3 AND account_type = 2",
                     amount, user_id, asset.asset_id
                 )
                 .execute(&mut *tx_refund)

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT available, version FROM balances_tb WHERE user_id = $1 AND asset_id = $2 AND account_type = 1 FOR UPDATE",
+  "query": "SELECT available, version FROM balances_tb WHERE user_id = $1 AND asset_id = $2 AND account_type = 2 FOR UPDATE",
   "describe": {
     "columns": [
       {
@@ -25,5 +25,5 @@
       false
     ]
   },
-  "hash": "d5e24c4377b2b12b8010026b61409e9a03d2496b179543704de28d7f7ac2e273"
+  "hash": "2927553048a3c114d382a066488414de3aca2a38ea21d710a4b78b4617a5eba4"
 }

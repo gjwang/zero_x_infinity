@@ -159,7 +159,7 @@ echo ""
 echo "[Step $STEP] Querying trades API and verifying fee fields..."
 
 # Use Python script for authenticated API call
-TRADES_RESULT=$(uv run << 'EOF'
+TRADES_RESULT=$(uv run python3 - << 'EOF'
 import sys
 sys.path.insert(0, 'scripts')
 from lib.api_auth import get_test_client

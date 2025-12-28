@@ -96,9 +96,9 @@ CREATE TABLE IF NOT EXISTS balances_tb (
 -- CLEAN SLATE: Delete ALL balances for test user
 DELETE FROM balances_tb WHERE user_id = 1001;
 
--- Create ONLY Funding balance: 1000 USDT (scaled by 10^6 = 1000000000)
+-- Create ONLY Funding balance: 1000 USDT (Unit Amount, not scaled)
 INSERT INTO balances_tb (user_id, asset_id, account_type, available, frozen, status)
-VALUES (1001, 2, 2, 1000000000, 0, 1);
+VALUES (1001, 2, 2, 1000, 0, 1);
 
 -- Clear old transfer records for clean test
 DELETE FROM transfer_operations_tb WHERE transfer_id IN (
@@ -464,7 +464,7 @@ echo -e "${YELLOW}[5/6] Final database state...${NC}"
 PGPASSWORD="${PG_PASSWORD}" psql -h "${PG_HOST}" -p "${PG_PORT}" -U "${PG_USER}" -d "${PG_DB}" -t << 'EOF'
 SELECT 
     CASE account_type WHEN 1 THEN 'Spot' WHEN 2 THEN 'Funding' END as account,
-    (available / 1000000)::text || ' USDT' as balance
+    available::text || ' USDT' as balance
 FROM balances_tb 
 WHERE user_id = 1001 AND asset_id = 2
 ORDER BY account_type;
