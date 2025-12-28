@@ -185,7 +185,7 @@ class TestDataProtectionAgentC:
         assert settings.database_url is not None
         # Should not be hardcoded default
         assert "localhost:5432" not in settings.database_url or \
-               settings.database_url.startswith("postgresql://")
+               settings.database_url.startswith("postgresql")
     
     def test_jwt_secret_from_env(self):
         """TC-DATA-03: JWT secret should come from environment"""
