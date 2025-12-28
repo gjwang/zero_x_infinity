@@ -153,13 +153,18 @@ loop {
             continue;
         }
         
-        // Process Deposits
-        db.transaction(|tx| {
-            for deposit in block.deposits {
-                tx.insert_deposit(deposit, status="CONFIRMING");
-            }
-            tx.update_cursor(block.height, block.hash);
-        });
+        // Batch Process Deposits (Performance)
+        // Avoid lock contention by inserting in chunks of 100
+        for chunk in block.deposits.chunks(100) {
+            db.transaction(|tx| {
+                for deposit in chunk {
+                    tx.insert_deposit(deposit, status="CONFIRMING");
+                }
+            });
+        }
+        
+        // Atomic Cursor Update
+        db.update_cursor(block.height, block.hash).await?;
         
         // Monitor Confirmations
         update_confirmations(scanner).await?;
@@ -273,22 +278,20 @@ These parameters MUST be loadable from configuration (e.g., `Settings.toml` or D
     ```
 *   **Purpose**: Prevents Sentinel from scanning a stale local chain while the real world has moved on.
 
+    }
+    ```
+*   **Purpose**: Prevents Sentinel from scanning a stale local chain while the real world has moved on.
+
 ## 10. Wallet & Address Management (HD Architecture)
 
 To ensure security, we strictly follow the **Watch-Only Wallet** pattern using BIP32/BIP44/BIP84 standards.
 
-### 10.1 The Master Key (Security Strategy)
-
-#### Production (Cold)
+### 10.1 The Master Key (Cold Storage)
 *   **Generation**: Created offline (Air-gapped) or via Hardware Wallet (Ledger/Trezor).
 *   **Export**: Only the **Extended Public Key (`xpub`/`zpub`)** is exported to the production server.
 *   **Security Guarantee**: Even if the entire DB and Sentinel are compromised, **attackers cannot steal funds** (they can't sign withdrawals).
 
-#### Stage/Dev (Hot)
-*   **Simplification**: We will use a **Hot Master Key** (Mnemonic stored in `.env` or Config) to facilitate rapid testing of withdrawals and consolidation during development.
-*   **Risk**: Acceptable for Testnet/Regtest coins only.
-
-### 10.2 Address Derivation (On-Demand Allocation)
+### 10.2 Address Derivation (Hot Allocation)
 *   **Path Standard**:
     *   BTC (Segwit): `m/84'/0'/0'/0/{index}` (BIP84)
     *   ETH: `m/44'/60'/0'/0/{index}` (BIP44)
@@ -312,3 +315,14 @@ To ensure security, we strictly follow the **Watch-Only Wallet** pattern using B
     1.  Admin configures new `xpub_v2`.
     2.  New users get addresses from `xpub_v2`.
     3.  Sentinel scans **BOTH** `xpub_v1` addresses and `xpub_v2` addresses.
+
+### 10.5 Security Guards
+*   **Rate Limiting**: `GET /deposit/address` must be rate-limited (e.g., 10/min per user) to prevent **Address Poisoning** (bloating our scan index).
+*   **Sanity Check**: Reject derivation if `index > max_allowed_index` (e.g., 10 million).
+
+## 11. Advanced Defense (The "Fake Re-org")
+*   **Risk**: Attacker compromises the local Bitcoin Node and feeds fake blocks.
+*   **Defense**: **Multi-Source Validation** (Phase II).
+    *   Before "Finalizing" any deposit > 1 BTC, Sentinel must verify the Block Hash against a secondary, trusted source (e.g., Blockstream API / Infura).
+    *   *Note*: Optional for Regtest/Phase I, Mandatory for Mainnet.
+
