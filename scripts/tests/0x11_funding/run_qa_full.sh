@@ -58,6 +58,6 @@ log_info "Gateway PID: $GATEWAY_PID"
 wait_for_gateway 8080
 
 # 3. Run QA Suite
-log "Executing QA Master Suite..."
+log_info "Executing QA Master Suite..."
 cd "$SCRIPT_DIR"
 ./run_tests.sh

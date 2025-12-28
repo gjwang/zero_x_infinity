@@ -76,7 +76,6 @@
 - [Naming Convention](../standards/naming-convention.md)
 - [CI Pitfalls](./standards/ci-pitfalls.md)
 - [Pre-merge Checklist](./standards/pre-merge-checklist.md)
-- [Testing Pitfalls](./testing-pitfalls.md)
 - [Build Verification Guide](./build-verification-guide.md)
 - [Database Selection: TDengine](./database-selection-tdengine.md)
 - [ADR-001: WebSocket Security (Strict Auth)](./architecture/decisions/ADR-001-websocket-security-auth-enforcement.md)
