@@ -240,13 +240,42 @@ This is the most complex part of the system. We must handle two types of Re-orgs
 
 While not part of the initial implementation, the following components are critical for a long-term production system.
 
-### 8.1 T+1 Reconciliation Bot (Financial Audit)
-*   **Problem**: Distributed systems drift. Sentinel might miss a block; DB might rollback but Chain didn't.
-*   **Solution**: A nightly batch job.
-    1.  Snapshot Database Balances: `Sum(user_wallets)`.
-    2.  Snapshot Chain UTXOs: `Sum(RPC.listunspent)`.
-    3.  **Audit**: If `DbBalance != ChainBalance`, trigger P0 Alert.
-*   **Status**: Marked for Phase 0x11-b.
+### 8.1 T+1 Reconciliation Bot (The Financial Audit)
+
+We implement a **Triangular Reconciliation Strategy** to ensure the exchange is solvent and leakage-free.
+
+#### 8.1.1 The Equation of Truth
+We must solve this equation daily:
+`Delta(Liabilities) == Delta(Assets) + Fees`
+
+To break it down:
+```text
+(Sum(User_End) - Sum(User_Start))  
+== 
+(Sum(Wallet_End) - Sum(Wallet_Start)) + (Sum(Withdrawals) - Sum(Deposits))
+```
+
+#### 8.1.2 Three-Way Match Components
+1.  **Proof of Liabilities (PoL)**:
+    *   `SELECT SUM(available + frozen) FROM accounts WHERE asset = 'BTC'`
+2.  **Proof of Assets (PoA)**:
+    *   `RPC.getbalance()` (or `listunspent` sum)
+    *   *Note*: Must subtract "Unswept Dust" if we ignore it in DB.
+3.  **Proof of Flow (PoF)**:
+    *   `SELECT SUM(amount) FROM deposit_history WHERE status='SUCCESS' AND time > T-1`
+    *   `SELECT SUM(amount + fee) FROM withdraw_history WHERE status='SUCCESS' AND time > T-1`
+
+#### 8.1.3 The Alert Thresholds
+*   **Precision**: We use `Decimal` / `u64` (Fixed Point). There is **NO** floating point error.
+*   **Gas Tracking**: Every on-chain transaction (Withdrawal, Consolidation) MUST record the exact `tx_fee` in the database.
+*   **Equation**: `Delta(Assets) + GasSpent == Delta(Liabilities) + NetFlow`
+*   **Allowed Variance**:
+    *   **Unswept Dust**: Sum of deposits < `MIN_DEPOSIT_THRESHOLD` (tracked in separate DB counter).
+    *   **Nothing Else**.
+*   **Action**:
+    *   `Diff != Dust` -> **P0 Alert**.
+    *   **Zero Tolerance** for calculation errors.
+    *   If `Diff > 0`: **Suspend Withdrawals**. Call Ops.
 
 3.  **Gas Management**: Manual gas funding for hot wallets.
 
