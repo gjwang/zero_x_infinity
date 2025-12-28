@@ -1,35 +1,98 @@
-# Implement: Phase 0x11 Deposit & Withdraw
+# 💻 Developer Session: Phase 0x11-a
 
-**Role**: Senior Rust Developer
-**Context**: Adding Funding Layer to High-Performance Exchange.
-**Blocked By**: N/A (Design & Spec Ready).
+## Session Info
+- **Date**: 2025-12-28
+- **Role**: Senior Rust Developer
+- **Status**: ✅ Phase C.1 Complete
 
-## 1. Technical Specification (Must Follow)
-*   **Architecture**: [`docs/agents/sessions/shared/arch-to-dev-handover-0x11.md`](../shared/arch-to-dev-handover-0x11.md)
-    *   *Includes*: SQL Schema (`deposit_history`, `user_addresses`) & Rust Trait (`ChainClient`).
-*   **Definition of Done**: [`docs/src/0x11-acceptance-checklist.md`](../../../src/0x11-acceptance-checklist.md)
-    *   *Critical*: Idempotency (TxHash unique constraint) is P0.
+---
 
-## 2. Implementation Steps
-### 2.1 Database Layer
-*   Create `migrations/20251228132000_deposit_withdraw.sql`.
-*   Copy Schema from Handover Doc Section 2.1 exactly.
+## 🎯 Task: Sentinel Service MVP
 
-### 2.2 Chain Adapter Module (`src/funding/chain_adapter.rs`)
-*   Implement `trait ChainClient`.
-*   Implement `MockBtcChain`: Address start with "1", "3", or "bc1".
-*   Implement `MockEvmChain`: Address start with "0x" (len > 10).
-*   *Note*: Use `uuid` for generating fake TxHashes.
+### Goal
+Implement the Sentinel service that monitors real blockchain nodes (BTC Regtest, ETH Anvil), detects deposits via block scanning, and records them in the database.
 
-### 2.3 Funding Service (`src/funding/service.rs`)
-*   `get_deposit_address(user, asset)`:
-    *   Check `user_addresses` table first.
-    *   If missing, call `ChainClient::generate_address` and INSERT.
-    *   Return address.
-*   `mock_deposit_callback`:
-    *   **Transactional**: Insert `deposit_history` -> Credit `UBScore`.
-    *   **Idempotency**: Handle "Duplicate Key Error" gracefully (ignore).
+---
 
-## 3. Verification
-*   **Unit Test**: Does `MockBtcChain` generate valid-looking addresses?
-*   **Integration**: Can I register a user -> Get Address -> Mock Deposit -> See Balance?
+## 📦 Delivery Summary
+
+### Phase C.1: Sentinel MVP ✅ Complete
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `src/sentinel/mod.rs` | 25 | Module entry with re-exports |
+| `src/sentinel/scanner.rs` | 97 | `ChainScanner` trait + core types |
+| `src/sentinel/btc.rs` | 244 | BTC scanner with mock mode |
+| `src/sentinel/eth.rs` | 249 | ETH scanner with mock mode |
+| `src/sentinel/worker.rs` | 300 | `SentinelWorker` orchestration |
+| `src/sentinel/config.rs` | 176 | Configuration structs |
+| `src/sentinel/error.rs` | 34 | Error types |
+
+### Configuration Files
+| File | Purpose |
+|------|---------|
+| `config/sentinel_config.yaml` | Main service configuration |
+| `config/chains/btc_regtest.yaml` | BTC Regtest chain settings |
+| `config/chains/eth_anvil.yaml` | ETH Anvil chain settings |
+
+### Database Migration
+| File | Purpose |
+|------|---------|
+| `migrations/20251228180000_chain_cursor.sql` | `chain_cursor` table + deposit_history enhancements |
+
+---
+
+## ✅ Verification
+
+### Unit Tests: 17 Passing
+```
+sentinel::scanner::tests::test_scanned_block_with_deposits
+sentinel::scanner::tests::test_node_health_synced
+sentinel::config::tests::test_sentinel_config_deserialize
+sentinel::config::tests::test_btc_chain_config_deserialize
+sentinel::config::tests::test_eth_chain_config_deserialize
+sentinel::btc::tests::test_btc_scanner_creation
+sentinel::btc::tests::test_address_watching
+sentinel::btc::tests::test_mock_block_scanning
+sentinel::btc::tests::test_mock_health_check
+sentinel::btc::tests::test_verify_block_hash
+sentinel::eth::tests::test_eth_scanner_creation
+sentinel::eth::tests::test_address_watching_case_insensitive
+sentinel::eth::tests::test_mock_block_scanning
+sentinel::eth::tests::test_mock_health_check
+sentinel::eth::tests::test_wei_to_eth_conversion
+sentinel::worker::tests::test_worker_creation
+sentinel::worker::tests::test_chain_cursor_struct
+```
+
+### Full Test Suite: 317 Passed
+```
+cargo test --lib
+test result: ok. 317 passed; 0 failed; 20 ignored
+```
+
+### Code Quality
+- ✅ `cargo fmt` - Formatted
+- ✅ `cargo clippy -- -D warnings` - No warnings
+
+---
+
+## 🔗 Next Steps (Phase C.2)
+
+1. **Confirmation Monitor**: Track confirmation counts for DETECTED deposits
+2. **State Machine**: Implement DETECTED → CONFIRMING → FINALIZED transitions
+3. **Real RPC**: Connect to actual bitcoind and anvil nodes
+
+---
+
+## 📝 Handover Notes
+
+### For QA
+- Mock mode tests are complete
+- Integration tests with real DB need `chain_cursor` migration
+- Docker containers needed: `ruimarinho/bitcoin-core:24`, `ghcr.io/foundry-rs/foundry:latest`
+
+### For DevOps
+- New service binary: Consider `--sentinel` flag or separate binary
+- New config files in `config/chains/`
+- New DB migration required before starting sentinel
