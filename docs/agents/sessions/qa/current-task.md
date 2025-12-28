@@ -1,17 +1,32 @@
-# Current Task: Phase 0x11 Test Planning
+# QA Test Plan: Phase 0x11 Funding
 
-**Objective**: Prepare Test Plan and Automation for Deposit/Withdraw.
+**Role**: QA Engineer
+**Context**: Verifying a critical financial module (Money In/Out).
+**Risk Level**: **EXTREME** (Double Spend = Loss of Funds).
 
-## Status
-*   **Design**: COMPLETE.
-*   **Dev**: STARTING.
+## 1. Verification Basis
+*   **Strict Checklist**: [`docs/src/0x11-acceptance-checklist.md`](../../../src/0x11-acceptance-checklist.md)
+    *   You MUST NOT pass the release unless *every* item is checked.
 
-## Action Items
-1.  **Review Design**: `docs/src/0x11-deposit-withdraw.md`.
-2.  **Review Checklist**: `docs/src/0x11-acceptance-checklist.md`.
-    *   Create Test Cases for each item in the checklist.
-    *   Focus on: **Idempotency** (Double Spend) and **Race Conditions**.
-3.  **Prepare Chaos Tests**:
-    *   How will we simulate a "Re-org"? (Mock Chain API requirement?)
+## 2. Test Strategy Focus
+### 2.1 "The Double Spend" (Idempotency)
+*   **Scenario**: Developer sends the same `tx_hash` 20 times in parallel.
+*   **Expected**:
+    *   Database: 1 row.
+    *   User Balance: Credited 1 time.
+    *   API Response: 200 OK (all look successful to client, but backend filters duplicates).
 
-**Waiting for Developer to implement `POST /internal/mock/deposit` endpoint.**
+### 2.2 "The Race" (Concurrency)
+*   **Scenario**: User has 100 USDT. Sends 3 requests to withdraw 50 USDT simultaneously.
+*   **Expected**:
+    *   2 Requests succeed.
+    *   3rd Request fails (Insufficient Balance).
+    *   User Balance = 0 USDT.
+
+### 2.3 "The Mock Chain"
+*   **Scenario**: Request BTC Address.
+*   **Expected**: Returns Base58 format (not Hex).
+
+## 3. Automation Requirements
+*   Create `scripts/test_funding_concurrency.py` using `asyncio` to flood endpoint.
+*   Verify results against `GET /api/v1/private/balances`.
