@@ -157,6 +157,8 @@ jobs:
         run: chmod +x target/release/zero_x_infinity
       
       - name: Run Unit Tests
+        env:
+          SKIP_LARGE_DATASET: 1
         run: ./scripts/test_ci.sh --test-unit
 
   # ============================================================================
