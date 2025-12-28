@@ -301,7 +301,36 @@ To ensure security, we strictly follow the **Watch-Only Wallet** pattern using B
     3.  Service: Derive address from `xpub` at new `index`.
     4.  DB: Store mapping `user_id <-> address <-> index`.
 
-### 10.3 The "Gap Limit" Problem
+### 10.3 Wallet Lifecycle Diagram
+
+```mermaid
+sequenceDiagram
+    participant Admin as Admin (Cold)
+    participant Srv as Server (Hot)
+    participant DB as Database
+    participant User as User
+    participant Sen as Sentinel
+
+    Note over Admin, Srv: 1. Setup Phase
+    Admin->>Admin: Generate Mnemonic (Offline)
+    Admin->>Srv: Deploy XPUB (Prod) or Mnemonic (Stage)
+    
+    Note over User, DB: 2. Allocation Phase
+    User->>Srv: GET /deposit/address
+    Srv->>DB: Increment Index (Atomic)
+    Srv->>Srv: Derive Address (BIP84/44)
+    Srv->>DB: Insert {User, Asset, Addr, Index}
+    Srv-->>User: Return Address
+    
+    Note over Sen, DB: 3. Sync Phase
+    loop Every 10s
+        Sen->>DB: Load ALL Addresses
+        Sen->>Sen: Update Bloom Filter
+        Sen->>Sen: Scan Block vs Filter
+    end
+```
+
+### 10.4 The "Gap Limit" Problem
 *   **Issue**: HD Wallets usually stop scanning if they see 20 unused addresses. We allocate addresses randomly to users.
 *   **Solution**: **Full Index Scanning**.
     *   The Sentinel does NOT rely on Gap Limits.
