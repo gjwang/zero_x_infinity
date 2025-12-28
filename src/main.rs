@@ -16,6 +16,7 @@
 //! - Single-threaded atomic operations
 //! ```
 
+use anyhow::Context;
 use std::fs::File;
 use std::io::Write;
 use std::time::Instant;
@@ -106,6 +107,13 @@ fn get_port_override() -> Option<u16> {
 }
 
 fn main() {
+    if let Err(e) = run() {
+        eprintln!("❌ Error: {:#}", e);
+        std::process::exit(1);
+    }
+}
+
+fn run() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();
 
     // Check for --version or -V
@@ -123,7 +131,7 @@ fn main() {
                 "Release"
             }
         );
-        return;
+        return Ok(());
     }
 
     let output_dir = get_output_dir();
@@ -144,7 +152,7 @@ fn main() {
         println!("=== 0xInfinity: Chapter 9a - Gateway Mode ===");
 
         // Load configuration
-        let (symbol_mgr, active_symbol_id) = load_symbol_manager();
+        let (symbol_mgr, active_symbol_id) = load_symbol_manager()?;
 
         // Get Gateway config from YAML, allow --port override
         let gateway_config = &app_config.gateway;
@@ -159,7 +167,7 @@ fn main() {
             "Active symbol: {}",
             symbol_mgr
                 .get_symbol_info_by_id(active_symbol_id)
-                .unwrap()
+                .context("Active symbol not found")?
                 .symbol
         );
         println!("Order queue size: {}", gateway_config.queue_size);
@@ -182,7 +190,9 @@ fn main() {
 
         // Create tokio runtime and initialize TDengine in main thread
         // This allows sharing db_client with both Gateway and Pipeline
-        let shared_rt = std::sync::Arc::new(tokio::runtime::Runtime::new().unwrap());
+        let shared_rt = std::sync::Arc::new(
+            tokio::runtime::Runtime::new().context("Failed to create shared runtime")?,
+        );
         let rt_handle = shared_rt.handle().clone();
 
         let persistence_config = app_config.persistence.clone();
@@ -309,10 +319,10 @@ fn main() {
         println!("\n[1] Initializing Trading Core...");
 
         // Load initial balances
-        let accounts = load_balances_and_deposit(&format!("{}/balances_init.csv", input_dir));
+        let accounts = load_balances_and_deposit(&format!("{}/balances_init.csv", input_dir))?;
 
         // Create output paths
-        std::fs::create_dir_all(output_dir).unwrap();
+        std::fs::create_dir_all(output_dir).context("Failed to create output directory")?;
         let ledger_path = format!("{}/t2_ledger.csv", output_dir);
         let events_path = format!("{}/t2_events.csv", output_dir);
         let wal_path = format!("{}/orders.wal", output_dir);
@@ -335,13 +345,15 @@ fn main() {
             );
             let ubscore_config = UBSCoreConfig::new(&app_config.ubscore_persistence.data_dir);
             UBSCore::new_with_recovery((*symbol_mgr).clone(), ubscore_config)
-                .expect("Failed to create UBSCore with recovery")
+                .context("Failed to create UBSCore with recovery")?
         } else {
-            UBSCore::new((*symbol_mgr).clone(), wal_config).expect("Failed to create UBSCore")
+            UBSCore::new((*symbol_mgr).clone(), wal_config).context("Failed to create UBSCore")?
         };
 
         // Transfer initial balances to UBSCore and pre-create TDengine tables
-        let symbol_info = symbol_mgr.get_symbol_info_by_id(active_symbol_id).unwrap();
+        let symbol_info = symbol_mgr
+            .get_symbol_info_by_id(active_symbol_id)
+            .context("Active symbol not found")?;
         let base_id = symbol_info.base_asset_id;
         let quote_id = symbol_info.quote_asset_id;
 
@@ -400,7 +412,9 @@ fn main() {
         let symbol_mgr_clone = symbol_mgr.clone();
         let depth_service_clone = depth_service.clone();
         let gateway_thread = std::thread::spawn(move || {
-            let rt = tokio::runtime::Runtime::new().unwrap();
+            let rt = tokio::runtime::Runtime::new()
+                .context("Failed to create gateway runtime")
+                .unwrap(); // unwrap because this is a thread, and we want to panic if runtime fails
             rt.block_on(async {
                 // Spawn DepthService task (inside tokio runtime)
                 tokio::spawn(async move {
@@ -438,7 +452,8 @@ fn main() {
                 {
                     ubscore
                         .deposit(*user_id, asset_id, balance.avail())
-                        .unwrap();
+                        .map_err(anyhow::Error::msg)
+                        .context("Failed to deposit initial balance to UBSCore")?;
                 }
             }
         }
@@ -476,9 +491,11 @@ fn main() {
         );
 
         // Wait for gateway thread
-        gateway_thread.join().unwrap();
+        gateway_thread
+            .join()
+            .map_err(|e| anyhow::anyhow!("Gateway thread panicked: {:?}", e))?;
 
-        return;
+        return Ok(());
     }
 
     if pipeline_mt_mode {
@@ -497,7 +514,7 @@ fn main() {
 
     // Step 1: Load configuration
     println!("[1] Loading configuration...");
-    let (symbol_mgr, active_symbol_id) = load_symbol_manager();
+    let (symbol_mgr, active_symbol_id) = load_symbol_manager()?;
 
     // Generate output paths
     let balances_t1 = format!("{}/t1_balances_deposited.csv", output_dir);
@@ -509,11 +526,11 @@ fn main() {
     let summary_path = format!("{}/t2_summary.txt", output_dir);
     let wal_path = format!("{}/orders.wal", output_dir);
 
-    std::fs::create_dir_all(output_dir).unwrap();
+    std::fs::create_dir_all(output_dir).context("Failed to create output directory")?;
 
     // Step 2: Load balances
     println!("\n[2] Loading balances and depositing...");
-    let accounts = load_balances_and_deposit(&format!("{}/balances_init.csv", input_dir));
+    let accounts = load_balances_and_deposit(&format!("{}/balances_init.csv", input_dir))?;
 
     // Step 3: Snapshot after deposit
     println!("\n[3] Dumping balance snapshot after deposit...");
@@ -525,7 +542,7 @@ fn main() {
         &format!("{}/orders.csv", input_dir),
         &symbol_mgr,
         active_symbol_id,
-    );
+    )?;
 
     let load_time = start_time.elapsed();
     println!("\n    Data loading completed in {:.2?}", load_time);
@@ -551,7 +568,7 @@ fn main() {
 
     let symbol_info = symbol_mgr
         .get_symbol_info_by_id(active_symbol_id)
-        .expect("Active symbol not found");
+        .context("Active symbol not found")?;
     let base_id = symbol_info.base_asset_id;
     let quote_id = symbol_info.quote_asset_id;
     let (accepted, rejected, total_trades, perf, final_accounts, final_book) = if pipeline_mt_mode {
@@ -565,7 +582,7 @@ fn main() {
         };
 
         let mut ubscore =
-            UBSCore::new(symbol_mgr.clone(), wal_config).expect("Failed to create UBSCore");
+            UBSCore::new(symbol_mgr.clone(), wal_config).context("Failed to create UBSCore")?;
 
         // Transfer initial balances to UBSCore via deposit()
         let mut deposit_count = 0u64;
@@ -576,7 +593,7 @@ fn main() {
                 {
                     ubscore
                         .deposit(*user_id, asset_id, balance.avail())
-                        .unwrap();
+                        .unwrap(); // UBSCore deposit is memory only here, unwrap is safe-ish, but ideally ?
                     deposit_count += 1;
                 }
             }
@@ -652,7 +669,7 @@ fn main() {
         };
 
         let mut ubscore =
-            UBSCore::new(symbol_mgr.clone(), wal_config).expect("Failed to create UBSCore");
+            UBSCore::new(symbol_mgr.clone(), wal_config).context("Failed to create UBSCore")?;
 
         // Transfer initial balances to UBSCore via deposit()
         let mut deposit_count = 0u64;
@@ -665,7 +682,6 @@ fn main() {
                         .deposit(*user_id, asset_id, balance.avail())
                         .unwrap();
 
-                    // Record Deposit event
                     if let Some(b) = ubscore.get_balance(*user_id, asset_id) {
                         deposit_count += 1;
                         let deposit_event = BalanceEvent::deposit(
@@ -745,7 +761,7 @@ fn main() {
         };
 
         let mut ubscore =
-            UBSCore::new(symbol_mgr.clone(), wal_config).expect("Failed to create UBSCore");
+            UBSCore::new(symbol_mgr.clone(), wal_config).context("Failed to create UBSCore")?;
 
         // Transfer initial balances to UBSCore via deposit()
         // Also record Deposit events for complete audit trail
@@ -829,9 +845,8 @@ fn main() {
             Some(book),
         )
     } else {
-        println!("    Standard mode redirected to Ring Buffer Pipeline...");
+        println!("    Using basic matching engine (No WAL, No Pipeline)...");
 
-        // Create UBSCore for standard mode
         let wal_config = WalConfig {
             path: wal_path.clone(),
             flush_interval_entries: 100,
@@ -839,7 +854,7 @@ fn main() {
         };
 
         let mut ubscore =
-            UBSCore::new(symbol_mgr.clone(), wal_config).expect("Failed to create UBSCore");
+            UBSCore::new(symbol_mgr.clone(), wal_config).context("Failed to create UBSCore")?;
 
         // Initial deposits
         for (user_id, account) in &accounts {
@@ -849,7 +864,8 @@ fn main() {
                 {
                     ubscore
                         .deposit(*user_id, asset_id, balance.avail())
-                        .unwrap();
+                        .map_err(anyhow::Error::msg)
+                        .context("Failed to deposit (basic mode)")?;
                 }
             }
         }
@@ -1012,4 +1028,5 @@ Samples: {}
     println!("Perf baseline written to {}", perf_path);
 
     println!("\n=== Done ===");
+    Ok(())
 }

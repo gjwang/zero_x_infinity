@@ -24,8 +24,16 @@ set -e
 
 # 1. Setup Paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Adjust relative path if template is moved
-PROJECT_DIR="$(cd "$SCRIPT_DIR/../../" && pwd)" 
+
+# Robust Project Root Detection
+if [ -f "$SCRIPT_DIR/../../Cargo.toml" ]; then
+    PROJECT_DIR="$(cd "$SCRIPT_DIR/../../" && pwd)"
+elif [ -f "$SCRIPT_DIR/../Cargo.toml" ]; then
+    PROJECT_DIR="$(cd "$SCRIPT_DIR/../" && pwd)"
+else
+    echo "ERROR: Could not locate project root (Cargo.toml). Please adjust PROJECT_DIR in script."
+    exit 1
+fi
 cd "$PROJECT_DIR"
 
 # 2. Global Constants
