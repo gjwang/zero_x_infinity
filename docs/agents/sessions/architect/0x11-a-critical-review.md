@@ -50,12 +50,18 @@
     *   **Risk**: If an attacker controls the Node (e.g., via compromised RPC port 18443), they can feed fake blocks to Sentinel, trigger a credit, then re-org.
     *   **Mitigation**: **Multi-Source Validation**. Sentinel should check Block Hash against 2 different nodes (e.g., Local + Infura) before Finalizing large amounts. (Overkill for Phase I, but critical for Phase II).
 
-## 4. Final Verdict
+## 4. Scope Trade-offs (Architect's Note)
+
+To accelerate delivery of Phase 0x11-a, we have explicitly excluded the following:
+- **Bloom Filters**: Using standard `HashMap` for now. This is acceptable for the current user scale (< 10k addresses).
+- **Automated Clawback**: Deep re-orgs (> `MAX_REORG_DEPTH`) now trigger a **Circuit Breaker** and manual audit. This avoids the complexity of administrative balance adjustment in the core engine for this phase.
+
+## 5. Final Verdict
 
 The current design is **Solid for Phase I (Zero to One)**.
 It correctly prioritizes **Safety (Anti-Double Spend)** over **Convenience**.
 
 **Actionable Advice**:
-1.  **Add "Minimum Deposit" config** to avoiding bankruptcy by dust.
+1.  **Enforce STRICT "No Hardcoding"** in implementation.
 2.  **Add "Node Health Check"** to avoid scanning stale chains.
 3.  **Proceed to Implementation**.
