@@ -13,74 +13,50 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-LOG_DIR="${PROJECT_ROOT}/logs"
+
+# Source Unified Utilities
+source "${SCRIPT_DIR}/lib/test_utils.sh"
+
+# Setup Environment
+detect_ci_env
+
+# Define Log File (Absolute Path)
 GATEWAY_LOG="${LOG_DIR}/gateway_0x11.log"
 
-mkdir -p "$LOG_DIR"
-
-# Colors
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-NC='\033[0m'
-
-log() { echo -e "${GREEN}[TEST]${NC} $1"; }
-error() { echo -e "${RED}[ERROR]${NC} $1"; }
-
-# Cleanup Function
+# Cleanup Trap
 cleanup() {
-    log "Cleaning up..."
-    pkill -x "zero_x_infinity" || true
+    log_info "Cleaning up..."
+    cleanup_gateway_process
 }
 trap cleanup EXIT
 
 # 1. Initialize Database
-log "Initializing Database (PostgreSQL)..."
-"$SCRIPT_DIR/db/init.sh" pg
+log_info "Initializing Database (PostgreSQL)..."
+"${SCRIPT_DIR}/db/init.sh" pg
 
 # 2. Build (Ensure fresh binary)
-log "Building Binary..."
-cd "$PROJECT_ROOT"
+log_info "Building Binary..."
+cd "${PROJECT_ROOT}"
 cargo build --bin zero_x_infinity
 
 # 3. Start Gateway
-log "Starting Gateway..."
-# Source env vars
-source "$SCRIPT_DIR/lib/db_env.sh"
+log_info "Starting Gateway..."
+# Source DB env vars
+source "${SCRIPT_DIR}/lib/db_env.sh"
 
 # Start in background
-./target/debug/zero_x_infinity --gateway > "$GATEWAY_LOG" 2>&1 &
+./target/debug/zero_x_infinity --gateway ${GATEWAY_ARGS} > "${GATEWAY_LOG}" 2>&1 &
 GATEWAY_PID=$!
 
 # Wait for Health Check
-log "Waiting for Gateway to be ready..."
-MAX_RETRIES=30
-for i in $(seq 1 $MAX_RETRIES); do
-    if curl -s http://localhost:8080/api/v1/health >/dev/null; then
-        log "Gateway is READY!"
-        break
-    fi
-    if ! kill -0 $GATEWAY_PID 2>/dev/null; then
-        error "Gateway process died! Check logs:"
-        tail -n 20 "$GATEWAY_LOG"
-        exit 1
-    fi
-    echo -n "."
-    sleep 2
-done
-
-if ! curl -s http://localhost:8080/api/v1/health >/dev/null; then
-    error "Gateway failed to start within timeout."
-    tail -n 20 "$GATEWAY_LOG"
-    exit 1
-fi
+wait_for_gateway "${BASE_URL}"
 
 # 4. Run Verification (Python)
-log "Running Verification Logic..."
+log_info "Running Verification Logic..."
 if command -v uv >/dev/null 2>&1; then
-    uv run "$SCRIPT_DIR/verify_funding_flow.py"
+    uv run "${SCRIPT_DIR}/verify_funding_flow.py"
 else
-    python3 "$SCRIPT_DIR/verify_funding_flow.py"
+    python3 "${SCRIPT_DIR}/verify_funding_flow.py"
 fi
 
-echo ""
-log "✅ One-Click Verification PASSED!"
+log_success "One-Click Verification PASSED!"
