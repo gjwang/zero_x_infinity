@@ -18,22 +18,18 @@ pub const KLINE_INTERVALS: &[(&str, &str)] = &[
 /// Create K-Line streams for all intervals
 ///
 /// Each stream aggregates trades into OHLCV data for a specific time window.
-/// The streams write to klines subtables automatically using the `klines` super table.
+/// The streams write to klines_* subtables automatically.
 pub async fn create_kline_streams(taos: &Taos) -> Result<()> {
     tracing::info!("Creating K-Line streams...");
 
     for (interval_name, interval_sql) in KLINE_INTERVALS {
         let stream_name = format!("kline_{}_stream", interval_name);
-        // Subtable naming: kl_{interval}_{symbol_id} e.g., kl_5m_1
         let subtable_prefix = format!("kl_{}_", interval_name);
 
-        // Use the unified `klines` super table with TAGS (symbol_id, intv)
-        // The stream writes to subtables created from this super table
         let create_stream = format!(
             r#"
             CREATE STREAM IF NOT EXISTS {}
-            INTO klines TAGS (symbol_id, '{}')
-            SUBTABLE(CONCAT('{}', CAST(symbol_id AS VARCHAR(10))))
+            INTO klines_{} SUBTABLE(CONCAT('{}', CAST(symbol_id AS VARCHAR(10))))
             AS SELECT
                 _wstart AS ts,
                 FIRST(price) AS open,
