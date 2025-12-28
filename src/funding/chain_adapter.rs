@@ -67,20 +67,22 @@ pub struct MockBtcChain;
 #[async_trait]
 impl ChainClient for MockBtcChain {
     async fn generate_address(&self, _user_id: i64) -> Result<String, ChainError> {
-        // Simulate Regtest Bech32 address: bcrt1 + alphanumeric
-        // This satisfies DEF-001 (Gateway generating Mainnet addresses)
-        let len = rand::thread_rng().gen_range(30..=50);
-        let charset = b"023456789acdefghjklmnpqrstuvwxyz"; // Bech32 charset
+        // Fix DEF-001: Generate cryptographically valid P2WPKH Regtest address
+        // The previous string mock failed checksum validation in bitcoind.
+
+        let secp = bitcoincore_rpc::bitcoin::secp256k1::Secp256k1::new();
         let mut rng = rand::thread_rng();
+        let (_secret_key, public_key) = secp.generate_keypair(&mut rng);
 
-        let suffix: String = (0..len)
-            .map(|_| {
-                let idx = rng.gen_range(0..charset.len());
-                charset[idx] as char
-            })
-            .collect();
+        // Create CompressedPublicKey (needed for P2WPKH)
+        let pubkey = bitcoincore_rpc::bitcoin::CompressedPublicKey(public_key);
 
-        Ok(format!("bcrt1{}", suffix))
+        let address = bitcoincore_rpc::bitcoin::Address::p2wpkh(
+            &pubkey,
+            bitcoincore_rpc::bitcoin::Network::Regtest,
+        ); // p2wpkh cannot fail with valid compressed pubkey
+
+        Ok(address.to_string())
     }
 
     fn validate_address(&self, address: &str) -> bool {
