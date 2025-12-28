@@ -15,7 +15,7 @@
 3.  **Removed MD5**: Removed dependency on MD5 for address generation, switching to `rand::Rng`.
 
 ## Verification
-Executed `scripts/verify_all.sh` (includes `test_address_validation.py`):
+Executed `scripts/verify_funding_trading_flow.sh` (includes `test_address_validation.py`):
 ```text
 ✅ Phase 0x11 Verification PASSED
 ...

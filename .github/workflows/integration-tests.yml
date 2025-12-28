@@ -519,7 +519,7 @@ jobs:
       - name: Run Funding & Trading Verification
         env:
           GATEWAY_BINARY: ./target/release/zero_x_infinity
-        run: ./scripts/verify_all.sh
+        run: ./scripts/verify_funding_trading_flow.sh
         id: run-test
         continue-on-error: true
 

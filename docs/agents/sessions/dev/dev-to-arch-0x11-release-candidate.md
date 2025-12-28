@@ -26,7 +26,7 @@ The generic "Mock Chain" implementation has been upgraded to meet strict complia
 - **Details**: See [Defect Resolution Record](../qa/defect-p0-address-resolution.md).
 
 ## 4. Verification Status
-- **Scripts**: `scripts/verify_all.sh` (PASSED).
+- **Scripts**: `scripts/verify_funding_trading_flow.sh` (PASSED).
     - Includes `run_qa_full.sh` (Core Logic).
     - Includes `run_poc.sh` (Address Validation + Lifecycle).
 - **Coverage**: Happy Path, Chaos/Idempotency, Security/Auth, Data Persistence.

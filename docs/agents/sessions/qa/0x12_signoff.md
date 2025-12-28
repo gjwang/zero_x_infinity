@@ -12,7 +12,7 @@
 We have successfully verified the Full Funding & Trading Cycle.
 
 ### 1.1 Orchestration
-- **Single Source of Truth**: `scripts/verify_all.sh` established as the master verification script.
+- **Single Source of Truth**: `scripts/verify_funding_trading_flow.sh` established as the master verification script.
 - **CI Integration**: Added `test-funding-integration` job to `integration-tests.yml`.
 
 ### 1.2 Defect Resolution
