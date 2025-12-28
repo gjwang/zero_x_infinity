@@ -7,7 +7,7 @@ echo "=========================================================="
 
 echo ""
 echo "🤖 [Agent B] Running Core Stability Tests..."
-if python3 test_deposit_withdraw_core.py; then
+if uv run python3 test_deposit_withdraw_core.py; then
     echo "✅ Agent B: PASS"
 else
     echo "❌ Agent B: FAIL"
@@ -16,7 +16,7 @@ fi
 
 echo ""
 echo "🏴‍☠️ [Agent A] Running Chaos & Idempotency Tests..."
-if python3 test_funding_idempotency.py; then
+if uv run python3 test_funding_idempotency.py; then
     echo "✅ Agent A: PASS"
 else
     echo "❌ Agent A: FAIL"
@@ -25,7 +25,7 @@ fi
 
 echo ""
 echo "🔒 [Agent C] Running Security Tests..."
-if python3 test_funding_security.py; then
+if uv run python3 test_funding_security.py; then
     echo "✅ Agent C: PASS"
 else
     echo "❌ Agent C: FAIL"
