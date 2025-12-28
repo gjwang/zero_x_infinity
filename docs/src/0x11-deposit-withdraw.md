@@ -1,6 +1,6 @@
 # 0x11 Deposit & Withdraw Architecture
 
-| Status | **DRAFT** |
+| Status | **FINAL** (Released) |
 | :--- | :--- |
 | **Date** | 2025-12-28 |
 | **Context** | P1 Feature: Asset Inflow/Outflow |

@@ -47,6 +47,8 @@
 - [0x0F Admin Dashboard | 管理后台](./0x0F-admin-dashboard.md)
     - [Testing Guide | 测试指南](./0x0F-admin-testing.md)
 - [0x10 Web Frontend | 前端外包需求](./0x10-web-frontend.md) ⭐
+- [0x11 Deposit & Withdraw | 充值与提现 (Mock Chain)](./0x11-deposit-withdraw.md)
+- [0x11-a Real Chain Integration | 真实链集成](./0x11-a-real-chain.md)
 
 ---
 
@@ -55,6 +57,7 @@
 - [0x12 Zero-Copy Optimization | Zero-Copy 反序列化优化](./0x12-zero-copy.md)
 - [0x13 CPU Affinity & Cache | 缓存友好性与 CPU 亲和性](./0x13-cpu-affinity.md)
 - [0x14 SIMD Matching Acceleration | SIMD 矢量化撮合加速](./0x14-simd-matching.md)
+
 
 ---
 
