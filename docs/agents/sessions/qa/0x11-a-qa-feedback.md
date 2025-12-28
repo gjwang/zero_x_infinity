@@ -28,7 +28,11 @@ Use a proper library (e.g., `bitcoin`, `bitcoincore-rpc`) to generate valid addr
 *   **Security**: ✅ **PASS**.
 
 ## ⏭️ Next Steps
-1.  **Developer**: Please implement legitimate address generation in Phase 0x11-b.
+1.  **Developer**: Please implement- **DEF-001 (Gateway Address Generation)**: [FAILED]
+    - **Status**: Verification Failed (Regression)
+    - **Issue**: Generated `bcrt1` addresses have INVALID CHECKSUM according to `bitcoind`.
+    - **Evidence**: `validateaddress` returns `isvalid: false`.
+    - **Action**: Returned to Develop.
 2.  **QA**: Will blocking-wait for valid address generation to verify `TC-B01` (Deposit Lifecycle).
 
 ---

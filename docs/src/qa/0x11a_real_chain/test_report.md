@@ -29,10 +29,11 @@
 #### Agent B (Conservative) - Core Flow
 | ID | Test Case | Status | Notes |
 | :--- | :--- | :---: | :--- |
-| TC-B01 | BTC Deposit Lifecycle | ❌ FAIL | **INDEPENDENT QA VERIFICATION FAILED**: Addresses start with `bcrt1` but are cryptographically invalid. Rejected by node. |
-| TC-B01b | Address Persistence | ✅ PASS | Verified. |
-| TC-B02 | ETH Deposit Lifecycle | ✅ PASS | Verified. |
-| TC-B04 | Confirmation Accuracy | ❌ FAIL | Failed: `Invalid Bitcoin address`. |
+| TC-B01    | BTC Deposit Lifecycle     | ❌ FAIL   | Invalid Address Checksum (DEF-001) |
+| TC-B01b   | Address Persistence       | ✅ PASS   | -                                  |
+| TC-B02    | ETH Deposit Lifecycle     | ✅ PASS   | -                                  |
+| TC-B03    | ERC20 Deposit             | ⏭️ SKIP   | Not implemented                    |
+| TC-B04    | Confirmation Accuracy     | ❌ FAIL   | RPC Error (Wallet)                 |
 | TC-B05 | State Transitions | ✅ PASS | Conceptual verification passed. |
 | TC-B06 | Cursor Persistence | ✅ PASS | Verified. |
 | TC-B07 | Idempotency | ❌ FAIL | Blocked by Address Defect. |
