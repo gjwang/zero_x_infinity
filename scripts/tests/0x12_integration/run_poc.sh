@@ -1,13 +1,24 @@
 #!/bin/bash
 set -e
 PROJECT_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+source "$PROJECT_ROOT/scripts/lib/db_env.sh"
 export RUST_LOG=info,gateway=debug,zero_x_infinity=debug
-export DATABASE_URL="postgres://trading:trading@localhost:5433/exchange_info_db"
-export TDENGINE_DSN="taos://root:taosdata@localhost:6041/trading"
+# DATABASE_URL and TDENGINE_DSN are exported by db_env.sh
 export JWT_SECRET="dev_secret_key_for_testing_only_do_not_use_in_production"
+
+# Wait for DB
+echo "[POC] Waiting for PostgreSQL..."
+for i in {1..30}; do
+    if pg_check; then
+        echo "[POC] PostgreSQL is ready"
+        break
+    fi
+    sleep 2
+done
 
 # Start Gateway
 echo "[POC] Starting Gateway (Production Mode)..."
+echo "[POC] Using DB: $DATABASE_URL"
 cd "$PROJECT_ROOT"
 # Use existing debug binary (proven by QA runs)
 GATEWAY_BIN="${GATEWAY_BINARY:-./target/debug/zero_x_infinity}"

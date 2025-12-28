@@ -29,9 +29,28 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Source DB environment variables
+source "$PROJECT_ROOT/scripts/lib/db_env.sh"
+
 # 1. Init DB
 log "Initializing DB..."
 "$PROJECT_ROOT/scripts/db/init.sh" pg
+
+# Wait for DB to be ready
+log "Waiting for PostgreSQL to be ready..."
+for i in {1..30}; do
+    if pg_check; then
+        log "PostgreSQL is ready"
+        break
+    fi
+    log "Waiting for PostgreSQL... ($i/30)"
+    sleep 2
+done
+
+if ! pg_check; then
+    error "PostgreSQL failed to become ready."
+    exit 1
+fi
 
 # 2. Start Gateway
 log "Starting Gateway..."
