@@ -1,47 +1,47 @@
 # 0x12 Zero-Copy Optimization
 
-<h3>
-  <a href="#-english">🇺🇸 English</a>
-  &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
-  <a href="#-chinese">🇨🇳 中文</a>
-</h3>
+| Status | **DRAFT** |
+| :--- | :--- |
+| **Date** | 2025-12-28 |
+| **Context** | Phase IV: Extreme Optimization |
+| **Goal** | Eliminate memory copy overhead in the Hot Path. |
 
-<div id="-english"></div>
+## 1. Problem Definition
+Currently, an Order flows through these copy stages:
+1.  **Network Read**: Socket -> Kernel Buffer -> User Space Buffer.
+2.  **Deserialization**: JSON/Bincode -> `OrderRequest` struct (Heap Allocation).
+3.  **Conversion**: `OrderRequest` -> `InternalOrder` (Copy).
+4.  **Ring Buffer Push**: `InternalOrder` -> `OrderEvent` (Copy into slot).
+5.  **WAL Write**: `InternalOrder` -> bincode bytes -> Disk Buffer.
 
-## 🇺🇸 English
+Each copy consumes memory bandwidth and CPU cycles. At 1.3M TPS, these micro-latencies compound.
 
-> **📅 Status**: 🚧 **Planned**
-> **Core Objective**: Optimize deserialization and memory usage using Zero-Copy techniques (rkyv/capnproto).
+## 2. Optimization Strategy
 
----
+### 2.1 Zero-Copy Deserialization (`rkyv`)
+We will replace `bincode` with **`rkyv`** for internal persistence (WAL) and potentially IPC.
+*   **Why**: Guaranteed Zero-Copy deserialization. Accessing a field is just pointer arithmetic.
+*   **Target**: `src/wal_v2`, `src/ubscore_wal`.
 
-## 1. Overview
+### 2.2 Arena Allocation (Ring Buffer)
+The `crossbeam_array::ArrayQueue` stores `OrderEvent`.
+Instead of pushing *values*, we should investigate pushing *handles* to a pre-allocated Arena, OR ensure `OrderEvent` is `Copy` and small enough to fit in cache lines.
+*   **Current `InternalOrder`**: ~60-80 bytes?
+*   **Goal**: Ensure `InternalOrder` is aligned to 64 bytes (Cache Line).
 
-*   **Goal**: Reduce CPU usage during object creation and cloning.
-*   **Technique**: Use `rkyv` or `zerocopy` to cast bytes directly to structs.
-*   **Target**: High-frequency data paths (Gateway -> Sequence -> Matching).
+### 2.3 Zero-Copy Network Handling (Future)
+Investigate `io_uring` to read directly into pre-allocated Ring Buffer slots (Advanced).
 
-*(Detailed content coming soon in Phase III)*
+## 3. Implementation Plan
 
-<br>
-<div align="right"><a href="#-english">↑ Back to Top</a></div>
-<br>
+1.  **Benchmark**: Create a benchmark (Criterion) for `Order` serialization/deserialization.
+2.  **Prototype `rkyv`**: Implement `Archive` trait for `InternalOrder`. Compare speed.
+3.  **WAL Refactor**: Switch WAL v2 to use `rkyv` aligned buffers.
 
----
+## 4. Risks
+*   **Complexity**: `rkyv` lifetimes (`Pin`) can be complex.
+*   **Compatibility**: Breaking change for WAL format (requires migration tool).
 
-<div id="-chinese"></div>
-
-## 🇨🇳 中文
-
-> **📅 状态**: 🚧 **计划中**
-> **核心目标**: 使用零拷贝技术 (Zero-Copy) 优化反序列化与内存使用。
-
----
-
-## 1. 概述
-
-*   **目标**: 降低对象创建与克隆的 CPU 开销。
-*   **技术**: 使用 `rkyv` 或 `zerocopy` 直接将字节映射为结构体。
-*   **场景**: 高频数据路径 (Gateway -> Sequence -> Matching)。
-
-*(第三阶段详细内容敬请期待)*
+## 5. Success Metric
+*   **TPS**: Increase from 1.3M to 1.5M+.
+*   **Latency**: P99 reduction by 10%.

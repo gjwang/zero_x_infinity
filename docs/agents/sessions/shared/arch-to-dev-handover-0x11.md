@@ -65,6 +65,16 @@ pub trait ChainClient: Send + Sync + Debug {
 }
 ```
 
+### 2.3 Pipeline Integration (CRITICAL)
+The Architect mandates using the high-performance Ring Buffer Pipeline for all Balance Operations.
+Do **NOT** update balances via direct DB writes (except for initial migration logging).
+
+*   **Deposit**: Must inject `OrderAction::Deposit(BalanceUpdate)` into the `order_queue`.
+    *   This requires adding `Deposit` variant to `src/pipeline.rs`.
+    *   This requires handling `Deposit` in `src/ubscore.rs` `apply_order_action`.
+*   **Withdraw**: Must inject `OrderAction::WithdrawLock(...)` (to be defined) into the pipeline to safely lock funds.
+*   **Rationale**: Ensures strict serialization of balance events and prevents race conditions between Trading and Funding.
+
 ## 3. Strict Constraints
 1.  **NO Real Chain Integration**: Use `MockBtcChain` and `MockEvmChain` structs.
 2.  **Idempotency**: The `deposit_history.tx_hash` PRIMARY KEY is the primary defense against Double Spending. Do NOT remove it.

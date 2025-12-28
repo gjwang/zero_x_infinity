@@ -58,12 +58,12 @@ sequenceDiagram
     else New Tx
         FS->>DB: Insert DepositRecord (Status: CONFIRMING)
         
-        Note over FS, ME: 3. Credit Balance
-        FS->>ME: Command: Deposit(user_id, asset, amount)
-        ME-->>FS: Success (Balance Updated)
+    Note over FS, ME: 3. Credit Balance (Pipeline Integration)
+    FS->>ME: OrderAction::Deposit(balance_update) [Ring Buffer]
+    ME-->>FS: Async Ack (BalanceEvent::Deposit) [Event Queue]
         
-        FS->>DB: Update DepositRecord (Status: SUCCESS)
-        FS-->>Dev: 200 OK (Credited)
+    FS->>DB: Update DepositRecord (Status: SUCCESS)
+    FS-->>Dev: 200 OK (Credited)
     end
 ```
 
@@ -75,20 +75,20 @@ sequenceDiagram
     participant User
     participant GW as Gateway
     participant FS as FundingService
-    participant ME as MatchingEngine
+    participant ME as MatchingEngine (UBScore)
     participant Chain as MockChainAdapter
 
-    User->>GW: POST /capital/withdraw/apply
+    User->>GW: POST /capital/withdraw/apply (RequestId, Asset, Amount)
     GW->>FS: Validate Request (2FA, Whitelist)
     
-    Note over FS, ME: 1. Balance Lock/Deduct
-    FS->>ME: Command: Withdraw(user_id, asset, amount)
+    Note over FS, ME: 1. Balance Lock (Pipeline Integration)
+    FS->>ME: OrderAction::WithdrawLock(user, asset, amount) [Ring Buffer]
     
     alt Insufficient Funds
-        ME-->>FS: Error
+        ME-->>FS: RejectEvent
         FS-->>User: 400 Insufficient Balance
-    else Deduct Success
-        ME-->>FS: Success (New Balance)
+    else Lock Success
+        ME-->>FS: BalanceEvent::Lock
         FS->>DB: Insert WithdrawRecord (Status: PENDING)
         
         Note over FS, Chain: 2. Execution
@@ -97,6 +97,10 @@ sequenceDiagram
         
         Note over FS, DB: 3. Finalize
         FS->>DB: Update WithdrawRecord (Status: SUCCESS, tx_hash)
+        
+        Note over FS, ME: 4. Burn Locked Funds
+        FS->>ME: OrderAction::WithdrawConfirm (SpendFrozen)
+        
         FS-->>User: 200 OK (Request ID)
     end
 ```
