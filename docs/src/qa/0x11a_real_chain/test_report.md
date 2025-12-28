@@ -29,7 +29,7 @@
 #### Agent B (Conservative) - Core Flow
 | ID | Test Case | Status | Notes |
 | :--- | :--- | :---: | :--- |
-| TC-B01 | BTC Deposit Lifecycle | ❌ FAIL | **REGRESSION**: Addresses start with `bcrt1` (DEF-001 "Fixed") but have invalid checksums. Rejected by node. |
+| TC-B01 | BTC Deposit Lifecycle | ❌ FAIL | **INDEPENDENT QA VERIFICATION FAILED**: Addresses start with `bcrt1` but are cryptographically invalid. Rejected by node. |
 | TC-B01b | Address Persistence | ✅ PASS | Verified. |
 | TC-B02 | ETH Deposit Lifecycle | ✅ PASS | Verified. |
 | TC-B04 | Confirmation Accuracy | ❌ FAIL | Failed: `Invalid Bitcoin address`. |
@@ -51,7 +51,7 @@
 
 | ID | Severity | Description | Status |
 | :--- | :---: | :--- | :---: |
-| **DEF-001** | **P0 (Critical)** | **Gateway Address Generation Incompatible with Regtest**<br>Fix attempted: Changed prefix to `bcrt1` but checksums are random/invalid. Node still rejects. | **RE-OPENED** |
+| **DEF-001** | **P0 (Critical)** | **Gateway Address Generation Incompatible with Regtest**<br>The "mock" implementation generates random strings with `bcrt1` prefix which are invalid addresses. Real `bitcoind` node rejects transfers to them. | **RE-OPENED** |
 | **DEF-002** | P2 (Medium) | **Sentinel Continuous Mode**<br>Sentinel now runs continuously. | **CLOSED** |
 
 ## 📝 Recommendations
