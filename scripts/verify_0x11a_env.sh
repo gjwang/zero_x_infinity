@@ -7,7 +7,7 @@ set -e
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-export PROJECT_ROOT="$SCRIPT_DIR"
+export PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Source DB Environment (Handles DATABASE_URL/Ports from dev.yaml)
 source "$PROJECT_ROOT/scripts/lib/db_env.sh"
@@ -25,7 +25,7 @@ docker run --name postgres_dev -e POSTGRES_USER=$PG_USER -e POSTGRES_PASSWORD=$P
 
 # Bitcoind (Regtest)
 docker rm -f bitcoind 2>/dev/null || true
-docker run -d --name bitcoind -p 18443:18443 -p 18332:18332 --rm ruimarinho/bitcoin-core:24 -regtest -rpcuser=admin -rpcpassword=admin -printtoconsole
+docker run -d --name bitcoind -p 18443:18443 -p 18332:18332 --rm ruimarinho/bitcoin-core:24 -regtest -rpcuser=admin -rpcpassword=admin -printtoconsole -rpcallowip=0.0.0.0/0 -rpcbind=0.0.0.0 -fallbackfee=0.00001
 
 # Wait for readiness
 echo "Waiting for services..."
@@ -47,22 +47,41 @@ echo "--------------------------------------------------------"
 echo "Applying Migrations..."
 "$PROJECT_ROOT/scripts/db/init.sh" pg
 
+# Pre-build to ensure we run the latest code
+echo "Building binary..."
+cargo build --bin zero_x_infinity
+
 # 3. Start Gateway (Background)
 echo "--------------------------------------------------------"
 echo "Starting Gateway..."
-cargo run --bin zero_x_infinity -- -e dev > /tmp/gateway.log 2>&1 &
+./target/debug/zero_x_infinity --gateway -e dev > /tmp/gateway.log 2>&1 &
 GATEWAY_PID=$!
 echo "Gateway PID: $GATEWAY_PID"
 
-# Wait for Gateway
-sleep 5
+# Wait for Gateway to be ready
+echo "Waiting for Gateway to listen..."
+for i in {1..30}; do
+    if grep -q "Gateway will listen on" /tmp/gateway.log; then
+        echo "✅ Gateway is ready!"
+        break
+    fi
+    echo "Waiting for Gateway... ($i/30)"
+    sleep 1
+    if [ $i -eq 30 ]; then
+        echo "❌ Gateway failed to start within 30 seconds"
+        tail -n 20 /tmp/gateway.log
+        kill $GATEWAY_PID 2>/dev/null || true
+        exit 1
+    fi
+done
+echo "Gateway started!"
 
 # 4. Start Sentinel (Background)
 echo "--------------------------------------------------------"
 echo "Starting Sentinel..."
 # Sentinel needs the same DATABASE_URL
 export DATABASE_URL
-cargo run --bin zero_x_infinity -- --sentinel -e dev > /tmp/sentinel.log 2>&1 &
+./target/debug/zero_x_infinity --sentinel -e dev > /tmp/sentinel.log 2>&1 &
 SENTINEL_PID=$!
 echo "Sentinel PID: $SENTINEL_PID"
 
@@ -79,6 +98,7 @@ export PYTHONPATH="$PROJECT_ROOT/scripts:$PYTHONPATH"
 export BTC_RPC_USER="admin"
 export BTC_RPC_PASS="admin"
 export BTC_WALLET="sentinel_test"
+export BTC_RPC_URL="http://admin:admin@127.0.0.1:18443"
 
 # Run Script
 # Note: we need to allow failures to perform cleanup, so we modify set -e temporarily or use || true

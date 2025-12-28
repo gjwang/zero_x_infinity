@@ -29,9 +29,9 @@
 #### Agent B (Conservative) - Core Flow
 | ID | Test Case | Status | Notes |
 | :--- | :--- | :---: | :--- |
-| TC-B01    | BTC Deposit Lifecycle     | ❌ FAIL   | Invalid Address Checksum (DEF-001) |
-| TC-B01b   | Address Persistence       | ✅ PASS   | -                                  |
-| TC-B02    | ETH Deposit Lifecycle     | ✅ PASS   | -                                  |
+| TC-B01 | BTC Deposit Lifecycle | ⚠️ FAIL | Address valid, TX broadcast confirmed. Fail at **Sentinel Detection**. Sentinel logs show block scanning but no deposit detected. |
+| TC-B01b | Address Persistence | ✅ PASS | Generated addresses are correctly persisted in DB. |
+| TC-B02 | ETH Deposit Lifecycle | ⚠️ FAIL | ETH Mock still returning random hex (`0x...`). Low priority vs BTC. |
 | TC-B03    | ERC20 Deposit             | ⏭️ SKIP   | Not implemented                    |
 | TC-B04    | Confirmation Accuracy     | ❌ FAIL   | RPC Error (Wallet)                 |
 | TC-B05 | State Transitions | ✅ PASS | Conceptual verification passed. |
@@ -52,9 +52,11 @@
 
 | ID | Severity | Description | Status |
 | :--- | :---: | :--- | :---: |
-| **DEF-001** | **P0 (Critical)** | **Gateway Address Generation Incompatible with Regtest**<br>The "mock" implementation generates random strings with `bcrt1` prefix which are invalid addresses. Real `bitcoind` node rejects transfers to them. | **RE-OPENED** |
-| **DEF-002** | P2 (Medium) | **Sentinel Continuous Mode**<br>Sentinel now runs continuously. | **CLOSED** |
+| DEF-001 | Critical | Gateway Generates Invalid BTC Addresses | **VERIFIED FIXED** |
+| DEF-002 | Critical | Sentinel Misses P2WPKH Deposits | **OPEN** |
+| CI-001 | Low | Schema Linter embedded in test_ci.sh | **FIXED** |
 
 ## 📝 Recommendations
-1.  **Phase 0x11-b**: The "MockBtcChain" needs to be replaced with `RealBtcChain` (using RPC `getnewaddress`) or a proper Bech32 library implementation.
-2.  **Proceed with Caution**: Sentinel and Security are solid. The blocking issue is isolated to the "Mock" address generator in the Gateway. If 0x11-b replaces this module, we can proceed.
+1.  **Gateway Address Generation (DEF-001)**: The fix for generating valid `P2WPKH` addresses is verified and should be merged.
+2.  **Sentinel Service (DEF-002)**: Urgent investigation and fix required for Sentinel to correctly detect and process `P2WPKH` deposits. This is currently the primary blocker for integration.
+3.  **CI/CD Improvement (CI-001)**: The schema linter has been successfully moved to a dedicated CI job, improving build clarity and maintainability.
