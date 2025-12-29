@@ -301,21 +301,19 @@ class GatewayClientExtended(GatewayClient):
         payload = {
             "user_id": user_id,
             "asset": asset,
-            "amount": str(amount),
-            "tx_hash": generate_random_tx_hash()
+            "amount": amount,
+            "tx_hash": f"mock_tx_{int(time.time() * 1000)}_{user_id}"
         }
-        headers = {"X-Internal-Secret": os.getenv("INTERNAL_SECRET", "dev-secret")}
-        
+        headers = {
+            "Content-Type": "application/json",
+            "X-Internal-Secret": "dev-secret"
+        }
         try:
             resp = requests.post(url, json=payload, headers=headers)
-            if resp.status_code == 200:
-                # print(f"      ✅ Mock deposit success: {resp.text}")
-                return True
-            else:
-                print(f"      ❌ Mock deposit failed: {resp.status_code} - {resp.text}")
-                return False
+            print(f"DEBUG: internal_mock_deposit status: {resp.status_code}")
+            return resp.status_code == 200
         except Exception as e:
-            print(f"      ❌ Mock deposit exception: {e}")
+            print(f"Mock deposit error: {e}")
             return False
 
     def get_deposit_address_with_validation(
@@ -408,6 +406,18 @@ class GatewayClientExtended(GatewayClient):
                 print(f"DEBUG: Found asset {asset}: {b.get('available')}")
                 return float(b.get("available", 0))
         return 0.0
+
+    def get_exchange_info(self) -> Dict:
+        """Fetch public exchange info (limits/decimals)."""
+        url = f"{self.base_url}/api/v1/public/exchange_info"
+        try:
+            resp = requests.get(url)
+            if resp.status_code == 200:
+                return resp.json().get("data", {})
+            return {}
+        except Exception as e:
+            print(f"Error fetching exchange info: {e}")
+            return {}
 
 
 # =============================================================================
