@@ -4,6 +4,16 @@
 > **Status**: Draft  
 > **Date**: 2025-12-29
 
+## Design Principles
+
+> [!IMPORTANT]
+> **Clarity First, Performance Second**
+>
+> 1. **减少迷糊是第一性** - Reducing confusion is the top priority
+> 2. **数据量不会很多** - Data volume is small (< 100 chains), so VARCHAR FK is acceptable
+>
+> This guides all naming and FK decisions in this schema.
+
 ## 1. Background
 
 ### Industry Standards
@@ -80,15 +90,22 @@ CREATE TABLE user_addresses (
 
 ## 3. Seed Data
 
-| chain_slug | chain_id | full_name | native_currency | chain_type |
-|:---|:---|:---|:---|:---|
-| `eth` | 1 | Ethereum Mainnet | ETH | EVM |
-| `bnb` | 56 | BNB Smart Chain | BNB | EVM |
-| `matic` | 137 | Polygon Mainnet | MATIC | EVM |
-| `btc` | NULL | Bitcoin Mainnet | BTC | UTXO |
-| `trx` | NULL | Tron Mainnet | TRX | ACCOUNT |
-| `btc_regtest` | NULL | Bitcoin Regtest | BTC | UTXO |
+| chain_slug | chain_id | full_name | native_currency | chain_type | slip44_index |
+|:---|:---|:---|:---|:---|:---|
+| `eth` | 1 | Ethereum Mainnet | ETH | EVM | 60 |
+| `bnb` | 56 | BNB Smart Chain | BNB | EVM | 9006 |
+| `matic` | 137 | Polygon Mainnet | MATIC | EVM | 60 |
+| `btc` | 0 | Bitcoin Mainnet | BTC | UTXO | 0 |
+| `trx` | 728126428 | Tron Mainnet | TRX | ACCOUNT | 195 |
+| `sol` | 900 | Solana Mainnet | SOL | ACCOUNT | 501 |
+| `btc_regtest` | 0 | Bitcoin Regtest | BTC | UTXO | 0 |
 
+> [!NOTE]
+> **chain_id 来源**:
+> - EVM 链: EIP-155 标准 (1, 56, 137...)
+> - BTC: SLIP-0044 coin type = 0
+> - Tron: 使用 genesis block 标识 (728126428)
+> - Solana: 非 EVM，使用内部标识
 ---
 
 ## 4. Phase 0x11-b Quick Fix
