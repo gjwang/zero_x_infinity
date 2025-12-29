@@ -127,18 +127,18 @@ impl DepositService {
         asset: &str,
         network: &str,
     ) -> Result<String, DepositError> {
-        // Check DB first
-        let row = sqlx::query!(
+        // Check DB first (use runtime query to avoid compile-time DB schema check)
+        let row: Option<(String,)> = sqlx::query_as(
             "SELECT address FROM user_addresses WHERE user_id = $1 AND asset = $2 AND chain_id = $3",
-            user_id,
-            asset,
-            network
         )
+        .bind(user_id)
+        .bind(asset)
+        .bind(network)
         .fetch_optional(self.db.pool())
         .await?;
 
-        if let Some(r) = row {
-            return Ok(r.address);
+        if let Some((address,)) = row {
+            return Ok(address);
         }
 
         // Generate New
@@ -149,25 +149,27 @@ impl DepositService {
             DepositError::Database(sqlx::Error::Protocol(format!("Chain Error: {:?}", e)))
         })?; // Wrap error
 
-        sqlx::query!(
+        sqlx::query(
             "INSERT INTO user_addresses (user_id, asset, chain_id, address) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
-            user_id, asset, network, address
         )
+        .bind(user_id)
+        .bind(asset)
+        .bind(network)
+        .bind(&address)
         .execute(self.db.pool())
         .await?;
 
         // Re-fetch to ensure we return what's in DB (handle race condition on unique constraint)
-        let final_addr = sqlx::query!(
+        let final_addr: (String,) = sqlx::query_as(
             "SELECT address FROM user_addresses WHERE user_id = $1 AND asset = $2 AND chain_id = $3",
-            user_id,
-            asset,
-            network
         )
+        .bind(user_id)
+        .bind(asset)
+        .bind(network)
         .fetch_one(self.db.pool())
-        .await?
-        .address;
+        .await?;
 
-        Ok(final_addr)
+        Ok(final_addr.0)
     }
 
     pub async fn get_history(&self, user_id: i64) -> Result<Vec<DepositRecord>, DepositError> {
