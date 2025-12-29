@@ -443,7 +443,7 @@ main() {
         log_warn "⚠️ Level 2 SKIPPED: ERC20 Component Test (Environment limitation)"
         ((TESTS_SKIPPED++))
         L2_STATUS="SKIPPED"
-    elif [ $? -eq 0 ]; then
+    elif echo "$L2_OUTPUT" | grep -q "ALL TESTS PASSED"; then
         # Exit code 0 and no FAILED/skipped string
         log_info "✅ Level 2 PASSED: ERC20 Component Test"
         ((TESTS_PASSED++))
@@ -462,6 +462,16 @@ main() {
     else
          log_warn "⚠️ Level 2b SKIPPED/FAILED"
          # Optional
+    fi
+
+    echo ""
+    log_info "📋 Level 2c: Multi-Decimal Independent Suite"
+    if uv run python3 test_erc20_independent.py --mode suite; then
+        log_info "✅ Level 2c PASSED: Multi-Decimal Logic Verified"
+        ((TESTS_PASSED++))
+    else
+         log_warn "⚠️ Level 2c FAILED"
+         ((TESTS_FAILED++))
     fi
     
     # ========================================================================
