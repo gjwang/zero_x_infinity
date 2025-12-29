@@ -349,7 +349,7 @@ main() {
     cd "$PROJECT_ROOT/scripts/tests/0x11b_sentinel"
     
     ((TOTAL_TESTS++))
-    if uv run python3 test_erc20_e2e.py 2>&1 | tail -15; then
+    if uv run python3 L2_erc20_component.py 2>&1 | tail -15; then
         log_info "✅ Level 2 PASSED: ERC20 Component Test"
         ((TESTS_PASSED++))
     else
@@ -367,7 +367,7 @@ main() {
     echo "════════════════════════════════════════════════════════════════════════"
     
     ((TOTAL_TESTS++))
-    if uv run python3 e2e_critical_path.py; then
+    if uv run python3 L3_single_user_btc.py; then
         log_info "✅ Level 3 PASSED: Single User BTC E2E"
         ((TESTS_PASSED++))
     else
@@ -385,7 +385,7 @@ main() {
     echo "════════════════════════════════════════════════════════════════════════"
     
     ((TOTAL_TESTS++))
-    if uv run python3 e2e_two_user_matching.py; then
+    if uv run python3 L4_two_user_matching.py; then
         log_info "✅ Level 4 PASSED: Two User Matching E2E"
         ((TESTS_PASSED++))
     else
