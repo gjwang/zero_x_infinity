@@ -131,44 +131,54 @@ def test_tc_a06_precision_violation(gateway: GatewayClientExtended):
 
 def test_tc_a07_tiny_amount_ignored(gateway: GatewayClientExtended):
     """
-    TC-A07: Deep Sub-Atomic (1e-18)
+    TC-A07: Deep Sub-Atomic (Config-Relative)
     
-    Scenario: User deposits 1e-18 ETH (Wei) when config is 8 decimals.
-    Expected: 
-    - System might return 200 OK (Accepted), OR 400 (Rejected).
-    - BUT Balance MUST NOT change (Effective Rejection).
-    
-    1e-18 ETH = 0.0000000001 Satoshi (Atomic 8-dec) -> Should be 0.
+    Scenario: User deposits 'dust' effectively 0 in atomic units.
+    Logic: 
+    1. Fetch decimals (D).
+    2. Try to deposit 1 * 10^-(D + 10).
+       e.g. D=8 -> 1e-18.
+       e.g. D=18 -> 1e-28.
+    3. Monitor Balance + Status Code.
     """
-    print_test_header("TC-A07", "Deep Sub-Atomic (1e-18)", "A")
+    print_test_header("TC-A07", "Deep Sub-Atomic (Config-Relative)", "A")
     
     try:
+        # 0. Fetch Config
+        asset_config = get_asset_config(gateway, "ETH")
+        if not asset_config:
+            print("   ⚠️  Config missing, defaulting to hardcoded check logic [Fallback]")
+            decimals = 8
+        else:
+            decimals = asset_config.get("decimals", 8)
+            
+        print(f"    Contract Decimals: {decimals}")
+        
+        # 1. Calc Tiny Amount
+        # 1e-(D+10) is sufficiently small to be "Deep Sub-Atomic"
+        # Using string formatting to avoid scientific notation issues if API expects standard float string
+        tiny_exp = decimals + 10
+        amount_tiny_str = f"1e-{tiny_exp}"
+        amount_tiny_fmt = f"{Decimal(amount_tiny_str):f}"
+        
+        print(f"   👉 Testing Deep Sub-Atomic: {amount_tiny_fmt} ETH")
+        
         user_id = 1001
         
-        # 1. Get Pre-Balance
-        # We need headers for JWT (using setup_jwt_user logic or existing)
-        # For simplicity, we assume internal mock doesn't need balance check via public API 
-        # but to verify EFFECT, we absolutely need to check balance.
+        # 2. Get Pre-Balance
         from common.chain_utils_extended import setup_jwt_user
-        _, _, headers = setup_jwt_user() # Setup fresh user/headers or reuse? 
-        # Better to use the SAME user_id if we want to check THEIR balance.
-        # But setup_jwt_user creates a NEW user.
-        # Let's create a temp user for this test to be clean.
+        # Create temp user for isolation
         user_id_new, _, headers_new = setup_jwt_user()
         
         print(f"   👤 User: {user_id_new}")
         
-        # Initial balance should be 0
         bal_start = gateway.get_balance(headers_new, "ETH") or 0.0
         print(f"   💰 Balance Start: {bal_start}")
         
-        amount_tiny = "0.000000000000000001" # 1e-18
-        print(f"   👉 Depositing: {amount_tiny} ETH")
+        # 3. Deposit
+        resp = gateway.internal_mock_deposit(user_id_new, "ETH", amount_tiny_fmt)
         
-        # 2. Deposit
-        resp = gateway.internal_mock_deposit(user_id_new, "ETH", amount_tiny)
-        
-        # 3. Check Post-Balance
+        # 4. Check Post-Balance
         bal_end = gateway.get_balance(headers_new, "ETH") or 0.0
         print(f"   💰 Balance End:   {bal_end}")
         
@@ -177,14 +187,14 @@ def test_tc_a07_tiny_amount_ignored(gateway: GatewayClientExtended):
              print_test_result(False, "Tiny amount credited (Precision Leak)")
              return False
         
-        print(f"   ✅ Balance unchanged (Effective Rejection)")
+        print(f"   ✅ Balance unchanged (Effective Safety)")
             
         if not resp:
-            print(f"   ℹ️  API rejected request (Good)")
+            print(f"   ℹ️  API rejected request (Status 400) - PERFECT")
         else:
-            print(f"   ℹ️  API accepted request but credited 0 (Acceptable)")
+            print(f"   ℹ️  API accepted request (Status 200) - ACCEPTABLE (if balance 0)")
             
-        print_test_result(True, "1e-18 Ignored")
+        print_test_result(True, "Deep Sub-Atomic Ignored")
         return True
 
     except Exception as e:
