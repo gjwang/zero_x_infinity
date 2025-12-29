@@ -93,6 +93,39 @@ enum SyncingStatus {
     },
 }
 
+/// ERC20 Transfer event log structure
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct EthLog {
+    /// Contract address that emitted the event
+    address: String,
+    /// Indexed topics: [0]=Transfer sig, [1]=from, [2]=to
+    topics: Vec<String>,
+    /// Non-indexed data (amount for ERC20 Transfer)
+    data: String,
+    /// Transaction hash
+    transaction_hash: String,
+    /// Transaction index in block
+    transaction_index: String,
+    /// Log index in block
+    log_index: String,
+    /// Block number
+    #[allow(dead_code)]
+    block_number: String,
+}
+
+/// eth_getLogs filter parameters
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct LogFilter {
+    from_block: String,
+    to_block: String,
+    topics: Vec<Option<String>>,
+}
+
+/// ERC20 Transfer event topic: keccak256("Transfer(address,address,uint256)")
+const TRANSFER_TOPIC: &str = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+
 impl EthScanner {
     /// Create a new ETH scanner with real RPC connection
     pub fn new(config: EthChainConfig) -> Result<Self, ScannerError> {
@@ -203,12 +236,12 @@ impl EthScanner {
 
         // Get block with transactions
         let block: EthBlock = self
-            .rpc_call("eth_getBlockByNumber", (height_hex, true))
+            .rpc_call("eth_getBlockByNumber", (height_hex.clone(), true))
             .await?;
 
         let mut deposits = Vec::new();
 
-        // Scan each transaction for ETH transfers to watched addresses
+        // 1. Scan native ETH transfers
         for tx in &block.transactions {
             if let Some(ref to_addr) = tx.to
                 && self.is_watched(to_addr)
@@ -240,6 +273,10 @@ impl EthScanner {
             }
         }
 
+        // 2. Scan ERC20 Transfer events
+        let erc20_deposits = self.scan_erc20_transfers(height).await?;
+        deposits.extend(erc20_deposits);
+
         // Parse block metadata
         let block_number =
             u64::from_str_radix(block.number.trim_start_matches("0x"), 16).unwrap_or(height);
@@ -253,6 +290,92 @@ impl EthScanner {
             timestamp,
             deposits,
         })
+    }
+
+    /// Scan for ERC20 Transfer events using eth_getLogs
+    async fn scan_erc20_transfers(
+        &self,
+        height: u64,
+    ) -> Result<Vec<DetectedDeposit>, ScannerError> {
+        let height_hex = format!("0x{:x}", height);
+
+        // Build log filter for Transfer events
+        let filter = LogFilter {
+            from_block: height_hex.clone(),
+            to_block: height_hex,
+            topics: vec![Some(TRANSFER_TOPIC.to_string())],
+        };
+
+        // Call eth_getLogs
+        let logs: Vec<EthLog> = self.rpc_call("eth_getLogs", (filter,)).await?;
+
+        let mut deposits = Vec::new();
+
+        for log in logs {
+            // Transfer event has 3 topics: [0]=sig, [1]=from, [2]=to
+            if log.topics.len() < 3 {
+                continue;
+            }
+
+            // Extract recipient address from topic[2] (32-byte padded, last 20 bytes)
+            let to_address = extract_address_from_topic(&log.topics[2]);
+
+            // Check if recipient is a watched address
+            if !self.is_watched(&to_address) {
+                continue;
+            }
+
+            // Parse amount from data field (uint256)
+            let amount_raw = parse_uint256(&log.data);
+
+            // Get token info from contract address
+            let (asset, decimals) = self.get_token_info(&log.address);
+
+            // Convert raw amount to decimal
+            let amount = raw_to_decimal(&amount_raw, decimals);
+
+            let tx_index = u32::from_str_radix(log.transaction_index.trim_start_matches("0x"), 16)
+                .unwrap_or(0);
+            let log_index =
+                u32::from_str_radix(log.log_index.trim_start_matches("0x"), 16).unwrap_or(0);
+
+            deposits.push(DetectedDeposit {
+                tx_hash: log.transaction_hash.clone(),
+                tx_index,
+                vout_index: log_index, // Use log_index as vout for uniqueness
+                to_address: to_address.clone(),
+                asset,
+                amount,
+                raw_amount: amount_raw,
+            });
+
+            info!(
+                "Detected ERC20 deposit to {} in tx {} (log {})",
+                to_address, log.transaction_hash, log_index
+            );
+        }
+
+        Ok(deposits)
+    }
+
+    /// Get token info (asset name, decimals) from contract address
+    /// TODO: Load from database assets_tb in production
+    fn get_token_info(&self, contract_address: &str) -> (String, u8) {
+        // Hardcoded for common tokens - in production, load from assets_tb
+        let addr_lower = contract_address.to_lowercase();
+
+        // Common mainnet addresses (for reference)
+        match addr_lower.as_str() {
+            // USDT (Tether) - various networks
+            "0xdac17f958d2ee523a2206206994597c13d831ec7" => ("USDT".to_string(), 6),
+            // USDC - various networks
+            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48" => ("USDC".to_string(), 6),
+            // Default: unknown ERC20 with 18 decimals
+            _ => {
+                warn!("Unknown ERC20 contract: {}", contract_address);
+                ("ERC20".to_string(), 18)
+            }
+        }
     }
 }
 
@@ -374,6 +497,34 @@ pub fn wei_to_eth(wei_str: &str) -> Decimal {
         .unwrap_or_default()
 }
 
+/// Extract Ethereum address from 32-byte padded topic (last 20 bytes)
+/// Topic format: 0x000000000000000000000000<20-byte-address>
+fn extract_address_from_topic(topic: &str) -> String {
+    let topic = topic.trim_start_matches("0x");
+    if topic.len() >= 40 {
+        // Last 40 hex chars = 20 bytes = ETH address
+        format!("0x{}", &topic[topic.len() - 40..])
+    } else {
+        format!("0x{}", topic)
+    }
+}
+
+/// Parse uint256 from hex data field
+fn parse_uint256(data: &str) -> String {
+    let data = data.trim_start_matches("0x");
+    // Parse as u128 (good enough for most ERC20 amounts)
+    u128::from_str_radix(data, 16)
+        .map(|v| v.to_string())
+        .unwrap_or_else(|_| "0".to_string())
+}
+
+/// Convert raw amount string to Decimal with given decimals
+fn raw_to_decimal(raw: &str, decimals: u8) -> Decimal {
+    Decimal::from_str(raw)
+        .map(|d| d / Decimal::from(10u64.pow(decimals as u32)))
+        .unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::scanner::DetectedDeposit;
@@ -482,5 +633,39 @@ mod tests {
         let scanner = result.unwrap();
         assert!(!scanner.mock_mode);
         assert!(scanner.client.is_some());
+    }
+
+    /// Test ERC20 Transfer event parsing functions
+    #[test]
+    fn test_erc20_transfer_parsing() {
+        // Test extract_address_from_topic
+        // Topic is 32-byte padded, address is in last 20 bytes (40 hex chars)
+        let topic = "0x0000000000000000000000001234567890abcdef1234567890abcdef12345678";
+        let address = extract_address_from_topic(topic);
+        assert_eq!(address, "0x1234567890abcdef1234567890abcdef12345678");
+
+        // Test parse_uint256
+        // 1000000 in hex = 0xF4240
+        let amount_hex = "0x00000000000000000000000000000000000000000000000000000000000f4240";
+        let amount_raw = parse_uint256(amount_hex);
+        assert_eq!(amount_raw, "1000000");
+
+        // Test raw_to_decimal with USDT (6 decimals)
+        let amount_usdt = raw_to_decimal("1000000", 6);
+        assert_eq!(amount_usdt, Decimal::new(1, 0)); // 1 USDT
+
+        // Test raw_to_decimal with ETH (18 decimals)
+        let amount_eth = raw_to_decimal("1000000000000000000", 18);
+        assert_eq!(amount_eth, Decimal::new(1, 0)); // 1 ETH
+    }
+
+    /// Test TRANSFER_TOPIC constant is correct
+    #[test]
+    fn test_transfer_topic_constant() {
+        // keccak256("Transfer(address,address,uint256)")
+        assert_eq!(
+            TRANSFER_TOPIC,
+            "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+        );
     }
 }
