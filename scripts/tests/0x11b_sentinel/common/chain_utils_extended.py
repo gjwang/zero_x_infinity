@@ -13,7 +13,9 @@ from typing import Optional, Dict, Any, List, Tuple
 from dataclasses import dataclass
 
 # Import base utilities from 0x11a
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "0x11a_real_chain", "common"))
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+_0x11a_common = os.path.join(os.path.dirname(_script_dir), "..", "0x11a_real_chain", "common")
+sys.path.insert(0, os.path.abspath(_0x11a_common))
 from chain_utils import BtcRpc, EthRpc, GatewayClient, check_node_health, BlockInfo
 
 # Also import JWT helper
