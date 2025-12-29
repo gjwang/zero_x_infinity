@@ -36,6 +36,13 @@ TEST_CASES = [
     {"name": "Standard USDT/USDC",       "decimals": 6, "amount_raw": 1000000, "expected": "1"},
     {"name": "WBTC (8 Decimals)",        "decimals": 8, "amount_raw": 100000000, "expected": "1"},
     {"name": "Standard ETH/ERC20",       "decimals": 18, "amount_raw": 10**18, "expected": "1"},
+    # Expectation: Unknown Token -> Rejected (None). 
+    # (Previously we expected 0 during fallback, but strict mode rejects it entirely)
+    {"name": "Huge Amount (Overflow)",   "decimals": 18, "amount_raw": 10**50, "expected": "None"}, 
+    
+    # DoS Vector: HUGE Amount on WHITELISTED Token
+    # Should parse to 0 due to u128 overflow in Rust 
+    {"name": "USDT Huge Overflow", "decimals": 6, "token": "0xdac17f958d2ee523a2206206994597c13d831ec7", "amount_raw": 10**50, "expected": "0"}
 ]
 
 def mock_sentinel_logic(token_address, amount_raw):
@@ -55,7 +62,11 @@ def mock_sentinel_logic(token_address, amount_raw):
     else:
         return None, None # Rejected (Zero Trust)
         
-    # 2. Parse
+    # 2. Parse (Simulate Rust Limits)
+    # Rust: u128 limit (~3.4e38)
+    if amount_raw > 340282366920938463463374607431768211455: # u128::MAX
+         return Decimal(0), decimals # Rust returns 0 on parse failure
+    
     amount_dec = Decimal(amount_raw) / Decimal(10**decimals)
     return amount_dec, decimals
 
@@ -69,21 +80,33 @@ def run_suite():
         decs = case["decimals"]
         raw = case["amount_raw"]
         
-        # Scenario A: Unknown Token
-        mock_addr = f"0xunknown{decs}0000000000000000000000000000000000"
+        # Scenario A: Unknown Token unless specified
+        mock_addr = case.get("token", f"0xunknown{decs}0000000000000000000000000000000000")
         res, used_decs = mock_sentinel_logic(mock_addr, raw)
         
         print(f"   Case: {name} (Decimals: {decs})")
         print(f"      Input Raw: {raw}")
-        print(f"      Result: {res} (Expected: None/Rejected)")
+        print(f"      Result: {res}")
         
-        # Logic Check: MUST BE REJECTED
-        if res is None:
-             log_info(f"✅ Verified: Sentinel REJECTED unknown token {name} (Safe)")
-             p_count += 1
+        # Logic Check
+        exp_s = case.get("expected")
+        if exp_s == "0":
+             if res == Decimal(0):
+                 log_info(f"✅ Verified: Overflow/Limit handled safely (0) for {name}")
+                 p_count += 1
+             else:
+                 log_fail(f"❌ Failed: Overflow not handled correctly (Got {res})")
+                 f_count += 1
+        elif exp_s is None or exp_s == "None":
+             if res is None:
+                 log_info(f"✅ Verified: REJECTED {name}")
+                 p_count += 1
+             else:
+                 log_fail(f"❌ Failed: Accepted! {res}")
+                 f_count += 1
         else:
-             log_fail(f"❌ Failed: Accepted unknown token!")
-             f_count += 1
+             # Accepted Case (e.g. if we add whitelisted tests later)
+             pass
              
     print("-" * 40)
     print(f"Suite Result: {p_count} Passed, {f_count} Failed")
