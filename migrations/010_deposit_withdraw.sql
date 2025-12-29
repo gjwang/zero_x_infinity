@@ -35,14 +35,14 @@ CREATE INDEX IF NOT EXISTS idx_withdraw_user ON withdraw_history(user_id);
 
 
 -- 3. User Addresses (Warm Wallet Model)
--- One address per network per asset (or shared if possible, but distinct here)
+-- One address per chain per asset (or shared if possible, but distinct here)
 CREATE TABLE IF NOT EXISTS user_addresses (
     user_id BIGINT NOT NULL,
     asset VARCHAR(32) NOT NULL,
-    network VARCHAR(32) NOT NULL, -- BTC, ETH, TRON
+    chain_id VARCHAR(32) NOT NULL, -- BTC, ETH, TRON
     address VARCHAR(255) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (user_id, asset, network)
+    PRIMARY KEY (user_id, asset, chain_id)
 );
 
 -- Ensure we can look up owner by address (for deposit scanning)
