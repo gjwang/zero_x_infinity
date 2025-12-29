@@ -1746,7 +1746,7 @@ pub async fn create_order_jwt(
     }
 
     Ok((
-        StatusCode::ACCEPTED,
+        StatusCode::OK,
         Json(ApiResponse::success(OrderResponseData {
             order_id,
             cid: req.cid,

@@ -399,7 +399,7 @@ impl ServiceAdapter for FundingAdapter {
             WHERE user_id = $2 AND asset_id = $3 AND account_type = $4
             "#,
         )
-        .bind(amount as i64) // amount is i64 here from rollback query
+        .bind(amount) // amount is i64 here from rollback query
         .bind(user_id)
         .bind(asset_id)
         .bind(FUNDING_ACCOUNT_TYPE)

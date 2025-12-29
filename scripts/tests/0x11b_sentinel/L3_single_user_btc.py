@@ -397,17 +397,6 @@ class CompleteMoneyFlowE2E:
                     print(f"   📋 Response: {msg}")
                     with open("failed_response.txt", "w") as f: f.write(f"Code: {data.get('code')}, Msg: {msg}")
                     self.add_result("3.2 Place Order", False)
-            elif resp.status_code == 202:
-                data = resp.json()
-                if data.get("code") == 0:
-                    order_id = data.get("data", {}).get("order_id")
-                    print(f"   ✅ Order placed: {order_id} (Async Accepted)")
-                    print(f"   ✅ Quantity: {self.trade_amount} BTC (exact)")
-                    self.add_result("3.2 Place Order", True, f"{self.trade_amount} BTC")
-                else:
-                    msg = data.get('msg')
-                    print(f"   📋 Response: {msg}")
-                    self.add_result("3.2 Place Order", False)
             else:
                 print(f"   ⚠️  Status: {resp.status_code}")
                 print(f"   ⚠️  Response: {resp.text}")

@@ -149,7 +149,7 @@ impl TransferService {
         .bind(user_id)
         .fetch_all(pool)
         .await
-        .map_err(|e| TransferError::DatabaseError(e))?;
+        .map_err(TransferError::DatabaseError)?;
 
         tracing::info!(
             "DB: get_all_balances found {} rows for user_id: {}",
