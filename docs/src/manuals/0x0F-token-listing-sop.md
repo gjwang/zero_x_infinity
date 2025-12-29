@@ -36,15 +36,17 @@ Before listing, you need the following information:
 
 1.  **Navigate**: Admin -> `Assets` -> Select `UNI` (#10) -> `Chain Config` Tab.
 2.  **Click**: `Add New Binding`.
-3.  **Input Configuration**:
-    *   **Chain**: Select `ETH` (Ethereum) from dropdown.
-    *   **Contract Address**: Paste `0x1f9840a85d5af5bf1d1762f925bdaddc4201f984`.
-    *   **Min Deposit**: Set `0.1` (Ignore tiny dust).
-    *   **Withdraw Fee**: Set `5.0` (Cover gas costs).
-4.  **Action**: Click `Verify On-Chain` button.
-    *   *System Check*: Admin backend calls RPC `eth_call(decimals)`.
-    *   *Success*: Display "✅ Valid ERC20. Decimals: 18. Protocol: Uniswap".
-    *   *Fail*: Display "❌ Invalid Contract / Not ERC20".
+3.  **Input Configuration (Minimal)**:
+    *   **Chain**: Select `ETH` (Ethereum).
+    *   **Contract Address**: Paste `0x1f98...`
+    *   *(Leave other fields empty - System will fetch them)*
+
+4.  **Action**: Click `Auto-Detect from Chain`.
+    *   *System Action*: Queries RPC `decimals()`, `symbol()`.
+    *   *Result*:
+        *   **Decimals**: Auto-filled `18`. (Locked, Read-only)
+        *   **Symbol**: Auto-detected `UNI`. (Verifies against Asset name)
+    *   *Ops Action*: Verify the fetched data matches. Adjust `Min Deposit` / `Fee` only if defaults are unsuitable.
 5.  **Confirm**: Check detected Decimals match project info.
 6.  **Click**: `Bind & Activate`.
     *   *System Result*: `chain_assets_tb` created. Sentinel hot-reloads within 60s.
