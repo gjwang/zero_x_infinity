@@ -1,32 +1,42 @@
-# QA Test Plan: Phase 0x11 Funding
+# QA Current Task
 
-**Role**: QA Engineer
-**Context**: Verifying a critical financial module (Money In/Out).
-**Risk Level**: **EXTREME** (Double Spend = Loss of Funds).
+## Session Info
+- **Date**: 2025-12-29
+- **Role**: QA Engineer
+- **Task**: Phase 0x11-b: Verify Sentinel Hardening Fixes
 
-## 1. Verification Basis
-*   **Strict Checklist**: [`docs/src/0x11-acceptance-checklist.md`](../../../src/0x11-acceptance-checklist.md)
-    *   You MUST NOT pass the release unless *every* item is checked.
+## Original Goal
+Verify that DEF-002 (BTC SegWit blindness) is fixed and ETH/ERC20 Sentinel is correctly implemented.
 
-## 2. Test Strategy Focus
-### 2.1 "The Double Spend" (Idempotency)
-*   **Scenario**: Developer sends the same `tx_hash` 20 times in parallel.
-*   **Expected**:
-    *   Database: 1 row.
-    *   User Balance: Credited 1 time.
-    *   API Response: 200 OK (all look successful to client, but backend filters duplicates).
+## Progress Checklist
+- [ ] **Regression Testing (Phase 0x11-a)**
+  - [ ] Run `scripts/run_0x11a_verification.sh` - all tests pass
+  - [ ] Verify Legacy P2PKH deposits still work
+- [ ] **DEF-002 Verification (BTC P2WPKH)**
+  - [ ] Execute TC-B01: Deposit to `bcrt1...` address
+  - [ ] Verify: Status transitions DETECTED → CONFIRMING → FINALIZED
+  - [ ] Verify: User balance correctly credited
+- [ ] **ETH/ERC20 Verification**
+  - [ ] Execute TC-B02: ERC20 Transfer to user address
+  - [ ] Verify: `DetectedDeposit` created with correct precision
+  - [ ] Verify: USDT amount scaled correctly (6 decimals)
+- [ ] **Chaos Testing (Re-org)**
+  - [ ] Simulate block re-org after deposit detection
+  - [ ] Verify: Sentinel detects hash mismatch and rolls back
 
-### 2.2 "The Race" (Concurrency)
-*   **Scenario**: User has 100 USDT. Sends 3 requests to withdraw 50 USDT simultaneously.
-*   **Expected**:
-    *   2 Requests succeed.
-    *   3rd Request fails (Insufficient Balance).
-    *   User Balance = 0 USDT.
+## Key Decisions Made
+| Decision | Rationale | Alternatives Rejected |
+|----------|-----------|----------------------|
+| TBD | TBD | TBD |
 
-### 2.3 "The Mock Chain"
-*   **Scenario**: Request BTC Address.
-*   **Expected**: Returns Base58 format (not Hex).
+## Blockers / Dependencies
+- [ ] **BLOCKED**: Waiting for Developer to complete DEF-002 fix
+- [ ] **BLOCKED**: Waiting for Developer to implement EthScanner
 
-## 3. Automation Requirements
-*   Create `scripts/test_funding_concurrency.py` using `asyncio` to flood endpoint.
-*   Verify results against `GET /api/v1/private/balances`.
+## Handover Notes
+**From Architect (2025-12-29)**:
+- Test plan: `docs/agents/sessions/shared/arch-to-qa-0x11-b-test-plan.md`
+- Main spec: `docs/src/0x11-b-sentinel-hardening.md`
+- Branch: `0x11-b-sentinel-hardening`
+
+**Acceptance Metric**: DEF-002 marked CLOSED in `docs/qa/0x11a_real_chain/test_report.md`

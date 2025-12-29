@@ -1,98 +1,37 @@
-# 💻 Developer Session: Phase 0x11-a
+# Developer Current Task
 
 ## Session Info
-- **Date**: 2025-12-28
-- **Role**: Senior Rust Developer
-- **Status**: ✅ Phase C.1 Complete
+- **Date**: 2025-12-29
+- **Role**: Developer
+- **Task**: Phase 0x11-b: Fix DEF-002 & Implement ETH Sentinel
 
----
+## Original Goal
+Fix Sentinel blindness to SegWit (P2WPKH) deposits and implement ETH/ERC20 event log parsing.
 
-## 🎯 Task: Sentinel Service MVP
+## Progress Checklist
+- [ ] **DEF-002 Fix (BTC P2WPKH)**
+  - [ ] Add unit test `test_p2wpkh_extraction` in `src/sentinel/btc.rs`
+  - [ ] Fix `extract_address` to handle P2WPKH scripts
+  - [ ] Verify with E2E: deposit to `bcrt1...` address detected
+- [ ] **ETH Sentinel Implementation**
+  - [ ] Implement `EthScanner` in `src/sentinel/eth.rs`
+  - [ ] Add `eth_getLogs` polling with Transfer topic filter
+  - [ ] Parse ERC20 Transfer events (topic[2] = recipient, data = amount)
+  - [ ] Add unit test `test_erc20_transfer_parsing`
+  - [ ] Verify with E2E: MockUSDT deposit detected
 
-### Goal
-Implement the Sentinel service that monitors real blockchain nodes (BTC Regtest, ETH Anvil), detects deposits via block scanning, and records them in the database.
+## Key Decisions Made
+| Decision | Rationale | Alternatives Rejected |
+|----------|-----------|----------------------|
+| TBD | TBD | TBD |
 
----
+## Blockers / Dependencies
+- [ ] None currently - ready for implementation
 
-## 📦 Delivery Summary
+## Handover Notes
+**From Architect (2025-12-29)**:
+- Main spec: `docs/src/0x11-b-sentinel-hardening.md`
+- Detailed handover: `docs/agents/sessions/shared/arch-to-dev-0x11-b-def-002.md`
+- Branch: `0x11-b-sentinel-hardening`
 
-### Phase C.1: Sentinel MVP ✅ Complete
-
-| File | Lines | Purpose |
-|------|-------|---------|
-| `src/sentinel/mod.rs` | 25 | Module entry with re-exports |
-| `src/sentinel/scanner.rs` | 97 | `ChainScanner` trait + core types |
-| `src/sentinel/btc.rs` | 244 | BTC scanner with mock mode |
-| `src/sentinel/eth.rs` | 249 | ETH scanner with mock mode |
-| `src/sentinel/worker.rs` | 300 | `SentinelWorker` orchestration |
-| `src/sentinel/config.rs` | 176 | Configuration structs |
-| `src/sentinel/error.rs` | 34 | Error types |
-
-### Configuration Files
-| File | Purpose |
-|------|---------|
-| `config/sentinel_config.yaml` | Main service configuration |
-| `config/chains/btc_regtest.yaml` | BTC Regtest chain settings |
-| `config/chains/eth_anvil.yaml` | ETH Anvil chain settings |
-
-### Database Migration
-| File | Purpose |
-|------|---------|
-| `migrations/20251228180000_chain_cursor.sql` | `chain_cursor` table + deposit_history enhancements |
-
----
-
-## ✅ Verification
-
-### Unit Tests: 17 Passing
-```
-sentinel::scanner::tests::test_scanned_block_with_deposits
-sentinel::scanner::tests::test_node_health_synced
-sentinel::config::tests::test_sentinel_config_deserialize
-sentinel::config::tests::test_btc_chain_config_deserialize
-sentinel::config::tests::test_eth_chain_config_deserialize
-sentinel::btc::tests::test_btc_scanner_creation
-sentinel::btc::tests::test_address_watching
-sentinel::btc::tests::test_mock_block_scanning
-sentinel::btc::tests::test_mock_health_check
-sentinel::btc::tests::test_verify_block_hash
-sentinel::eth::tests::test_eth_scanner_creation
-sentinel::eth::tests::test_address_watching_case_insensitive
-sentinel::eth::tests::test_mock_block_scanning
-sentinel::eth::tests::test_mock_health_check
-sentinel::eth::tests::test_wei_to_eth_conversion
-sentinel::worker::tests::test_worker_creation
-sentinel::worker::tests::test_chain_cursor_struct
-```
-
-### Full Test Suite: 317 Passed
-```
-cargo test --lib
-test result: ok. 317 passed; 0 failed; 20 ignored
-```
-
-### Code Quality
-- ✅ `cargo fmt` - Formatted
-- ✅ `cargo clippy -- -D warnings` - No warnings
-
----
-
-## 🔗 Next Steps (Phase C.2)
-
-1. **Confirmation Monitor**: Track confirmation counts for DETECTED deposits
-2. **State Machine**: Implement DETECTED → CONFIRMING → FINALIZED transitions
-3. **Real RPC**: Connect to actual bitcoind and anvil nodes
-
----
-
-## 📝 Handover Notes
-
-### For QA
-- Mock mode tests are complete
-- Integration tests with real DB need `chain_cursor` migration
-- Docker containers needed: `ruimarinho/bitcoin-core:24`, `ghcr.io/foundry-rs/foundry:latest`
-
-### For DevOps
-- New service binary: Consider `--sentinel` flag or separate binary
-- New config files in `config/chains/`
-- New DB migration required before starting sentinel
+**Priority**: P0 = DEF-002 (BTC), P1 = ETH Sentinel

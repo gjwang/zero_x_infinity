@@ -71,4 +71,22 @@ When making a decision that impacts other roles:
 
 ---
 
+### 2025-12-29 - Phase 0x11-b Sentinel Hardening Handover
+
+- **Decided by**: Architect (AI Agent)
+- **Decision**: Hand over Phase 0x11-b to Developer and QA for implementation and verification
+- **Rationale**: Phase 0x11-a complete (12/12 mock tests pass). Two critical gaps identified:
+  1. **DEF-002** (P0): Sentinel blind to P2WPKH (SegWit) BTC deposits
+  2. **ETH Gap** (P1): `EthScanner` not implemented (ERC20 event parsing)
+- **Impact on other roles**:
+  - **Developer**: Fix `src/sentinel/btc.rs` for P2WPKH; Implement `src/sentinel/eth.rs`
+  - **QA**: Verify fixes per test plan; Update `test_report.md` to close DEF-002
+- **Key documents**:
+  - Main Spec: `docs/src/0x11-b-sentinel-hardening.md`
+  - Dev Handover: `docs/agents/sessions/shared/arch-to-dev-0x11-b-def-002.md`
+  - QA Test Plan: `docs/agents/sessions/shared/arch-to-qa-0x11-b-test-plan.md`
+- **Branch**: `0x11-b-sentinel-hardening`
+
+---
+
 <!-- Add new decisions above this line -->
