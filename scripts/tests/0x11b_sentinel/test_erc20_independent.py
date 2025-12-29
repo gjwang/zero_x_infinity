@@ -53,14 +53,14 @@ def mock_sentinel_logic(token_address, amount_raw):
     elif addr_lower == "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48":
         decimals = 6 # USDC
     else:
-        decimals = 18 # Default Unknown
+        return None, None # Rejected (Zero Trust)
         
     # 2. Parse
     amount_dec = Decimal(amount_raw) / Decimal(10**decimals)
     return amount_dec, decimals
 
 def run_suite():
-    log_info("Running Multi-Decimal Test Suite...")
+    log_info("Running Multi-Decimal Test Suite (Strict Mode)...")
     p_count = 0
     f_count = 0
     
@@ -68,34 +68,21 @@ def run_suite():
         name = case["name"]
         decs = case["decimals"]
         raw = case["amount_raw"]
-        exp = Decimal(case["expected"])
-        
-        # Mock Address (Unknown)
-        # If we use an unknown address, Sentinel defaults to 18.
-        # So for a 6 decimal token (unknown), the Sentinel will parse incorrectly.
-        # This test verifies EXACTLY that behavior.
         
         # Scenario A: Unknown Token
         mock_addr = f"0xunknown{decs}0000000000000000000000000000000000"
         res, used_decs = mock_sentinel_logic(mock_addr, raw)
         
-        actual_if_unknown = raw / (10**18)
-        
         print(f"   Case: {name} (Decimals: {decs})")
         print(f"      Input Raw: {raw}")
-        print(f"      Sentinel assumption: {used_decs} decimals (Default for unknown)")
-        print(f"      Result: {res}")
+        print(f"      Result: {res} (Expected: None/Rejected)")
         
-        # Logic Check
-        # If the token is NOT hardcoded, Sentinel assumes 18.
-        # So we expect the result to be raw / 10^18.
-        # UNLESS matches USDT/USDC.
-        
-        if res == Decimal(raw) / Decimal(10**18):
-             log_info(f"✅ Verified: Sentinel correctly defaults to 18 for unknown {name}")
+        # Logic Check: MUST BE REJECTED
+        if res is None:
+             log_info(f"✅ Verified: Sentinel REJECTED unknown token {name} (Safe)")
              p_count += 1
         else:
-             log_fail(f"❌ Mismatch in Default Logic")
+             log_fail(f"❌ Failed: Accepted unknown token!")
              f_count += 1
              
     print("-" * 40)
@@ -104,17 +91,14 @@ def run_suite():
 
 def run_single(token, decimals):
     log_info(f"Testing Single Token: {token} (Decimals: {decimals})")
-    # Here we would ideally emit a real event if Anvil is connected.
-    # For independent logic verification:
-    res, used_decs = mock_sentinel_logic(token, 10**int(decimals))
-    log_info(f"Sentinel determined decimals: {used_decs}")
-    log_info(f"Parsed Amount (Expected ~1.0): {res}")
     
-    if int(decimals) != used_decs:
-        log_warn(f"⚠️  Decimal mismatch! Real: {decimals}, Sentinel used: {used_decs}")
-        log_warn("   (This is expected for non-hardcoded tokens in current version)")
+    res, used_decs = mock_sentinel_logic(token, 10**int(decimals))
+    
+    if res is None:
+        log_warn("⚠️  Token REJECTED by Sentinel (Not in whitelist). This is SAFE default.")
     else:
-        log_info("✅ Decimals matched config.")
+        log_info(f"✅ Token Accepted. Decimals: {used_decs}")
+        log_info(f"Parsed Amount: {res}")
 
 def main():
     parser = argparse.ArgumentParser(description="Multi-Currency Independent Test")

@@ -329,7 +329,13 @@ impl EthScanner {
             let amount_raw = parse_uint256(&log.data);
 
             // Get token info from contract address
-            let (asset, decimals) = self.get_token_info(&log.address);
+            let (asset, decimals) = match self.get_token_info(&log.address) {
+                Some(info) => info,
+                None => {
+                    debug!("Skipping deposit from unknown contract: {}", log.address);
+                    continue;
+                }
+            };
 
             // Convert raw amount to decimal
             let amount = raw_to_decimal(&amount_raw, decimals);
@@ -359,21 +365,25 @@ impl EthScanner {
     }
 
     /// Get token info (asset name, decimals) from contract address
-    /// TODO: Load from database assets_tb in production
-    fn get_token_info(&self, contract_address: &str) -> (String, u8) {
+    /// STRICT MODE: Only returns Info for Whitelisted tokens.
+    /// Everything else is rejected to prevent "High Decimal" attacks.
+    fn get_token_info(&self, contract_address: &str) -> Option<(String, u8)> {
         // Hardcoded for common tokens - in production, load from assets_tb
         let addr_lower = contract_address.to_lowercase();
 
         // Common mainnet addresses (for reference)
         match addr_lower.as_str() {
             // USDT (Tether) - various networks
-            "0xdac17f958d2ee523a2206206994597c13d831ec7" => ("USDT".to_string(), 6),
+            "0xdac17f958d2ee523a2206206994597c13d831ec7" => Some(("USDT".to_string(), 6)),
             // USDC - various networks
-            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48" => ("USDC".to_string(), 6),
-            // Default: unknown ERC20 with 18 decimals
+            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48" => Some(("USDC".to_string(), 6)),
+            // Default: REJECT UNKNOWN (Zero Trust)
             _ => {
-                warn!("Unknown ERC20 contract: {}", contract_address);
-                ("ERC20".to_string(), 18)
+                warn!(
+                    "REJECTED Unknown ERC20 contract: {} (Not in whitelist)",
+                    contract_address
+                );
+                None
             }
         }
     }
