@@ -44,6 +44,7 @@ export BTC_WALLET="${BTC_WALLET:-sentinel_test}"
 # Process tracking (安全: 不使用 pkill -f)
 GATEWAY_PID=""
 SENTINEL_PID=""
+ANVIL_PID=""
 
 # ============================================================================
 # Helper Functions
@@ -97,6 +98,7 @@ cleanup() {
     log_info "Cleaning up..."
     stop_process "$GATEWAY_PID" "Gateway"
     stop_process "$SENTINEL_PID" "Sentinel"
+    stop_process "$ANVIL_PID" "Anvil"
 }
 
 trap cleanup EXIT
@@ -202,6 +204,32 @@ setup_btc_wallet() {
     fi
 }
 
+start_anvil() {
+    log_step "[2.8/6] Starting Anvil (ETH Node)..."
+    
+    # Check if already running
+    local existing_pid
+    existing_pid=$(get_pid_by_port 8545)
+    if [ -n "$existing_pid" ]; then
+        log_warn "Anvil already running (PID: $existing_pid)"
+        ANVIL_PID="$existing_pid"
+        return 0
+    fi
+    
+    if ! command -v anvil &> /dev/null; then
+        log_warn "⚠️ Anvil not found in PATH. Skipping ETH Environment."
+        log_warn "   Run: curl -L https://foundry.paradigm.xyz | bash && foundryup"
+        return 0
+    fi
+
+    mkdir -p "$LOG_DIR"
+    nohup anvil --port 8545 > "$LOG_DIR/anvil.log" 2>&1 &
+    ANVIL_PID=$!
+    
+    wait_for_port 8545 "Anvil" 15 || return 1
+    log_info "✅ Anvil started (PID: $ANVIL_PID)"
+}
+
 start_gateway() {
     log_step "[3/6] Starting Gateway HTTP Server..."
     
@@ -265,11 +293,11 @@ main() {
     while [[ $# -gt 0 ]]; do
         case $1 in
             --cleanup)
-                log_info "Cleaning up any orphan processes on port 8080..."
+                log_info "Cleaning up any orphan processes..."
                 local gw_pid=$(get_pid_by_port 8080)
-                if [ -n "$gw_pid" ]; then
-                    stop_process "$gw_pid" "Gateway on 8080"
-                fi
+                if [ -n "$gw_pid" ]; then stop_process "$gw_pid" "Gateway"; fi
+                local anvil_pid=$(get_pid_by_port 8545)
+                if [ -n "$anvil_pid" ]; then stop_process "$anvil_pid" "Anvil"; fi
                 log_info "Cleanup complete"
                 exit 0
                 ;;
@@ -298,6 +326,7 @@ main() {
         run_migrations
         check_btc_node || exit 1
         setup_btc_wallet
+        start_anvil         # New: Start Anvil
         start_gateway || exit 1
         start_sentinel || exit 1
         
@@ -370,7 +399,7 @@ main() {
         log_warn "⚠️ Level 2 FAILED: ERC20 Component Test reported failure"
         ((TESTS_FAILED++))
         L2_STATUS="FAILED"
-    elif echo "$L2_OUTPUT" | grep -q "skipped"; then
+    elif echo "$L2_OUTPUT" | grep -q "SKIPPED"; then
         log_warn "⚠️ Level 2 SKIPPED: ERC20 Component Test (Environment limitation)"
         ((TESTS_SKIPPED++))
         L2_STATUS="SKIPPED"
