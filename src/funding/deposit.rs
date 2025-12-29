@@ -129,7 +129,7 @@ impl DepositService {
     ) -> Result<String, DepositError> {
         // Check DB first (use runtime query to avoid compile-time DB schema check)
         let row: Option<(String,)> = sqlx::query_as(
-            "SELECT address FROM user_addresses WHERE user_id = $1 AND asset = $2 AND chain_id = $3",
+            "SELECT address FROM user_addresses WHERE user_id = $1 AND asset = $2 AND chain_slug = $3",
         )
         .bind(user_id)
         .bind(asset)
@@ -150,7 +150,7 @@ impl DepositService {
         })?; // Wrap error
 
         sqlx::query(
-            "INSERT INTO user_addresses (user_id, asset, chain_id, address) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
+            "INSERT INTO user_addresses (user_id, asset, chain_slug, address) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
         )
         .bind(user_id)
         .bind(asset)
@@ -161,7 +161,7 @@ impl DepositService {
 
         // Re-fetch to ensure we return what's in DB (handle race condition on unique constraint)
         let final_addr: (String,) = sqlx::query_as(
-            "SELECT address FROM user_addresses WHERE user_id = $1 AND asset = $2 AND chain_id = $3",
+            "SELECT address FROM user_addresses WHERE user_id = $1 AND asset = $2 AND chain_slug = $3",
         )
         .bind(user_id)
         .bind(asset)
