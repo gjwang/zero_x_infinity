@@ -54,6 +54,7 @@
 - [0x10 Web Frontend | 前端外包需求](./0x10-web-frontend.md)
 - [0x11 Deposit & Withdraw | 充值与提现 (Mock Chain)](./0x11-deposit-withdraw.md)
 - [0x11-a Real Chain Integration | 真实链集成 (Sentinel)](./0x11-a-real-chain.md)
+- [0x11-b Sentinel Hardening | 哨兵强化 (SegWit & ETH)](./0x11-b-sentinel-hardening.md)
 
 ---
 
