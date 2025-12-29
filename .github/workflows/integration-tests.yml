@@ -843,7 +843,6 @@ jobs:
       - name: Install Admin Dependencies
         run: |
           uv sync
-          uv pip install -r admin/requirements.txt --python .venv
           uv run playwright install chromium --with-deps
 
       - name: Initialize Admin DB
