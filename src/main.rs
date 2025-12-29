@@ -1045,8 +1045,7 @@ Samples: {}
 /// Run the Sentinel blockchain scanner service
 fn run_sentinel(app_config: &zero_x_infinity::config::AppConfig) -> anyhow::Result<()> {
     use zero_x_infinity::sentinel::{
-        BtcChainConfig, BtcScanner, ConfirmationMonitor, DepositPipeline, EthChainConfig,
-        EthScanner, SentinelConfig, SentinelWorker,
+        BtcChainConfig, BtcScanner, EthChainConfig, EthScanner, SentinelConfig, SentinelWorker,
     };
 
     println!("\n[1] Loading Sentinel configuration...");
@@ -1126,10 +1125,6 @@ fn run_sentinel(app_config: &zero_x_infinity::config::AppConfig) -> anyhow::Resu
             "No scanners enabled. Check sentinel_config.yaml"
         ));
     }
-
-    // Create confirmation monitor and pipeline (for future integration)
-    let _confirmation_monitor = ConfirmationMonitor::new(pool.clone());
-    let _deposit_pipeline = DepositPipeline::new(pool.clone());
 
     println!("\n[4] Starting Sentinel service...");
     println!("  Press Ctrl+C to stop\n");

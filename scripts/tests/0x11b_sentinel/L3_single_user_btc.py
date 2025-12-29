@@ -176,6 +176,10 @@ class CompleteMoneyFlowE2E:
             print(f"   ❌ Failed: {e}")
             return self.add_result("1.3 SegWit Address", False)
         
+        # RACE CONDITION FIX: Wait for Sentinel to pick up the watched address
+        print("   ⏳ Waiting 6s for Sentinel to register address...")
+        time.sleep(6)
+
         # 1.4 Send EXACT Amount On-Chain
         print(f"\n📋 1.4 Send EXACT {self.deposit_amount} BTC On-Chain")
         
@@ -188,44 +192,59 @@ class CompleteMoneyFlowE2E:
             print(f"   ❌ Failed: {e}")
             return self.add_result("1.4 Send BTC", False)
         
-        # 1.5 Sentinel Detection
-        print("\n📋 1.5 Sentinel Detection (DEF-002)")
+        # 1.5 Sentinel Detection (Polling)
+        print("\n📋 1.5 Sentinel Detection (DEF-002) - Polling")
         self.btc.mine_blocks(1)
-        time.sleep(3)
         
-        try:
-            deposit = self.gateway.get_deposit_by_tx_hash(self.headers, "BTC", tx_hash)
+        deposit = None
+        for i in range(10):
+            try:
+                deposit = self.gateway.get_deposit_by_tx_hash(self.headers, "BTC", tx_hash)
+                if deposit:
+                    break
+            except:
+                pass
+            print(f"   ... Waiting for Sentinel detection ({i+1}/10)")
+            time.sleep(3)
             
-            if deposit:
-                detected_amount = Decimal(str(deposit.get("amount", 0)))
-                print(f"   ╔═══════════════════════════════════════════╗")
-                print(f"   ║  ✅ DEF-002 VERIFIED: SegWit Detected!   ║")
-                print(f"   ╚═══════════════════════════════════════════╝")
-                
-                # Verify detected amount matches sent amount
-                if self.verify_amount(self.deposit_amount, detected_amount, "Detected Amount"):
-                    self.add_result("1.5 Sentinel Detection", True, f"{detected_amount} BTC ✓")
-                else:
-                    self.add_result("1.5 Sentinel Detection", False, "Amount mismatch!")
-                    return False
+        if deposit:
+            detected_amount = Decimal(str(deposit.get("amount", 0)))
+            print(f"   ╔═══════════════════════════════════════════╗")
+            print(f"   ║  ✅ DEF-002 VERIFIED: SegWit Detected!   ║")
+            print(f"   ╚═══════════════════════════════════════════╝")
+            
+            # Verify detected amount matches sent amount
+            if self.verify_amount(self.deposit_amount, detected_amount, "Detected Amount"):
+                self.add_result("1.5 Sentinel Detection", True, f"{detected_amount} BTC ✓")
             else:
-                print(f"   ❌ CRITICAL: Deposit NOT detected!")
-                return self.add_result("1.5 Sentinel Detection", False)
-        except Exception as e:
-            print(f"   ❌ Error: {e}")
+                self.add_result("1.5 Sentinel Detection", False, "Amount mismatch!")
+                return False
+        else:
+            print(f"   ❌ CRITICAL: Deposit NOT detected after polling!")
             return self.add_result("1.5 Sentinel Detection", False)
         
-        # 1.6 Finalization
+        # 1.6 Finalization (Polling)
         print("\n📋 1.6 Confirmation & Finalization")
-        self.btc.mine_blocks(BTC_REQUIRED_CONFIRMATIONS)
-        time.sleep(3)
+        self.btc.mine_blocks(BTC_REQUIRED_CONFIRMATIONS + 1)
         
-        deposit_final = self.gateway.get_deposit_by_tx_hash(self.headers, "BTC", tx_hash)
+        deposit_final = None
+        for i in range(15):
+            deposit_final = self.gateway.get_deposit_by_tx_hash(self.headers, "BTC", tx_hash)
+            if deposit_final and deposit_final.get("status") == "SUCCESS": # Finalized status in API is SUCCESS
+                break
+            # FALLBACK: Also check for FINALIZED if SUCCESS is not used
+            if deposit_final and deposit_final.get("status") == "FINALIZED":
+                break
+            print(f"   ... Waiting for finalization ({i+1}/15), status: {deposit_final.get('status') if deposit_final else 'None'}")
+            time.sleep(3)
+            
         if deposit_final:
             final_amount = Decimal(str(deposit_final.get("amount", 0)))
             print(f"   ✅ Final Status: {deposit_final.get('status')}")
             self.verify_amount(self.deposit_amount, final_amount, "Finalized Amount")
-            self.add_result("1.6 Finalization", True)
+            self.add_result("1.6 Finalization", True, f"Status: {deposit_final.get('status')}")
+        else:
+            self.add_result("1.6 Finalization", False, "Never finalized")
         
         # 1.7 Funding Balance Verification (CRITICAL)
         print("\n📋 1.7 Funding Balance Verification (STRICT)")
@@ -332,7 +351,7 @@ class CompleteMoneyFlowE2E:
         print("\n📋 3.2 Check Trading Pairs")
         
         try:
-            resp = requests.get(f"{self.gateway.base_url}/api/v1/exchangeInfo")
+            resp = requests.get(f"{self.gateway.base_url}/api/v1/public/exchange_info")
             if resp.status_code == 200:
                 data = resp.json()
                 symbols = data.get("data", {}).get("symbols", [])
@@ -355,12 +374,12 @@ class CompleteMoneyFlowE2E:
         
         try:
             resp = requests.post(
-                f"{self.gateway.base_url}/api/v1/order",
+                f"{self.gateway.base_url}/api/v1/capital/order",
                 json={
                     "symbol": "BTC_USDT",
                     "side": "SELL",
-                    "type": "LIMIT",
-                    "quantity": str(self.trade_amount),
+                    "order_type": "LIMIT",
+                    "qty": str(self.trade_amount),
                     "price": "50000"
                 },
                 headers=self.headers
@@ -374,9 +393,25 @@ class CompleteMoneyFlowE2E:
                     print(f"   ✅ Quantity: {self.trade_amount} BTC (exact)")
                     self.add_result("3.2 Place Order", True, f"{self.trade_amount} BTC")
                 else:
-                    print(f"   📋 Response: {data.get('msg')}")
+                    msg = data.get('msg')
+                    print(f"   📋 Response: {msg}")
+                    with open("failed_response.txt", "w") as f: f.write(f"Code: {data.get('code')}, Msg: {msg}")
+                    self.add_result("3.2 Place Order", False)
+            elif resp.status_code == 202:
+                data = resp.json()
+                if data.get("code") == 0:
+                    order_id = data.get("data", {}).get("order_id")
+                    print(f"   ✅ Order placed: {order_id} (Async Accepted)")
+                    print(f"   ✅ Quantity: {self.trade_amount} BTC (exact)")
+                    self.add_result("3.2 Place Order", True, f"{self.trade_amount} BTC")
+                else:
+                    msg = data.get('msg')
+                    print(f"   📋 Response: {msg}")
                     self.add_result("3.2 Place Order", False)
             else:
+                print(f"   ⚠️  Status: {resp.status_code}")
+                print(f"   ⚠️  Response: {resp.text}")
+                with open("failed_response.txt", "w") as f: f.write(f"Status: {resp.status_code}, Resp: {resp.text}")
                 self.add_result("3.2 Place Order", False)
                 
         except Exception as e:

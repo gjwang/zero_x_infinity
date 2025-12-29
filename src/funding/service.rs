@@ -6,6 +6,7 @@ use crate::account::{AssetManager, Database};
 use rust_decimal::prelude::*;
 use sqlx::Row;
 use std::str::FromStr;
+use utoipa::ToSchema;
 
 pub struct TransferService;
 
@@ -134,6 +135,7 @@ impl TransferService {
         pool: &sqlx::PgPool,
         user_id: i64,
     ) -> Result<Vec<BalanceInfo>, TransferError> {
+        tracing::debug!("DB: get_all_balances for user_id: {}", user_id);
         let rows = sqlx::query(
             r#"
             SELECT b.user_id, b.asset_id, b.account_type, b.available, b.frozen,
@@ -146,8 +148,14 @@ impl TransferService {
         )
         .bind(user_id)
         .fetch_all(pool)
-        .await?;
+        .await
+        .map_err(|e| TransferError::DatabaseError(e))?;
 
+        tracing::info!(
+            "DB: get_all_balances found {} rows for user_id: {}",
+            rows.len(),
+            user_id
+        );
         let mut balances = Vec::new();
         for row in rows {
             let asset_id: i32 = row.get("asset_id");
@@ -178,7 +186,7 @@ impl TransferService {
 }
 
 /// Balance info for API response
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, ToSchema)]
 pub struct BalanceInfo {
     pub asset_id: u32,
     pub asset: String,

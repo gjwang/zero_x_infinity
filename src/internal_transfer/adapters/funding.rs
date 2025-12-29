@@ -97,7 +97,7 @@ impl ServiceAdapter for FundingAdapter {
         .await;
 
         // Get asset decimals
-        let decimals: i16 = match sqlx::query_scalar!(
+        let _decimals: i16 = match sqlx::query_scalar!(
             "SELECT decimals FROM assets_tb WHERE asset_id = $1",
             asset_id as i32
         )
@@ -119,7 +119,7 @@ impl ServiceAdapter for FundingAdapter {
 
         let (available, account_status) = match balance_row {
             Ok(Some(row)) => {
-                let available: rust_decimal::Decimal = row.get("available");
+                let available: i64 = row.get("available");
                 let status: i16 = row.get("status");
                 (available, status)
             }
@@ -178,11 +178,8 @@ impl ServiceAdapter for FundingAdapter {
         }
 
         // Check sufficient balance
-        // scaling: amount is integer repr, need to divide by 10^decimals
-        let scale = rust_decimal::Decimal::from(10u64.pow(decimals as u32));
-        let amount_decimal = rust_decimal::Decimal::from(amount) / scale;
-
-        if available < amount_decimal {
+        // use atomic units directly
+        if available < amount as i64 {
             let _ = tx.rollback().await;
             let _ = record_operation(
                 &self.pool,
@@ -193,7 +190,7 @@ impl ServiceAdapter for FundingAdapter {
                 Some("Insufficient balance"),
             )
             .await;
-            debug!(transfer_id = %transfer_id, available = %available, amount = %amount_decimal, "Funding withdraw failed: Insufficient balance");
+            debug!(transfer_id = %transfer_id, available = %available, amount = %amount, "Funding withdraw failed: Insufficient balance");
             return OpResult::Failed("Insufficient balance".to_string());
         }
 
@@ -205,7 +202,7 @@ impl ServiceAdapter for FundingAdapter {
             WHERE user_id = $2 AND asset_id = $3 AND account_type = $4
             "#,
         )
-        .bind(amount_decimal)
+        .bind(amount as i64)
         .bind(user_id as i64)
         .bind(asset_id as i32)
         .bind(FUNDING_ACCOUNT_TYPE)
@@ -272,7 +269,7 @@ impl ServiceAdapter for FundingAdapter {
         }
 
         // Get asset decimals
-        let decimals: i16 = match sqlx::query_scalar!(
+        let _decimals: i16 = match sqlx::query_scalar!(
             "SELECT decimals FROM assets_tb WHERE asset_id = $1",
             asset_id as i32
         )
@@ -291,8 +288,7 @@ impl ServiceAdapter for FundingAdapter {
         };
 
         // UPSERT balance (create if not exists, or add to existing)
-        let scale = rust_decimal::Decimal::from(10u64.pow(decimals as u32));
-        let amount_decimal = rust_decimal::Decimal::from(amount) / scale;
+        // UPSERT balance (create if not exists, or add to existing)
         let result = sqlx::query(
             r#"
             INSERT INTO balances_tb (user_id, asset_id, account_type, available, frozen, version)
@@ -305,7 +301,7 @@ impl ServiceAdapter for FundingAdapter {
         .bind(user_id as i64)
         .bind(asset_id as i32)
         .bind(FUNDING_ACCOUNT_TYPE)
-        .bind(amount_decimal)
+        .bind(amount as i64)
         .execute(&self.pool)
         .await;
 
@@ -369,7 +365,7 @@ impl ServiceAdapter for FundingAdapter {
             Ok(Some(row)) => {
                 let user_id: i64 = row.get("user_id");
                 let asset_id: i32 = row.get("asset_id");
-                let amount: rust_decimal::Decimal = row.get("amount");
+                let amount: i64 = row.get("amount");
                 (user_id, asset_id, amount)
             }
             Ok(None) => {
@@ -383,7 +379,7 @@ impl ServiceAdapter for FundingAdapter {
         };
 
         // Get asset decimals
-        let decimals: i16 = match sqlx::query_scalar!(
+        let _decimals: i16 = match sqlx::query_scalar!(
             "SELECT decimals FROM assets_tb WHERE asset_id = $1",
             asset_id as i32
         )
@@ -395,10 +391,6 @@ impl ServiceAdapter for FundingAdapter {
             Err(_) => return OpResult::Pending,
         };
 
-        // Scale amount
-        let scale = rust_decimal::Decimal::from(10u64.pow(decimals as u32));
-        let amount_to_credit = amount / scale;
-
         // Credit back the withdrawn amount (same as deposit logic)
         let result = sqlx::query(
             r#"
@@ -407,7 +399,7 @@ impl ServiceAdapter for FundingAdapter {
             WHERE user_id = $2 AND asset_id = $3 AND account_type = $4
             "#,
         )
-        .bind(amount_to_credit)
+        .bind(amount as i64) // amount is i64 here from rollback query
         .bind(user_id)
         .bind(asset_id)
         .bind(FUNDING_ACCOUNT_TYPE)

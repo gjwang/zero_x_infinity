@@ -251,21 +251,8 @@ impl TransferDb {
             TransferType::SpotToFunding => ServiceId::Funding,
         };
 
-        let amount: rust_decimal::Decimal = row.get("amount");
-        // Use trunc() to drop decimal places, then convert to i64/u64
-        // DB stores amount like 50000000.00000000, we need 50000000
-        use rust_decimal::prelude::ToPrimitive;
-
-        // P1 Fix: Warn if amount has unexpected fractional part (precision loss detection)
-        if amount.fract() != rust_decimal::Decimal::ZERO {
-            tracing::warn!(
-                transfer_id = %transfer_id_str,
-                amount = %amount,
-                "Transfer amount has fractional part - truncating"
-            );
-        }
-
-        let amount_u64 = amount.trunc().to_i64().unwrap_or(0) as u64;
+        let amount_i64: i64 = row.get("amount");
+        let amount_u64 = amount_i64 as u64;
 
         let created_at: chrono::DateTime<chrono::Utc> = row.get("created_at");
         let updated_at: chrono::DateTime<chrono::Utc> = row.get("updated_at");

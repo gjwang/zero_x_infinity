@@ -12,7 +12,8 @@ use crate::pipeline::OrderAction;
 
 use super::state::AppState;
 use super::types::{
-    ApiResponse, CancelOrderRequest, ClientOrder, DepthApiData, OrderResponseData, error_codes,
+    AccountResponseData, ApiResponse, CancelOrderRequest, ClientOrder, DepthApiData,
+    OrderResponseData, error_codes,
 };
 
 use crate::symbol_manager::SymbolManager;
@@ -357,6 +358,15 @@ async fn create_transfer_fsm_handler(
     (StatusCode, Json<ApiResponse<()>>),
 > {
     // Convert legacy request to FSM request
+    tracing::info!(
+        "[DEBUG] FSM Handler Raw Request: from='{}' to='{}' asset='{}' amount='{}' cid={:?}",
+        req.from,
+        req.to,
+        req.asset,
+        req.amount,
+        req.cid
+    );
+
     let fsm_req = crate::internal_transfer::TransferApiRequest {
         from: req.from.clone(),
         to: req.to.clone(),
@@ -893,6 +903,53 @@ pub async fn get_all_balances(
     // Query all balances
     match crate::funding::service::TransferService::get_all_balances(pg_db.pool(), user_id).await {
         Ok(balances) => Ok((StatusCode::OK, Json(ApiResponse::success(balances)))),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error(
+                error_codes::SERVICE_UNAVAILABLE,
+                format!("Query failed: {}", e),
+            )),
+        )),
+    }
+}
+
+/// Get account information (balances) for legacy test script compatibility
+///
+/// GET /api/v1/private/account
+/// Returns balances wrapped in a 'balances' field.
+#[utoipa::path(
+    get,
+    path = "/api/v1/private/account",
+    responses(
+        (status = 200, description = "User account info", body = AccountResponseData, content_type = "application/json"),
+        (status = 503, description = "Service unavailable")
+    ),
+    security(("ed25519_auth" = [])),
+    tag = "Account"
+)]
+pub async fn get_account(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<crate::api_auth::AuthenticatedUser>,
+) -> Result<(StatusCode, Json<ApiResponse<AccountResponseData>>), (StatusCode, Json<ApiResponse<()>>)>
+{
+    let user_id = user.user_id;
+    tracing::info!("DEBUG: get_account called for user_id: {}", user_id);
+
+    let pg_db = state.pg_db.as_ref().ok_or_else(|| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ApiResponse::<()>::error(
+                error_codes::SERVICE_UNAVAILABLE,
+                "Account database not available",
+            )),
+        )
+    })?;
+
+    match crate::funding::service::TransferService::get_all_balances(pg_db.pool(), user_id).await {
+        Ok(balances) => {
+            let data = AccountResponseData { balances };
+            Ok((StatusCode::OK, Json(ApiResponse::success(data))))
+        }
         Err(e) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::<()>::error(
@@ -1561,4 +1618,291 @@ pub async fn get_exchange_info(
     };
 
     Ok((StatusCode::OK, Json(ApiResponse::success(exchange_info))))
+}
+
+/// Account info for JWT auth
+pub async fn get_account_jwt(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<crate::user_auth::service::Claims>,
+) -> Result<(StatusCode, Json<ApiResponse<AccountResponseData>>), (StatusCode, Json<ApiResponse<()>>)>
+{
+    let user_id = claims.sub.parse::<i64>().unwrap_or_default();
+    tracing::info!("DEBUG: get_account_jwt called for user_id: {}", user_id);
+
+    let pg_db = state.pg_db.as_ref().ok_or_else(|| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ApiResponse::<()>::error(
+                error_codes::SERVICE_UNAVAILABLE,
+                "Account database not available",
+            )),
+        )
+    })?;
+
+    match crate::funding::service::TransferService::get_all_balances(pg_db.pool(), user_id).await {
+        Ok(balances) => {
+            let data = AccountResponseData { balances };
+            Ok((StatusCode::OK, Json(ApiResponse::success(data))))
+        }
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error(
+                error_codes::SERVICE_UNAVAILABLE,
+                format!("Query failed: {}", e),
+            )),
+        )),
+    }
+}
+
+// ============================================================================
+// JWT Compatible Handlers (Phase 0x11-b)
+// ============================================================================
+
+/// Create transfer (JWT)
+pub async fn create_transfer_jwt(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<crate::user_auth::service::Claims>,
+    Json(req): Json<crate::funding::transfer::TransferRequest>,
+) -> Result<
+    (
+        StatusCode,
+        Json<ApiResponse<crate::funding::transfer::TransferResponse>>,
+    ),
+    (StatusCode, Json<ApiResponse<()>>),
+> {
+    let user_id = claims.sub.parse::<i64>().unwrap_or_default();
+    tracing::info!("[TRACE] Transfer Request (JWT): User {}", user_id);
+
+    if let Some(ref coordinator) = state.transfer_coordinator {
+        return create_transfer_fsm_handler(state.clone(), coordinator, user_id as u64, req).await;
+    }
+
+    let db = state.pg_db.as_ref().ok_or_else(|| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ApiResponse::<()>::error(
+                error_codes::SERVICE_UNAVAILABLE,
+                "Database not available",
+            )),
+        )
+    })?;
+
+    match crate::funding::service::TransferService::execute(db, user_id, req).await {
+        Ok(resp) => Ok((StatusCode::OK, Json(ApiResponse::success(resp)))),
+        Err(e) => Err((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<()>::error(
+                error_codes::INVALID_PARAMETER,
+                e.to_string(),
+            )),
+        )),
+    }
+}
+
+/// Create order (JWT)
+pub async fn create_order_jwt(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<crate::user_auth::service::Claims>,
+    Json(req): Json<ClientOrder>,
+) -> Result<(StatusCode, Json<ApiResponse<OrderResponseData>>), (StatusCode, Json<ApiResponse<()>>)>
+{
+    let user_id = claims.sub.parse::<u64>().unwrap_or_default();
+    tracing::info!("[TRACE] Create Order (JWT): User {}", user_id);
+
+    let validated =
+        super::types::validate_client_order(req.clone(), &state.symbol_mgr).map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<()>::error(error_codes::INVALID_PARAMETER, e)),
+            )
+        })?;
+
+    let order_id = state.next_order_id();
+    let timestamp = now_ns();
+
+    let internal_order = validated
+        .into_internal_order(order_id, user_id, timestamp)
+        .map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<()>::error(error_codes::INVALID_PARAMETER, e)),
+            )
+        })?;
+
+    let action = OrderAction::Place(crate::pipeline::SequencedOrder::new(
+        order_id,
+        internal_order,
+        timestamp,
+    ));
+
+    if state.order_queue.push(action).is_err() {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ApiResponse::<()>::error(
+                error_codes::SERVICE_UNAVAILABLE,
+                "Order queue is full",
+            )),
+        ));
+    }
+
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(ApiResponse::success(OrderResponseData {
+            order_id,
+            cid: req.cid,
+            order_status: "ACCEPTED".to_string(),
+            accepted_at: now_ms(),
+        })),
+    ))
+}
+
+/// Cancel order (JWT)
+pub async fn cancel_order_jwt(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<crate::user_auth::service::Claims>,
+    Json(req): Json<CancelOrderRequest>,
+) -> Result<(StatusCode, Json<ApiResponse<OrderResponseData>>), (StatusCode, Json<ApiResponse<()>>)>
+{
+    let user_id = claims.sub.parse::<u64>().unwrap_or_default();
+    tracing::info!(
+        "[TRACE] Cancel Order (JWT) {}: User {}",
+        req.order_id,
+        user_id
+    );
+
+    let action = OrderAction::Cancel {
+        order_id: req.order_id,
+        user_id,
+        ingested_at_ns: now_ns(),
+    };
+
+    if state.order_queue.push(action).is_err() {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ApiResponse::<()>::error(
+                error_codes::SERVICE_UNAVAILABLE,
+                "Order queue is full",
+            )),
+        ));
+    }
+
+    Ok((
+        StatusCode::OK,
+        Json(ApiResponse::success(OrderResponseData {
+            order_id: req.order_id,
+            cid: None,
+            order_status: "CANCEL_PENDING".to_string(),
+            accepted_at: now_ms(),
+        })),
+    ))
+}
+
+/// Get orders (JWT)
+pub async fn get_orders_jwt(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<crate::user_auth::service::Claims>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Result<
+    (
+        StatusCode,
+        Json<ApiResponse<Vec<crate::persistence::queries::OrderApiData>>>,
+    ),
+    (StatusCode, Json<ApiResponse<()>>),
+> {
+    let user_id = claims.sub.parse::<u64>().unwrap_or_default();
+    let db_client = state.db_client.as_ref().ok_or_else(|| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ApiResponse::<()>::error(
+                error_codes::SERVICE_UNAVAILABLE,
+                "Persistence not enabled",
+            )),
+        )
+    })?;
+
+    let limit: usize = params
+        .get("limit")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(10);
+
+    match crate::persistence::queries::query_orders(
+        db_client.taos(),
+        user_id,
+        state.active_symbol_id,
+        limit,
+        &state.symbol_mgr,
+    )
+    .await
+    {
+        Ok(orders) => Ok((StatusCode::OK, Json(ApiResponse::success(orders)))),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error(
+                error_codes::SERVICE_UNAVAILABLE,
+                format!("Query failed: {}", e),
+            )),
+        )),
+    }
+}
+
+/// Get single balance (JWT)
+pub async fn get_balance_jwt(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<crate::user_auth::service::Claims>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Result<
+    (
+        StatusCode,
+        Json<ApiResponse<crate::persistence::queries::BalanceApiData>>,
+    ),
+    (StatusCode, Json<ApiResponse<()>>),
+> {
+    let user_id = claims.sub.parse::<u64>().unwrap_or_default();
+    let db_client = state.db_client.as_ref().ok_or_else(|| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ApiResponse::<()>::error(
+                error_codes::SERVICE_UNAVAILABLE,
+                "Persistence not enabled",
+            )),
+        )
+    })?;
+
+    let asset_id: u32 = params
+        .get("asset_id")
+        .and_then(|s| s.parse().ok())
+        .ok_or_else(|| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<()>::error(
+                    error_codes::INVALID_PARAMETER,
+                    "Missing or invalid asset_id parameter",
+                )),
+            )
+        })?;
+
+    match crate::persistence::queries::query_balance(
+        db_client.taos(),
+        user_id,
+        asset_id,
+        &state.symbol_mgr,
+    )
+    .await
+    {
+        Ok(Some(balance)) => Ok((StatusCode::OK, Json(ApiResponse::success(balance)))),
+        Ok(None) => Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<()>::error(
+                error_codes::ORDER_NOT_FOUND,
+                "Balance not found",
+            )),
+        )),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error(
+                error_codes::SERVICE_UNAVAILABLE,
+                format!("Query failed: {}", e),
+            )),
+        )),
+    }
 }
