@@ -96,16 +96,17 @@ CREATE TABLE user_addresses (
 | `bnb` | 56 | BNB Smart Chain | BNB | EVM | 9006 |
 | `matic` | 137 | Polygon Mainnet | MATIC | EVM | 60 |
 | `btc` | 0 | Bitcoin Mainnet | BTC | UTXO | 0 |
-| `trx` | 728126428 | Tron Mainnet | TRX | ACCOUNT | 195 |
-| `sol` | 900 | Solana Mainnet | SOL | ACCOUNT | 501 |
+| `trx` | 195 | Tron Mainnet | TRX | ACCOUNT | 195 |
+| `sol` | 501 | Solana Mainnet | SOL | ACCOUNT | 501 |
 | `btc_regtest` | 0 | Bitcoin Regtest | BTC | UTXO | 0 |
 
 > [!NOTE]
 > **chain_id 来源**:
-> - EVM 链: EIP-155 标准 (1, 56, 137...)
-> - BTC: SLIP-0044 coin type = 0
-> - Tron: 使用 genesis block 标识 (728126428)
-> - Solana: 非 EVM，使用内部标识
+> - **EVM 链**: EIP-155 标准 (1=ETH, 56=BSC, 137=Polygon)
+> - **非 EVM 链**: SLIP-0044 `coin_type` (0=BTC, 195=TRX, 501=SOL)
+>
+> 参考: [SLIP-0044](https://github.com/satoshilabs/slips/blob/master/slip-0044.md)
+
 ---
 
 ## 4. Phase 0x11-b Quick Fix
