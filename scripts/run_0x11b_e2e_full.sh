@@ -276,19 +276,57 @@ main() {
     
     cd "$PROJECT_ROOT/scripts/tests/0x11b_sentinel"
     
-    # Run single-user E2E test
-    log_info "Running: Single User Money Flow E2E"
-    echo "------------------------------------------------------------------------"
+    TESTS_PASSED=0
+    TESTS_FAILED=0
+    
+    # Test 1: Single User - Complete Money Flow
+    echo ""
+    echo "========================================================================"
+    log_info "📋 Test 1/2: Single User - Complete Money Flow E2E"
+    echo "   Path: Deposit → Transfer In → Trade → Transfer Out → Withdraw"
+    echo "========================================================================"
     
     if uv run python3 e2e_critical_path.py; then
-        log_info "✅ E2E Test PASSED"
-        echo ""
+        log_info "✅ Test 1 PASSED: Single User E2E"
+        ((TESTS_PASSED++))
+    else
+        log_warn "❌ Test 1 FAILED: Single User E2E"
+        ((TESTS_FAILED++))
+    fi
+    
+    # Test 2: Two Users - Order Matching
+    echo ""
+    echo "========================================================================"
+    log_info "📋 Test 2/2: Two Users - Order Matching E2E"
+    echo "   Path: User A sells BTC ↔ User B buys BTC → Trade matched"
+    echo "========================================================================"
+    
+    if uv run python3 e2e_two_user_matching.py; then
+        log_info "✅ Test 2 PASSED: Two User Matching E2E"
+        ((TESTS_PASSED++))
+    else
+        log_warn "❌ Test 2 FAILED: Two User Matching E2E"
+        ((TESTS_FAILED++))
+    fi
+    
+    # Summary
+    echo ""
+    echo "========================================================================"
+    log_info "📊 E2E TEST SUMMARY"
+    echo "========================================================================"
+    echo "   Passed: $TESTS_PASSED / 2"
+    echo "   Failed: $TESTS_FAILED / 2"
+    echo ""
+    
+    if [ $TESTS_FAILED -eq 0 ]; then
         echo -e "${GREEN}╔══════════════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "${GREEN}║  🎉 ALL TESTS PASSED!                                                ║${NC}"
+        echo -e "${GREEN}║  🎉 ALL E2E TESTS PASSED!                                            ║${NC}"
         echo -e "${GREEN}╚══════════════════════════════════════════════════════════════════════╝${NC}"
         exit 0
     else
-        log_error "❌ E2E Test FAILED"
+        echo -e "${YELLOW}╔══════════════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${YELLOW}║  ⚠️  Some E2E tests failed (likely DEF-002-B pending fix)            ║${NC}"
+        echo -e "${YELLOW}╚══════════════════════════════════════════════════════════════════════╝${NC}"
         echo ""
         echo "Check logs at: $LOG_DIR/"
         exit 1
