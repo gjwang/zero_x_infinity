@@ -247,6 +247,18 @@ version       INT                  -- Version (optimistic lock)
 
 ## 10. Withdraw Flow Architecture
 
+> [!CAUTION]
+> **Production Risk Control Requirements**
+> 
+> The current implementation is for **MVP/Testing only**. Before production deployment, withdrawals **MUST** pass through:
+> 1. **Comprehensive Risk Engine** - Real-time fraud detection, velocity limits, address blacklist
+> 2. **Manual Review** - Large amounts require human approval
+> 3. **Multi-signature Approval** - Hot wallet threshold triggers cold wallet multi-sig
+> 4. **AML/KYC Verification** - Regulatory compliance checks
+> 5. **Delay Mechanism** - Suspicious transactions held for review period
+> 
+> **Never deploy the current auto-approval flow to production!**
+
 ### 10.1 Overview
 
 ```
@@ -600,6 +612,18 @@ version       INT                  -- 版本号 (乐观锁)
 ---
 
 ## 10. 提现流程架构
+
+> [!CAUTION]
+> **生产环境风控要求**
+> 
+> 当前实现仅用于 **MVP/测试**。生产部署前，提现请求 **必须** 经过:
+> 1. **完整风控引擎** - 实时欺诈检测、频率限制、地址黑名单
+> 2. **人工审核** - 大额提现需人工批准
+> 3. **多签审批** - 热钱包阈值触发冷钱包多签
+> 4. **AML/KYC 验证** - 合规性检查
+> 5. **延迟机制** - 可疑交易进入审核等待期
+> 
+> **绝对不要将当前自动审批流程部署到生产环境！**
 
 ### 10.1 概览
 
