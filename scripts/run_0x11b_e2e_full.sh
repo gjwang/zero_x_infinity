@@ -317,8 +317,19 @@ main() {
     
     TESTS_PASSED=0
     TESTS_FAILED=0
+    TESTS_SKIPPED=0
     TOTAL_TESTS=0
     
+    # Helper function for status icons
+    get_status_icon() {
+        case "$1" in
+            "PASSED") echo '✅' ;;
+            "FAILED") echo '❌' ;;
+            "SKIPPED") echo '⚠️' ;;
+            *) echo '❓' ;; # Unknown status
+        esac
+    }
+
     # ========================================================================
     # Level 1: Rust Unit Tests (最小粒度，秒级)
     # ========================================================================
@@ -328,9 +339,11 @@ main() {
     echo "════════════════════════════════════════════════════════════════════════"
     
     ((TOTAL_TESTS++))
+    L1_STATUS="FAILED" # Default to failed
     if cargo test sentinel --quiet 2>&1 | tail -5; then
         log_info "✅ Level 1 PASSED: Rust Sentinel Unit Tests"
         ((TESTS_PASSED++))
+        L1_STATUS="PASSED"
     else
         log_warn "❌ Level 1 FAILED: Rust Sentinel Unit Tests"
         ((TESTS_FAILED++))
@@ -350,12 +363,27 @@ main() {
     cd "$PROJECT_ROOT/scripts/tests/0x11b_sentinel"
     
     ((TOTAL_TESTS++))
-    if uv run python3 L2_erc20_component.py 2>&1 | tail -15; then
+    L2_OUTPUT=$(uv run python3 L2_erc20_component.py 2>&1 || true)
+    echo "$L2_OUTPUT" | tail -15
+    
+    if echo "$L2_OUTPUT" | grep -q "FAILED"; then
+        log_warn "⚠️ Level 2 FAILED: ERC20 Component Test reported failure"
+        ((TESTS_FAILED++))
+        L2_STATUS="FAILED"
+    elif echo "$L2_OUTPUT" | grep -q "skipped"; then
+        log_warn "⚠️ Level 2 SKIPPED: ERC20 Component Test (Environment limitation)"
+        ((TESTS_SKIPPED++))
+        L2_STATUS="SKIPPED"
+    elif [ $? -eq 0 ]; then
+        # Exit code 0 and no FAILED/skipped string
         log_info "✅ Level 2 PASSED: ERC20 Component Test"
         ((TESTS_PASSED++))
+        L2_STATUS="PASSED"
     else
-        log_warn "⚠️ Level 2 SKIPPED/FAILED: ERC20 Component Test (Anvil may not be running)"
-        # Don't block on this - Anvil might not be available
+        # Non-zero exit code but didn't catch specific strings
+        log_warn "❌ Level 2 CRASHED: ERC20 Component Test"
+        ((TESTS_FAILED++))
+        L2_STATUS="FAILED"
     fi
     
     # ========================================================================
@@ -368,12 +396,15 @@ main() {
     echo "════════════════════════════════════════════════════════════════════════"
     
     ((TOTAL_TESTS++))
+    L3_STATUS="FAILED" # Default to failed
     if uv run python3 L3_single_user_btc.py; then
         log_info "✅ Level 3 PASSED: Single User BTC E2E"
         ((TESTS_PASSED++))
+        L3_STATUS="PASSED"
     else
         log_warn "❌ Level 3 FAILED: Single User BTC E2E"
         ((TESTS_FAILED++))
+        L3_STATUS="FAILED"
     fi
     
     # ========================================================================
@@ -386,12 +417,15 @@ main() {
     echo "════════════════════════════════════════════════════════════════════════"
     
     ((TOTAL_TESTS++))
+    L4_STATUS="FAILED" # Default to failed
     if uv run python3 L4_two_user_matching.py; then
         log_info "✅ Level 4 PASSED: Two User Matching E2E"
         ((TESTS_PASSED++))
+        L4_STATUS="PASSED"
     else
         log_warn "❌ Level 4 FAILED: Two User Matching E2E"
         ((TESTS_FAILED++))
+        L4_STATUS="FAILED"
     fi
     
     # ========================================================================
@@ -404,45 +438,58 @@ main() {
         echo "════════════════════════════════════════════════════════════════════════"
         
         # BTC Security
+        ((TOTAL_TESTS++))
+        L5_BTC_STATUS="FAILED"
         if uv run python3 agent_c_security/test_btc_security.py 2>&1 | tail -10; then
             log_info "✅ BTC Security Tests PASSED"
             ((TESTS_PASSED++))
+            L5_BTC_STATUS="PASSED"
         else
             log_warn "❌ BTC Security Tests FAILED"
             ((TESTS_FAILED++))
+            L5_BTC_STATUS="FAILED"
         fi
         
         # ETH Security
         ((TOTAL_TESTS++))
+        L5_ETH_STATUS="FAILED"
         if uv run python3 agent_c_security/test_eth_security.py 2>&1 | tail -10; then
             log_info "✅ ETH Security Tests PASSED"
             ((TESTS_PASSED++))
+            L5_ETH_STATUS="PASSED"
         else
             log_warn "❌ ETH Security Tests FAILED"
             ((TESTS_FAILED++))
+            L5_ETH_STATUS="FAILED"
         fi
 
         # ====================================================================
         # Level 5a: System Boundary Tests (New: Agent A & C)
         # ====================================================================
         ((TOTAL_TESTS++))
+        L5a_BOUNDARY_STATUS="FAILED"
         log_info "📋 Running System Boundary Tests (Agent A: Min/Max)"
         if uv run python3 agent_a_edge/test_boundary_values.py 2>&1; then
             log_info "✅ Agent A Boundary Tests PASSED"
             ((TESTS_PASSED++))
+            L5a_BOUNDARY_STATUS="PASSED"
         else
             log_warn "❌ Agent A Boundary Tests FAILED"
             ((TESTS_FAILED++))
+            L5a_BOUNDARY_STATUS="FAILED"
         fi
 
         ((TOTAL_TESTS++))
+        L5a_OVERFLOW_STATUS="FAILED"
         log_info "📋 Running Overflow/Limit Tests (Agent C: 9.22 ETH)"
         if uv run python3 agent_c_security/test_overflow.py 2>&1; then
              log_info "✅ Agent C Overflow Tests PASSED"
              ((TESTS_PASSED++))
+             L5a_OVERFLOW_STATUS="PASSED"
         else
              log_warn "❌ Agent C Overflow Tests FAILED (System Limitation Confirmed)"
              ((TESTS_FAILED++))
+             L5a_OVERFLOW_STATUS="FAILED"
         fi
     else
         log_info "ℹ️  Skipping security tests (use --security to enable)"
@@ -456,24 +503,31 @@ main() {
     log_info "📊 E2E TEST SUMMARY (Layered Approach)"
     echo "════════════════════════════════════════════════════════════════════════"
     echo ""
-    echo "   Level 1: Rust Unit Tests    $([ $TESTS_PASSED -ge 1 ] && echo '✅' || echo '❌')"
-    echo "   Level 2: ERC20 Component    $([ $TESTS_PASSED -ge 2 ] && echo '✅' || echo '⚠️')"
-    echo "   Level 3: Single User E2E    $([ $TESTS_PASSED -ge 3 ] && echo '✅' || echo '❌')"
-    echo "   Level 4: Multi User E2E     $([ $TESTS_PASSED -ge 4 ] && echo '✅' || echo '❌')"
+    echo "   Level 1: Rust Unit Tests    $(get_status_icon $L1_STATUS)"
+    echo "   Level 2: ERC20 Component    $(get_status_icon $L2_STATUS)"
+    echo "   Level 3: Single User E2E    $(get_status_icon $L3_STATUS)"
+    echo "   Level 4: Multi User E2E     $(get_status_icon $L4_STATUS)"
     echo ""
-    echo "   Passed: $TESTS_PASSED / $TOTAL_TESTS"
-    echo "   Failed: $TESTS_FAILED / $TOTAL_TESTS"
+    echo "   Passed:  $TESTS_PASSED / $TOTAL_TESTS"
+    echo "   Failed:  $TESTS_FAILED / $TOTAL_TESTS"
+    echo "   Skipped: $TESTS_SKIPPED / $TOTAL_TESTS"
     echo ""
     
-    if [ $TESTS_FAILED -eq 0 ]; then
+    if [ $TESTS_FAILED -eq 0 ] && [ $TESTS_SKIPPED -eq 0 ]; then
         echo -e "${GREEN}╔══════════════════════════════════════════════════════════════════════╗${NC}"
         echo -e "${GREEN}║  🎉 ALL E2E TESTS PASSED!                                            ║${NC}"
         echo -e "${GREEN}╚══════════════════════════════════════════════════════════════════════╝${NC}"
         exit 0
-    else
+    elif [ $TESTS_FAILED -eq 0 ]; then
         echo -e "${YELLOW}╔══════════════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "${YELLOW}║  ⚠️  Some E2E tests failed                                           ║${NC}"
+        echo -e "${YELLOW}║  ⚠️  TESTS PASSED (WITH SKIPS)                                       ║${NC}"
+        echo -e "${YELLOW}║  Some tests were skipped due to missing environment.                 ║${NC}"
         echo -e "${YELLOW}╚══════════════════════════════════════════════════════════════════════╝${NC}"
+        exit 0
+    else
+        echo -e "${RED}╔══════════════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${RED}║  ❌ SOME TESTS FAILED                                                ║${NC}"
+        echo -e "${RED}╚══════════════════════════════════════════════════════════════════════╝${NC}"
         echo ""
         echo "Check logs at: $LOG_DIR/"
         exit 1
