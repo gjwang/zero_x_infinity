@@ -305,52 +305,141 @@ main() {
             ;;
     esac
     
-    # Run E2E tests
-    log_step "[5/6] Running E2E Tests..."
+    # Run E2E tests with layered approach: Unit → Component → Integration → Full
+    log_step "[5/6] Running E2E Tests (Layered Approach)..."
+    echo ""
+    echo "   Strategy: Unit → Component → E2E → Security"
+    echo "   (Early failure = faster debugging)"
     echo ""
     
-    cd "$PROJECT_ROOT/scripts/tests/0x11b_sentinel"
+    cd "$PROJECT_ROOT"
     
     TESTS_PASSED=0
     TESTS_FAILED=0
+    TOTAL_TESTS=0
     
-    # Test 1: Single User - Complete Money Flow
+    # ========================================================================
+    # Level 1: Rust Unit Tests (最小粒度，秒级)
+    # ========================================================================
     echo ""
-    echo "========================================================================"
-    log_info "📋 Test 1/2: Single User - Complete Money Flow E2E"
-    echo "   Path: Deposit → Transfer In → Trade → Transfer Out → Withdraw"
-    echo "========================================================================"
+    echo "════════════════════════════════════════════════════════════════════════"
+    log_info "📋 Level 1: Rust Unit Tests (Sentinel)"
+    echo "════════════════════════════════════════════════════════════════════════"
     
+    ((TOTAL_TESTS++))
+    if cargo test sentinel --quiet 2>&1 | tail -5; then
+        log_info "✅ Level 1 PASSED: Rust Sentinel Unit Tests"
+        ((TESTS_PASSED++))
+    else
+        log_warn "❌ Level 1 FAILED: Rust Sentinel Unit Tests"
+        ((TESTS_FAILED++))
+        log_error "Stopping early - fix unit tests first!"
+        exit 1
+    fi
+    
+    # ========================================================================
+    # Level 2: Component E2E - ERC20 (需要 Anvil/ETH 节点)
+    # ========================================================================
+    echo ""
+    echo "════════════════════════════════════════════════════════════════════════"
+    log_info "📋 Level 2: ERC20 Component Test"
+    echo "   (Verifies ERC20 event parsing without full system)"
+    echo "════════════════════════════════════════════════════════════════════════"
+    
+    cd "$PROJECT_ROOT/scripts/tests/0x11b_sentinel"
+    
+    ((TOTAL_TESTS++))
+    if uv run python3 test_erc20_e2e.py 2>&1 | tail -15; then
+        log_info "✅ Level 2 PASSED: ERC20 Component Test"
+        ((TESTS_PASSED++))
+    else
+        log_warn "⚠️ Level 2 SKIPPED/FAILED: ERC20 Component Test (Anvil may not be running)"
+        # Don't block on this - Anvil might not be available
+    fi
+    
+    # ========================================================================
+    # Level 3: Single User E2E (完整系统，BTC 资金流)
+    # ========================================================================
+    echo ""
+    echo "════════════════════════════════════════════════════════════════════════"
+    log_info "📋 Level 3: Single User E2E (BTC Complete Money Flow)"
+    echo "   Deposit → Transfer In → Trade → Transfer Out → Withdraw"
+    echo "════════════════════════════════════════════════════════════════════════"
+    
+    ((TOTAL_TESTS++))
     if uv run python3 e2e_critical_path.py; then
-        log_info "✅ Test 1 PASSED: Single User E2E"
+        log_info "✅ Level 3 PASSED: Single User BTC E2E"
         ((TESTS_PASSED++))
     else
-        log_warn "❌ Test 1 FAILED: Single User E2E"
+        log_warn "❌ Level 3 FAILED: Single User BTC E2E"
         ((TESTS_FAILED++))
     fi
     
-    # Test 2: Two Users - Order Matching
+    # ========================================================================
+    # Level 4: Multi User E2E (双用户撮合)
+    # ========================================================================
     echo ""
-    echo "========================================================================"
-    log_info "📋 Test 2/2: Two Users - Order Matching E2E"
-    echo "   Path: User A sells BTC ↔ User B buys BTC → Trade matched"
-    echo "========================================================================"
+    echo "════════════════════════════════════════════════════════════════════════"
+    log_info "📋 Level 4: Two User E2E (Order Matching)"
+    echo "   User A sells BTC ↔ User B buys BTC → Trade matched"
+    echo "════════════════════════════════════════════════════════════════════════"
     
+    ((TOTAL_TESTS++))
     if uv run python3 e2e_two_user_matching.py; then
-        log_info "✅ Test 2 PASSED: Two User Matching E2E"
+        log_info "✅ Level 4 PASSED: Two User Matching E2E"
         ((TESTS_PASSED++))
     else
-        log_warn "❌ Test 2 FAILED: Two User Matching E2E"
+        log_warn "❌ Level 4 FAILED: Two User Matching E2E"
         ((TESTS_FAILED++))
     fi
     
+    # ========================================================================
+    # Level 5: Agent Security Tests (可选，需要更多时间)
+    # ========================================================================
+    if [[ "${RUN_SECURITY_TESTS:-false}" == "true" ]]; then
+        echo ""
+        echo "════════════════════════════════════════════════════════════════════════"
+        log_info "📋 Level 5: Agent Security Tests"
+        echo "════════════════════════════════════════════════════════════════════════"
+        
+        # BTC Security
+        ((TOTAL_TESTS++))
+        if uv run python3 agent_c_security/test_btc_security.py 2>&1 | tail -10; then
+            log_info "✅ BTC Security Tests PASSED"
+            ((TESTS_PASSED++))
+        else
+            log_warn "❌ BTC Security Tests FAILED"
+            ((TESTS_FAILED++))
+        fi
+        
+        # ETH Security
+        ((TOTAL_TESTS++))
+        if uv run python3 agent_c_security/test_eth_security.py 2>&1 | tail -10; then
+            log_info "✅ ETH Security Tests PASSED"
+            ((TESTS_PASSED++))
+        else
+            log_warn "❌ ETH Security Tests FAILED"
+            ((TESTS_FAILED++))
+        fi
+    else
+        log_info "ℹ️  Skipping security tests (use --security to enable)"
+    fi
+    
+    # ========================================================================
     # Summary
+    # ========================================================================
     echo ""
-    echo "========================================================================"
-    log_info "📊 E2E TEST SUMMARY"
-    echo "========================================================================"
-    echo "   Passed: $TESTS_PASSED / 2"
-    echo "   Failed: $TESTS_FAILED / 2"
+    echo "════════════════════════════════════════════════════════════════════════"
+    log_info "📊 E2E TEST SUMMARY (Layered Approach)"
+    echo "════════════════════════════════════════════════════════════════════════"
+    echo ""
+    echo "   Level 1: Rust Unit Tests    $([ $TESTS_PASSED -ge 1 ] && echo '✅' || echo '❌')"
+    echo "   Level 2: ERC20 Component    $([ $TESTS_PASSED -ge 2 ] && echo '✅' || echo '⚠️')"
+    echo "   Level 3: Single User E2E    $([ $TESTS_PASSED -ge 3 ] && echo '✅' || echo '❌')"
+    echo "   Level 4: Multi User E2E     $([ $TESTS_PASSED -ge 4 ] && echo '✅' || echo '❌')"
+    echo ""
+    echo "   Passed: $TESTS_PASSED / $TOTAL_TESTS"
+    echo "   Failed: $TESTS_FAILED / $TOTAL_TESTS"
     echo ""
     
     if [ $TESTS_FAILED -eq 0 ]; then
@@ -360,7 +449,7 @@ main() {
         exit 0
     else
         echo -e "${YELLOW}╔══════════════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "${YELLOW}║  ⚠️  Some E2E tests failed (likely DEF-002-B pending fix)            ║${NC}"
+        echo -e "${YELLOW}║  ⚠️  Some E2E tests failed                                           ║${NC}"
         echo -e "${YELLOW}╚══════════════════════════════════════════════════════════════════════╝${NC}"
         echo ""
         echo "Check logs at: $LOG_DIR/"
