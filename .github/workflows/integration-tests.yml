@@ -770,9 +770,7 @@ jobs:
           enable-cache: true
           
       - name: Install Dependencies
-        run: |
-          uv sync
-          uv pip install -r admin/requirements.txt --python .venv
+        run: uv sync
           
       - name: Download Binary
         uses: actions/download-artifact@v4
