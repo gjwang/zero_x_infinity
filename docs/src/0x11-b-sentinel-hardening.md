@@ -16,7 +16,7 @@
 | **Context** | Phase 0x11-a Extension: Hardening Sentinel for Production |
 | **Goal** | Fix SegWit blindness (DEF-002) and implement ETH/ERC20 support. |
 | **Branch** | `0x11-b-sentinel-hardening` |
-| **Latest Commit** | `50dc35b` |
+| **Latest Commit** | `d383b6c` |
 
 ---
 
@@ -31,145 +31,7 @@ This phase addresses the critical gaps identified during Phase 0x11-a QA:
 
 ---
 
-## 2. Problem Analysis: DEF-002 (BTC SegWit Blindness)
-
-### 2.1 Root Cause
-The `extract_address` function in `src/sentinel/btc.rs` uses `Address::from_script(script, network)`.
-
-While the `rust-bitcoin` crate *should* support P2WPKH scripts (`OP_0 <20-byte-hash>`), the current implementation may fail due to:
-1.  Network mismatch between the script encoding and the `Network` enum passed.
-2.  Missing feature flags in the `bitcoincore-rpc` dependency.
-
-### 2.2 Solution
-1.  **Verify**: Add unit test with raw P2WPKH script construction.
-2.  **Fix**: If `Address::from_script` fails, manually detect witness v0 scripts:
-    ```rust
-    if script.is_p2wpkh() {
-        // Extract 20-byte hash from script[2..22]
-        // Construct Address::p2wpkh(...)
-    }
-    ```
-
----
-
-## 3. Feature Specification: ETH/ERC20 Sentinel
-
-### 3.1 Architecture
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                       EthScanner                                │
-├─────────────────────────────────────────────────────────────────┤
-│ 1. Poll eth_blockNumber (Tip Tracking)                          │
-│ 2. eth_getLogs(fromBlock, toBlock, topics=[Transfer])           │
-│ 3. Filter: Match log.address (Contract) + topic[2] (To)         │
-│ 4. Parse: Decode log.data as uint256 amount                     │
-│ 5. Emit: DetectedDeposit { tx_hash, to_address, amount, ... }   │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### 3.2 Key Implementation Details
-*   **Topic0 (Transfer)**: `keccak256("Transfer(address,address,uint256)")`
-    = `0xddf252ad...`
-*   **Topic1**: Sender (indexed)
-*   **Topic2**: Recipient (indexed) - **Match against `user_addresses`**
-*   **Data**: Amount (uint256, left-padded)
-
-### 3.3 Precision Handling
-| Token | Decimals | Scaling |
-| :--- | :--- | :--- |
-| ETH | 18 | `amount / 10^18` |
-| USDT | 6 | `amount / 10^6` |
-| USDC | 6 | `amount / 10^6` |
-
-> [!IMPORTANT]
-> Token decimals MUST be loaded from `assets_tb`, not hardcoded.
-
----
-
-## 4. Database Schema Extensions
-
-```sql
--- EthScanner requires contract address tracking
-ALTER TABLE assets_tb
-ADD COLUMN contract_address VARCHAR(42); -- e.g., '0xdAC17F958D2ee523a2206206994597C13D831ec7'
-
--- Index for fast lookup by contract
-CREATE INDEX idx_assets_contract ON assets_tb(contract_address);
-```
-
----
-
-## 5. Configuration: `config/sentinel.yaml`
-
-```yaml
-eth:
-  chain_id: "ETH"
-  network: "anvil"  # or "mainnet", "goerli"
-  rpc:
-    url: "http://127.0.0.1:8545"
-  scanning:
-    required_confirmations: 12
-    max_reorg_depth: 20
-    start_height: 0
-  contracts:
-    - name: "USDT"
-      address: "0x..."
-      decimals: 6
-    - name: "USDC"
-      address: "0x..."
-      decimals: 6
-```
-
----
-
-## 6. Acceptance Criteria
-
-- [x] **BTC**: Unit test `test_p2wpkh_extraction` passes. ✅ (`test_segwit_p2wpkh_extraction_def_002`)
-- [x] **BTC**: E2E deposit to `bcrt1...` address is detected and credited. ✅ (Verified via greybox test)
-- [x] **ETH**: Unit test `test_erc20_transfer_parsing` passes. ✅ (7 ETH tests pass)
-- [ ] **ETH**: E2E deposit via MockUSDT contract is detected. ⏳ (Pending: ERC20 `eth_getLogs` not yet implemented)
-- [x] **Regression**: All existing Phase 0x11-a tests still pass. ✅ (322 tests)
-
----
-
-## 7. Implementation Status
-
-| Component | Status | Notes |
-| :--- | :--- | :--- |
-| `BtcScanner` P2WPKH Fix | ✅ **Complete** | Test `test_segwit_p2wpkh_extraction_def_002` passes |
-| `EthScanner` Implementation | ✅ **Complete** | Full JSON-RPC (`eth_blockNumber`, `eth_getBlockByNumber`, `eth_syncing`) |
-| Unit Tests | ✅ **22 Pass** | All Sentinel tests passing |
-| E2E Verification | ⚠️ **Partial** | Nodes not running during test; scripts ready |
-| ERC20 Token Support | 📋 **Future** | `eth_getLogs` for Transfer events (Phase 0x12) |
-
----
-
-## 8. Testing Instructions
-
-### Quick Test (Rust Unit Tests)
-```bash
-# Run all Sentinel tests
-cargo test --package zero_x_infinity --lib sentinel -- --nocapture
-
-# Run DEF-002 verification test only
-cargo test test_segwit_p2wpkh_extraction_def_002 -- --nocapture
-
-# Run ETH Scanner tests only
-cargo test sentinel::eth -- --nocapture
-```
-
-### Full Test Suite
-```bash
-# Run test script (no nodes required)
-./scripts/tests/0x11b_sentinel/run_tests.sh
-
-# Run with node startup (requires docker-compose)
-./scripts/tests/0x11b_sentinel/run_tests.sh --with-nodes
-```
-
----
-
-## 9. Deposit Flow Architecture
+## 2. Deposit Flow Architecture
 
 > [!IMPORTANT]
 > ## 🚨 Production Risk Control Requirements
@@ -183,7 +45,7 @@ cargo test sentinel::eth -- --nocapture
 >
 > The current implementation credits balance automatically on finalization.
 
-### 9.1 Overview
+### 2.1 Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -204,7 +66,7 @@ cargo test sentinel::eth -- --nocapture
 └───────┴─────────────────────────────────────────────────────────────────────┘
 ```
 
-### 9.2 State Machine
+### 2.2 State Machine
 
 ```
 DETECTED ──▶ CONFIRMING ──▶ FINALIZED ──▶ SUCCESS
@@ -221,7 +83,7 @@ DETECTED ──▶ CONFIRMING ──▶ FINALIZED ──▶ SUCCESS
 | `SUCCESS` | Balance credited | ✅ |
 | `ORPHANED` | Block re-orged, tx invalidated | ❌ |
 
-### 9.3 Key Components
+### 2.3 Key Components
 
 | Component | File | Responsibility |
 | :--- | :--- | :--- |
@@ -230,7 +92,7 @@ DETECTED ──▶ CONFIRMING ──▶ FINALIZED ──▶ SUCCESS
 | `ConfirmationMonitor` | `src/sentinel/confirmation.rs` | Track confirmations, detect re-orgs |
 | `DepositPipeline` | `src/sentinel/pipeline.rs` | Credit balance on finalization |
 
-### 9.4 Database Schema
+### 2.4 Database Schema
 
 **`deposit_history`** (Deposit Records):
 ```sql
@@ -245,19 +107,9 @@ status        VARCHAR              -- Status (see state machine)
 confirmations INT                  -- Current confirmation count
 ```
 
-**`balances_tb`** (Balance Table):
-```sql
-user_id       BIGINT               -- User ID
-asset_id      INT                  -- Asset ID
-account_type  INT                  -- Account type (1=Spot)
-available     DECIMAL              -- Available balance
-frozen        DECIMAL              -- Frozen balance
-version       INT                  -- Version (optimistic lock)
-```
-
 ---
 
-## 10. Withdraw Flow Architecture
+## 3. Withdraw Flow Architecture
 
 > [!CAUTION]
 > ## ⛔ Production Risk Control Requirements ⛔
@@ -271,7 +123,7 @@ version       INT                  -- Version (optimistic lock)
 > 
 > **Never deploy the current auto-approval flow to production!**
 
-### 10.1 Overview
+### 3.1 Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -295,7 +147,7 @@ version       INT                  -- Version (optimistic lock)
 └───────┴─────────────────────────────────────────────────────────────────────┘
 ```
 
-### 10.2 Flow Steps
+### 3.2 Flow Steps
 
 ```
 1. Validate Request
@@ -318,7 +170,7 @@ version       INT                  -- Version (optimistic lock)
    └─▶ Failure: AUTO REFUND + status = 'FAILED'
 ```
 
-### 10.3 State Machine
+### 3.3 State Machine
 
 ```
            ┌──────────────┐
@@ -339,7 +191,7 @@ version       INT                  -- Version (optimistic lock)
 | `SUCCESS` | TX broadcast successful | ✅ Completed |
 | `FAILED` | Broadcast failed, auto-refunded | 🔄 Refunded |
 
-### 10.4 Key Components
+### 3.4 Key Components
 
 | Component | File | Responsibility |
 | :--- | :--- | :--- |
@@ -347,7 +199,7 @@ version       INT                  -- Version (optimistic lock)
 | `ChainClient` | `src/funding/chain_adapter.rs` | Blockchain TX broadcast interface |
 | `handlers::apply_withdraw` | `src/funding/handlers.rs` | HTTP API endpoint |
 
-### 10.5 Database Schema
+### 3.5 Database Schema
 
 **`withdraw_history`** (Withdraw Records):
 ```sql
@@ -363,7 +215,7 @@ created_at    TIMESTAMP            -- Created time
 updated_at    TIMESTAMP            -- Updated time
 ```
 
-### 10.6 Amount Calculation
+### 3.6 Amount Calculation
 
 ```
 User Balance Delta = -Request Amount
@@ -377,9 +229,9 @@ Example:
 
 ---
 
-## 11. 🛡️ Tiered Risk Control Framework (Defense in Depth)
+## 4. 🛡️ Tiered Risk Control Framework (Defense in Depth)
 
-### 11.1 Defense Layers
+### 4.1 Defense Layers
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -409,7 +261,7 @@ Example:
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 11.2 Risk Tiers by Amount
+### 4.2 Risk Tiers by Amount
 
 | Tier | Amount | Delay | Approval | Wallet |
 | :---: | :--- | :--- | :--- | :--- |
@@ -419,7 +271,7 @@ Example:
 | 🔴 **T4** | $50K - $100K | 48 hours | 2-of-3 Manual | Warm |
 | ⚫ **T5** | > $100K | 72 hours | 3-of-5 + HSM | Cold |
 
-### 11.3 Automated Checks (All Tiers)
+### 4.3 Automated Checks (All Tiers)
 
 | Check | Block | Alert |
 | :--- | :---: | :---: |
@@ -430,7 +282,7 @@ Example:
 | Unusual amount pattern | ⚠️ Delay | ✅ |
 | Geographic anomaly | ⚠️ Delay | ✅ |
 
-### 11.4 Deposit-Specific Checks
+### 4.4 Deposit-Specific Checks
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
@@ -444,7 +296,7 @@ Example:
 └────────────────────────────────────────────────────────────────┘
 ```
 
-### 11.5 Withdraw-Specific Checks
+### 4.5 Withdraw-Specific Checks
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
@@ -457,6 +309,144 @@ Example:
 │ ✓ Device fingerprint verification                               │
 │ ✓ API key usage pattern                                         │
 └────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 5. Problem Analysis: DEF-002 (BTC SegWit Blindness)
+
+### 5.1 Root Cause
+The `extract_address` function in `src/sentinel/btc.rs` uses `Address::from_script(script, network)`.
+
+While the `rust-bitcoin` crate *should* support P2WPKH scripts (`OP_0 <20-byte-hash>`), the current implementation may fail due to:
+1.  Network mismatch between the script encoding and the `Network` enum passed.
+2.  Missing feature flags in the `bitcoincore-rpc` dependency.
+
+### 5.2 Solution
+1.  **Verify**: Add unit test with raw P2WPKH script construction.
+2.  **Fix**: If `Address::from_script` fails, manually detect witness v0 scripts:
+    ```rust
+    if script.is_p2wpkh() {
+        // Extract 20-byte hash from script[2..22]
+        // Construct Address::p2wpkh(...)
+    }
+    ```
+
+---
+
+## 6. Feature Specification: ETH/ERC20 Sentinel
+
+### 6.1 Architecture
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                       EthScanner                                │
+├─────────────────────────────────────────────────────────────────┤
+│ 1. Poll eth_blockNumber (Tip Tracking)                          │
+│ 2. eth_getLogs(fromBlock, toBlock, topics=[Transfer])           │
+│ 3. Filter: Match log.address (Contract) + topic[2] (To)         │
+│ 4. Parse: Decode log.data as uint256 amount                     │
+│ 5. Emit: DetectedDeposit { tx_hash, to_address, amount, ... }   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 6.2 Key Implementation Details
+*   **Topic0 (Transfer)**: `keccak256("Transfer(address,address,uint256)")`
+    = `0xddf252ad...`
+*   **Topic1**: Sender (indexed)
+*   **Topic2**: Recipient (indexed) - **Match against `user_addresses`**
+*   **Data**: Amount (uint256, left-padded)
+
+### 6.3 Precision Handling
+| Token | Decimals | Scaling |
+| :--- | :--- | :--- |
+| ETH | 18 | `amount / 10^18` |
+| USDT | 6 | `amount / 10^6` |
+| USDC | 6 | `amount / 10^6` |
+
+> [!IMPORTANT]
+> Token decimals MUST be loaded from `assets_tb`, not hardcoded.
+
+---
+
+## 7. Database Schema Extensions
+
+```sql
+-- EthScanner requires contract address tracking
+ALTER TABLE assets_tb
+ADD COLUMN contract_address VARCHAR(42); -- e.g., '0xdAC17F958D2ee523a2206206994597C13D831ec7'
+
+-- Index for fast lookup by contract
+CREATE INDEX idx_assets_contract ON assets_tb(contract_address);
+```
+
+---
+
+## 8. Configuration: `config/sentinel.yaml`
+
+```yaml
+eth:
+  chain_id: "ETH"
+  network: "anvil"  # or "mainnet", "goerli"
+  rpc:
+    url: "http://127.0.0.1:8545"
+  scanning:
+    required_confirmations: 12
+    max_reorg_depth: 20
+    start_height: 0
+  contracts:
+    - name: "USDT"
+      address: "0x..."
+      decimals: 6
+    - name: "USDC"
+      address: "0x..."
+      decimals: 6
+```
+
+---
+
+## 9. Acceptance Criteria
+
+- [x] **BTC**: Unit test `test_p2wpkh_extraction` passes. ✅ (`test_segwit_p2wpkh_extraction_def_002`)
+- [x] **BTC**: E2E deposit to `bcrt1...` address is detected and credited. ✅ (Verified via greybox test)
+- [x] **ETH**: Unit test `test_erc20_transfer_parsing` passes. ✅ (7 ETH tests pass)
+- [ ] **ETH**: E2E deposit via MockUSDT contract is detected. ⏳ (Pending: ERC20 `eth_getLogs` not yet implemented)
+- [x] **Regression**: All existing Phase 0x11-a tests still pass. ✅ (322 tests)
+
+---
+
+## 10. Implementation Status
+
+| Component | Status | Notes |
+| :--- | :--- | :--- |
+| `BtcScanner` P2WPKH Fix | ✅ **Complete** | Test `test_segwit_p2wpkh_extraction_def_002` passes |
+| `EthScanner` Implementation | ✅ **Complete** | Full JSON-RPC (`eth_blockNumber`, `eth_getBlockByNumber`, `eth_syncing`) |
+| Unit Tests | ✅ **22 Pass** | All Sentinel tests passing |
+| E2E Verification | ⚠️ **Partial** | Nodes not running during test; scripts ready |
+| ERC20 Token Support | 📋 **Future** | `eth_getLogs` for Transfer events (Phase 0x12) |
+
+---
+
+## 11. Testing Instructions
+
+### Quick Test (Rust Unit Tests)
+```bash
+# Run all Sentinel tests
+cargo test --package zero_x_infinity --lib sentinel -- --nocapture
+
+# Run DEF-002 verification test only
+cargo test test_segwit_p2wpkh_extraction_def_002 -- --nocapture
+
+# Run ETH Scanner tests only
+cargo test sentinel::eth -- --nocapture
+```
+
+### Full Test Suite
+```bash
+# Run test script (no nodes required)
+./scripts/tests/0x11b_sentinel/run_tests.sh
+
+# Run with node startup (requires docker-compose)
+./scripts/tests/0x11b_sentinel/run_tests.sh --with-nodes
 ```
 
 ---
@@ -477,7 +467,7 @@ Example:
 | **上下文** | Phase 0x11-a 延续: 强化哨兵服务 |
 | **目标** | 修复 SegWit 盲区 (DEF-002) 并实现 ETH/ERC20 支持。 |
 | **分支** | `0x11-b-sentinel-hardening` |
-| **最新提交** | `50dc35b` |
+| **最新提交** | `d383b6c` |
 
 ---
 
@@ -492,145 +482,7 @@ Example:
 
 ---
 
-## 2. 问题分析: DEF-002 (BTC SegWit 盲区)
-
-### 2.1 根因
-`src/sentinel/btc.rs` 中的 `extract_address` 函数使用 `Address::from_script(script, network)`。
-
-虽然 `rust-bitcoin` 库 *理论上* 支持 P2WPKH 脚本 (`OP_0 <20-byte-hash>`)，但当前实现可能因以下原因失败:
-1.  脚本编码与传入的 `Network` 枚举不匹配。
-2.  `bitcoincore-rpc` 依赖缺少必要的 feature flags。
-
-### 2.2 解决方案
-1.  **验证**: 添加单元测试，手动构造原始 P2WPKH 脚本。
-2.  **修复**: 如果 `Address::from_script` 失败，手动检测 witness v0 脚本:
-    ```rust
-    if script.is_p2wpkh() {
-        // 从 script[2..22] 提取 20 字节哈希
-        // 构造 Address::p2wpkh(...)
-    }
-    ```
-
----
-
-## 3. 功能规格: ETH/ERC20 哨兵
-
-### 3.1 架构
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                       EthScanner                                │
-├─────────────────────────────────────────────────────────────────┤
-│ 1. 轮询 eth_blockNumber (区块高度追踪)                           │
-│ 2. eth_getLogs(fromBlock, toBlock, topics=[Transfer])           │
-│ 3. 过滤: 匹配 log.address (合约) + topic[2] (收款人)             │
-│ 4. 解析: 将 log.data 解码为 uint256 金额                         │
-│ 5. 产出: DetectedDeposit { tx_hash, to_address, amount, ... }   │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### 3.2 关键实现细节
-*   **Topic0 (Transfer)**: `keccak256("Transfer(address,address,uint256)")`
-    = `0xddf252ad...`
-*   **Topic1**: 发送方 (indexed)
-*   **Topic2**: 接收方 (indexed) - **与 `user_addresses` 匹配**
-*   **Data**: 金额 (uint256, 左填充)
-
-### 3.3 精度处理
-| 代币 | 小数位 | 缩放比例 |
-| :--- | :--- | :--- |
-| ETH | 18 | `amount / 10^18` |
-| USDT | 6 | `amount / 10^6` |
-| USDC | 6 | `amount / 10^6` |
-
-> [!IMPORTANT]
-> 代币精度 **必须** 从 `assets_tb` 加载，**禁止硬编码**。
-
----
-
-## 4. 数据库模式扩展
-
-```sql
--- EthScanner 需要追踪合约地址
-ALTER TABLE assets_tb
-ADD COLUMN contract_address VARCHAR(42); -- 例: '0xdAC17F958D2ee523a2206206994597C13D831ec7'
-
--- 按合约快速查询的索引
-CREATE INDEX idx_assets_contract ON assets_tb(contract_address);
-```
-
----
-
-## 5. 配置: `config/sentinel.yaml`
-
-```yaml
-eth:
-  chain_id: "ETH"
-  network: "anvil"  # 或 "mainnet", "goerli"
-  rpc:
-    url: "http://127.0.0.1:8545"
-  scanning:
-    required_confirmations: 12
-    max_reorg_depth: 20
-    start_height: 0
-  contracts:
-    - name: "USDT"
-      address: "0x..."
-      decimals: 6
-    - name: "USDC"
-      address: "0x..."
-      decimals: 6
-```
-
----
-
-## 6. 验收标准
-
-- [x] **BTC**: 单元测试 `test_p2wpkh_extraction` 通过。 ✅ (`test_segwit_p2wpkh_extraction_def_002`)
-- [x] **BTC**: E2E 测试中充值到 `bcrt1...` 地址被检测并入账。 ✅ (通过 greybox 测试验证)
-- [x] **ETH**: 单元测试 `test_erc20_transfer_parsing` 通过。 ✅ (7 个 ETH 测试通过)
-- [ ] **ETH**: E2E 测试中通过 MockUSDT 合约充值被检测。 ⏳ (待完成: ERC20 `eth_getLogs` 尚未实现)
-- [x] **回归**: 所有 Phase 0x11-a 现有测试仍然通过。 ✅ (322 个测试)
-
----
-
-## 7. 实施状态
-
-| 组件 | 状态 | 备注 |
-| :--- | :--- | :--- |
-| `BtcScanner` P2WPKH 修复 | ✅ **已完成** | 测试 `test_segwit_p2wpkh_extraction_def_002` 通过 |
-| `EthScanner` 实现 | ✅ **已完成** | 完整 JSON-RPC (`eth_blockNumber`, `eth_getBlockByNumber`, `eth_syncing`) |
-| 单元测试 | ✅ **22 通过** | 所有 Sentinel 测试通过 |
-| E2E 验证 | ⚠️ **部分** | 测试时节点未运行；脚本已就绪 |
-| ERC20 代币支持 | 📋 **未来** | `eth_getLogs` for Transfer events (Phase 0x12) |
-
----
-
-## 8. 测试方法
-
-### 快速测试 (Rust 单元测试)
-```bash
-# 运行所有 Sentinel 测试
-cargo test --package zero_x_infinity --lib sentinel -- --nocapture
-
-# 仅运行 DEF-002 验证测试
-cargo test test_segwit_p2wpkh_extraction_def_002 -- --nocapture
-
-# 仅运行 ETH Scanner 测试
-cargo test sentinel::eth -- --nocapture
-```
-
-### 完整测试套件
-```bash
-# 运行测试脚本 (无需节点)
-./scripts/tests/0x11b_sentinel/run_tests.sh
-
-# 运行测试脚本 (自动启动节点, 需要 docker-compose)
-./scripts/tests/0x11b_sentinel/run_tests.sh --with-nodes
-```
-
----
-
-## 9. 充值流程架构
+## 2. 充值流程架构
 
 > [!IMPORTANT]
 > ## 🚨 生产环境风控要求
@@ -644,7 +496,7 @@ cargo test sentinel::eth -- --nocapture
 >
 > 当前实现在确认完成后自动入账。
 
-### 9.1 概览
+### 2.1 概览
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -665,7 +517,7 @@ cargo test sentinel::eth -- --nocapture
 └───────┴─────────────────────────────────────────────────────────────────────┘
 ```
 
-### 9.2 状态机
+### 2.2 状态机
 
 ```
 DETECTED ──▶ CONFIRMING ──▶ FINALIZED ──▶ SUCCESS
@@ -683,7 +535,7 @@ DETECTED ──▶ CONFIRMING ──▶ FINALIZED ──▶ SUCCESS
 | `SUCCESS` | 已入账到余额 | ✅ |
 | `ORPHANED` | 区块被重组，交易失效 | ❌ |
 
-### 9.3 关键组件
+### 2.3 关键组件
 
 | 组件 | 文件 | 职责 |
 | :--- | :--- | :--- |
@@ -692,7 +544,7 @@ DETECTED ──▶ CONFIRMING ──▶ FINALIZED ──▶ SUCCESS
 | `ConfirmationMonitor` | `src/sentinel/confirmation.rs` | 追踪确认数，检测重组 |
 | `DepositPipeline` | `src/sentinel/pipeline.rs` | 完成后入账余额 |
 
-### 9.4 数据库结构
+### 2.4 数据库结构
 
 **`deposit_history`** (充值记录表):
 ```sql
@@ -707,19 +559,9 @@ status        VARCHAR              -- 状态 (见状态机)
 confirmations INT                  -- 当前确认数
 ```
 
-**`balances_tb`** (余额表):
-```sql
-user_id       BIGINT               -- 用户 ID
-asset_id      INT                  -- 资产 ID
-account_type  INT                  -- 账户类型 (1=现货)
-available     DECIMAL              -- 可用余额
-frozen        DECIMAL              -- 冻结余额
-version       INT                  -- 版本号 (乐观锁)
-```
-
 ---
 
-## 10. 提现流程架构
+## 3. 提现流程架构
 
 > [!CAUTION]
 > ## ⛔ 生产环境风控要求 ⛔
@@ -733,7 +575,7 @@ version       INT                  -- 版本号 (乐观锁)
 > 
 > **绝对不要将当前自动审批流程部署到生产环境！**
 
-### 10.1 概览
+### 3.1 概览
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -757,7 +599,7 @@ version       INT                  -- 版本号 (乐观锁)
 └───────┴─────────────────────────────────────────────────────────────────────┘
 ```
 
-### 10.2 流程步骤
+### 3.2 流程步骤
 
 ```
 1. 验证请求
@@ -780,7 +622,7 @@ version       INT                  -- 版本号 (乐观锁)
    └─▶ 失败: 自动退款 + status = 'FAILED'
 ```
 
-### 10.3 状态机
+### 3.3 状态机
 
 ```
            ┌──────────────┐
@@ -803,7 +645,7 @@ version       INT                  -- 版本号 (乐观锁)
 | `SUCCESS` | 交易广播成功 | ✅ 完成 |
 | `FAILED` | 广播失败，已自动退款 | 🔄 已退款 |
 
-### 10.4 关键组件
+### 3.4 关键组件
 
 | 组件 | 文件 | 职责 |
 | :--- | :--- | :--- |
@@ -811,7 +653,7 @@ version       INT                  -- 版本号 (乐观锁)
 | `ChainClient` | `src/funding/chain_adapter.rs` | 区块链交易广播接口 |
 | `handlers::apply_withdraw` | `src/funding/handlers.rs` | HTTP API 端点 |
 
-### 10.5 数据库结构
+### 3.5 数据库结构
 
 **`withdraw_history`** (提现记录表):
 ```sql
@@ -827,7 +669,7 @@ created_at    TIMESTAMP            -- 创建时间
 updated_at    TIMESTAMP            -- 更新时间
 ```
 
-### 10.6 金额计算
+### 3.6 金额计算
 
 ```
 用户余额变化 = -请求金额
@@ -841,9 +683,9 @@ updated_at    TIMESTAMP            -- 更新时间
 
 ---
 
-## 11. 🛡️ 分级纵深防御风控框架
+## 4. 🛡️ 分级纵深防御风控框架
 
-### 11.1 防御层级
+### 4.1 防御层级
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -873,7 +715,7 @@ updated_at    TIMESTAMP            -- 更新时间
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 11.2 风险分级 (按金额)
+### 4.2 风险分级 (按金额)
 
 | 层级 | 金额 | 延迟 | 审批 | 钱包 |
 | :---: | :--- | :--- | :--- | :--- |
@@ -883,7 +725,7 @@ updated_at    TIMESTAMP            -- 更新时间
 | 🔴 **T4** | ¥350K - ¥700K | 48小时 | 2-of-3 人工 | 温 |
 | ⚫ **T5** | > ¥700K | 72小时 | 3-of-5 + HSM | 冷 |
 
-### 11.3 自动化检查 (所有层级)
+### 4.3 自动化检查 (所有层级)
 
 | 检查项 | 阻止 | 告警 |
 | :--- | :---: | :---: |
@@ -894,7 +736,7 @@ updated_at    TIMESTAMP            -- 更新时间
 | 异常金额模式 | ⚠️ 延迟 | ✅ |
 | 地理位置异常 | ⚠️ 延迟 | ✅ |
 
-### 11.4 充值专项检查
+### 4.4 充值专项检查
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
@@ -908,7 +750,7 @@ updated_at    TIMESTAMP            -- 更新时间
 └────────────────────────────────────────────────────────────────┘
 ```
 
-### 11.5 提现专项检查
+### 4.5 提现专项检查
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
@@ -925,8 +767,144 @@ updated_at    TIMESTAMP            -- 更新时间
 
 ---
 
+## 5. 问题分析: DEF-002 (BTC SegWit 盲区)
+
+### 5.1 根因
+`src/sentinel/btc.rs` 中的 `extract_address` 函数使用 `Address::from_script(script, network)`。
+
+虽然 `rust-bitcoin` 库 *理论上* 支持 P2WPKH 脚本 (`OP_0 <20-byte-hash>`)，但当前实现可能因以下原因失败:
+1.  脚本编码与传入的 `Network` 枚举不匹配。
+2.  `bitcoincore-rpc` 依赖缺少必要的 feature flags。
+
+### 5.2 解决方案
+1.  **验证**: 添加单元测试，手动构造原始 P2WPKH 脚本。
+2.  **修复**: 如果 `Address::from_script` 失败，手动检测 witness v0 脚本:
+    ```rust
+    if script.is_p2wpkh() {
+        // 从 script[2..22] 提取 20 字节哈希
+        // 构造 Address::p2wpkh(...)
+    }
+    ```
+
+---
+
+## 6. 功能规格: ETH/ERC20 哨兵
+
+### 6.1 架构
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                       EthScanner                                │
+├─────────────────────────────────────────────────────────────────┤
+│ 1. 轮询 eth_blockNumber (区块高度追踪)                           │
+│ 2. eth_getLogs(fromBlock, toBlock, topics=[Transfer])           │
+│ 3. 过滤: 匹配 log.address (合约) + topic[2] (收款人)             │
+│ 4. 解析: 将 log.data 解码为 uint256 金额                         │
+│ 5. 产出: DetectedDeposit { tx_hash, to_address, amount, ... }   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 6.2 关键实现细节
+*   **Topic0 (Transfer)**: `keccak256("Transfer(address,address,uint256)")`
+    = `0xddf252ad...`
+*   **Topic1**: 发送方 (indexed)
+*   **Topic2**: 接收方 (indexed) - **与 `user_addresses` 匹配**
+*   **Data**: 金额 (uint256, 左填充)
+
+### 6.3 精度处理
+| 代币 | 小数位 | 缩放比例 |
+| :--- | :--- | :--- |
+| ETH | 18 | `amount / 10^18` |
+| USDT | 6 | `amount / 10^6` |
+| USDC | 6 | `amount / 10^6` |
+
+> [!IMPORTANT]
+> 代币精度 **必须** 从 `assets_tb` 加载，**禁止硬编码**。
+
+---
+
+## 7. 数据库模式扩展
+
+```sql
+-- EthScanner 需要追踪合约地址
+ALTER TABLE assets_tb
+ADD COLUMN contract_address VARCHAR(42); -- 例: '0xdAC17F958D2ee523a2206206994597C13D831ec7'
+
+-- 按合约快速查询的索引
+CREATE INDEX idx_assets_contract ON assets_tb(contract_address);
+```
+
+---
+
+## 8. 配置: `config/sentinel.yaml`
+
+```yaml
+eth:
+  chain_id: "ETH"
+  network: "anvil"  # 或 "mainnet", "goerli"
+  rpc:
+    url: "http://127.0.0.1:8545"
+  scanning:
+    required_confirmations: 12
+    max_reorg_depth: 20
+    start_height: 0
+  contracts:
+    - name: "USDT"
+      address: "0x..."
+      decimals: 6
+    - name: "USDC"
+      address: "0x..."
+      decimals: 6
+```
+
+---
+
+## 9. 验收标准
+
+- [x] **BTC**: 单元测试 `test_p2wpkh_extraction` 通过。 ✅ (`test_segwit_p2wpkh_extraction_def_002`)
+- [x] **BTC**: E2E 测试中充值到 `bcrt1...` 地址被检测并入账。 ✅ (通过 greybox 测试验证)
+- [x] **ETH**: 单元测试 `test_erc20_transfer_parsing` 通过。 ✅ (7 个 ETH 测试通过)
+- [ ] **ETH**: E2E 测试中通过 MockUSDT 合约充值被检测。 ⏳ (待完成: ERC20 `eth_getLogs` 尚未实现)
+- [x] **回归**: 所有 Phase 0x11-a 现有测试仍然通过。 ✅ (322 个测试)
+
+---
+
+## 10. 实施状态
+
+| 组件 | 状态 | 备注 |
+| :--- | :--- | :--- |
+| `BtcScanner` P2WPKH 修复 | ✅ **已完成** | 测试 `test_segwit_p2wpkh_extraction_def_002` 通过 |
+| `EthScanner` 实现 | ✅ **已完成** | 完整 JSON-RPC (`eth_blockNumber`, `eth_getBlockByNumber`, `eth_syncing`) |
+| 单元测试 | ✅ **22 通过** | 所有 Sentinel 测试通过 |
+| E2E 验证 | ⚠️ **部分** | 测试时节点未运行；脚本已就绪 |
+| ERC20 代币支持 | 📋 **未来** | `eth_getLogs` for Transfer events (Phase 0x12) |
+
+---
+
+## 11. 测试方法
+
+### 快速测试 (Rust 单元测试)
+```bash
+# 运行所有 Sentinel 测试
+cargo test --package zero_x_infinity --lib sentinel -- --nocapture
+
+# 仅运行 DEF-002 验证测试
+cargo test test_segwit_p2wpkh_extraction_def_002 -- --nocapture
+
+# 仅运行 ETH Scanner 测试
+cargo test sentinel::eth -- --nocapture
+```
+
+### 完整测试套件
+```bash
+# 运行测试脚本 (无需节点)
+./scripts/tests/0x11b_sentinel/run_tests.sh
+
+# 运行测试脚本 (自动启动节点, 需要 docker-compose)
+./scripts/tests/0x11b_sentinel/run_tests.sh --with-nodes
+```
+
+---
+
 <br>
 <div align="right"><a href="#-chinese">↑ 回到顶部</a></div>
 <br>
-
-
