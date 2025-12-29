@@ -3,7 +3,9 @@
 //! Orchestrates block scanning across multiple chains,
 //! handles re-org detection, and records deposits to the database.
 
+use super::confirmation::ConfirmationMonitor;
 use super::error::{ScannerError, SentinelError};
+use super::pipeline::DepositPipeline;
 use super::scanner::{ChainScanner, DetectedDeposit, ScannedBlock};
 use sqlx::{PgPool, Row};
 use std::sync::Arc;
@@ -25,6 +27,8 @@ pub struct SentinelWorker {
     pool: PgPool,
     poll_interval: Duration,
     max_block_lag_seconds: i64,
+    monitor: ConfirmationMonitor,
+    pipeline: DepositPipeline,
 }
 
 impl SentinelWorker {
@@ -32,9 +36,11 @@ impl SentinelWorker {
     pub fn new(pool: PgPool, poll_interval_ms: u64) -> Self {
         Self {
             scanners: Vec::new(),
-            pool,
+            pool: pool.clone(),
             poll_interval: Duration::from_millis(poll_interval_ms),
             max_block_lag_seconds: 3600, // Default 1 hour
+            monitor: ConfirmationMonitor::new(pool.clone()),
+            pipeline: DepositPipeline::new(pool),
         }
     }
 
@@ -83,6 +89,33 @@ impl SentinelWorker {
                 if let Err(e) = self.scan_chain(scanner_guard.as_ref()).await {
                     error!("Error scanning {}: {:?}", chain_id, e);
                 }
+
+                // 2. Update confirmations and finalize deposits
+                match self
+                    .monitor
+                    .update_confirmations(
+                        &chain_id,
+                        scanner_guard.get_latest_height().await.unwrap_or(0),
+                        scanner_guard.required_confirmations(),
+                        scanner_guard.as_ref(),
+                    )
+                    .await
+                {
+                    Ok(finalized) => {
+                        if !finalized.is_empty() {
+                            // 3. Process finalized deposits (credit balance)
+                            if let Err(e) = self.pipeline.process_finalized(finalized).await {
+                                error!(
+                                    "{}: Failed to process finalized deposits: {:?}",
+                                    chain_id, e
+                                );
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        warn!("{}: Failed to update confirmations: {:?}", chain_id, e);
+                    }
+                }
             }
 
             sleep(self.poll_interval).await;
@@ -95,9 +128,10 @@ impl SentinelWorker {
         scanner: &mut dyn ChainScanner,
         chain_id: &str,
     ) -> Result<(), SentinelError> {
+        let chain_slug = chain_id.to_lowercase();
         let addresses: Vec<String> =
-            sqlx::query_scalar("SELECT address FROM user_addresses WHERE network = $1")
-                .bind(chain_id)
+            sqlx::query_scalar("SELECT address FROM user_addresses WHERE chain_slug = $1")
+                .bind(&chain_slug)
                 .fetch_all(&self.pool)
                 .await
                 .map_err(ScannerError::from)?;
@@ -209,17 +243,18 @@ impl SentinelWorker {
 
     /// Get cursor from database
     pub async fn get_cursor(&self, chain_id: &str) -> Result<Option<ChainCursor>, SentinelError> {
+        let chain_slug = chain_id.to_lowercase();
         let row = sqlx::query(
-            r#"SELECT chain_id, last_scanned_height, last_scanned_hash 
-               FROM chain_cursor WHERE chain_id = $1"#,
+            r#"SELECT chain_slug, last_scanned_height, last_scanned_hash 
+               FROM chain_cursor WHERE chain_slug = $1"#,
         )
-        .bind(chain_id)
+        .bind(&chain_slug)
         .fetch_optional(&self.pool)
         .await
         .map_err(ScannerError::from)?;
 
         Ok(row.map(|r| ChainCursor {
-            chain_id: r.get("chain_id"),
+            chain_id: r.get::<String, _>("chain_slug"),
             height: r.get("last_scanned_height"),
             hash: r.get("last_scanned_hash"),
         }))
@@ -232,15 +267,16 @@ impl SentinelWorker {
         height: u64,
         hash: &str,
     ) -> Result<(), SentinelError> {
+        let chain_slug = chain_id.to_lowercase();
         sqlx::query(
-            r#"INSERT INTO chain_cursor (chain_id, last_scanned_height, last_scanned_hash)
+            r#"INSERT INTO chain_cursor (chain_slug, last_scanned_height, last_scanned_hash)
                VALUES ($1, $2, $3)
-               ON CONFLICT (chain_id) DO UPDATE 
+               ON CONFLICT (chain_slug) DO UPDATE 
                SET last_scanned_height = EXCLUDED.last_scanned_height,
                    last_scanned_hash = EXCLUDED.last_scanned_hash,
                    updated_at = NOW()"#,
         )
-        .bind(chain_id)
+        .bind(&chain_slug)
         .bind(height as i64)
         .bind(hash)
         .execute(&self.pool)
@@ -276,17 +312,19 @@ impl SentinelWorker {
         let user_id: i64 = user_row.get("user_id");
 
         // 2. Insert deposit record (idempotent on tx_hash)
+        let chain_slug = chain_id.to_lowercase();
+        let amount_raw: i64 = deposit.raw_amount.parse().unwrap_or(0);
         let result = sqlx::query(
             r#"INSERT INTO deposit_history 
-               (tx_hash, user_id, asset, amount, status, chain_id, block_height, block_hash, tx_index, confirmations)
+               (tx_hash, user_id, asset, amount, status, chain_slug, block_height, block_hash, tx_index, confirmations)
                VALUES ($1, $2, $3, $4, 'DETECTED', $5, $6, $7, $8, 0)
                ON CONFLICT (tx_hash) DO NOTHING"#,
         )
         .bind(&deposit.tx_hash)
         .bind(user_id)
         .bind(&deposit.asset)
-        .bind(deposit.amount)
-        .bind(chain_id)
+        .bind(amount_raw)
+        .bind(&chain_slug)
         .bind(block.height as i64)
         .bind(&block.hash)
         .bind(deposit.tx_index as i32)

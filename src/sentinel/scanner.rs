@@ -9,6 +9,9 @@ pub trait ChainScanner: Send + Sync {
     /// Chain identifier (e.g., "BTC", "ETH")
     fn chain_id(&self) -> &str;
 
+    /// Required confirmations for this chain
+    fn required_confirmations(&self) -> u32;
+
     /// Get the latest block height from the node
     async fn get_latest_height(&self) -> Result<u64, ScannerError>;
 

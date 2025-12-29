@@ -27,8 +27,8 @@ pub struct PendingDeposit {
     pub tx_hash: String,
     pub user_id: i64,
     pub asset: String,
-    pub amount: rust_decimal::Decimal,
-    pub chain_id: String,
+    pub amount: i64,
+    pub chain_slug: String,
     pub block_height: i64,
     pub block_hash: String,
     pub status: String,
@@ -131,13 +131,14 @@ impl ConfirmationMonitor {
         &self,
         chain_id: &str,
     ) -> Result<Vec<PendingDeposit>, SentinelError> {
+        let chain_slug = chain_id.to_lowercase();
         let rows = sqlx::query(
-            r#"SELECT tx_hash, user_id, asset, amount, chain_id, block_height, block_hash, status, confirmations
+            r#"SELECT tx_hash, user_id, asset, amount, chain_slug, block_height, block_hash, status, confirmations
                FROM deposit_history
-               WHERE chain_id = $1 AND status IN ('DETECTED', 'CONFIRMING')
+               WHERE chain_slug = $1 AND status IN ('DETECTED', 'CONFIRMING')
                ORDER BY block_height ASC"#,
         )
-        .bind(chain_id)
+        .bind(&chain_slug)
         .fetch_all(&self.pool)
         .await
         .map_err(ScannerError::from)?;
@@ -149,7 +150,7 @@ impl ConfirmationMonitor {
                 user_id: r.get("user_id"),
                 asset: r.get("asset"),
                 amount: r.get("amount"),
-                chain_id: r.get("chain_id"),
+                chain_slug: r.get("chain_slug"),
                 block_height: r.get("block_height"),
                 block_hash: r.get("block_hash"),
                 status: r.get("status"),
@@ -218,8 +219,8 @@ mod tests {
             tx_hash: "0xabc".to_string(),
             user_id: 1,
             asset: "BTC".to_string(),
-            amount: rust_decimal::Decimal::new(100000000, 8),
-            chain_id: "BTC".to_string(),
+            amount: 100_000_000,
+            chain_slug: "btc".to_string(),
             block_height: 100,
             block_hash: "hash123".to_string(),
             status: status::DETECTED.to_string(),
@@ -227,6 +228,7 @@ mod tests {
         };
 
         assert_eq!(deposit.tx_hash, "0xabc");
+        assert_eq!(deposit.chain_slug, "btc");
         assert_eq!(deposit.status, "DETECTED");
     }
 }

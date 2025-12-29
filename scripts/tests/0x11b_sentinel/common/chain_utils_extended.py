@@ -366,6 +366,25 @@ class GatewayClientExtended(GatewayClient):
                 return deposit
             time.sleep(1)
         return None
+    
+    def get_balance(self, headers: Dict[str, str], asset: str) -> Optional[float]:
+        """Override to use JWT-protected endpoint in Phase 0x11-b."""
+        url = f"{self.base_url}/api/v1/capital/account"
+        print(f"DEBUG: Calling get_balance URL: {url}")
+        resp = requests.get(
+            url,
+            headers=headers
+        )
+        print(f"DEBUG: get_balance response: {resp.status_code}")
+        if resp.status_code != 200:
+            return None
+        balances = resp.json().get("data", {}).get("balances", [])
+        print(f"DEBUG: get_balance found {len(balances)} asset(s)")
+        for b in balances:
+            if b.get("asset") == asset:
+                print(f"DEBUG: Found asset {asset}: {b.get('available')}")
+                return float(b.get("available", 0))
+        return 0.0
 
 
 # =============================================================================

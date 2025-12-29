@@ -230,6 +230,12 @@ pub struct OrderResponseData {
     pub accepted_at: u64,
 }
 
+/// Account response data (for legacy /account endpoint)
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AccountResponseData {
+    pub balances: Vec<crate::funding::service::BalanceInfo>,
+}
+
 /// Market depth API response data
 #[derive(Debug, Serialize, ToSchema)]
 pub struct DepthApiData {

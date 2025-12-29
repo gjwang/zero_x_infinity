@@ -1,6 +1,7 @@
 use super::chain_adapter::ChainClient;
 use crate::account::{AssetManager, Database};
 use rust_decimal::prelude::*;
+use sqlx::Row;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -21,7 +22,7 @@ pub struct DepositRecord {
     pub tx_hash: String,
     pub user_id: i64,
     pub asset: String,
-    pub amount: i64, // Stored as scaled integer (e.g. Satoshi)
+    pub amount: String, // Human readable scaled string (e.g. "2.0")
     pub status: String,
     pub created_at: Option<chrono::NaiveDateTime>,
     pub block_height: Option<i64>,
@@ -173,19 +174,41 @@ impl DepositService {
     }
 
     pub async fn get_history(&self, user_id: i64) -> Result<Vec<DepositRecord>, DepositError> {
-        let records = sqlx::query_as!(
-            DepositRecord,
+        let rows = sqlx::query(
             r#"
-            SELECT tx_hash, user_id, asset, amount, status, created_at, block_height
-            FROM deposit_history
-            WHERE user_id = $1
-            ORDER BY created_at DESC
+            SELECT d.tx_hash, d.user_id, d.asset, d.amount, d.status, d.created_at, d.block_height,
+                   a.decimals
+            FROM deposit_history d
+            JOIN assets_tb a ON d.asset = a.asset
+            WHERE d.user_id = $1
+            ORDER BY d.created_at DESC
             LIMIT 50
             "#,
-            user_id
         )
+        .bind(user_id)
         .fetch_all(self.db.pool())
         .await?;
+
+        let mut records = Vec::new();
+        for row in rows {
+            let amount_raw: i64 = row.get("amount");
+            let decimals: i16 = row.get("decimals");
+
+            // Scaling logic
+            let scale_factor = Decimal::from(10u64.pow(decimals as u32));
+            let amount_decimal = Decimal::from(amount_raw) / scale_factor;
+            let amount_str = format!("{:.prec$}", amount_decimal, prec = decimals as usize);
+
+            records.push(DepositRecord {
+                tx_hash: row.get("tx_hash"),
+                user_id: row.get("user_id"),
+                asset: row.get("asset"),
+                amount: amount_str,
+                status: row.get("status"),
+                created_at: row.get("created_at"),
+                block_height: row.get("block_height"),
+            });
+        }
 
         Ok(records)
     }

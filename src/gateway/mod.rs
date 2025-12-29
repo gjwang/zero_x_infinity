@@ -283,6 +283,7 @@ pub async fn run_server(
         .route("/trades", get(handlers::get_trades))
         .route("/balances", get(handlers::get_balances))
         .route("/balances/all", get(handlers::get_all_balances))
+        .route("/account", get(handlers::get_account))
         // Trading operations
         .route("/order", post(handlers::create_order))
         .route("/cancel", post(handlers::cancel_order))
@@ -322,6 +323,16 @@ pub async fn run_server(
                     "/withdraw/history",
                     get(crate::funding::handlers::get_withdraw_history),
                 )
+                .route("/account", get(handlers::get_account_jwt))
+                .route("/balances", get(handlers::get_balance_jwt))
+                .route("/balances/all", get(handlers::get_account_jwt)) // Use account_jwt for all balances
+                .route("/transfer", post(handlers::create_transfer_jwt))
+                .route("/transfer/{req_id}", get(handlers::get_transfer))
+                .route("/order", post(handlers::create_order_jwt))
+                .route("/cancel", post(handlers::cancel_order_jwt))
+                .route("/orders", get(handlers::get_orders_jwt))
+                .route("/order/{order_id}", get(handlers::get_order))
+                .route("/trades", get(handlers::get_trades))
                 .layer(from_fn_with_state(
                     state.clone(),
                     crate::user_auth::middleware::jwt_auth_middleware,

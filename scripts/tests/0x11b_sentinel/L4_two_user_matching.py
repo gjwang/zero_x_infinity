@@ -194,16 +194,24 @@ class TwoUserOrderMatchingE2E:
             return self.add_result("2.2 Send BTC", False)
         
         # Mine and wait
-        print("\n📋 2.3 Confirm Deposit")
+        print("\n📋 2.3 Confirm Deposit (Polling)")
         self.btc.mine_blocks(BTC_REQUIRED_CONFIRMATIONS + 1)
-        time.sleep(3)
         
-        deposit = self.gateway.get_deposit_by_tx_hash(self.user_a_headers, "BTC", tx_hash)
+        # Wait for deposit to be recorded and confirmed (up to 30s)
+        deposit = None
+        for i in range(10):
+            deposit = self.gateway.get_deposit_by_tx_hash(self.user_a_headers, "BTC", tx_hash)
+            if deposit:
+                break
+            print(f"   ... Waiting for deposit detection ({i+1}/10)")
+            time.sleep(3)
+            
         if deposit:
-            print(f"   ✅ Deposit detected: {deposit.get('status')}")
-            self.add_result("2.3 Deposit Confirmed", True)
+            status = deposit.get('status')
+            print(f"   ✅ Deposit detected: {status}")
+            self.add_result("2.3 Deposit Confirmed", True, f"Status: {status}")
         else:
-            print(f"   ❌ Deposit NOT detected")
+            print(f"   ❌ Deposit NOT detected after polling")
             return self.add_result("2.3 Deposit Confirmed", False)
         
         # Verify User A balance
@@ -273,11 +281,9 @@ class TwoUserOrderMatchingE2E:
         print("📈 PHASE 4: Place Orders (Maker/Taker)")
         print("=" * 80)
         
-        # User A: SELL order (Maker)
-        print(f"\n📋 4.1 User A: SELL {self.trade_quantity} BTC @ {self.trade_price}")
         try:
             resp = requests.post(
-                f"{self.gateway.base_url}/api/v1/order",
+                f"{self.gateway.base_url}/api/v1/capital/order",
                 json={
                     "symbol": "BTC_USDT",
                     "side": "SELL",
@@ -303,11 +309,9 @@ class TwoUserOrderMatchingE2E:
             print(f"   ⚠️  {e}")
             self.add_result("4.1 User A SELL", False)
         
-        # User B: BUY order (Taker)
-        print(f"\n📋 4.2 User B: BUY {self.trade_quantity} BTC @ {self.trade_price}")
         try:
             resp = requests.post(
-                f"{self.gateway.base_url}/api/v1/order",
+                f"{self.gateway.base_url}/api/v1/capital/order",
                 json={
                     "symbol": "BTC_USDT",
                     "side": "BUY",
@@ -349,7 +353,7 @@ class TwoUserOrderMatchingE2E:
         print("\n📋 5.1 User A Trade History")
         try:
             resp = requests.get(
-                f"{self.gateway.base_url}/api/v1/myTrades",
+                f"{self.gateway.base_url}/api/v1/capital/trades",
                 params={"symbol": "BTC_USDT"},
                 headers=self.user_a_headers
             )
@@ -373,7 +377,7 @@ class TwoUserOrderMatchingE2E:
         print("\n📋 5.2 User B Trade History")
         try:
             resp = requests.get(
-                f"{self.gateway.base_url}/api/v1/myTrades",
+                f"{self.gateway.base_url}/api/v1/capital/trades",
                 params={"symbol": "BTC_USDT"},
                 headers=self.user_b_headers
             )

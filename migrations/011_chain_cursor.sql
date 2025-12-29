@@ -3,7 +3,7 @@
 
 -- Track scanning progress per chain
 CREATE TABLE IF NOT EXISTS chain_cursor (
-    chain_id VARCHAR(16) PRIMARY KEY,
+    chain_slug VARCHAR(32) PRIMARY KEY, -- "btc", "eth", "trx"
     last_scanned_height BIGINT NOT NULL,
     last_scanned_hash VARCHAR(128) NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -13,10 +13,10 @@ CREATE TABLE IF NOT EXISTS chain_cursor (
 -- These columns may already exist, so we use IF NOT EXISTS pattern via DO block
 DO $$
 BEGIN
-    -- Add chain_id column
+    -- Add chain_slug column
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
-                   WHERE table_name = 'deposit_history' AND column_name = 'chain_id') THEN
-        ALTER TABLE deposit_history ADD COLUMN chain_id VARCHAR(16);
+                   WHERE table_name = 'deposit_history' AND column_name = 'chain_slug') THEN
+        ALTER TABLE deposit_history ADD COLUMN chain_slug VARCHAR(32);
     END IF;
     
     -- Add block_height column (may already exist from mock phase)
@@ -46,7 +46,7 @@ END $$;
 
 -- Index for efficient re-org checking
 CREATE INDEX IF NOT EXISTS idx_deposit_chain_height 
-ON deposit_history(chain_id, block_height);
+ON deposit_history(chain_slug, block_height);
 
 -- Index for confirmation monitoring
 CREATE INDEX IF NOT EXISTS idx_deposit_confirming 

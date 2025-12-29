@@ -67,11 +67,11 @@ impl DepositPipeline {
 
         let asset_id: i32 = sqlx::Row::get(&asset_row, "asset_id");
 
-        // Credit balance (account_type = 1 for Spot)
+        // Credit balance (account_type = 2 for Funding)
         // Using UPSERT to handle both new and existing balances
         sqlx::query(
             r#"INSERT INTO balances_tb (user_id, asset_id, account_type, available, frozen, version)
-               VALUES ($1, $2, 1, $3, 0, 1)
+               VALUES ($1, $2, 2, $3, 0, 1)
                ON CONFLICT (user_id, asset_id, account_type) 
                DO UPDATE SET available = balances_tb.available + EXCLUDED.available, 
                              version = balances_tb.version + 1"#,
@@ -137,8 +137,8 @@ mod tests {
             tx_hash: "test_tx".to_string(),
             user_id: 1,
             asset: "BTC".to_string(),
-            amount: rust_decimal::Decimal::new(100000000, 8),
-            chain_id: "BTC".to_string(),
+            amount: 100_000_000,
+            chain_slug: "btc".to_string(),
             block_height: 100,
             block_hash: "hash".to_string(),
             status: status::FINALIZED.to_string(),

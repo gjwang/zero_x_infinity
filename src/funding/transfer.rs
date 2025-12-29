@@ -19,7 +19,9 @@ pub struct Transfer {
 
 #[derive(Debug, Deserialize)]
 pub struct TransferRequest {
+    #[serde(alias = "fromAccount")]
     pub from: String,
+    #[serde(alias = "toAccount")]
     pub to: String,
     pub asset: String,
     pub amount: String, // String to avoid float precision issues JSON

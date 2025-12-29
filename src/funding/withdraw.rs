@@ -1,6 +1,7 @@
 use super::chain_adapter::ChainClient;
 use crate::account::{AssetManager, Database};
 use rust_decimal::prelude::*;
+use sqlx::Row;
 use std::sync::Arc;
 use thiserror::Error;
 use uuid::Uuid;
@@ -26,8 +27,8 @@ pub struct WithdrawRecord {
     pub request_id: String,
     pub user_id: i64,
     pub asset: String,
-    pub amount: i64, // Scaled integer
-    pub fee: i64,    // Scaled integer
+    pub amount: String, // Human readable scaled string
+    pub fee: String,    // Human readable scaled string
     pub to_address: String,
     pub status: String,
     pub tx_hash: Option<String>,
@@ -193,19 +194,49 @@ impl WithdrawService {
     }
 
     pub async fn get_history(&self, user_id: i64) -> Result<Vec<WithdrawRecord>, WithdrawError> {
-        let records = sqlx::query_as!(
-            WithdrawRecord,
+        let rows = sqlx::query(
             r#"
-            SELECT request_id, user_id, asset, amount, fee, to_address, status, tx_hash, created_at, updated_at
-            FROM withdraw_history
-            WHERE user_id = $1
-            ORDER BY created_at DESC
+            SELECT w.request_id, w.user_id, w.asset, w.amount, w.fee, w.to_address, w.status, w.tx_hash, w.created_at, w.updated_at,
+                   a.decimals
+            FROM withdraw_history w
+            JOIN assets_tb a ON w.asset = a.asset
+            WHERE w.user_id = $1
+            ORDER BY w.created_at DESC
             LIMIT 50
             "#,
-            user_id
         )
+        .bind(user_id)
         .fetch_all(self.db.pool())
         .await?;
+
+        let mut records = Vec::new();
+        for row in rows {
+            let amount_raw: i64 = row.get("amount");
+            let fee_raw: i64 = row.get("fee");
+            let decimals: i16 = row.get("decimals");
+
+            // Scaling logic
+            let scale_factor = Decimal::from(10u64.pow(decimals as u32));
+
+            let amount_decimal = Decimal::from(amount_raw) / scale_factor;
+            let amount_str = format!("{:.prec$}", amount_decimal, prec = decimals as usize);
+
+            let fee_decimal = Decimal::from(fee_raw) / scale_factor;
+            let fee_str = format!("{:.prec$}", fee_decimal, prec = decimals as usize);
+
+            records.push(WithdrawRecord {
+                request_id: row.get("request_id"),
+                user_id: row.get("user_id"),
+                asset: row.get("asset"),
+                amount: amount_str,
+                fee: fee_str,
+                to_address: row.get("to_address"),
+                status: row.get("status"),
+                tx_hash: row.get("tx_hash"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+            });
+        }
 
         Ok(records)
     }

@@ -188,6 +188,10 @@ impl ChainScanner for BtcScanner {
         "BTC"
     }
 
+    fn required_confirmations(&self) -> u32 {
+        self.config.scanning.required_confirmations
+    }
+
     async fn get_latest_height(&self) -> Result<u64, ScannerError> {
         if self.mock_mode {
             return Ok(self.mock_blocks.len() as u64);
