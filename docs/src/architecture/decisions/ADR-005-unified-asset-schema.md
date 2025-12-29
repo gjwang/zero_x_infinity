@@ -60,7 +60,7 @@ CREATE TABLE chain_assets_tb (
     min_deposit DECIMAL(30, 8) DEFAULT 0,
     min_withdraw DECIMAL(30, 8) DEFAULT 0,
     withdraw_fee DECIMAL(30, 8) DEFAULT 0,
-    is_active BOOLEAN DEFAULT TRUE,
+    is_active BOOLEAN DEFAULT FALSE, -- Safety: Inactive by default until verified
     
     -- Constraints
     UNIQUE(chain_slug, asset_id),        -- 1 Asset per Chain (for now, can look into bridging later)

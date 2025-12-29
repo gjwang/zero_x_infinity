@@ -58,8 +58,34 @@ Before listing, you need the following information:
     *   **Min Withdraw**: `10.0` (Must be > Fee).
     *   **Withdraw Fee**: `5.0` (Cover Gas + Margin).
 6.  **Confirm**: Check detected Decimals match project info.
-7.  **Click**: `Bind & Activate`.
-    *   *System Result*: `chain_assets_tb` created. Sentinel hot-reloads within 60s.
+7.  **Click**: `Bind (Saved as Inactive)`.
+    *   *System Result*: `chain_assets_tb` created with `is_active=false`.
+
+> **Note**: Risk Parameters (Fee, Min Deposit) are **Chain-Specific**.
+
+### Phase 3: Validation & Activation (验证与激活)
+*Verify functionality before opening to public.*
+
+1.  **Validation**: Perform the "User Deposit Test" (See Section 3).
+    *   *Note*: Inactive assets can still be processed by Sentinel for Admin-whitelisted test accounts (if supported), or use Staging env. 
+    *   *Correction*: Current Sentinel design might require Active to process. **SOP Update**: Set "Fee" very high or "Min Deposit" very high to prevent public use, OR rely on `asset_flags` (Deposit Disabled) from Phase 1.
+    *   *Refined Strategy*: 
+        1. Enable **Chain Binding** (Active = True) to allow Sentinel to see it.
+        2. Keep **Logical Asset** "Deposit/Withdraw" flags (Phase 1) **DISABLED**.
+        3. Test.
+        4. Enable Logical Flags.
+
+*(Self-Correction: Sentinel needs `is_active=true` to index logs. So we must keep Chain Active but Logic (User Balance) Disabled)*.
+
+**Revised Step 7**: 
+7. **Click**: `Bind & Activate` (Chain Level).
+    *   *Safety*: Ensure **Phase 1 Flags** (Deposit/Withdraw) are **UNCHECKED**. This allows Sentinel to sync, but Users cannot operate.
+
+### Phase 4: Public Launch (Go Live)
+1.  **Navigate**: Admin -> `Assets` -> `UNI`.
+2.  **Action**: Check `[x] Can Allow Deposit`, `[x] Can Allow Withdraw`.
+3.  **Click**: `Save`.
+    *   *Result*: Users can now see deposit address and transact.
 
 > **Note**: Risk Parameters (Fee, Min Deposit) are **Chain-Specific**. If you list USDT on both ETH and TRON, you must configure them separately for each chain (e.g., ETH Fee = 5.0, TRON Fee = 1.0).
 
