@@ -175,6 +175,8 @@ pip install fastapi-amis-admin fastapi-user-auth sqlalchemy asyncpg
 > 1.  **Chain Config**: Manage `chains_tb` (RPC, confirmations)
 > 2.  **Asset Binding**: Manage `chain_assets_tb` (Contract Address, Decimals)
 > 3.  **Auto-Verify**: Verify contracts on-chain before binding
+> 4.  **Asset Migration (P3)**: Unbind/Rebind for Token Swaps (e.g., LEND -> AAVE)
+
 
 > **Dual-Confirmation Workflow**:
 > 1. **Preview** - Config change preview
