@@ -106,7 +106,7 @@ trap cleanup EXIT
 # ============================================================================
 
 check_postgres() {
-    log_step "[1/5] Checking PostgreSQL..."
+    log_step "[1/6] Checking PostgreSQL..."
     if pg_isready -h localhost -p 5432 > /dev/null 2>&1; then
         log_info "✅ PostgreSQL is ready"
         return 0
@@ -117,8 +117,36 @@ check_postgres() {
     fi
 }
 
+run_migrations() {
+    log_step "[1.5/6] Running database migrations..."
+    
+    local db_name="${DATABASE_NAME:-zero_x_infinity}"
+    local db_user="${DATABASE_USER:-postgres}"
+    
+    # Check if database exists, create if not
+    if ! psql -U "$db_user" -lqt | cut -d \| -f 1 | grep -qw "$db_name"; then
+        log_info "Creating database '$db_name'..."
+        createdb -U "$db_user" "$db_name" 2>/dev/null || true
+    fi
+    
+    # Run all migrations in order
+    local migrations_dir="$PROJECT_ROOT/migrations"
+    if [ -d "$migrations_dir" ]; then
+        for migration in "$migrations_dir"/*.sql; do
+            if [ -f "$migration" ]; then
+                local migration_name=$(basename "$migration")
+                log_info "   Running $migration_name..."
+                psql -U "$db_user" -d "$db_name" -f "$migration" -q 2>/dev/null || true
+            fi
+        done
+        log_info "✅ Migrations complete"
+    else
+        log_warn "No migrations directory found at $migrations_dir"
+    fi
+}
+
 check_btc_node() {
-    log_step "[2/5] Checking BTC Node..."
+    log_step "[2/6] Checking BTC Node..."
     
     local response
     response=$(curl -s --user "${BTC_RPC_USER}:${BTC_RPC_PASS}" \
@@ -137,7 +165,7 @@ check_btc_node() {
 }
 
 setup_btc_wallet() {
-    log_step "[2.5] Ensuring BTC wallet exists..."
+    log_step "[2.5/6] Ensuring BTC wallet exists..."
     
     # Check if wallet exists
     local wallet_check
@@ -185,7 +213,7 @@ setup_btc_wallet() {
 }
 
 start_gateway() {
-    log_step "[3/5] Starting Gateway HTTP Server..."
+    log_step "[3/6] Starting Gateway HTTP Server..."
     
     # Check if already running
     local existing_pid
@@ -205,7 +233,7 @@ start_gateway() {
 }
 
 start_sentinel() {
-    log_step "[4/5] Starting Sentinel Service..."
+    log_step "[4/6] Starting Sentinel Service..."
     
     mkdir -p "$LOG_DIR"
     nohup cargo run -- --sentinel > "$LOG_DIR/sentinel_e2e.log" 2>&1 &
@@ -232,11 +260,12 @@ main() {
     echo -e "${CYAN}╠══════════════════════════════════════════════════════════════════════╣${NC}"
     echo -e "${CYAN}║                                                                      ║${NC}"
     echo -e "${CYAN}║  Services:                                                           ║${NC}"
-    echo -e "${CYAN}║    [1] PostgreSQL (check)                                            ║${NC}"
-    echo -e "${CYAN}║    [2] BTC Node + Wallet                                             ║${NC}"
-    echo -e "${CYAN}║    [3] Gateway HTTP                                                  ║${NC}"
-    echo -e "${CYAN}║    [4] Sentinel                                                      ║${NC}"
-    echo -e "${CYAN}║    [5] E2E Tests                                                     ║${NC}"
+    echo -e "${CYAN}║    [1]   PostgreSQL (check)                                          ║${NC}"
+    echo -e "${CYAN}║    [1.5] Database Migrations (auto-run)                              ║${NC}"
+    echo -e "${CYAN}║    [2]   BTC Node + Wallet                                           ║${NC}"
+    echo -e "${CYAN}║    [3]   Gateway HTTP                                                ║${NC}"
+    echo -e "${CYAN}║    [4]   Sentinel                                                    ║${NC}"
+    echo -e "${CYAN}║    [5]   E2E Tests                                                   ║${NC}"
     echo -e "${CYAN}║                                                                      ║${NC}"
     echo -e "${CYAN}╚══════════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
@@ -259,6 +288,7 @@ main() {
         *)
             # Full startup sequence
             check_postgres || exit 1
+            run_migrations
             check_btc_node || exit 1
             setup_btc_wallet
             start_gateway || exit 1
@@ -271,7 +301,7 @@ main() {
     esac
     
     # Run E2E tests
-    log_step "[5/5] Running E2E Tests..."
+    log_step "[5/6] Running E2E Tests..."
     echo ""
     
     cd "$PROJECT_ROOT/scripts/tests/0x11b_sentinel"
