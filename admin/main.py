@@ -120,7 +120,14 @@ class SecuritySanitizationMiddleware:
         import json
         
         async def send_wrapper(message):
-            if message["type"] == "http.response.body":
+            if message["type"] == "http.response.start":
+                # Remove Content-Length header as sanitization may change body size
+                headers = message.get("headers", [])
+                message["headers"] = [
+                    (k, v) for k, v in headers 
+                    if k.lower() != b"content-length"
+                ]
+            elif message["type"] == "http.response.body":
                 body = message.get("body", b"")
                 if body:
                     try:
