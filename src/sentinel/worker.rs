@@ -64,14 +64,49 @@ impl SentinelWorker {
 
         loop {
             for scanner in &self.scanners {
+                // Get write lock to reload addresses
+                let mut scanner_guard = scanner.write().await;
+                let chain_id = scanner_guard.chain_id().to_string();
+
+                // Load addresses from database for this chain
+                if let Err(e) = self
+                    .reload_scanner_addresses(scanner_guard.as_mut(), &chain_id)
+                    .await
+                {
+                    warn!("Failed to reload addresses for {}: {:?}", chain_id, e);
+                }
+
+                // Drop write lock and get read lock for scanning
+                drop(scanner_guard);
                 let scanner_guard = scanner.read().await;
+
                 if let Err(e) = self.scan_chain(scanner_guard.as_ref()).await {
-                    error!("Error scanning {}: {:?}", scanner_guard.chain_id(), e);
+                    error!("Error scanning {}: {:?}", chain_id, e);
                 }
             }
 
             sleep(self.poll_interval).await;
         }
+    }
+
+    /// Load addresses from database and update scanner's watched addresses
+    async fn reload_scanner_addresses(
+        &self,
+        scanner: &mut dyn ChainScanner,
+        chain_id: &str,
+    ) -> Result<(), SentinelError> {
+        let addresses: Vec<String> =
+            sqlx::query_scalar("SELECT address FROM user_addresses WHERE chain_id = $1")
+                .bind(chain_id)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(ScannerError::from)?;
+
+        let count = addresses.len();
+        scanner.reload_addresses(addresses);
+        debug!("{}: Loaded {} watched addresses", chain_id, count);
+
+        Ok(())
     }
 
     /// Run a single scan iteration (for testing)

@@ -294,6 +294,15 @@ impl ChainScanner for BtcScanner {
             peers: network_info.connections as u32,
         })
     }
+
+    fn reload_addresses(&mut self, addresses: Vec<String>) {
+        debug!("Reloading {} BTC addresses", addresses.len());
+        self.watched_addresses = addresses.into_iter().collect();
+    }
+
+    fn watched_count(&self) -> usize {
+        self.watched_addresses.len()
+    }
 }
 
 #[cfg(test)]

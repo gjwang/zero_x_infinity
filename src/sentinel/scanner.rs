@@ -25,6 +25,13 @@ pub trait ChainScanner: Send + Sync {
 
     /// Health check: is the node synced and responsive?
     async fn health_check(&self) -> Result<NodeHealth, ScannerError>;
+
+    /// Reload watched addresses from database
+    /// Called periodically by Worker to sync with user_addresses table
+    fn reload_addresses(&mut self, addresses: Vec<String>);
+
+    /// Get the number of watched addresses
+    fn watched_count(&self) -> usize;
 }
 
 /// Result of scanning a single block

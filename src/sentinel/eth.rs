@@ -356,6 +356,15 @@ impl ChainScanner for EthScanner {
             peers,
         })
     }
+
+    fn reload_addresses(&mut self, addresses: Vec<String>) {
+        debug!("Reloading {} ETH addresses", addresses.len());
+        self.watched_addresses = addresses.into_iter().map(|a| a.to_lowercase()).collect();
+    }
+
+    fn watched_count(&self) -> usize {
+        self.watched_addresses.len()
+    }
 }
 
 /// Convert wei (u128 string) to Decimal with 18 decimals
