@@ -19,6 +19,10 @@ Fix Sentinel blindness to SegWit (P2WPKH) deposits and implement ETH/ERC20 event
   - [ ] Parse ERC20 Transfer events (topic[2] = recipient, data = amount)
   - [ ] Add unit test `test_erc20_transfer_parsing`
   - [ ] Verify with E2E: MockUSDT deposit detected
+- [ ] **ADR-004 Implementation (Chain Asset Binding)**
+  - [ ] Create migration: `chains_tb` and `chain_assets_tb`
+  - [ ] Refactor `BtcScanner`/`EthScanner` to load config from DB (Hot Reload)
+  - [ ] Remove hardcoded tokens from `config.toml`
 
 ## Key Decisions Made
 | Decision | Rationale | Alternatives Rejected |
