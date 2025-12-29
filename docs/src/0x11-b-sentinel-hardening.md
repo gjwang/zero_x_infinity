@@ -422,7 +422,7 @@ eth:
 | `EthScanner` Implementation | ✅ **Complete** | Full JSON-RPC (`eth_blockNumber`, `eth_getBlockByNumber`, `eth_syncing`) |
 | Unit Tests | ✅ **22 Pass** | All Sentinel tests passing |
 | E2E Verification | ⚠️ **Partial** | Nodes not running during test; scripts ready |
-| ERC20 Token Support | 📋 **Future** | `eth_getLogs` for Transfer events (Phase 0x12) |
+| ERC20 Token Support | 🚧 **In Progress** | `eth_getLogs` for Transfer events (Phase 0x11-b scope) |
 
 ---
 
@@ -876,7 +876,7 @@ eth:
 | `EthScanner` 实现 | ✅ **已完成** | 完整 JSON-RPC (`eth_blockNumber`, `eth_getBlockByNumber`, `eth_syncing`) |
 | 单元测试 | ✅ **22 通过** | 所有 Sentinel 测试通过 |
 | E2E 验证 | ⚠️ **部分** | 测试时节点未运行；脚本已就绪 |
-| ERC20 代币支持 | 📋 **未来** | `eth_getLogs` for Transfer events (Phase 0x12) |
+| ERC20 代币支持 | 🚧 **进行中** | `eth_getLogs` for Transfer events (Phase 0x11-b 范围) |
 
 ---
 
