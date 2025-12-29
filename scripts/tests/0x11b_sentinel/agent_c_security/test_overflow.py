@@ -63,53 +63,50 @@ def test_tc_c11_integer_overflow(gateway: GatewayClientExtended):
         print(f"   ⚠️  {e}")
         return False
 
-def test_tc_c12_9_22_eth_barrier(gateway: GatewayClientExtended):
+def test_tc_c12_large_amount_deposit(gateway: GatewayClientExtended):
     """
-    TC-C12: The 9.22 ETH Barrier
+    TC-C12: Large Amount Deposit (User Requirement Validation)
     
-    Context:
-      ETH has 18 decimals.
-      1 ETH = 1,000,000,000,000,000,000 Wei (10^18)
-      MAX_INT64 = 9,223,372,036,854,775,807
-      MAX ETH in i64 = 9.223372... ETH
-      
-    Scenario: Deposit 10 ETH.
-    Expected: 
-      - If DB is INT8/BIGINT: CRASH or ERROR (500/400)
-      - If DB is NUMERIC: SUCCESS
-      
-    This test verifies behavior. If it crashes, we confirmed the vulnerability.
+    Requirement: Users must be able to deposit reasonable amounts (e.g., 100 ETH).
+    The System MUST handle 18-decimal assets correctly without artificial i64 limits.
+    
+    Scenario: User deposits 100 ETH.
+    Expected: SUCCESS.
+    
+    If this fails with "Number too large" or "500", it is a CRITICAL DEFECT.
     """
-    print_test_header("TC-C12", "The 9.22 ETH Barrier", "C")
+    print_test_header("TC-C12", "Large Amount Deposit (100 ETH)", "C")
     
     try:
         # Create a valid user first
         from common.chain_utils_extended import setup_jwt_user
         user_id, _, _ = setup_jwt_user()
         
-        amount_eth = "10.0" # > 9.22 ETH
+        amount_eth = "100.0" 
         
-        print(f"   🧪 Testing 10 ETH deposit for User {user_id} (exceeds i64 atomic units)")
+        print(f"   🧪 Attempting to deposit {amount_eth} ETH...")
+        print(f"   (Standard User Expectation: This MUST work)")
         
         try:
             resp = gateway.internal_mock_deposit(user_id, "ETH", amount_eth)
             if resp:
-                print(f"   ✅ Deposit Accepted! (DB might be NUMERIC or handling overflow?)")
-                print_test_result(True, "10 ETH Accepted")
+                print(f"   ✅ Deposit of {amount_eth} ETH Accepted")
+                print_test_result(True, "100 ETH Deposit Succeeded")
                 return True
             else:
-                print(f"   ❌ Deposit Failed (Quietly)")
+                print(f"   ❌ Deposit Failed")
                 print_test_result(False, "Deposit Failed")
                 return False
                 
         except Exception as e:
-            print(f"   ⚠️  Deposit Rejected/Crashed: {e}")
-            # If it's a 500 error, it likely explicitly failed serialization or DB insert
-            if "500" in str(e):
-                print("   🚨 Server returned 500 - Likely INT8 Overflow in DB/Rust")
-                print_test_result(False, "Server 500 Error (Overflow Confirm)")
-            else:
-                print_test_result(False, f"Error: {e}")
+            print(f"   ❌ CRITICAL FAILURE: System rejected valid amount {amount_eth} ETH")
+            print(f"   Error details: {e}")
+            
+            if "500" in str(e) or "Number too large" in str(e):
+                print("   🚨 Root Cause: Backend uses i64/u64 for 18-decimal assets.")
+                print("   🚨 Max i64 = ~9.22 ETH. This is a BLOCKING DEFECT.")
+            
+            print_test_result(False, "System cannot handle 100 ETH (Critical Defect)")
             return False
 
     except Exception as e:
@@ -126,7 +123,7 @@ def main():
     
     results = []
     results.append(("TC-C11: Integer Overflow", test_tc_c11_integer_overflow(gateway)))
-    results.append(("TC-C12: 9.22 ETH Barrier", test_tc_c12_9_22_eth_barrier(gateway)))
+    results.append(("TC-C12: 100 ETH Deposit", test_tc_c12_large_amount_deposit(gateway)))
     
     print("\n" + "=" * 70)
     print("📊 AGENT C RESULTS - Overflow")

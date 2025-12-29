@@ -261,49 +261,50 @@ main() {
     echo ""
     
     # Handle arguments
-    case "${1:-}" in
-        --cleanup)
-            log_info "Cleaning up any orphan processes on port 8080..."
-            local gw_pid
-            gw_pid=$(get_pid_by_port 8080)
-            if [ -n "$gw_pid" ]; then
-                stop_process "$gw_pid" "Gateway on 8080"
-            fi
-            log_info "Cleanup complete"
-            exit 0
-            ;;
-        --skip-startup)
-            log_warn "Skipping service startup..."
-            ;;
-        --clean-db)
-            log_warn "Clean DB mode: will drop and recreate all tables"
-            export CLEAN_DB=true
-            # Fall through to full startup
-            check_postgres || exit 1
-            run_migrations
-            check_btc_node || exit 1
-            setup_btc_wallet
-            start_gateway || exit 1
-            start_sentinel || exit 1
-            
-            # Wait for services to stabilize
-            log_info "Waiting for services to stabilize..."
-            sleep 5
-            ;;
-        *)
-            # Full startup sequence
-            check_postgres || exit 1
-            run_migrations
-            check_btc_node || exit 1
-            setup_btc_wallet
-            start_gateway || exit 1
-            start_sentinel || exit 1
-            
-            # Wait for services to stabilize
-            log_info "Waiting for services to stabilize..."
-            sleep 5
-            ;;
-    esac
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --cleanup)
+                log_info "Cleaning up any orphan processes on port 8080..."
+                local gw_pid=$(get_pid_by_port 8080)
+                if [ -n "$gw_pid" ]; then
+                    stop_process "$gw_pid" "Gateway on 8080"
+                fi
+                log_info "Cleanup complete"
+                exit 0
+                ;;
+            --skip-startup)
+                SKIP_STARTUP=true
+                shift
+                ;;
+            --clean-db)
+                log_warn "Clean DB mode: will drop and recreate all tables"
+                export CLEAN_DB=true
+                shift
+                ;;
+            --security)
+                export RUN_SECURITY_TESTS=true
+                shift
+                ;;
+            *)
+                shift # Ignore unknown args or treat as standard startup
+                ;;
+        esac
+    done
+
+    # Service Startup Logic
+    if [[ "${SKIP_STARTUP:-false}" != "true" ]]; then
+        check_postgres || exit 1
+        run_migrations
+        check_btc_node || exit 1
+        setup_btc_wallet
+        start_gateway || exit 1
+        start_sentinel || exit 1
+        
+        # Wait for services to stabilize
+        log_info "Waiting for services to stabilize..."
+        sleep 5
+    fi
     
     # Run E2E tests with layered approach: Unit → Component → Integration → Full
     log_step "[5/6] Running E2E Tests (Layered Approach)..."
