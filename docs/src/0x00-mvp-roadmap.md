@@ -1,6 +1,7 @@
 # 0x00 Project Roadmap
 
 > **Vision**: Build a production-grade cryptocurrency exchange from Hello World to Microsecond Latency.
+> **Current Status**: Phase III (Resilience & Funding) - Sentinel Integration.
 
 ---
 
@@ -44,26 +45,41 @@ This project documents the complete journey of building a **1.3M orders/sec** ma
 
 ## 🔶 Phase III: Resilience & Funding
 
-*Status: **In Progress** (0x0F Complete)*
+*Status: **In Progress***
 
-| Chapter | Title | Description |
-|---------|-------|--------------|
-| 0x0D | [Snapshot & Recovery](./0x0D-snapshot-recovery.md) | ✅ State snapshot, crash recovery |
-| 0x0E | [OpenAPI Integration](./0x0E-openapi-integration.md) | ✅ Swagger UI, SDK generation |
-| 0x0F | [Admin Dashboard](./0x0F-admin-dashboard.md) | ✅ Ops Panel, KYC, hot-reload |
-| 0x10 | [Web Frontend](./0x10-web-frontend.md) | 🚧 Trading UI (In Progress) |
-| 0x11 | Deposit & Withdraw | Blockchain integration (planned) |
+| Chapter | Title | Description | Status |
+|---------|-------|--------------|---|
+| 0x0D | [Snapshot & Recovery](./0x0D-snapshot-recovery.md) | State snapshot, crash recovery | ✅ Done |
+| 0x0E | [OpenAPI Integration](./0x0E-openapi-integration.md) | Swagger UI, SDK generation | ✅ Done |
+| 0x0F | [Admin Dashboard](./0x0F-admin-dashboard.md) | Ops Panel, KYC, hot-reload | ✅ Done |
+| 0x11 | [Deposit & Withdraw](./0x11-deposit-withdraw.md) | Mock Chain integration, Idempotency | ✅ Done |
+| 0x11-a | [Real Chain Integration](./0x11-a-real-chain.md) | Sentinel Service (Pull Model) | ✅ MVP Done |
+| 0x11-b | Real Chain Hardening | Sentinel **SegWit Fix (P2WPKH)** & ETH Support | 🚧 Next Step |
+
 ---
 
-## ⏳ Phase IV: Extreme Optimization
+## 🔶 Phase IV: Trading Integration & Verification
+
+*Status: **Pending Verification***
+
+> **Context**: The Core Engine and Trading APIs are implemented but currently tested with **Mocks**. This phase bridges the gap between the Real Chain (0x11) and the Matching Engine (0x01).
+
+| Chapter | Title | Description | Status |
+|---------|-------|-------------|---|
+| 0x12 | Real Trading Verification | End-to-End: `Bitcoind -> Sentinel -> Order -> Trade` | � Code Ready (Needs Real-Chain Test) |
+| 0x13 | Market Data Experience | WebSocket Verification (`Ticker`, `Trade`, `Depth`) | � Code Ready (Needs E2E Test) |
+
+---
+
+## ⏳ Phase V: Extreme Optimization
 
 *Status: **Planned***
 
 | Chapter | Title | Description |
 |---------|-------|-------------|
-| 0x12 | [Zero-Copy](./0x12-zero-copy.md) | Zero-copy deserialization |
-| 0x13 | [CPU Affinity](./0x13-cpu-affinity.md) | Cache-friendly optimization |
-| 0x14 | [SIMD Matching](./0x14-simd-matching.md) | Vectorized acceleration |
+| 0x14 | [Zero-Copy](./0x12-zero-copy.md) | Zero-copy deserialization |
+| 0x15 | [CPU Affinity](./0x13-cpu-affinity.md) | Cache-friendly optimization |
+| 0x16 | [SIMD Matching](./0x14-simd-matching.md) | Vectorized acceleration |
 
 ---
 
@@ -74,34 +90,22 @@ This project documents the complete journey of building a **1.3M orders/sec** ma
 | `v0.09-f-integration-test` | 0x09 | **1.3M orders/sec** baseline achieved |
 | `v0.10-a-account-system` | 0x0A | PostgreSQL account integration |
 | `v0.10-b-api-auth` | 0x0A | Ed25519 authentication |
-| `v0.0B-a-transfer-fsm` | 0x0B | ULID-based FSM transfer |
 | `v0.0C-trade-fee` | 0x0C | Maker/Taker fee system |
 | `v0.0D-persistence` | 0x0D | Universal WAL & Snapshot persistence |
-| `v0.0E-openapi` | 0x0E | OpenAPI 3.0 + Swagger UI |
 | `v0.0F-admin-dashboard` | 0x0F | Admin Operations Dashboard |
+| `v0.11-a-funding-qa` | 0x11-a | Real Chain Sentinel MVP (Deposit/Withdraw) |
 
 ---
 
 ## 🎯 What You'll Learn
 
-By following this project, you will learn:
-
 1. **Financial Precision** - Why `f64` fails and how to use fixed-point `u64`
 2. **High-Performance Data Structures** - BTreeMap for O(log n) order matching
 3. **Lock-Free Concurrency** - LMAX Disruptor-style Ring Buffer
 4. **Event Sourcing** - WAL-based deterministic state reconstruction
-5. **Production Architecture** - PostgreSQL + TDengine dual-database design
-6. **Cryptographic Security** - Ed25519 asymmetric authentication
-7. **Financial Integrity** - Maker/Taker fee calculation with 10^6 precision
+5. **Real-World Blockchain Integration** - Handling Re-orgs, Confirmations, and UTXO management
+6. **Production Security** - Watch-only wallets & Ed25519 authentication
 
 ---
 
-## 📚 References
-
-- [Performance Report](./perf-report.md) - Latest benchmark results
-- [Database Selection](./database-selection-tdengine.md) - Why TDengine?
-- [API Conventions](../standards/api-conventions.md) - REST API standards
-
----
-
-*Last Updated: 2024-12-25*
+*Last Updated: 2025-12-29*

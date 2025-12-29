@@ -42,21 +42,33 @@
         - [E2E Testing Guide | E2E 测试指南](./0x0B-a-transfer-testing.md)
         - [Build & Verification Guide | 编译与验证事项](./agent-build-verification-guide.md)
 - [0x0C Trade Fee | 手续费系统](./0x0C-trade-fee.md)
+
+---
+
+## 🔶 第三阶段：韧性与资金 (Resilience & Funding)
+
 - [0x0D Snapshot & Recovery | 鲁棒性: 快照与恢复](./0x0D-snapshot-recovery.md)
 - [0x0E OpenAPI Integration | OpenAPI 集成](./0x0E-openapi-integration.md)
 - [0x0F Admin Dashboard | 管理后台](./0x0F-admin-dashboard.md)
     - [Testing Guide | 测试指南](./0x0F-admin-testing.md)
-- [0x10 Web Frontend | 前端外包需求](./0x10-web-frontend.md) ⭐
+- [0x10 Web Frontend | 前端外包需求](./0x10-web-frontend.md)
 - [0x11 Deposit & Withdraw | 充值与提现 (Mock Chain)](./0x11-deposit-withdraw.md)
-- [0x11-a Real Chain Integration | 真实链集成](./0x11-a-real-chain.md)
+- [0x11-a Real Chain Integration | 真实链集成 (Sentinel)](./0x11-a-real-chain.md)
 
 ---
 
-## ⚡ 第三阶段：极致单点性能优化 (Extreme Optimization)
+## 🔶 第四阶段：交易集成与验证 (Trading Integration)
 
-- [0x12 Zero-Copy Optimization | Zero-Copy 反序列化优化](./0x12-zero-copy.md)
-- [0x13 CPU Affinity & Cache | 缓存友好性与 CPU 亲和性](./0x13-cpu-affinity.md)
-- [0x14 SIMD Matching Acceleration | SIMD 矢量化撮合加速](./0x14-simd-matching.md)
+- [0x12 Real Trading Verification | 全链路验证 (Mock Removal)](./0x00-mvp-roadmap.md) <!-- Placeholder link until doc exists -->
+- [0x13 Market Data Experience | 行情数据体验 (WS Verification)](./0x00-mvp-roadmap.md) <!-- Placeholder link until doc exists -->
+
+---
+
+## ⚡ 第五阶段：极致单点性能优化 (Extreme Optimization)
+
+- [0x14 Zero-Copy Optimization | Zero-Copy 反序列化优化](./0x12-zero-copy.md)
+- [0x15 CPU Affinity & Cache | 缓存友好性与 CPU 亲和性](./0x13-cpu-affinity.md)
+- [0x16 SIMD Matching Acceleration | SIMD 矢量化撮合加速](./0x14-simd-matching.md)
 
 
 ---
