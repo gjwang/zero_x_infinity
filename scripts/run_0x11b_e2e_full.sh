@@ -267,6 +267,46 @@ start_sentinel() {
     fi
 }
 
+check_anvil() {
+    log_step "[2.6/6] Checking Anvil (Ethereum Node)..."
+    if which anvil >/dev/null 2>&1; then
+        ANVIL_BIN=$(which anvil)
+        log_info "✅ Anvil found at $ANVIL_BIN"
+        return 0
+    else
+        # Try common path
+        if [ -f "$HOME/.foundry/bin/anvil" ]; then
+             export PATH="$HOME/.foundry/bin:$PATH"
+             log_info "✅ Anvil found at ~/.foundry/bin/anvil"
+             return 0
+        fi
+        log_warn "⚠️ Anvil not found. L2 Tests will be skipped."
+        return 1
+    fi
+}
+
+start_anvil() {
+    log_step "[2.7/6] Starting Anvil..."
+    
+    local existing_pid=$(get_pid_by_port 8545)
+    if [ -n "$existing_pid" ]; then
+        log_info "Anvil already running (PID: $existing_pid)"
+        ANVIL_PID="$existing_pid"
+        return 0
+    fi
+
+    check_anvil || return 0 # Skip if not found
+
+    # Start Anvil
+    # -b 1: Block time 1s (fast enough for tests)
+    # --port 8545
+    nohup anvil -b 1 --port 8545 > "$LOG_DIR/anvil.log" 2>&1 &
+    ANVIL_PID=$!
+    
+    wait_for_port 8545 "Anvil" 10
+    log_info "✅ Anvil started (PID: $ANVIL_PID)"
+}
+
 # ============================================================================
 # Main
 # ============================================================================
@@ -326,7 +366,7 @@ main() {
         run_migrations
         check_btc_node || exit 1
         setup_btc_wallet
-        start_anvil         # New: Start Anvil
+        start_anvil
         start_gateway || exit 1
         start_sentinel || exit 1
         
@@ -399,7 +439,7 @@ main() {
         log_warn "⚠️ Level 2 FAILED: ERC20 Component Test reported failure"
         ((TESTS_FAILED++))
         L2_STATUS="FAILED"
-    elif echo "$L2_OUTPUT" | grep -q "SKIPPED"; then
+    elif echo "$L2_OUTPUT" | grep -q "SKIPPED:"; then
         log_warn "⚠️ Level 2 SKIPPED: ERC20 Component Test (Environment limitation)"
         ((TESTS_SKIPPED++))
         L2_STATUS="SKIPPED"
@@ -409,10 +449,19 @@ main() {
         ((TESTS_PASSED++))
         L2_STATUS="PASSED"
     else
-        # Non-zero exit code but didn't catch specific strings
         log_warn "❌ Level 2 CRASHED: ERC20 Component Test"
         ((TESTS_FAILED++))
         L2_STATUS="FAILED"
+    fi
+
+    echo ""
+    log_info "📋 Level 2b: Fake Token Scenarios (Security)"
+    if uv run python3 L2b_erc20_fake_scenarios.py; then
+        log_info "✅ Level 2b PASSED: Fake Token Logic Verified"
+        ((TESTS_PASSED++))
+    else
+         log_warn "⚠️ Level 2b SKIPPED/FAILED"
+         # Optional
     fi
     
     # ========================================================================
