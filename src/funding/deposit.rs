@@ -129,7 +129,7 @@ impl DepositService {
     ) -> Result<String, DepositError> {
         // Check DB first
         let row = sqlx::query!(
-            "SELECT address FROM user_addresses WHERE user_id = $1 AND asset = $2 AND network = $3",
+            "SELECT address FROM user_addresses WHERE user_id = $1 AND asset = $2 AND chain_id = $3",
             user_id,
             asset,
             network
@@ -150,7 +150,7 @@ impl DepositService {
         })?; // Wrap error
 
         sqlx::query!(
-            "INSERT INTO user_addresses (user_id, asset, network, address) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
+            "INSERT INTO user_addresses (user_id, asset, chain_id, address) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
             user_id, asset, network, address
         )
         .execute(self.db.pool())
@@ -158,7 +158,7 @@ impl DepositService {
 
         // Re-fetch to ensure we return what's in DB (handle race condition on unique constraint)
         let final_addr = sqlx::query!(
-            "SELECT address FROM user_addresses WHERE user_id = $1 AND asset = $2 AND network = $3",
+            "SELECT address FROM user_addresses WHERE user_id = $1 AND asset = $2 AND chain_id = $3",
             user_id,
             asset,
             network
