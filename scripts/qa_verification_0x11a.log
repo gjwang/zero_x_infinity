@@ -1,0 +1,146 @@
+=== [Mon Dec 29 01:35:39 CST 2025] Starting Phase 0x11-a Verification ===
+Restarting Docker (Postgres/Bitcoind)...
+postgres_dev
+b3896b509adaa9cac6c44e8e32ccd08fb703e73c92153efe94ea2f746a7e9a83
+docker: Error response from daemon: failed to set up container networking: driver failed programming external connectivity on endpoint postgres_dev (48ebfd5c897339dcbc15049a7770386c9777c54052fae576f8da8d7ad9f47c33): Bind for 0.0.0.0:5433 failed: port is already allocated
+
+Run 'docker run --help' for more information
+=== [Mon Dec 29 01:35:49 CST 2025] Starting Phase 0x11-a Verification ===
+Restarting Docker (Postgres/Bitcoind)...
+b09201c1d479a56c70988addefbad8761d0041e1c500b37ccb43de447a24f352
+6f6d69526d5104cfa3914beb531029197bec6f46d45e5e4b10bf4054fb2340dd
+Waiting for Bitcoind...
+✅ Bitcoind ready
+Initializing DB...
+========================================
+ Database Configuration
+========================================
+  Runtime Environment: DEV
+  Config File: /Users/gjwang/eclipse-workspace/rust_source/zero_x_infinity_test/config/dev.yaml
+
+  PostgreSQL:
+    Host:     localhost
+    Port:     5433
+    User:     trading
+    Password: tra***
+    Database: exchange_info_db
+
+  TDengine:
+    Host:     localhost
+    REST Port: 6041
+    User:     root
+    Password: tao***
+    Database: trading
+========================================
+
+[0;32m[INFO][0m === Initializing PostgreSQL ===
+[0;32m[INFO][0m Waiting for PostgreSQL...
+..........[0;32m[INFO][0m PostgreSQL is ready
+[0;32m[INFO][0m Running migrations...
+[0;32m[INFO][0m   Applying 001_init_schema.sql...
+[0;32m[INFO][0m   Applying 002_create_api_keys.sql...
+[0;32m[INFO][0m   Applying 003_internal_transfer.sql...
+[0;32m[INFO][0m   Applying 004_fsm_transfers.sql...
+[0;32m[INFO][0m   Applying 005_account_status.sql...
+[0;32m[INFO][0m   Applying 006_consolidate_transfer_id.sql...
+[0;32m[INFO][0m   Applying 007_trade_fee.sql...
+[0;32m[INFO][0m   Applying 008_admin_audit_log.sql...
+[0;32m[INFO][0m   Applying 009_users_auth.sql...
+[0;32m[INFO][0m   Applying 010_deposit_withdraw.sql...
+[0;32m[INFO][0m   Applying 20251228180000_chain_cursor.sql...
+[0;32m[INFO][0m Seeding data...
+INSERT 0 1
+INSERT 0 3
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+[0;32m[INFO][0m Fixing sequences...
+[0;32m[INFO][0m Verifying tables...
+[0;32m[INFO][0m   Found 14 tables
+[0;32m[INFO][0m ✅ PostgreSQL initialized
+
+======================================
+ ✅ All databases initialized
+======================================
+Starting Gateway...
+Gateway PID: 33046
+Starting Sentinel...
+Sentinel PID: 33047
+Running Test Suite (scripts/tests/0x11_funding/run_tests.sh)...
+==========================================================
+🛡️  0x11 RELEASE VERIFICATION: DEPOSIT & WITHDRAW
+==========================================================
+
+🤖 [Agent B] Running Core Stability Tests...
+👮 Agent B: Starting Core Flow Verification
+🔑 [Setup] Valid JWT acquired for user qa_user_wmvbhv (ID: 1003)
+
+[Step 1] Verifying Deposit Address Generation...
+   ✅ BTC Address: bcrt1qaaqxt02gkh8dgz6e4qylymk8muv29qs3uv4rjy
+   ✅ Address Persistence Verified
+
+[Step 2] Simulating Mock Deposit...
+   ✅ Mock Deposit Submitted: tx_mock_1766943377
+   Waiting for balance update...
+   ✅ Deposit Record Found: SUCCESS
+   (Skipping explicit balance read, proving via Withdrawal)
+
+[Step 3] Verifying Withdrawal Flow...
+   ✅ Withdrawal Applied: ID cb870a77-fa53-41af-8d56-0a6fa1cd04f7
+   Tracking status...
+   Status: SUCCESS
+   ✅ Withdrawal Processing/Success
+
+🎉 Agent B: Core Flow Verified (Happy Path)
+✅ Agent B: PASS
+
+🏴‍☠️ [Agent A] Running Chaos & Idempotency Tests...
+🔑 [Setup] Valid JWT acquired for user qa_user_mljgyo (ID: 1004)
+
+🏴‍☠️ Agent A: Launching Deposit Replay Attack (Double Spend)...
+   Target TxHash: tx_exploit_1766943379_2069
+   Results: 1 Success, 9 Rejections
+   Verifying ledger integrity...
+   Ledger Entries for TxHash: 1
+   ✅ Deposit Idempotency Passed (Ledger safe)
+
+🏴‍☠️ Agent A: Launching Withdrawal Race Condition (Bank Run)...
+   Attempting to withdraw 40.00000000 x 5 (Req: 200 > Avail: ~50)
+   Results: 0 Approved, 5 Rejected
+   ⚠️ All failed? Maybe balance wasn't credited.
+
+🎉 Agent A: Chaos Tests Passed (System Resilient)
+✅ Agent A: PASS
+
+🔒 [Agent C] Running Security Tests...
+🔑 [Setup] Valid JWT acquired for user qa_user_opilvy (ID: 1005)
+🔑 [Setup] Valid JWT acquired for user qa_user_yiryug (ID: 1006)
+
+🔒 Agent C: Testing Address Isolation...
+   User B Address: bcrt1q49drejd7gv57uq8jxtudvv8qacdzx45p8vrw2y
+   [Attack] User A requesting User B's address (spoofing user_id param)...
+   ✅ Parameter Spoofing blocked (Got bcrt1qda2mzyru29c9lfdhlsremvk49cd2zwdu4eagtu != bcrt1q49drejd7gv57uq8jxtudvv8qacdzx45p8vrw2y)
+
+🔒 Agent C: Testing Internal Endpoint Protection...
+   [Attack] External User calling /internal/mock/... (Simulated)
+   ✅ Access Denied: 403
+
+🔒 Agent C: Testing Withdrawal Input Sanitization...
+   [Attack] Withdrawing -100 BTC...
+   ✅ Negative amount rejected
+   [Attack] Injection in Address field...
+   ✅ Handled gracefully (400)
+
+🎉 Agent C: Security Tests Passed
+✅ Agent C: PASS
+
+==========================================================
+✅  ALL SYSTEMS GO: 0x11 READY FOR RELEASE
+==========================================================
+Cleaning up...
+✅ ALL TESTS PASSED
