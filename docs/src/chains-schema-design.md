@@ -9,10 +9,8 @@
 > [!IMPORTANT]
 > **Clarity First, Performance Second**
 >
-> 1. **减少迷糊是第一性** - Reducing confusion is the top priority
-> 2. **数据量不会很多** - Data volume is small (< 100 chains), so VARCHAR FK is acceptable
->
-> This guides all naming and FK decisions in this schema.
+> 1. Reducing confusion is the top priority
+> 2. Data volume is small (< 100 chains), so VARCHAR FK is acceptable
 
 ## 1. Background
 
