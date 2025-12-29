@@ -157,6 +157,10 @@ jobs:
         run: chmod +x target/release/zero_x_infinity
       
       - name: Run Unit Tests
+        env:
+          # Only run full 1.3M dataset tests on 'main' branch or if manually requested.
+          # For PRs and other branches, we skip it to keep CI fast.
+          SKIP_LARGE_DATASET: ${{ (github.ref == 'refs/heads/main' || inputs.run_full_tests == 'true') && '' || '1' }}
         run: ./scripts/test_ci.sh --test-unit
 
   # ============================================================================
@@ -766,9 +770,7 @@ jobs:
           enable-cache: true
           
       - name: Install Dependencies
-        run: |
-          uv sync
-          uv pip install -r admin/requirements.txt --python .venv
+        run: uv sync
           
       - name: Download Binary
         uses: actions/download-artifact@v4
@@ -841,7 +843,6 @@ jobs:
       - name: Install Admin Dependencies
         run: |
           uv sync
-          uv pip install -r admin/requirements.txt --python .venv
           uv run playwright install chromium --with-deps
 
       - name: Initialize Admin DB

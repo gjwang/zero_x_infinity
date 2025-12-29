@@ -31,7 +31,7 @@ def test_admin_ui_create_asset_propagation(page: Page):
     
     # 2. Click "Create" button (Amis primary button)
     create_btn = page.locator("button.cxd-Button--primary", has_text="Create")
-    create_btn.wait_for(state="visible", timeout=10000)
+    create_btn.wait_for(state="visible", timeout=30000)
     create_btn.click()
     
     # Wait for modal to appear

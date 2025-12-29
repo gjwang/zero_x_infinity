@@ -120,11 +120,6 @@ if [ ! -d "$ADMIN_DIR" ]; then
 fi
 echo -e "    ${GREEN}✓${NC} Admin directory exists"
 
-if [ ! -f "$ADMIN_DIR/requirements.txt" ]; then
-    fail_at_step "requirements.txt not found in $ADMIN_DIR"
-fi
-echo -e "    ${GREEN}✓${NC} requirements.txt found"
-
 # ============================================================================
 # Step 2: Install Python dependencies
 # ============================================================================
@@ -132,35 +127,18 @@ STEP=2
 echo ""
 echo "[Step $STEP] Installing Python dependencies..."
 
-cd "$ADMIN_DIR"
+cd "$PROJECT_DIR"
 
-# Create virtual environment if not exists
-if [ ! -d "venv" ]; then
-    echo "    Creating virtual environment..."
-    uv run python3 -m venv venv
-    echo -e "    ${GREEN}✓${NC} Virtual environment created"
-else
-    echo -e "    ${GREEN}✓${NC} Virtual environment already exists"
-fi
-
-# Activate virtual environment
-source venv/bin/activate
-
-# Upgrade pip to latest version
-echo "    Upgrading pip..."
-python -m pip install --upgrade pip --quiet
-echo -e "    ${GREEN}✓${NC} pip upgraded to $(pip --version | awk '{print $2}')"
-
-# Install/upgrade dependencies from requirements.txt
-echo "    Installing dependencies from requirements.txt..."
-pip install -r requirements.txt --quiet
-echo -e "    ${GREEN}✓${NC} All dependencies installed"
+# Install/sync dependencies via uv
+echo "    Syncing dependencies with uv..."
+uv sync
+echo -e "    ${GREEN}✓${NC} Dependencies synced"
 
 # Verify key packages
 echo "    Verifying key packages:"
 for pkg in fastapi uvicorn pytest; do
-    if python -c "import $pkg" 2>/dev/null; then
-        VERSION=$(python -c "import $pkg; print($pkg.__version__)" 2>/dev/null || echo "unknown")
+    if uv run python -c "import $pkg" 2>/dev/null; then
+        VERSION=$(uv run python -c "import $pkg; print($pkg.__version__)" 2>/dev/null || echo "unknown")
         echo -e "      ${GREEN}✓${NC} $pkg ($VERSION)"
     else
         fail_at_step "Package $pkg not installed correctly"
@@ -181,7 +159,8 @@ if [ -f "admin_auth.db" ]; then
     echo "    Skipping initialization (idempotent)"
 else
     echo "    Running init_db.py..."
-    if python init_db.py 2>&1 | grep -q "Database initialized successfully"; then
+    cd "$ADMIN_DIR"
+    if uv run python init_db.py 2>&1 | grep -q "Database initialized successfully"; then
         echo -e "    ${GREEN}✓${NC} Database initialized"
         echo -e "    ${GREEN}✓${NC} Default admin user created (admin/admin)"
     else
@@ -201,7 +180,8 @@ cleanup_server
 
 # Start uvicorn server in background
 echo "    Starting uvicorn on port 8001..."
-nohup uvicorn main:app --host 0.0.0.0 --port 8001 > /tmp/admin_e2e.log 2>&1 &
+cd "$ADMIN_DIR"
+nohup uv run uvicorn main:app --host 0.0.0.0 --port 8001 > /tmp/admin_e2e.log 2>&1 &
 SERVER_PID=$!
 sleep 2
 
@@ -244,7 +224,8 @@ echo "[Step $STEP] Running tests..."
 # 5.1: Basic HTTP Tests (verify_e2e.py)
 echo ""
 echo "    [5.1] Basic HTTP Tests (verify_e2e.py)..."
-if python verify_e2e.py 2>&1 | tee /tmp/verify_e2e.log; then
+cd "$ADMIN_DIR"
+if uv run python verify_e2e.py 2>&1 | tee /tmp/verify_e2e.log; then
     BASIC_PASSED=$(grep -o "[0-9]* passed" /tmp/verify_e2e.log | awk '{print $1}' || echo "4")
     BASIC_FAILED=$(grep -o "[0-9]* failed" /tmp/verify_e2e.log | awk '{print $1}' || echo "0")
     echo -e "    ${GREEN}✓${NC} Basic tests: $BASIC_PASSED passed, $BASIC_FAILED failed"
@@ -261,7 +242,7 @@ fi
 echo ""
 echo "    [5.2] Unit Tests (pytest tests/test_*.py)..."
 cd "$ADMIN_DIR"
-if pytest tests/test_*.py -v --tb=short 2>&1 | tee /tmp/pytest_unit.log; then
+if uv run python -m pytest tests/test_*.py -v --tb=short 2>&1 | tee /tmp/pytest_unit.log; then
     UNIT_PASSED=$(grep -E "^(tests/test_.*\.py)" /tmp/pytest_unit.log | grep -c "PASSED" || echo "0")
     UNIT_FAILED=$(grep -E "^(tests/test_.*\.py)" /tmp/pytest_unit.log | grep -c "FAILED" || echo "0")
     echo -e "    ${GREEN}✓${NC} Unit tests: $UNIT_PASSED passed, $UNIT_FAILED failed"
@@ -287,7 +268,7 @@ fi
 # 5.3: E2E Integration Tests (tests/e2e/)
 echo ""
 echo "    [5.3] E2E Integration Tests (pytest tests/e2e/)..."
-if pytest tests/e2e/ -v --tb=short 2>&1 | tee /tmp/pytest_e2e.log; then
+if uv run python -m pytest tests/e2e/ -v --tb=short 2>&1 | tee /tmp/pytest_e2e.log; then
     E2E_PASSED=$(grep -E "^(tests/e2e/test_.*\.py)" /tmp/pytest_e2e.log | grep -c "PASSED" 2>/dev/null || echo "0")
     E2E_FAILED=$(grep -E "^(tests/e2e/test_.*\.py)" /tmp/pytest_e2e.log | grep -c "FAILED" 2>/dev/null || echo "0")
     # Clean any whitespace/newlines that might cause arithmetic errors
