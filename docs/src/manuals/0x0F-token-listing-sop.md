@@ -11,8 +11,10 @@ Before listing, you need the following information:
 | **Logic Symbol** | The unique ticker on the exchange | `UNI` | Project Team |
 | **Asset Name** | Full display name | `Uniswap` | Project Team |
 | **Chain** | The blockchain network | `ETH` | Project Team |
-| **Contract Address** | The Token's Smart Contract | `0x1f9840a85d5af5bf1d1762f925bdaddc4201f984` | Etherscan / Project |
-| **Precision** | Token decimals | `18` | (Auto-detected, verification only) |
+| **Contract Address** | The Token's Smart Contract | `0x1f98...` | Etherscan / Project |
+| **Decimals** | Token precision | `18` | Auto-detected |
+| **Min Deposit** | Minimum amount to credit | `0.1` | Ops Decision (Risk) |
+| **Withdraw Fee** | Fee deducted per withdrawal | `5.0` | Ops Decision (Gas Cost) |
 
 ---
 
@@ -30,13 +32,15 @@ Before listing, you need the following information:
     *   *System Result*: `assets_tb` created. Asset ID generated (e.g., `#10`).
 
 ### Phase 2: Bind Chain Asset (链上绑定)
-*Tell Sentinel how to find this asset on-chain.*
+*Tell Sentinel how to find this asset on-chain and set limits.*
 
 1.  **Navigate**: Admin -> `Assets` -> Select `UNI` (#10) -> `Chain Config` Tab.
 2.  **Click**: `Add New Binding`.
-3.  **Input**:
+3.  **Input Configuration**:
     *   **Chain**: Select `ETH` (Ethereum) from dropdown.
     *   **Contract Address**: Paste `0x1f9840a85d5af5bf1d1762f925bdaddc4201f984`.
+    *   **Min Deposit**: Set `0.1` (Ignore tiny dust).
+    *   **Withdraw Fee**: Set `5.0` (Cover gas costs).
 4.  **Action**: Click `Verify On-Chain` button.
     *   *System Check*: Admin backend calls RPC `eth_call(decimals)`.
     *   *Success*: Display "✅ Valid ERC20. Decimals: 18. Protocol: Uniswap".
