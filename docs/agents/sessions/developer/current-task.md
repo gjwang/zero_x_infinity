@@ -23,6 +23,9 @@ Fix Sentinel blindness to SegWit (P2WPKH) deposits and implement ETH/ERC20 event
   - [ ] Create migration: `chains_tb` and `chain_assets_tb`
   - [ ] Refactor `BtcScanner`/`EthScanner` to load config from DB (Hot Reload)
   - [ ] Remove hardcoded tokens from `config.toml`
+- [ ] **ADR-006 Implementation (User Address Decoupling)**
+  - [ ] Create migration: `user_chain_addresses` (Split Address from Asset)
+  - [ ] Update Sentinel lookup logic: Match Chain Address -> User, then Asset via Contract
 
 ## Key Decisions Made
 | Decision | Rationale | Alternatives Rejected |
