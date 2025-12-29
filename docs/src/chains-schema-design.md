@@ -55,11 +55,11 @@ CREATE TABLE tokens (
     name VARCHAR(128) NOT NULL,               -- "Tether USD"
     decimals INTEGER NOT NULL,                -- 6
     token_type VARCHAR(16) NOT NULL,          -- "NATIVE", "ERC20"
-    chain_id INTEGER NOT NULL REFERENCES chains(id),
+    chain_slug VARCHAR(32) NOT NULL REFERENCES chains(chain_slug),  -- FK to chains.chain_slug
     contract_address VARCHAR(255),            -- NULL for native
     is_active BOOLEAN DEFAULT TRUE,
     
-    UNIQUE (chain_id, contract_address)
+    UNIQUE (chain_slug, contract_address)
 );
 ```
 
@@ -69,10 +69,10 @@ CREATE TABLE tokens (
 CREATE TABLE user_addresses (
     id SERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL,
-    chain_id INTEGER NOT NULL REFERENCES chains(id),
+    chain_slug VARCHAR(32) NOT NULL REFERENCES chains(chain_slug),  -- FK to chains.chain_slug
     address VARCHAR(255) NOT NULL,
     
-    UNIQUE (user_id, chain_id)
+    UNIQUE (user_id, chain_slug)
 );
 ```
 
