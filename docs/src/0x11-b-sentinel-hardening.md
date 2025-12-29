@@ -172,7 +172,7 @@ cargo test sentinel::eth -- --nocapture
 ## 9. Deposit Flow Architecture
 
 > [!IMPORTANT]
-> **Production Risk Control Requirements**
+> ## 🚨 Production Risk Control Requirements
 > 
 > Before crediting user balance on finalization, deposits **SHOULD** pass through:
 > 1. **Source Verification** - Check if sender address is on sanctions/blacklist
@@ -260,7 +260,7 @@ version       INT                  -- Version (optimistic lock)
 ## 10. Withdraw Flow Architecture
 
 > [!CAUTION]
-> **Production Risk Control Requirements**
+> ## ⛔ Production Risk Control Requirements ⛔
 > 
 > The current implementation is for **MVP/Testing only**. Before production deployment, withdrawals **MUST** pass through:
 > 1. **Comprehensive Risk Engine** - Real-time fraud detection, velocity limits, address blacklist
@@ -549,7 +549,7 @@ cargo test sentinel::eth -- --nocapture
 ## 9. 充值流程架构
 
 > [!IMPORTANT]
-> **生产环境风控要求**
+> ## 🚨 生产环境风控要求
 > 
 > 在确认完成后为用户入账之前，充值 **应该** 经过:
 > 1. **来源验证** - 检查发送地址是否在制裁/黑名单上
@@ -638,7 +638,7 @@ version       INT                  -- 版本号 (乐观锁)
 ## 10. 提现流程架构
 
 > [!CAUTION]
-> **生产环境风控要求**
+> ## ⛔ 生产环境风控要求 ⛔
 > 
 > 当前实现仅用于 **MVP/测试**。生产部署前，提现请求 **必须** 经过:
 > 1. **完整风控引擎** - 实时欺诈检测、频率限制、地址黑名单
