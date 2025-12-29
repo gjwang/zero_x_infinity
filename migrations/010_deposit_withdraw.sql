@@ -39,10 +39,10 @@ CREATE INDEX IF NOT EXISTS idx_withdraw_user ON withdraw_history(user_id);
 CREATE TABLE IF NOT EXISTS user_addresses (
     user_id BIGINT NOT NULL,
     asset VARCHAR(32) NOT NULL,
-    chain_id VARCHAR(32) NOT NULL, -- BTC, ETH, TRON
+    chain_slug VARCHAR(32) NOT NULL, -- "btc", "eth", "trx" (lowercase)
     address VARCHAR(255) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (user_id, asset, chain_id)
+    PRIMARY KEY (user_id, asset, chain_slug)
 );
 
 -- Ensure we can look up owner by address (for deposit scanning)

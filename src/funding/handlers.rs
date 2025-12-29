@@ -177,13 +177,16 @@ pub async fn get_deposit_address(
             address: addr,
             network: chain_slug, // Return lowercase chain_slug
         }))),
-        Err(e) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error(
-                error_codes::INTERNAL_ERROR,
-                e.to_string(),
-            )),
-        )),
+        Err(e) => {
+            eprintln!("[DEBUG] get_deposit_address error: {:?}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error(
+                    error_codes::INTERNAL_ERROR,
+                    e.to_string(),
+                )),
+            ))
+        }
     }
 }
 
