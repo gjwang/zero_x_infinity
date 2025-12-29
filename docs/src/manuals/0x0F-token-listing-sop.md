@@ -61,6 +61,8 @@ Before listing, you need the following information:
 7.  **Click**: `Bind & Activate`.
     *   *System Result*: `chain_assets_tb` created. Sentinel hot-reloads within 60s.
 
+> **Note**: Risk Parameters (Fee, Min Deposit) are **Chain-Specific**. If you list USDT on both ETH and TRON, you must configure them separately for each chain (e.g., ETH Fee = 5.0, TRON Fee = 1.0).
+
 ---
 
 ## 3. 结果验证 (Verification)
