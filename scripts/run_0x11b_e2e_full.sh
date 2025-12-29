@@ -120,43 +120,19 @@ check_postgres() {
 run_migrations() {
     log_step "[1.5/6] Running database migrations..."
     
-    local db_name="${DATABASE_NAME:-zero_x_infinity}"
-    local db_user="${DATABASE_USER:-postgres}"
-    local db_host="${DATABASE_HOST:-localhost}"
-    local db_port="${DATABASE_PORT:-5432}"
-    local psql_cmd="psql -h $db_host -p $db_port -U $db_user"
-    
-    # Check if database exists, create if not
-    if ! $psql_cmd -lqt 2>/dev/null | cut -d \| -f 1 | grep -qw "$db_name"; then
-        log_info "Creating database '$db_name'..."
-        createdb -h "$db_host" -p "$db_port" -U "$db_user" "$db_name" 2>/dev/null || true
-    fi
-    
-    # If --clean-db flag, drop all tables first for fresh start
+    # Use existing unified database initialization script
     if [[ "${CLEAN_DB:-}" == "true" ]]; then
-        log_warn "   Dropping existing tables for clean start..."
-        $psql_cmd -d "$db_name" -c "DROP TABLE IF EXISTS user_addresses, deposit_history, withdraw_history CASCADE;" -q 2>/dev/null || true
+        log_warn "   Clean DB mode: using --reset flag..."
+        "$PROJECT_ROOT/scripts/db/init.sh" pg --reset 2>&1 | while read line; do
+            echo "   $line"
+        done
+    else
+        "$PROJECT_ROOT/scripts/db/init.sh" pg 2>&1 | while read line; do
+            echo "   $line"
+        done
     fi
     
-    # Run all migrations in order
-    local migrations_dir="$PROJECT_ROOT/migrations"
-    if [ -d "$migrations_dir" ]; then
-        for migration in "$migrations_dir"/*.sql; do
-            if [ -f "$migration" ]; then
-                local migration_name=$(basename "$migration")
-                log_info "   Running $migration_name..."
-                $psql_cmd -d "$db_name" -f "$migration" -q 2>/dev/null || true
-            fi
-        done
-        
-        # Fix: Ensure chain_slug column exists (handle various legacy column names)
-        $psql_cmd -d "$db_name" -c "ALTER TABLE user_addresses RENAME COLUMN network TO chain_slug;" -q 2>/dev/null || true
-        $psql_cmd -d "$db_name" -c "ALTER TABLE user_addresses RENAME COLUMN chain_id TO chain_slug;" -q 2>/dev/null || true
-        
-        log_info "✅ Migrations complete"
-    else
-        log_warn "No migrations directory found at $migrations_dir"
-    fi
+    log_info "✅ Migrations complete"
 }
 
 check_btc_node() {
