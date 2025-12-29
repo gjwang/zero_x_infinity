@@ -171,6 +171,18 @@ cargo test sentinel::eth -- --nocapture
 
 ## 9. Deposit Flow Architecture
 
+> [!IMPORTANT]
+> **Production Risk Control Requirements**
+> 
+> Before crediting user balance on finalization, deposits **SHOULD** pass through:
+> 1. **Source Verification** - Check if sender address is on sanctions/blacklist
+> 2. **Amount Thresholds** - Large deposits may require enhanced verification
+> 3. **Pattern Analysis** - Detect unusual deposit patterns (structuring, layering)
+> 4. **AML Compliance** - Regulatory reporting for threshold amounts
+> 5. **Address Attribution** - Verify expected vs actual funding sources
+>
+> The current implementation credits balance automatically on finalization.
+
 ### 9.1 Overview
 
 ```
@@ -535,6 +547,18 @@ cargo test sentinel::eth -- --nocapture
 ---
 
 ## 9. 充值流程架构
+
+> [!IMPORTANT]
+> **生产环境风控要求**
+> 
+> 在确认完成后为用户入账之前，充值 **应该** 经过:
+> 1. **来源验证** - 检查发送地址是否在制裁/黑名单上
+> 2. **金额阈值** - 大额充值可能需要加强验证
+> 3. **模式分析** - 检测异常充值模式 (拆分、分层)
+> 4. **AML 合规** - 超过阈值金额的监管报告
+> 5. **地址归属** - 验证预期 vs 实际资金来源
+>
+> 当前实现在确认完成后自动入账。
 
 ### 9.1 概览
 
