@@ -82,10 +82,10 @@ def test_greybox_sentinel():
     run_sql(f"DELETE FROM user_addresses WHERE user_id = {user_id};")
     
     sql = f"""
-    INSERT INTO user_addresses (user_id, asset, network, address)
+    INSERT INTO user_addresses (user_id, asset, chain_id, address)
     VALUES ({user_id}, 'BTC', 'BTC', '{real_addr}'),
            ({user_id}, 'BTC', 'regtest', '{real_addr}')
-    ON CONFLICT (user_id, asset, network) DO UPDATE SET address = EXCLUDED.address
+    ON CONFLICT (user_id, asset, chain_id) DO UPDATE SET address = EXCLUDED.address
     RETURNING address;
     """
     try:

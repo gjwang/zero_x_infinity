@@ -96,7 +96,7 @@ impl SentinelWorker {
         chain_id: &str,
     ) -> Result<(), SentinelError> {
         let addresses: Vec<String> =
-            sqlx::query_scalar("SELECT address FROM user_addresses WHERE network = $1")
+            sqlx::query_scalar("SELECT address FROM user_addresses WHERE chain_id = $1")
                 .bind(chain_id)
                 .fetch_all(&self.pool)
                 .await
