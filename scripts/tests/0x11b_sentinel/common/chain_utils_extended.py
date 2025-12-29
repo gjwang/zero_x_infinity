@@ -32,7 +32,9 @@ except ImportError:
         password = "TestPass123!"
         
         # Register
+        username = f"user_{uuid.uuid4().hex[:8]}"
         resp = requests.post(f"{gateway_url}/api/v1/auth/register", json={
+            "username": username,
             "email": email,
             "password": password
         })
