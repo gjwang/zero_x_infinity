@@ -27,6 +27,11 @@ Before listing, you need the following information:
 2.  **Input**:
     *   **Symbol**: `UNI`
     *   **Name**: `Uniswap`
+    *   **Decimals**: `18` (System Internal Precision)
+    *   **Initial Permissions**:
+        *   `[x] Can Allow Deposit`
+        *   `[ ] Can Allow Withdraw` (Recommended: Disable initially)
+        *   `[ ] Can Allow Trade` (Recommended: Enable later)
     *   **Status**: `Active`
 3.  **Click**: `Save`.
     *   *System Result*: `assets_tb` created. Asset ID generated (e.g., `#10`).
@@ -47,8 +52,13 @@ Before listing, you need the following information:
         *   **Decimals**: Auto-filled `18`. (Locked, Read-only)
         *   **Symbol**: Auto-detected `UNI`. (Verifies against Asset name)
     *   *Ops Action*: Verify the fetched data matches. Adjust `Min Deposit` / `Fee` only if defaults are unsuitable.
-5.  **Confirm**: Check detected Decimals match project info.
-6.  **Click**: `Bind & Activate`.
+
+5.  **Risk Configuration**: (Review Defaults)
+    *   **Min Deposit**: `0.1` (Prevent dust attacks).
+    *   **Min Withdraw**: `10.0` (Must be > Fee).
+    *   **Withdraw Fee**: `5.0` (Cover Gas + Margin).
+6.  **Confirm**: Check detected Decimals match project info.
+7.  **Click**: `Bind & Activate`.
     *   *System Result*: `chain_assets_tb` created. Sentinel hot-reloads within 60s.
 
 ---
