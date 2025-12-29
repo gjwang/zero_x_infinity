@@ -1,7 +1,7 @@
 # ADR-004: Chain Asset Binding & Configuration Driven Workflow
 
 **Date**: 2025-12-30
-**Status**: Proposed
+**Status**: Superseded by [ADR-005](./ADR-005-unified-asset-schema.md)
 **Context**: Phase 0x11-b Sentinel Hardening
 
 ## 1. Problem Definition

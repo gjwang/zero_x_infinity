@@ -170,6 +170,12 @@ pip install fastapi-amis-admin fastapi-user-auth sqlalchemy asyncpg
 
 #### Future Enhancements (P2)
 
+> **Chain Asset Management (Layer 2)**:
+> Implementation of [ADR-005](./architecture/decisions/ADR-005-unified-asset-schema.md)
+> 1.  **Chain Config**: Manage `chains_tb` (RPC, confirmations)
+> 2.  **Asset Binding**: Manage `chain_assets_tb` (Contract Address, Decimals)
+> 3.  **Auto-Verify**: Verify contracts on-chain before binding
+
 > **Dual-Confirmation Workflow**:
 > 1. **Preview** - Config change preview
 > 2. **Second approval** - Another admin approves
