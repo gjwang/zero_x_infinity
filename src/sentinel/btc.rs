@@ -403,4 +403,47 @@ mod tests {
         assert!(scanner.verify_block_hash(0, "blockhash123").await.unwrap());
         assert!(!scanner.verify_block_hash(0, "wronghash").await.unwrap());
     }
+
+    /// DEF-002: Test P2WPKH (SegWit) address extraction
+    /// This test reproduces the bug where Sentinel fails to detect SegWit deposits.
+    #[test]
+    fn test_segwit_p2wpkh_extraction_def_002() {
+        use bitcoincore_rpc::bitcoin::script::Builder;
+
+        let scanner = BtcScanner::new_mock(test_config());
+
+        // Construct a P2WPKH script: OP_0 <20-byte-pubkey-hash>
+        // This is what a SegWit address (bcrt1...) looks like in script form
+        // Format: 0x00 0x14 <20 bytes>
+        let pubkey_hash: [u8; 20] = [
+            0xe8, 0xdf, 0x01, 0x8c, 0x7e, 0x32, 0x6c, 0xc2, 0x97, 0x41, 0x25, 0x89, 0xa7, 0x26,
+            0x87, 0xc1, 0xf9, 0x22, 0xc9, 0x53,
+        ];
+
+        // Build P2WPKH script manually: OP_0 PUSH20 <hash>
+        let script = Builder::new()
+            .push_int(0) // OP_0 (witness version 0)
+            .push_slice(pubkey_hash)
+            .into_script();
+
+        // Verify it's a valid P2WPKH script
+        assert!(script.is_p2wpkh(), "Script should be identified as P2WPKH");
+
+        // DEF-002: This is where the bug manifests - extract_address returns None
+        let extracted = scanner.extract_address(&script);
+
+        // Expected: bcrt1qarls3s8lxjmxzja2y5c6ung0s0ujjef48egz5t (for regtest)
+        assert!(
+            extracted.is_some(),
+            "DEF-002: extract_address MUST return Some for P2WPKH scripts"
+        );
+
+        let address = extracted.unwrap();
+        // SegWit regtest addresses start with bcrt1
+        assert!(
+            address.starts_with("bcrt1"),
+            "Regtest P2WPKH address should start with bcrt1, got: {}",
+            address
+        );
+    }
 }

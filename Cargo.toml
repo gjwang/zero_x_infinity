@@ -81,6 +81,7 @@ cached = { version = "0.54", features = ["async", "async_tokio_rt_multi_thread"]
 
 # Sentinel Service (Phase 0x11-a: Real Chain Integration)
 bitcoincore-rpc = "0.19"
+reqwest = { version = "0.12.28", features = ["json"] }
 
 [dev-dependencies]
 crossterm = "0.29.0"
