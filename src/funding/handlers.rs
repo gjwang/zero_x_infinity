@@ -155,23 +155,27 @@ pub async fn get_deposit_address(
 
     // Select Chain Adapter based on Asset/Network
     // MVP: ETH=MockEvm, BTC=MockBtc. Default to ETH for others.
-    let network = req.network.as_deref().unwrap_or("ETH");
-    let address = if network == "BTC" {
+    let network_raw = req.network.as_deref().unwrap_or("ETH");
+    let network_upper = network_raw.to_uppercase();
+    // Normalize to lowercase for DB (chain_slug uses lowercase: "eth", "btc")
+    let chain_slug = network_raw.to_lowercase();
+
+    let address = if network_upper == "BTC" {
         let adapter = MockBtcChain;
         service
-            .get_address(&adapter, user_id, &req.asset, network)
+            .get_address(&adapter, user_id, &req.asset, &chain_slug)
             .await
     } else {
         let adapter = MockEvmChain;
         service
-            .get_address(&adapter, user_id, &req.asset, network)
+            .get_address(&adapter, user_id, &req.asset, &chain_slug)
             .await
     };
 
     match address {
         Ok(addr) => Ok(Json(ApiResponse::success(AddressResponse {
             address: addr,
-            network: network.to_string(),
+            network: chain_slug, // Return lowercase chain_slug
         }))),
         Err(e) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
