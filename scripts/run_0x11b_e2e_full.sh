@@ -149,8 +149,9 @@ run_migrations() {
             fi
         done
         
-        # Fix: Ensure chain_id column exists (handle legacy 'network' column)
-        $psql_cmd -d "$db_name" -c "ALTER TABLE user_addresses RENAME COLUMN network TO chain_id;" -q 2>/dev/null || true
+        # Fix: Ensure chain_slug column exists (handle various legacy column names)
+        $psql_cmd -d "$db_name" -c "ALTER TABLE user_addresses RENAME COLUMN network TO chain_slug;" -q 2>/dev/null || true
+        $psql_cmd -d "$db_name" -c "ALTER TABLE user_addresses RENAME COLUMN chain_id TO chain_slug;" -q 2>/dev/null || true
         
         log_info "✅ Migrations complete"
     else

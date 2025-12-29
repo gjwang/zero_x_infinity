@@ -913,43 +913,31 @@ cargo test sentinel::eth -- --nocapture
 
 ## Appendix A: Industry Standards Reference
 
-### Chain Identification Naming Conventions
+> **Full Design**: See [Chains Schema Design](./chains-schema-design.md) for complete schema and industry standards.
 
-For consistency with industry standards, this project uses **`chain_id`** in database schemas.
+### Naming Conventions
 
-#### References
+| Concept | Industry Term | Our Column | Type |
+|:---|:---|:---|:---|
+| Business ID | `shortName` | `chain_slug` | VARCHAR |
+| EIP-155 ID | `chainId` | `chain_id` | INTEGER |
+| Native Token | `nativeCurrency.symbol` | `native_currency` | VARCHAR |
 
-| Standard | Description | Link |
-| :--- | :--- | :--- |
-| **EIP-155** | Ethereum Chain ID (e.g., `1` for Mainnet, `137` for Polygon) | [EIP-155](https://eips.ethereum.org/EIPS/eip-155) |
-| **Ethereum Chains List** | Registry of EVM-compatible chains with `chainId` | [ethereum-lists/chains](https://github.com/ethereum-lists/chains) |
-| **SLIP-0044** | Registered coin types for BIP-44 derivation paths | [SLIP-0044](https://github.com/satoshilabs/slips/blob/master/slip-0044.md) |
+### References
 
-#### Example Chain Definition (Ethereum Mainnet)
+- [EIP-155](https://eips.ethereum.org/EIPS/eip-155) - Ethereum Chain ID
+- [ethereum-lists/chains](https://github.com/ethereum-lists/chains) - Chain Registry
+- [SLIP-0044](https://github.com/satoshilabs/slips/blob/master/slip-0044.md) - BIP-44 Coin Types
 
-```json
-{
-  "name": "Ethereum Mainnet",
-  "chain": "ETH",
-  "chainId": 1,
-  "networkId": 1,
-  "nativeCurrency": {
-    "name": "Ether",
-    "symbol": "ETH",
-    "decimals": 18
-  },
-  "shortName": "eth"
-}
+### Phase 0x11-b Schema
+
+```sql
+-- Minimum viable: uses chain_slug only
+CREATE TABLE user_addresses (
+    user_id BIGINT,
+    asset VARCHAR(32),
+    chain_slug VARCHAR(32),  -- "eth", "btc"
+    address VARCHAR(255),
+    PRIMARY KEY (user_id, asset, chain_slug)
+);
 ```
-
-#### Our Schema Mapping
-
-| Field | Industry Term | DB Column |
-| :--- | :--- | :--- |
-| Chain identifier | `chainId` | `chain_id` (VARCHAR) |
-| Asset symbol | `symbol` | `asset` |
-| User's deposit address | `address` | `address` |
-
-> [!NOTE]
-> We use `chain_id` as VARCHAR (e.g., "ETH", "BTC") rather than numeric chainId for simplicity.
-> For EVM chains, consider using numeric `chainId` (1, 137, etc.) in future.
