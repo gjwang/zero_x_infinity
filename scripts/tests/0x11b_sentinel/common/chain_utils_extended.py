@@ -295,6 +295,29 @@ class EthRpcExtended(EthRpc):
 class GatewayClientExtended(GatewayClient):
     """Extended Gateway client with additional helpers."""
     
+    def internal_mock_deposit(self, user_id: int, asset: str, amount: str) -> bool:
+        """Call internal mock deposit endpoint."""
+        url = f"{self.base_url}/internal/mock/deposit"
+        payload = {
+            "user_id": user_id,
+            "asset": asset,
+            "amount": str(amount),
+            "tx_hash": generate_random_tx_hash()
+        }
+        headers = {"X-Internal-Secret": os.getenv("INTERNAL_SECRET", "dev-secret")}
+        
+        try:
+            resp = requests.post(url, json=payload, headers=headers)
+            if resp.status_code == 200:
+                # print(f"      ✅ Mock deposit success: {resp.text}")
+                return True
+            else:
+                print(f"      ❌ Mock deposit failed: {resp.status_code} - {resp.text}")
+                return False
+        except Exception as e:
+            print(f"      ❌ Mock deposit exception: {e}")
+            return False
+
     def get_deposit_address_with_validation(
         self, 
         headers: Dict[str, str], 

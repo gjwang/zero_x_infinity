@@ -75,7 +75,7 @@ class TwoUserOrderMatchingE2E:
         print("🎯 Phase 0x11-b: TWO-USER ORDER MATCHING E2E TEST")
         print("   User A: Sell BTC | User B: Buy BTC")
         print("=" * 80)
-        print(f"\n📋 Trade Plan:")
+        print(f"\\n📋 Trade Plan:")
         print(f"   Price:    {self.trade_price} USDT/BTC")
         print(f"   Quantity: {self.trade_quantity} BTC")
         print(f"   Value:    {self.trade_value} USDT")
@@ -104,7 +104,7 @@ class TwoUserOrderMatchingE2E:
     # Phase 0: Pre-flight
     # ========================================
     def phase_0_preflight(self):
-        print("\n" + "=" * 80)
+        print("\\n" + "=" * 80)
         print("📋 PHASE 0: Pre-flight Checks")
         print("=" * 80)
         
@@ -127,12 +127,12 @@ class TwoUserOrderMatchingE2E:
     # Phase 1: Setup Two Users
     # ========================================
     def phase_1_setup_users(self):
-        print("\n" + "=" * 80)
+        print("\\n" + "=" * 80)
         print("👥 PHASE 1: Setup Two Users")
         print("=" * 80)
         
         # User A
-        print("\n📋 1.1 Create User A (BTC Seller)")
+        print("\\n📋 1.1 Create User A (BTC Seller)")
         try:
             self.user_a_id, _, self.user_a_headers = setup_jwt_user()
             print(f"   ✅ User A: {self.user_a_id}")
@@ -142,7 +142,7 @@ class TwoUserOrderMatchingE2E:
             return self.add_result("1.1 User A Created", False)
         
         # User B
-        print("\n📋 1.2 Create User B (BTC Buyer)")
+        print("\\n📋 1.2 Create User B (BTC Buyer)")
         try:
             self.user_b_id, _, self.user_b_headers = setup_jwt_user()
             print(f"   ✅ User B: {self.user_b_id}")
@@ -152,7 +152,7 @@ class TwoUserOrderMatchingE2E:
             return self.add_result("1.2 User B Created", False)
         
         # Verify isolation
-        print("\n📋 1.3 Verify User Isolation")
+        print("\\n📋 1.3 Verify User Isolation")
         balance_a = self.gateway.get_balance(self.user_a_headers, "BTC") or 0
         balance_b = self.gateway.get_balance(self.user_b_headers, "BTC") or 0
         
@@ -169,12 +169,12 @@ class TwoUserOrderMatchingE2E:
     # Phase 2: User A Deposits BTC
     # ========================================
     def phase_2_user_a_deposit_btc(self):
-        print("\n" + "=" * 80)
+        print("\\n" + "=" * 80)
         print(f"💰 PHASE 2: User A Deposits {self.user_a_btc_deposit} BTC")
         print("=" * 80)
         
         # Get deposit address
-        print("\n📋 2.1 User A Gets Deposit Address")
+        print("\\n📋 2.1 User A Gets Deposit Address")
         try:
             addr = self.gateway.get_deposit_address(self.user_a_headers, "BTC", "BTC")
             print(f"   ✅ Address: {addr}")
@@ -184,7 +184,7 @@ class TwoUserOrderMatchingE2E:
             return self.add_result("2.1 User A Address", False)
         
         # Send BTC
-        print(f"\n📋 2.2 Send {self.user_a_btc_deposit} BTC to User A")
+        print(f"\\n📋 2.2 Send {self.user_a_btc_deposit} BTC to User A")
         try:
             tx_hash = self.btc.send_to_address(addr, float(self.user_a_btc_deposit))
             print(f"   ✅ TX: {tx_hash[:32]}...")
@@ -194,7 +194,7 @@ class TwoUserOrderMatchingE2E:
             return self.add_result("2.2 Send BTC", False)
         
         # Mine and wait
-        print("\n📋 2.3 Confirm Deposit (Polling)")
+        print("\\n📋 2.3 Confirm Deposit (Polling)")
         self.btc.mine_blocks(BTC_REQUIRED_CONFIRMATIONS + 1)
         
         # Wait for deposit to be recorded and confirmed (up to 30s)
@@ -215,7 +215,7 @@ class TwoUserOrderMatchingE2E:
             return self.add_result("2.3 Deposit Confirmed", False)
         
         # Verify User A balance
-        print("\n📋 2.4 Verify User A Balance")
+        print("\\n📋 2.4 Verify User A Balance")
         balance_a = Decimal(str(self.gateway.get_balance(self.user_a_headers, "BTC") or 0))
         if self.verify_amount(self.user_a_btc_deposit, balance_a, "User A BTC"):
             self.add_result("2.4 User A Balance", True, f"{balance_a} BTC")
@@ -223,7 +223,7 @@ class TwoUserOrderMatchingE2E:
             return self.add_result("2.4 User A Balance", False)
         
         # Verify User B balance unchanged
-        print("\n📋 2.5 Verify User B NOT Affected")
+        print("\\n📋 2.5 Verify User B NOT Affected")
         balance_b = Decimal(str(self.gateway.get_balance(self.user_b_headers, "BTC") or 0))
         if self.verify_amount(0, balance_b, "User B BTC"):
             print(f"   ✅ User B balance unchanged (isolation verified)")
@@ -237,12 +237,12 @@ class TwoUserOrderMatchingE2E:
     # Phase 3: Prepare for Trading
     # ========================================
     def phase_3_prepare_trading(self):
-        print("\n" + "=" * 80)
+        print("\\n" + "=" * 80)
         print("📤 PHASE 3: Prepare for Trading")
         print("=" * 80)
         
         # User A: Transfer BTC to Spot
-        print(f"\n📋 3.1 User A: Transfer {self.trade_quantity} BTC to Spot")
+        print(f"\\n📋 3.1 User A: Transfer {self.trade_quantity} BTC to Spot")
         try:
             resp = requests.post(
                 f"{self.gateway.base_url}/api/v1/capital/transfer",
@@ -266,7 +266,7 @@ class TwoUserOrderMatchingE2E:
             self.add_result("3.1 User A Transfer", False)
         
         # User B: Would need USDT deposit - mock for now
-        print(f"\n📋 3.2 User B: (Mock) USDT for buying")
+        print(f"\\n📋 3.2 User B: (Mock) USDT for buying")
         print(f"   📋 Note: Real test needs USDT deposit mechanism")
         print(f"   📋 Required: {self.trade_value} USDT for {self.trade_quantity} BTC @ {self.trade_price}")
         self.add_result("3.2 User B USDT", True, "Mock")
@@ -277,18 +277,20 @@ class TwoUserOrderMatchingE2E:
     # Phase 4: Place Orders
     # ========================================
     def phase_4_place_orders(self):
-        print("\n" + "=" * 80)
+        print("\\n" + "=" * 80)
         print("📈 PHASE 4: Place Orders (Maker/Taker)")
         print("=" * 80)
         
+        # User A: SELL order (Maker)
+        print(f"\\n📋 4.1 User A: SELL {self.trade_quantity} BTC @ {self.trade_price}")
         try:
             resp = requests.post(
                 f"{self.gateway.base_url}/api/v1/capital/order",
                 json={
                     "symbol": "BTC_USDT",
                     "side": "SELL",
-                    "type": "LIMIT",
-                    "quantity": str(self.trade_quantity),
+                    "order_type": "LIMIT",
+                    "qty": str(self.trade_quantity),
                     "price": str(self.trade_price)
                 },
                 headers=self.user_a_headers
@@ -309,14 +311,16 @@ class TwoUserOrderMatchingE2E:
             print(f"   ⚠️  {e}")
             self.add_result("4.1 User A SELL", False)
         
+        # User B: BUY order (Taker)
+        print(f"\\n📋 4.2 User B: BUY {self.trade_quantity} BTC @ {self.trade_price}")
         try:
             resp = requests.post(
                 f"{self.gateway.base_url}/api/v1/capital/order",
                 json={
                     "symbol": "BTC_USDT",
                     "side": "BUY",
-                    "type": "LIMIT",
-                    "quantity": str(self.trade_quantity),
+                    "order_type": "LIMIT",
+                    "qty": str(self.trade_quantity),
                     "price": str(self.trade_price)
                 },
                 headers=self.user_b_headers
@@ -343,14 +347,14 @@ class TwoUserOrderMatchingE2E:
     # Phase 5: Verify Trade Execution
     # ========================================
     def phase_5_verify_trade(self):
-        print("\n" + "=" * 80)
+        print("\\n" + "=" * 80)
         print("✅ PHASE 5: Verify Trade Execution")
         print("=" * 80)
         
         time.sleep(2)  # Wait for matching
         
         # Check User A trades
-        print("\n📋 5.1 User A Trade History")
+        print("\\n📋 5.1 User A Trade History")
         try:
             resp = requests.get(
                 f"{self.gateway.base_url}/api/v1/capital/trades",
@@ -374,7 +378,7 @@ class TwoUserOrderMatchingE2E:
             self.add_result("5.1 User A Trades", True)
         
         # Check User B trades
-        print("\n📋 5.2 User B Trade History")
+        print("\\n📋 5.2 User B Trade History")
         try:
             resp = requests.get(
                 f"{self.gateway.base_url}/api/v1/capital/trades",
@@ -395,7 +399,7 @@ class TwoUserOrderMatchingE2E:
             self.add_result("5.2 User B Trades", True)
         
         # Final balance check
-        print("\n📋 5.3 Final Balance Verification")
+        print("\\n📋 5.3 Final Balance Verification")
         
         balance_a_btc = self.gateway.get_balance(self.user_a_headers, "BTC") or 0
         balance_b_btc = self.gateway.get_balance(self.user_b_headers, "BTC") or 0
@@ -411,7 +415,7 @@ class TwoUserOrderMatchingE2E:
     # Summary
     # ========================================
     def summarize(self):
-        print("\n" + "=" * 80)
+        print("\\n" + "=" * 80)
         print("📊 TWO-USER ORDER MATCHING E2E RESULTS")
         print("=" * 80)
         
@@ -427,7 +431,7 @@ class TwoUserOrderMatchingE2E:
             else:
                 total_failed += 1
         
-        print("\n" + "-" * 60)
+        print("\\n" + "-" * 60)
         print(f"   Total: {total_passed}/{total_passed + total_failed} passed")
         
         return total_failed == 0

@@ -403,7 +403,6 @@ main() {
         echo "════════════════════════════════════════════════════════════════════════"
         
         # BTC Security
-        ((TOTAL_TESTS++))
         if uv run python3 agent_c_security/test_btc_security.py 2>&1 | tail -10; then
             log_info "✅ BTC Security Tests PASSED"
             ((TESTS_PASSED++))
@@ -420,6 +419,29 @@ main() {
         else
             log_warn "❌ ETH Security Tests FAILED"
             ((TESTS_FAILED++))
+        fi
+
+        # ====================================================================
+        # Level 5a: System Boundary Tests (New: Agent A & C)
+        # ====================================================================
+        ((TOTAL_TESTS++))
+        log_info "📋 Running System Boundary Tests (Agent A: Min/Max)"
+        if uv run python3 agent_a_edge/test_boundary_values.py 2>&1; then
+            log_info "✅ Agent A Boundary Tests PASSED"
+            ((TESTS_PASSED++))
+        else
+            log_warn "❌ Agent A Boundary Tests FAILED"
+            ((TESTS_FAILED++))
+        fi
+
+        ((TOTAL_TESTS++))
+        log_info "📋 Running Overflow/Limit Tests (Agent C: 9.22 ETH)"
+        if uv run python3 agent_c_security/test_overflow.py 2>&1; then
+             log_info "✅ Agent C Overflow Tests PASSED"
+             ((TESTS_PASSED++))
+        else
+             log_warn "❌ Agent C Overflow Tests FAILED (System Limitation Confirmed)"
+             ((TESTS_FAILED++))
         fi
     else
         log_info "ℹ️  Skipping security tests (use --security to enable)"
