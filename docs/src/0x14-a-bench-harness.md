@@ -10,8 +10,11 @@
 
 ## 🇺🇸 English
 
-> **Phase V, Step 1**
-> **Objective**: Re-implement the Exchange-Core test data generation algorithm in Rust and verify correctness against golden data.
+| Status | ✅ **IMPLEMENTED / QA VERIFIED** (Phase 0x14-a Complete) |
+| :--- | :--- |
+| **Date** | 2025-12-30 |
+| **Context** | Phase V: Extreme Optimization (Step 1) |
+| **Goal** | Re-implement Exchange-Core test data generation algorithm in Rust and verify correctness against golden data. |
 
 ---
 
@@ -207,12 +210,113 @@ cargo test bench:: -- --nocapture
 
 ---
 
+### 7. Fair Benchmark Procedure
+
+> [!IMPORTANT]
+> **Key to Fairness**: Generation and Execution must be separated. Java pre-generates all commands into memory before testing.
+
+#### 7.1 Four Phase Separation
+
+```
+Phase 1: Data Pre-generation ───────── ⏸️ Not Timed
+Phase 2: FILL (Pre-fill) ───────────── ⏸️ Not Timed  
+Phase 3: BENCHMARK (Stress) ────────── ⏱️ Timed Phase
+Phase 4: Verification ──────────────── ⏸️ Not Timed
+```
+
+#### 7.2 Rust Implementation Spec
+
+```rust
+// ✅ Correct: Pre-generate -> Then Execute
+let (fill_commands, benchmark_commands) = generator.pre_generate_all();
+
+// Phase 2: FILL (Not Timed)
+for cmd in &fill_commands {
+    exchange.execute(cmd);
+}
+
+// Phase 3: BENCHMARK (Timed Only)
+let start = Instant::now();
+for cmd in &benchmark_commands {
+    exchange.execute(cmd);
+}
+let mtps = benchmark_commands.len() as f64 / start.elapsed().as_secs_f64() / 1_000_000.0;
+```
+
+#### 7.3 Pre-generation Interface
+
+```rust
+impl TestOrdersGeneratorSession {
+    /// Pre-generate all commands for fair benchmarking
+    pub fn pre_generate_all(&mut self) -> (Vec<TestCommand>, Vec<TestCommand>) {
+        let fill_count = self.config.target_orders_per_side * 2;
+        let benchmark_count = self.config.symbol_messages;
+        
+        let fill: Vec<_> = (0..fill_count).map(|_| self.next_command()).collect();
+        let benchmark: Vec<_> = (0..benchmark_count).map(|_| self.next_command()).collect();
+        
+        (fill, benchmark)
+    }
+}
+```
+
+#### 7.4 Current Status vs ME Requirements
+
+| Task | Current | Needs ME |
+|:---|:---:|:---:|
+| Pre-gen Method `pre_generate_all()` | ✅ | - |
+| Generate 3M orders to memory | ✅ | - |
+| Export CSV for verification | ✅ | - |
+| Execute FILL Phase | - | ✅ |
+| Execute BENCHMARK Phase | - | ✅ |
+| Global Balance Verification | - | ✅ |
+
+---
+
+### 8. Phase 0x14-a Summary
+
+#### 8.1 Completed Components
+
+| Component | Status | Verification |
+|:---|:---:|:---|
+| **JavaRandom LCG PRNG** | ✅ | Bit-exact with Java |
+| **Seed Derivation** | ✅ | `Objects.hash` reproduction |
+| **TestOrdersGenerator** | ✅ | FILL 1000 rows 100% matched |
+| **Shadow OrderBook** | ✅ | IOC Simulation implemented |
+| **Pre-gen Interface** | ✅ | `pre_generate_all()`, `pre_generate_3m()` |
+| **Fair Test Procedure Docs** | ✅ | Section 7, Appendix B |
+
+#### 8.2 BENCHMARK Phase Gap Analysis
+
+| Cause | Description |
+|:---|:---|
+| **Matching Engine Feedback** | Java uses `lastOrderBookOrdersSizeAsk/Bid` to decide `growOrders`. |
+| **Impact** | Command type distribution (GTC vs IOC) differs slightly. |
+| **Solution** | Phase 0x14-b introduces full ME to reach 100% parity. |
+
+#### 8.3 Next Steps
+
+| Priority | Task | Dependency |
+|:---:|:---|:---|
+| **P0** | Implement Rust Matching Engine (Phase 0x14-b) | - |
+| **P1** | 3M Orders Stress Test Verification | Matching Engine |
+| **P2** | Latency Stats (HdrHistogram) | Matching Engine |
+
+<br>
+<div align="right"><a href="#-english">↑ Back to Top</a></div>
+<br>
+
+---
+
 <div id="-chinese"></div>
 
 ## 🇨🇳 中文
 
-> **Phase V, 步骤 1**
-> **目标**: 用 Rust 重新实现 Exchange-Core 测试数据生成算法，并对比黄金数据验证正确性。
+| 状态 | ✅ **已实施 / QA 验证通过** (Phase 0x14-a 完成) |
+| :--- | :--- |
+| **日期** | 2025-12-30 |
+| **上下文** | Phase V: 极致优化 (Step 1) |
+| **目标** | 用 Rust 重新实现 Exchange-Core 测试数据生成算法，并对比黄金数据验证正确性。 |
 
 ---
 
@@ -231,6 +335,73 @@ cargo test bench:: -- --nocapture
 ### 2. 参考算法: LCG PRNG
 
 Exchange-Core 项目使用 Java 的 `java.util.Random` 作为 PRNG。我们必须实现一个比特级精确的副本。
+
+#### 2.1 Java Random Implementation
+
+```rust
+/// Java-compatible Linear Congruential Generator
+pub struct JavaRandom {
+    seed: u64,
+}
+
+impl JavaRandom {
+    const MULTIPLIER: u64 = 0x5DEECE66D;
+    const ADDEND: u64 = 0xB;
+    const MASK: u64 = (1 << 48) - 1;
+
+    pub fn new(seed: i64) -> Self {
+        Self {
+            seed: (seed as u64 ^ Self::MULTIPLIER) & Self::MASK,
+        }
+    }
+
+    fn next(&mut self, bits: u32) -> i32 {
+        self.seed = self.seed
+            .wrapping_mul(Self::MULTIPLIER)
+            .wrapping_add(Self::ADDEND) & Self::MASK;
+        (self.seed >> (48 - bits)) as i32
+    }
+
+    pub fn next_int(&mut self, bound: i32) -> i32 {
+        assert!(bound > 0);
+        let bound = bound as u32;
+        if (bound & bound.wrapping_sub(1)) == 0 {
+            // Power of two
+            return ((bound as u64 * self.next(31) as u64) >> 31) as i32;
+        }
+        loop {
+            let bits = self.next(31) as u32;
+            let val = bits % bound;
+            if bits.wrapping_sub(val).wrapping_add(bound.wrapping_sub(1)) >= bits {
+                return val as i32;
+            }
+        }
+    }
+
+    pub fn next_long(&mut self) -> i64 {
+        ((self.next(32) as i64) << 32) + self.next(32) as i64
+    }
+
+    pub fn next_double(&mut self) -> f64 {
+        let a = (self.next(26) as u64) << 27;
+        let b = self.next(27) as u64;
+        (a + b) as f64 / ((1u64 << 53) as f64)
+    }
+}
+```
+
+#### 2.2 Seed Derivation
+
+Each test session derives its seed from `symbol_id` and `benchmark_seed`:
+
+```rust
+fn derive_session_seed(symbol_id: i32, benchmark_seed: i64) -> i64 {
+    let mut hash: i64 = 1;
+    hash = 31 * hash + (symbol_id as i64 * -177277);
+    hash = 31 * hash + (benchmark_seed * 10037 + 198267);
+    hash
+}
+```
 
 ---
 
@@ -413,11 +584,14 @@ impl TestOrdersGeneratorSession {
 | **影响** | 命令类型分布略有不同（GTC vs IOC 比例） |
 | **解决方案** | Phase 0x14-b 实现完整匹配引擎后可达 100% |
 
-#### 8.3 建议下一步
+#### 8.3 下一步
 
 | 优先级 | 任务 | 依赖 |
 |:---:|:---|:---|
-| **P0** | 合并 `0x14-a-bench-harness` → `main` | - |
-| **P1** | 实现 Rust 匹配引擎 (Phase 0x14-b) | - |
-| **P2** | 3M 订单压测验证 | 匹配引擎 |
-| **P3** | 延迟统计 (HdrHistogram) | 匹配引擎 |
+| **P0** | 实现 Rust 匹配引擎 (Phase 0x14-b) | - |
+| **P1** | 3M 订单压测验证 | 匹配引擎 |
+| **P2** | 延迟统计 (HdrHistogram) | 匹配引擎 |
+
+<br>
+<div align="right"><a href="#-chinese">↑ 回到顶部</a></div>
+<br>
