@@ -37,10 +37,25 @@ Verify that DEF-002 (BTC SegWit blindness) is fixed, ETH/ERC20 Sentinel works, a
 | **Test Plan** | `docs/agents/sessions/shared/arch-to-qa-0x11-b-test-plan.md` |
 
 ## Blockers / Dependencies
-- [ ] **BLOCKED**: Waiting for Developer to complete DB Migration (012)
-- [ ] **BLOCKED**: Waiting for Developer to implement Hot Reload in Sentinel
+- [x] ~~BLOCKED: Waiting for Developer to complete DB Migration (012)~~ **DONE** (commit `e3fa5c9`)
+- [x] ~~BLOCKED: Waiting for Developer to implement Hot Reload in Sentinel~~ **DONE** (commit `201d261`)
 
 ## Handover Notes
 **From Architect (2025-12-30)**:
 - **Branch**: `0x11-b-sentinel-hardening`
 - **Acceptance Metric**: DEF-002 marked CLOSED + Hot Listing verified
+
+**From Developer (2025-12-30 12:15)**:
+- **Commits Ready for QA**:
+  | Commit | Description |
+  |--------|-------------|
+  | `e3fa5c9` | ADR-005/006 DB schema + EthScanner hot reload |
+  | `7ed8b33` | Dual-Lookup (Address→User) |
+  | `dd08ce9` | `is_active` default FALSE fix |
+  | `201d261` | Admin Chain/ChainAsset CRUD + Auto-Detect API |
+- **Key Verification Points**:
+  - `is_active DEFAULT FALSE` verified in DB
+  - EthScanner 8/8 unit tests pass
+  - BtcScanner 6/6 unit tests pass (DEF-002 test included)
+  - Pre-commit: fmt ✅ clippy ✅
+- **Hot Reload**: `refresh_config()` runs every 60s from `chain_assets_tb`
