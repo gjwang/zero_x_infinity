@@ -27,6 +27,15 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      tdengine:
+        image: tdengine/tdengine:3.3.3.0
+        ports:
+          - 6041:6041
+        options: >-
+          --health-cmd "curl -s http://localhost:6041/rest/login/root/taosdata || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     
     steps:
@@ -70,6 +79,12 @@ jobs:
       - name: Build Release Binary
         run: cargo build --release --bin zero_x_infinity
 
+      # Initialize TDengine Schema
+      - name: Initialize TDengine
+        run: |
+          curl -s -u root:taosdata -d "CREATE DATABASE IF NOT EXISTS trading" http://localhost:6041/rest/sql
+          curl -s -u root:taosdata -d "CREATE STABLE IF NOT EXISTS trading.balances (ts TIMESTAMP, avail BIGINT, frozen BIGINT, lock_version BIGINT, settle_version BIGINT) TAGS (user_id BIGINT, asset_id INT)" http://localhost:6041/rest/sql
+
       # Run Script
       - name: Run 0x11b E2E
         env:
@@ -84,6 +99,8 @@ jobs:
           BTC_WALLET: sentinel_test
           # Force DB clean for reliable test
           CLEAN_DB: true
+          # TDengine connection for Spot balance persistence
+          TDENGINE_DSN: taos://root:taosdata@localhost:6041/trading
         run: |
            export GATEWAY_BINARY=$(pwd)/target/release/zero_x_infinity
            chmod +x scripts/run_0x11b_e2e_full.sh
