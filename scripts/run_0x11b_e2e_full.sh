@@ -437,11 +437,11 @@ main() {
 
     if [ $L1_EXIT_CODE -eq 0 ]; then
         log_info "✅ Level 1 PASSED: Rust Sentinel Unit Tests"
-        ((TESTS_PASSED++))
+        TESTS_PASSED=$((TESTS_PASSED + 1))
         L1_STATUS="PASSED"
     else
         log_warn "❌ Level 1 FAILED: Rust Sentinel Unit Tests"
-        ((TESTS_FAILED++))
+        TESTS_FAILED=$((TESTS_FAILED + 1))
         log_error "Stopping early - fix unit tests first!"
         exit 1
     fi
@@ -457,26 +457,26 @@ main() {
     
     cd "$PROJECT_ROOT/scripts/tests/0x11b_sentinel"
     
-    ((TOTAL_TESTS++))
+    TOTAL_TESTS=$((TOTAL_TESTS + 1))
     L2_OUTPUT=$(uv run python3 L2_erc20_component.py 2>&1 || true)
     echo "$L2_OUTPUT" | tail -15
     
     if echo "$L2_OUTPUT" | grep -q "FAILED"; then
         log_warn "⚠️ Level 2 FAILED: ERC20 Component Test reported failure"
-        ((TESTS_FAILED++))
+        TESTS_FAILED=$((TESTS_FAILED + 1))
         L2_STATUS="FAILED"
     elif echo "$L2_OUTPUT" | grep -q "SKIPPED:"; then
         log_warn "⚠️ Level 2 SKIPPED: ERC20 Component Test (Environment limitation)"
-        ((TESTS_SKIPPED++))
+        TESTS_SKIPPED=$((TESTS_SKIPPED + 1))
         L2_STATUS="SKIPPED"
     elif echo "$L2_OUTPUT" | grep -q "ALL TESTS PASSED"; then
         # Exit code 0 and no FAILED/skipped string
         log_info "✅ Level 2 PASSED: ERC20 Component Test"
-        ((TESTS_PASSED++))
+        TESTS_PASSED=$((TESTS_PASSED + 1))
         L2_STATUS="PASSED"
     else
         log_warn "❌ Level 2 CRASHED: ERC20 Component Test"
-        ((TESTS_FAILED++))
+        TESTS_FAILED=$((TESTS_FAILED + 1))
         L2_STATUS="FAILED"
     fi
 
@@ -484,7 +484,7 @@ main() {
     log_info "📋 Level 2b: Fake Token Scenarios (Security)"
     if uv run python3 L2b_erc20_fake_scenarios.py; then
         log_info "✅ Level 2b PASSED: Fake Token Logic Verified"
-        ((TESTS_PASSED++))
+        TESTS_PASSED=$((TESTS_PASSED + 1))
     else
          log_warn "⚠️ Level 2b SKIPPED/FAILED"
          # Optional
@@ -494,10 +494,10 @@ main() {
     log_info "📋 Level 2c: Multi-Decimal Independent Suite"
     if uv run python3 test_erc20_independent.py --mode suite; then
         log_info "✅ Level 2c PASSED: Multi-Decimal Logic Verified"
-        ((TESTS_PASSED++))
+        TESTS_PASSED=$((TESTS_PASSED + 1))
     else
          log_warn "⚠️ Level 2c FAILED"
-         ((TESTS_FAILED++))
+         TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
     
     # ========================================================================
@@ -509,15 +509,15 @@ main() {
     echo "   Deposit → Transfer In → Trade → Transfer Out → Withdraw"
     echo "════════════════════════════════════════════════════════════════════════"
     
-    ((TOTAL_TESTS++))
+    TOTAL_TESTS=$((TOTAL_TESTS + 1))
     L3_STATUS="FAILED" # Default to failed
     if uv run python3 L3_single_user_btc.py; then
         log_info "✅ Level 3 PASSED: Single User BTC E2E"
-        ((TESTS_PASSED++))
+        TESTS_PASSED=$((TESTS_PASSED + 1))
         L3_STATUS="PASSED"
     else
         log_warn "❌ Level 3 FAILED: Single User BTC E2E"
-        ((TESTS_FAILED++))
+        TESTS_FAILED=$((TESTS_FAILED + 1))
         L3_STATUS="FAILED"
     fi
     
@@ -530,15 +530,15 @@ main() {
     echo "   User A sells BTC ↔ User B buys BTC → Trade matched"
     echo "════════════════════════════════════════════════════════════════════════"
     
-    ((TOTAL_TESTS++))
+    TOTAL_TESTS=$((TOTAL_TESTS + 1))
     L4_STATUS="FAILED" # Default to failed
     if uv run python3 L4_two_user_matching.py; then
         log_info "✅ Level 4 PASSED: Two User Matching E2E"
-        ((TESTS_PASSED++))
+        TESTS_PASSED=$((TESTS_PASSED + 1))
         L4_STATUS="PASSED"
     else
         log_warn "❌ Level 4 FAILED: Two User Matching E2E"
-        ((TESTS_FAILED++))
+        TESTS_FAILED=$((TESTS_FAILED + 1))
         L4_STATUS="FAILED"
     fi
     
@@ -552,57 +552,57 @@ main() {
         echo "════════════════════════════════════════════════════════════════════════"
         
         # BTC Security
-        ((TOTAL_TESTS++))
+        TOTAL_TESTS=$((TOTAL_TESTS + 1))
         L5_BTC_STATUS="FAILED"
         if uv run python3 agent_c_security/test_btc_security.py 2>&1 | tail -10; then
             log_info "✅ BTC Security Tests PASSED"
-            ((TESTS_PASSED++))
+            TESTS_PASSED=$((TESTS_PASSED + 1))
             L5_BTC_STATUS="PASSED"
         else
             log_warn "❌ BTC Security Tests FAILED"
-            ((TESTS_FAILED++))
+            TESTS_FAILED=$((TESTS_FAILED + 1))
             L5_BTC_STATUS="FAILED"
         fi
         
         # ETH Security
-        ((TOTAL_TESTS++))
+        TOTAL_TESTS=$((TOTAL_TESTS + 1))
         L5_ETH_STATUS="FAILED"
         if uv run python3 agent_c_security/test_eth_security.py 2>&1 | tail -10; then
             log_info "✅ ETH Security Tests PASSED"
-            ((TESTS_PASSED++))
+            TESTS_PASSED=$((TESTS_PASSED + 1))
             L5_ETH_STATUS="PASSED"
         else
             log_warn "❌ ETH Security Tests FAILED"
-            ((TESTS_FAILED++))
+            TESTS_FAILED=$((TESTS_FAILED + 1))
             L5_ETH_STATUS="FAILED"
         fi
 
         # ====================================================================
         # Level 5a: System Boundary Tests (New: Agent A & C)
         # ====================================================================
-        ((TOTAL_TESTS++))
+        TOTAL_TESTS=$((TOTAL_TESTS + 1))
         L5a_BOUNDARY_STATUS="FAILED"
         log_info "📋 Running System Boundary Tests (Agent A: Min/Max)"
         if uv run python3 agent_a_edge/test_boundary_values.py 2>&1; then
             log_info "✅ Agent A Boundary Tests PASSED"
-            ((TESTS_PASSED++))
+            TESTS_PASSED=$((TESTS_PASSED + 1))
             L5a_BOUNDARY_STATUS="PASSED"
         else
             log_warn "❌ Agent A Boundary Tests FAILED"
-            ((TESTS_FAILED++))
+            TESTS_FAILED=$((TESTS_FAILED + 1))
             L5a_BOUNDARY_STATUS="FAILED"
         fi
 
-        ((TOTAL_TESTS++))
+        TOTAL_TESTS=$((TOTAL_TESTS + 1))
         L5a_OVERFLOW_STATUS="FAILED"
         log_info "📋 Running Overflow/Limit Tests (Agent C: 9.22 ETH)"
         if uv run python3 agent_c_security/test_overflow.py 2>&1; then
              log_info "✅ Agent C Overflow Tests PASSED"
-             ((TESTS_PASSED++))
+             TESTS_PASSED=$((TESTS_PASSED + 1))
              L5a_OVERFLOW_STATUS="PASSED"
         else
              log_warn "❌ Agent C Overflow Tests FAILED (System Limitation Confirmed)"
-             ((TESTS_FAILED++))
+             TESTS_FAILED=$((TESTS_FAILED + 1))
              L5a_OVERFLOW_STATUS="FAILED"
         fi
     else
