@@ -210,18 +210,19 @@ impl TestOrdersGeneratorSession {
     /// **CRITICAL**: numAccounts is total ACCOUNT quota, not user count!
     /// Java code:
     /// ```java
-    /// int totalAccountsQuota = accountsToCreate;  // e.g. 100
-    /// do {
-    ///     int accountsToOpen = 1 + (int) paretoDistribution.sample();
-    ///     totalAccountsQuota -= accountsToOpen;
-    ///     result.add(bitSet);
-    /// } while (totalAccountsQuota > 0);
+    /// Random rand = new Random(1);                            // for currency selection
+    /// ParetoDistribution pareto = new ParetoDistribution(
+    ///     new JDKRandomGenerator(0), 1, 1.5);                  // separate RNG!
     /// ```
-    /// So 100 accounts creates ~20-50 users (each user has 1-5 accounts)
     fn generate_user_accounts(num_accounts: usize) -> Vec<Vec<i32>> {
         const CURRENCIES: [i32; 5] = [840, 978, 3762, 3928, 4141]; // USD, EUR, XBT, ETH, LTC
 
-        let mut rand = JavaRandom::new(1);
+        // Java uses TWO separate RNGs:
+        // 1. Random(1) for currency selection
+        // 2. JDKRandomGenerator(0) inside ParetoDistribution
+        let mut currency_rand = JavaRandom::new(1);
+        let mut pareto_rand = JavaRandom::new(0); // JDKRandomGenerator(0)
+
         let mut accounts = Vec::new();
 
         // uid=0 has no accounts
@@ -230,16 +231,19 @@ impl TestOrdersGeneratorSession {
         let mut accounts_quota = num_accounts as i32;
 
         while accounts_quota > 0 {
-            // Pareto(1, 1.5) sample: min 1, typically 1-5
-            let r = rand.next_double();
-            let pareto_sample = 1.0 / (1.0 - r).powf(1.0 / 1.5);
+            // Apache Commons Math ParetoDistribution.sample():
+            // return scale / FastMath.pow(n, 1 / shape);
+            // where scale=1, shape=1.5
+            let n = pareto_rand.next_double();
+            let pareto_sample = 1.0 / n.powf(1.0 / 1.5);
             let accounts_to_open = (pareto_sample.min(CURRENCIES.len() as f64) as i32)
                 .max(1)
                 .min(accounts_quota);
 
+            // Currency selection using currency_rand
             let mut user_currencies = Vec::new();
             while user_currencies.len() < accounts_to_open as usize {
-                let idx = rand.next_int(CURRENCIES.len() as i32) as usize;
+                let idx = currency_rand.next_int(CURRENCIES.len() as i32) as usize;
                 let currency = CURRENCIES[idx];
                 if !user_currencies.contains(&currency) {
                     user_currencies.push(currency);
