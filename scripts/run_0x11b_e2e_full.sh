@@ -419,7 +419,8 @@ main() {
     
     ((TOTAL_TESTS++))
     L1_STATUS="FAILED" # Default to failed
-    if cargo test sentinel --quiet 2>&1 | tail -5; then
+    # Remove --quiet and tail to see actual output in CI
+    if cargo test sentinel --no-fail-fast; then
         log_info "✅ Level 1 PASSED: Rust Sentinel Unit Tests"
         ((TESTS_PASSED++))
         L1_STATUS="PASSED"
