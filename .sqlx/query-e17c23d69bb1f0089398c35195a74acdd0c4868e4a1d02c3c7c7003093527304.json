@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT user_id\n            FROM user_chain_addresses\n            WHERE chain_slug = $1 AND LOWER(address) = LOWER($2)\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e17c23d69bb1f0089398c35195a74acdd0c4868e4a1d02c3c7c7003093527304"
+}

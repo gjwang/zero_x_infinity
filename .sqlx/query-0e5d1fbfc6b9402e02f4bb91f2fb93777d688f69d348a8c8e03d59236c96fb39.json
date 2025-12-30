@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT \n                chain_slug, chain_name, rpc_urls, network_id, \n                scan_start_height, confirmation_blocks, is_active\n            FROM chains_tb\n            WHERE chain_slug = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "chain_slug",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "chain_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "rpc_urls",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 3,
+        "name": "network_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "scan_start_height",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "confirmation_blocks",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "is_active",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "0e5d1fbfc6b9402e02f4bb91f2fb93777d688f69d348a8c8e03d59236c96fb39"
+}

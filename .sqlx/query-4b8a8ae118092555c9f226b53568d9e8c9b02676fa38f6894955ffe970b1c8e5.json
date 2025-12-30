@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT \n                ca.id, ca.chain_slug, ca.asset_id, \n                a.asset as asset_symbol,\n                ca.contract_address, ca.decimals, \n                ca.min_deposit, ca.min_withdraw, ca.withdraw_fee,\n                ca.is_active\n            FROM chain_assets_tb ca\n            JOIN assets_tb a ON ca.asset_id = a.asset_id\n            WHERE ca.chain_slug = $1 AND ca.is_active = TRUE\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "chain_slug",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "asset_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "asset_symbol",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "contract_address",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "decimals",
+        "type_info": "Int2"
+      },
+      {
+        "ordinal": 6,
+        "name": "min_deposit",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 7,
+        "name": "min_withdraw",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 8,
+        "name": "withdraw_fee",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 9,
+        "name": "is_active",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "4b8a8ae118092555c9f226b53568d9e8c9b02676fa38f6894955ffe970b1c8e5"
+}
