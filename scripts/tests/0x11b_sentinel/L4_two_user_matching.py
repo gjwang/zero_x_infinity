@@ -345,12 +345,19 @@ class TwoUserOrderMatchingE2E:
             if resp.status_code == 200 and resp.json().get("code") == 0:
                 print(f"   ✅ User A BTC transferred to Spot")
                 self.add_result("3.1 User A Transfer", True)
+                
+                # IMMEDIATE VERIFY: Query Spot balance right now
+                spot_btc = self.get_spot_balance(self.user_a_api_client, "BTC")
+                if spot_btc < self.trade_quantity:
+                    print(f"   ❌ FAIL: Spot balance {spot_btc} < expected {self.trade_quantity}")
+                    return self.add_result("3.1.1 User A Spot Verify", False)
+                print(f"   ✅ VERIFIED: Spot BTC = {spot_btc}")
             else:
-                print(f"   📋 {resp.json().get('msg', resp.status_code)}")
-                self.add_result("3.1 User A Transfer", False)
+                print(f"   ❌ Transfer failed: {resp.json().get('msg', resp.status_code)}")
+                return self.add_result("3.1 User A Transfer", False)
         except Exception as e:
-            print(f"   ⚠️  {e}")
-            self.add_result("3.1 User A Transfer", False)
+            print(f"   ❌ Exception: {e}")
+            return self.add_result("3.1 User A Transfer", False)
         
         # User B: Deposit USDT via internal mock (since no real USDT chain in test)
         print(f"\\n📋 3.2 User B: Deposit USDT via Mock")
@@ -382,13 +389,20 @@ class TwoUserOrderMatchingE2E:
             
             if resp.status_code == 200 and resp.json().get("code") == 0:
                 print(f"   ✅ User B USDT transferred to Spot")
+                
+                # IMMEDIATE VERIFY: Query Spot balance right now
+                spot_usdt = self.get_spot_balance(self.user_b_api_client, "USDT")
+                if spot_usdt < self.trade_value:
+                    print(f"   ❌ FAIL: Spot USDT {spot_usdt} < expected {self.trade_value}")
+                    return self.add_result("3.2.1 User B Spot Verify", False)
+                print(f"   ✅ VERIFIED: Spot USDT = {spot_usdt}")
                 self.add_result("3.2 User B USDT", True, f"{usdt_amount} USDT")
             else:
-                print(f"   ⚠️ Transfer failed: {resp.json().get('msg', resp.status_code)}")
-                self.add_result("3.2 User B USDT", True, "Deposit OK, transfer issue")
+                print(f"   ❌ Transfer failed: {resp.json().get('msg', resp.status_code)}")
+                return self.add_result("3.2 User B USDT", False)
         except Exception as e:
-            print(f"   ⚠️  {e}")
-            self.add_result("3.2 User B USDT", False)
+            print(f"   ❌ Exception: {e}")
+            return self.add_result("3.2 User B USDT", False)
         
         return True
     
@@ -474,9 +488,41 @@ class TwoUserOrderMatchingE2E:
                 print(f"   ❌ HTTP {resp.status_code}: {resp.text[:100]}")
                 self.add_result("4.2 User B BUY", False)
         except Exception as e:
-            print(f"   ⚠️  Exception: {e}")
-            self.add_result("4.2 User B BUY", False)
+            print(f"   ❌ Exception: {e}")
+            return self.add_result("4.2 User B BUY", False)
         
+        # IMMEDIATE VERIFY: Wait briefly then verify BOTH orders exist
+        time.sleep(1)  # Allow async processing
+        
+        print(f"\\n📋 4.3 IMMEDIATE VERIFY: Orders Created")
+        
+        # Verify User A order exists in system
+        try:
+            resp_a = self.user_a_api_client.get("/api/v1/private/orders", params={"symbol": "BTC_USDT"})
+            if resp_a.status_code == 200:
+                orders_a = resp_a.json().get("data", [])
+                if not orders_a:
+                    print(f"   ❌ FAIL: User A has no orders in system!")
+                    return self.add_result("4.3 Orders Exist", False, "User A no orders")
+                print(f"   ✅ User A has {len(orders_a)} order(s)")
+        except Exception as e:
+            print(f"   ❌ FAIL: Cannot query User A orders: {e}")
+            return self.add_result("4.3 Orders Exist", False)
+        
+        # Verify User B order exists in system
+        try:
+            resp_b = self.user_b_api_client.get("/api/v1/private/orders", params={"symbol": "BTC_USDT"})
+            if resp_b.status_code == 200:
+                orders_b = resp_b.json().get("data", [])
+                if not orders_b:
+                    print(f"   ❌ FAIL: User B has no orders in system!")
+                    return self.add_result("4.3 Orders Exist", False, "User B no orders")
+                print(f"   ✅ User B has {len(orders_b)} order(s)")
+        except Exception as e:
+            print(f"   ❌ FAIL: Cannot query User B orders: {e}")
+            return self.add_result("4.3 Orders Exist", False)
+        
+        self.add_result("4.3 Orders Exist", True, "Both users have orders")
         return True
     
     def wait_for_order_status(self, api_client, symbol, expected_status="FILLED", max_retries=10):
