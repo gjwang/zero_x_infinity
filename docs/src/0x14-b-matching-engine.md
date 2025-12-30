@@ -35,19 +35,16 @@ Based on code review of `src/engine.rs`, `src/models.rs`, `src/orderbook.rs`:
 
 #### ❌ Missing (Required for 0x14-b)
 
-> Based on `src/bench/order_generator.rs` analysis:
+> Based on `exchange_core_verification_kit/test_datasets_and_steps.md` L162-171 (Command Distribution):
 
-| Feature | Generator Line | Current Status | Priority |
+| Feature | Benchmark % | Current Status | Priority |
 | :--- | :--- | :--- | :--- |
-| **TimeInForce::IOC** | L555 `generate_ioc_order()` | ❌ Not Implemented | **P0** |
-| **ReduceOrder** | L472 | ❌ Not Implemented | **P1** |
-| **MoveOrder** | L504 | ❌ Not Implemented | **P1** |
+| **IOC (Immediate-or-Cancel)** | ~35% | ❌ Not Implemented | **P0** |
+| **MoveOrder** | ~8% | ❌ Not Implemented | **P0** |
+| **ReduceOrder** | ~3% | ❌ Not Implemented | **P1** |
+| **FOK_BUDGET** | ~1% | ❌ Not Implemented | **P2** |
 
-#### ✅ Not Required (Generator Unused)
-
-| Feature | Notes |
-| :--- | :--- |
-| **FokBudget** | Defined at L43 but **never generated**. Skip for MVP. |
+> **Note**: FOK_BUDGET (Fill-or-Kill by Quote Budget) is ~1% of benchmark commands. Required for full S-to-Huge parity.
 
 ---
 
@@ -135,32 +132,27 @@ The Matching Engine must process orders **sequentially** based on `seq_id`.
 
 ---
 
-### 1. 差距分析 (基于 Generator 代码审查)
+### 1. 差距分析 (基于 Verification Kit)
 
-> 基于 `src/bench/order_generator.rs` 实际使用分析：
+> 基于 `exchange_core_verification_kit/test_datasets_and_steps.md` L162-171 命令分布：
 
 #### ✅ 已实现
 
-| 功能 | 位置 | 说明 |
+| 功能 | 基准占比 | 说明 |
 | :--- | :--- | :--- |
-| **MatchingEngine** | `src/engine.rs` | `process_order()`, `match_buy()`, `match_sell()` |
-| **PlaceOrder** | L379, L549 | Limit + Market |
-| **CancelOrder** | L455 | 完整链路: Gateway → Pipeline → OrderBook → WAL |
-| **GTC (隐式)** | L385, L461... | 当前默认行为 |
+| **GTC 限价单** | ~45% | `engine.rs::process_order()` |
+| **Cancel 取消** | ~9% | 完整链路: Gateway → Pipeline → OrderBook → WAL |
 
 #### ❌ 需新增
 
-| 功能 | 生成器行号 | 优先级 |
+| 功能 | 基准占比 | 优先级 |
 | :--- | :--- | :--- |
-| **TimeInForce::IOC** | L555 `generate_ioc_order()` | **P0** |
-| **ReduceOrder** | L472 | **P1** |
-| **MoveOrder** | L504 | **P1** |
+| **IOC 即时单** | ~35% | **P0** |
+| **Move 移动** | ~8% | **P0** |
+| **Reduce 减量** | ~3% | **P1** |
+| **FOK_BUDGET** | ~1% | **P2** |
 
-#### ✅ 不需要 (生成器未使用)
-
-| 功能 | 说明 |
-| :--- | :--- |
-| **FokBudget** | 定义于 L43 但 **从未生成**。本次跳过。 |
+> **说明**: FOK_BUDGET (按报价币金额买入) 占比 ~1%，完成 S-to-Huge 全量测试需实现。
 
 ---
 
