@@ -233,4 +233,87 @@ mod tests {
 
         eprintln!("✅ First 10 golden orders verified successfully");
     }
+
+    /// **DETAILED COMPARISON TEST**
+    ///
+    /// This test generates orders using our Rust implementation and compares
+    /// each row against the golden CSV to find the first mismatch.
+    #[test]
+    fn test_generator_vs_golden_detailed() {
+        use crate::bench::order_generator::{Action, SessionConfig, TestOrdersGeneratorSession};
+
+        let path = golden_data_dir().join("golden_single_pair_margin.csv");
+        if !path.exists() {
+            eprintln!("Warning: Golden data file not found: {:?}", path);
+            return;
+        }
+
+        let golden_rows = load_golden_csv(&path).expect("Failed to load golden CSV");
+
+        // Create generator with same config as Java reference
+        // Golden data uses: symbol=40000, seed=1, numUsers=100, target=50/side
+        let config = SessionConfig {
+            target_orders_per_side: 50, // FILL phase has 100 orders = 50 per side
+            num_users: 100,             // From RustPortingDataDumper
+            symbol_id: 40000,
+        };
+        let mut session = TestOrdersGeneratorSession::new(config, 1);
+
+        eprintln!("\n=== Generator vs Golden Comparison ===");
+        eprintln!("Comparing first 20 orders...\n");
+
+        let mut first_mismatch: Option<usize> = None;
+        let compare_count = 20.min(golden_rows.len());
+
+        for i in 0..compare_count {
+            let golden = &golden_rows[i];
+            let generated = session.next_command();
+
+            let gen_action = match generated.action {
+                Action::Bid => "BID",
+                Action::Ask => "ASK",
+            };
+
+            let matches = golden.order_id == generated.order_id
+                && golden.price == generated.price
+                && golden.size == generated.size
+                && golden.action == gen_action
+                && golden.uid == generated.uid;
+
+            let status = if matches { "✅" } else { "❌" };
+
+            eprintln!(
+                "[{:3}] {} | Golden: id={}, price={:5}, size={:3}, action={}, uid={:2}",
+                i + 1,
+                status,
+                golden.order_id,
+                golden.price,
+                golden.size,
+                golden.action,
+                golden.uid
+            );
+            eprintln!(
+                "        | Ours:   id={}, price={:5}, size={:3}, action={}, uid={:2}",
+                generated.order_id, generated.price, generated.size, gen_action, generated.uid
+            );
+
+            if !matches && first_mismatch.is_none() {
+                first_mismatch = Some(i);
+                eprintln!("         ^^^^ FIRST MISMATCH ^^^^");
+            }
+        }
+
+        eprintln!("\n=== Summary ===");
+        if let Some(idx) = first_mismatch {
+            eprintln!("❌ First mismatch at row {}", idx + 1);
+            eprintln!("\nThis means our order generation algorithm does not yet");
+            eprintln!("exactly match the Java reference implementation.");
+            eprintln!("\nTo fix this, we need to:");
+            eprintln!("1. Verify the exact Java algorithm for price/size/uid generation");
+            eprintln!("2. Match the random number consumption order");
+            eprintln!("3. Match the Pareto distribution parameters exactly");
+        } else {
+            eprintln!("✅ All {} compared rows match!", compare_count);
+        }
+    }
 }
