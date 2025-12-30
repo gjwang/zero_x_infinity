@@ -40,8 +40,14 @@ class TwoUserOrderMatchingE2E:
     """Two-user order matching with strict amount verification"""
     
     PRECISION = Decimal("0.00000001")
+    TEST_TIMEOUT_SECONDS = 300  # 5 minutes max
+    DEBUG = os.environ.get("DEBUG", "").lower() in ("1", "true", "yes")
     
     def __init__(self):
+        # Test execution metadata
+        self.run_id = f"L4-{int(time.time())}"
+        self.start_time = time.time()
+        
         self.btc = BtcRpcExtended()
         self.gateway = GatewayClientExtended()
         self.results = []
@@ -65,6 +71,17 @@ class TwoUserOrderMatchingE2E:
         self.trade_price = Decimal("50000")  # USDT per BTC
         self.trade_quantity = Decimal("0.1")  # BTC
         self.trade_value = self.trade_price * self.trade_quantity  # 5000 USDT
+    
+    def debug(self, msg):
+        """Print debug message only if DEBUG mode enabled"""
+        if self.DEBUG:
+            print(f"      [DEBUG] {msg}")
+    
+    def check_timeout(self):
+        """Raise exception if test has exceeded timeout"""
+        elapsed = time.time() - self.start_time
+        if elapsed > self.TEST_TIMEOUT_SECONDS:
+            raise TimeoutError(f"Test exceeded {self.TEST_TIMEOUT_SECONDS}s timeout (elapsed: {elapsed:.1f}s)")
         
     def add_result(self, name, passed, detail=""):
         self.results.append((name, passed, detail))
@@ -92,14 +109,14 @@ class TwoUserOrderMatchingE2E:
             resp = api_client.get("/api/v1/private/account")
             if resp.status_code == 200:
                 balances = resp.json().get("data", {}).get("balances", [])
-                print(f"      DEBUG RAW BALANCES: {balances}")
+                self.debug(f"RAW BALANCES: {balances}")
                 for b in balances:
                     # Filter for SPOT account type
                     if b.get("asset") == asset and b.get("account_type") == "spot":
                         avail = b.get("available", 0)
                         frozen = b.get("frozen", 0)
                         locked = b.get("locked", 0)
-                        print(f"      DEBUG {asset} (SPOT): avail={avail}, frozen={frozen}, locked={locked}")
+                        self.debug(f"{asset} (SPOT): avail={avail}, frozen={frozen}, locked={locked}")
                         # Return 'available' balance for verification
                         return Decimal(str(avail))
         except Exception as e:
@@ -110,29 +127,44 @@ class TwoUserOrderMatchingE2E:
         print("=" * 80)
         print("🎯 Phase 0x11-b: TWO-USER ORDER MATCHING E2E TEST")
         print("   User A: Sell BTC | User B: Buy BTC")
+        print(f"   Run ID: {self.run_id}")
+        print(f"   Timeout: {self.TEST_TIMEOUT_SECONDS}s")
         print("=" * 80)
         print(f"\\n📋 Trade Plan:")
         print(f"   Price:    {self.trade_price} USDT/BTC")
         print(f"   Quantity: {self.trade_quantity} BTC")
         print(f"   Value:    {self.trade_value} USDT")
         
-        if not self.phase_0_preflight():
-            return self.summarize()
-        
-        if not self.phase_1_setup_users():
-            return self.summarize()
-        
-        if not self.phase_2_user_a_deposit_btc():
-            return self.summarize()
-        
-        if not self.phase_3_prepare_trading():
-            return self.summarize()
-        
-        if not self.phase_4_place_orders():
-            return self.summarize()
-        
-        if not self.phase_5_verify_trade():
-            return self.summarize()
+        try:
+            if not self.phase_0_preflight():
+                return self.summarize()
+            self.check_timeout()
+            
+            if not self.phase_1_setup_users():
+                return self.summarize()
+            self.check_timeout()
+            
+            if not self.phase_2_user_a_deposit_btc():
+                return self.summarize()
+            self.check_timeout()
+            
+            if not self.phase_3_prepare_trading():
+                return self.summarize()
+            self.check_timeout()
+            
+            if not self.phase_4_place_orders():
+                return self.summarize()
+            self.check_timeout()
+            
+            if not self.phase_5_verify_trade():
+                return self.summarize()
+                
+        except TimeoutError as e:
+            print(f"\\n❌ TIMEOUT: {e}")
+            self.add_result("Timeout", False, str(e))
+        except Exception as e:
+            print(f"\\n❌ UNEXPECTED ERROR: {e}")
+            self.add_result("Unexpected Error", False, str(e))
         
         return self.summarize()
     
@@ -687,8 +719,12 @@ class TwoUserOrderMatchingE2E:
     # Summary
     # ========================================
     def summarize(self):
+        elapsed = time.time() - self.start_time
+        
         print("\\n" + "=" * 80)
         print("📊 TWO-USER ORDER MATCHING E2E RESULTS")
+        print(f"   Run ID: {self.run_id}")
+        print(f"   Elapsed: {elapsed:.1f}s")
         print("=" * 80)
         
         total_passed = 0
@@ -705,6 +741,7 @@ class TwoUserOrderMatchingE2E:
         
         print("\\n" + "-" * 60)
         print(f"   Total: {total_passed}/{total_passed + total_failed} passed")
+        print(f"   Time:  {elapsed:.1f}s")
         
         return total_failed == 0
 
