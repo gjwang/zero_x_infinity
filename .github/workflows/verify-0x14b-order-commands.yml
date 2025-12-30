@@ -1,0 +1,88 @@
+name: Verify 0x14b-Order-Commands
+
+on:
+  push:
+    branches: [ "0x14-b-order-commands" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  SQLX_OFFLINE: true
+
+jobs:
+  verify-matching:
+    name: Order Commands Functional QA
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: exchange_info_db
+          POSTGRES_USER: trading
+          POSTGRES_PASSWORD: trading123
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U trading -d exchange_info_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      tdengine:
+        image: tdengine/tdengine:3.3.3.0
+        ports:
+          - 6041:6041
+        options: >-
+          --health-cmd "curl -s http://localhost:6041/rest/login/root/taosdata || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      # Setup Rust
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+            toolchain: 1.83.0
+      
+      - uses: Swatinem/rust-cache@v2
+
+      # Setup Python
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+            version: "0.5.11"
+      
+      - name: Install Dependencies
+        run: uv sync
+
+      # Build Binary
+      - name: Build Release Binary
+        run: cargo build --release --bin zero_x_infinity
+
+      # Run Script
+      - name: Run 0x14b QA Suite
+        env:
+          PG_HOST: localhost
+          PG_PORT: 5432
+          PG_USER: trading
+          PG_PASSWORD: trading123
+          PG_DB: exchange_info_db
+          TDENGINE_DSN: "taos+ws://root:taosdata@localhost:6041"
+        run: |
+           export GATEWAY_BINARY=$(pwd)/target/release/zero_x_infinity
+           chmod +x scripts/test_0x14b_qa.sh
+           ./scripts/test_0x14b_qa.sh
+
+      # Upload Logs
+      - name: Upload Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-0x14b-qa
+          path: logs/

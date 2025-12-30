@@ -32,6 +32,8 @@ ENTRY_TYPES = {
     5: "Deposit",
     6: "Withdraw",
     7: "SnapshotMarker",
+    8: "Reduce",
+    9: "Move",
 }
 
 

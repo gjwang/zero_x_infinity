@@ -125,6 +125,8 @@ pub enum WalEntryType {
     Deposit = 5,
     Withdraw = 6,
     SnapshotMarker = 7,
+    Reduce = 8,
+    Move = 9,
     /// Settlement checkpoint - records last processed trade_id
     SettlementCheckpoint = 0x10,
 }
@@ -141,6 +143,8 @@ impl TryFrom<u8> for WalEntryType {
             5 => Ok(Self::Deposit),
             6 => Ok(Self::Withdraw),
             7 => Ok(Self::SnapshotMarker),
+            8 => Ok(Self::Reduce),
+            9 => Ok(Self::Move),
             0x10 => Ok(Self::SettlementCheckpoint),
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -162,8 +166,9 @@ pub struct OrderPayload {
     pub symbol_id: u32,
     pub price: u64,
     pub qty: u64,
-    pub side: u8,       // 0=Buy, 1=Sell
-    pub order_type: u8, // 0=Limit, 1=Market
+    pub side: u8,          // 0=Buy, 1=Sell
+    pub order_type: u8,    // 0=Limit, 1=Market
+    pub time_in_force: u8, // 0=GTC, 1=IOC
     pub ingested_at_ns: u64,
 }
 
@@ -172,6 +177,22 @@ pub struct OrderPayload {
 pub struct CancelPayload {
     pub order_id: u64,
     pub user_id: u64,
+}
+
+/// Reduce payload (entry_type = 8)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ReducePayload {
+    pub order_id: u64,
+    pub user_id: u64,
+    pub reduce_qty: u64,
+}
+
+/// Move payload (entry_type = 9)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MovePayload {
+    pub order_id: u64,
+    pub user_id: u64,
+    pub new_price: u64,
 }
 
 /// Funding payload (entry_type = 5, 6: Deposit/Withdraw)
@@ -421,6 +442,7 @@ mod tests {
                 qty: 1000,
                 side: 0,
                 order_type: 0,
+                time_in_force: 0,
                 ingested_at_ns: 0,
             })
             .unwrap();
@@ -550,6 +572,7 @@ mod tests {
                 qty: 1_000000,       // 1.0
                 side: 0,             // Buy
                 order_type: 0,       // Limit
+                time_in_force: 0,
                 ingested_at_ns: 1703500000000000000,
             })
             .unwrap();
@@ -628,6 +651,7 @@ mod tests {
                 qty: 0,
                 side: 0,
                 order_type: 0,
+                time_in_force: 0,
                 ingested_at_ns: 0,
             })
             .unwrap() as u64;

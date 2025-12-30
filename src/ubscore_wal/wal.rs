@@ -9,7 +9,7 @@ use std::io::{BufReader, BufWriter, Result};
 use std::path::Path;
 
 // Re-export from wal_v2 for convenience
-pub use crate::wal_v2::{CancelPayload, FundingPayload, OrderPayload};
+pub use crate::wal_v2::{CancelPayload, FundingPayload, MovePayload, OrderPayload, ReducePayload};
 
 // ============================================================
 // Cancel Order (simplified for WAL)
@@ -57,6 +57,7 @@ impl UBSCoreWalWriter {
             qty: order.qty,
             side: order.side as u8,
             order_type: order.order_type as u8,
+            time_in_force: order.time_in_force as u8,
             ingested_at_ns: order.ingested_at_ns,
         };
 
@@ -84,6 +85,44 @@ impl UBSCoreWalWriter {
         let seq_id = self
             .writer
             .write_entry(WalEntryType::Cancel, &payload_bytes)?;
+        self.next_seq_id = seq_id + 1;
+
+        Ok(seq_id)
+    }
+
+    /// Append a reduce order to WAL
+    pub fn append_reduce(&mut self, order_id: u64, user_id: u64, reduce_qty: u64) -> Result<u64> {
+        let payload = ReducePayload {
+            order_id,
+            user_id,
+            reduce_qty,
+        };
+
+        let payload_bytes = bincode::serialize(&payload)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+
+        let seq_id = self
+            .writer
+            .write_entry(crate::wal_v2::WalEntryType::Reduce, &payload_bytes)?;
+        self.next_seq_id = seq_id + 1;
+
+        Ok(seq_id)
+    }
+
+    /// Append a move order to WAL
+    pub fn append_move(&mut self, order_id: u64, user_id: u64, new_price: u64) -> Result<u64> {
+        let payload = MovePayload {
+            order_id,
+            user_id,
+            new_price,
+        };
+
+        let payload_bytes = bincode::serialize(&payload)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+
+        let seq_id = self
+            .writer
+            .write_entry(crate::wal_v2::WalEntryType::Move, &payload_bytes)?;
         self.next_seq_id = seq_id + 1;
 
         Ok(seq_id)
@@ -221,6 +260,7 @@ mod tests {
             filled_qty: 0,
             side: Side::Buy,
             order_type: OrderType::Limit,
+            time_in_force: crate::models::TimeInForce::GTC,
             status: crate::models::OrderStatus::NEW,
             lock_version: 0,
             seq_id: 0,
@@ -261,6 +301,7 @@ mod tests {
             filled_qty: 0,
             side: Side::Buy,
             order_type: OrderType::Limit,
+            time_in_force: crate::models::TimeInForce::GTC,
             status: crate::models::OrderStatus::NEW,
             lock_version: 0,
             seq_id: 0,
@@ -324,6 +365,7 @@ mod tests {
                 filled_qty: 0,
                 side: Side::Buy,
                 order_type: OrderType::Limit,
+                time_in_force: crate::models::TimeInForce::GTC,
                 status: crate::models::OrderStatus::NEW,
                 lock_version: 0,
                 seq_id: 0,

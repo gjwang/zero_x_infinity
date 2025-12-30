@@ -2,7 +2,7 @@ use rust_decimal::prelude::*;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::models::{InternalOrder, OrderStatus, OrderType, Side};
+use crate::models::{InternalOrder, OrderStatus, OrderType, Side, TimeInForce};
 use crate::symbol_manager::SymbolManager;
 
 /// Custom deserializer for non-empty strings
@@ -33,6 +33,9 @@ pub struct ClientOrder {
     pub side: Side,
     /// Order type: "LIMIT" | "MARKET" (SCREAMING_CASE)
     pub order_type: OrderType,
+    /// Time in force: "GTC" | "IOC" (optional, defaults to GTC)
+    #[serde(default)]
+    pub time_in_force: TimeInForce,
     /// Price (required for LIMIT orders)
     pub price: Option<Decimal>,
     /// Quantity (unified field name)
@@ -102,6 +105,7 @@ pub fn validate_client_order(
         symbol_id,
         side: req.side,
         order_type: req.order_type,
+        time_in_force: req.time_in_force,
         price,
         qty: req.qty,
         price_decimals: symbol_info.price_decimal,
@@ -118,6 +122,7 @@ pub struct ValidatedClientOrder {
     pub symbol_id: u32,
     pub side: Side,
     pub order_type: OrderType,
+    pub time_in_force: TimeInForce,
     pub price: Decimal,      // Validated Decimal (0 for MARKET orders)
     pub qty: Decimal,        // Validated Decimal
     pub price_decimals: u32, // For conversion
@@ -147,6 +152,7 @@ impl ValidatedClientOrder {
             filled_qty: 0,
             side: self.side,
             order_type: self.order_type,
+            time_in_force: self.time_in_force,
             status: OrderStatus::NEW,
             lock_version: 0,
             seq_id: 0,
@@ -159,7 +165,7 @@ impl ValidatedClientOrder {
 /// Convert Decimal to u64
 ///
 /// Multiplies by 10^decimals and converts to u64
-fn decimal_to_u64(decimal: Decimal, decimals: u32) -> Result<u64, &'static str> {
+pub fn decimal_to_u64(decimal: Decimal, decimals: u32) -> Result<u64, &'static str> {
     let multiplier = Decimal::from(10u64.pow(decimals));
     let result = decimal * multiplier;
 
@@ -172,9 +178,25 @@ fn decimal_to_u64(decimal: Decimal, decimals: u32) -> Result<u64, &'static str> 
 }
 
 /// Cancel order request
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct CancelOrderRequest {
     pub order_id: u64,
+}
+
+/// Reduce order request
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct ReduceOrderRequest {
+    pub order_id: u64,
+    #[schema(value_type = String)]
+    pub reduce_qty: Decimal,
+}
+
+/// Move order request
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct MoveOrderRequest {
+    pub order_id: u64,
+    #[schema(value_type = String)]
+    pub new_price: Decimal,
 }
 
 // ============================================================================
@@ -383,6 +405,7 @@ mod tests {
             order_type: OrderType::Limit,
             price: Some(Decimal::from_str("85000.50").unwrap()),
             qty: Decimal::from_str("0.001").unwrap(),
+            time_in_force: TimeInForce::GTC,
         };
         let result = validate_client_order(order, &symbol_mgr);
         assert!(result.is_ok());
@@ -401,6 +424,7 @@ mod tests {
             order_type: OrderType::Market,
             price: None,
             qty: Decimal::from_str("0.002").unwrap(),
+            time_in_force: TimeInForce::GTC,
         };
         let result = validate_client_order(order, &symbol_mgr);
         assert!(result.is_ok());
@@ -418,6 +442,7 @@ mod tests {
             order_type: OrderType::Limit,
             price: None,
             qty: Decimal::from_str("0.001").unwrap(),
+            time_in_force: TimeInForce::GTC,
         };
         let result = validate_client_order(order, &symbol_mgr);
         assert!(result.is_err());
@@ -434,6 +459,7 @@ mod tests {
             order_type: OrderType::Limit,
             price: Some(Decimal::ZERO),
             qty: Decimal::from_str("0.001").unwrap(),
+            time_in_force: TimeInForce::GTC,
         };
         let result = validate_client_order(order, &symbol_mgr);
         assert!(result.is_err());
@@ -450,6 +476,7 @@ mod tests {
             order_type: OrderType::Limit,
             price: Some(Decimal::from_str("-100").unwrap()),
             qty: Decimal::from_str("0.001").unwrap(),
+            time_in_force: TimeInForce::GTC,
         };
         let result = validate_client_order(order, &symbol_mgr);
         assert!(result.is_err());
@@ -466,6 +493,7 @@ mod tests {
             order_type: OrderType::Limit,
             price: Some(Decimal::from_str("85000").unwrap()),
             qty: Decimal::ZERO,
+            time_in_force: TimeInForce::GTC,
         };
         let result = validate_client_order(order, &symbol_mgr);
         assert!(result.is_err());
@@ -482,6 +510,7 @@ mod tests {
             order_type: OrderType::Limit,
             price: Some(Decimal::from_str("1000").unwrap()),
             qty: Decimal::from_str("1.0").unwrap(),
+            time_in_force: TimeInForce::GTC,
         };
         let result = validate_client_order(order, &symbol_mgr);
         assert!(result.is_err());
@@ -497,6 +526,7 @@ mod tests {
             order_type: OrderType::Limit,
             price: Decimal::from_str("85000.50").unwrap(),
             qty: Decimal::from_str("0.001").unwrap(),
+            time_in_force: TimeInForce::GTC,
             price_decimals: 2,
             qty_decimals: 8,
         };
@@ -508,5 +538,70 @@ mod tests {
         assert_eq!(internal.price, 8500050); // 85000.50 * 100
         assert_eq!(internal.qty, 100000); // 0.001 * 100000000
         assert_eq!(internal.status, OrderStatus::NEW);
+    }
+
+    /// Test that IOC time_in_force correctly propagates from ClientOrder to InternalOrder
+    #[test]
+    fn test_ioc_time_in_force_passthrough() {
+        let (symbol_mgr, _) = load_symbol_manager().unwrap();
+
+        // Create a client order with IOC time_in_force
+        let order = ClientOrder {
+            cid: Some("ioc-test-001".to_string()),
+            symbol: "BTC_USDT".to_string(),
+            side: Side::Buy,
+            order_type: OrderType::Limit,
+            time_in_force: TimeInForce::IOC, // Explicitly set IOC
+            price: Some(Decimal::from_str("85000.00").unwrap()),
+            qty: Decimal::from_str("0.001").unwrap(),
+        };
+
+        // Validate
+        let validated = validate_client_order(order, &symbol_mgr).unwrap();
+        assert_eq!(validated.time_in_force, TimeInForce::IOC);
+
+        // Convert to internal order
+        let internal = validated
+            .into_internal_order(101, 1001, 1234567890)
+            .unwrap();
+
+        // Verify IOC is preserved in InternalOrder
+        assert_eq!(internal.time_in_force, TimeInForce::IOC);
+        assert_eq!(internal.order_id, 101);
+    }
+
+    /// Test that time_in_force defaults to GTC when not specified (via JSON)
+    #[test]
+    fn test_time_in_force_defaults_to_gtc() {
+        // Simulate JSON without time_in_force field
+        let json = r#"{
+            "symbol": "BTC_USDT",
+            "side": "BUY",
+            "order_type": "LIMIT",
+            "price": "85000.00",
+            "qty": "0.001"
+        }"#;
+
+        let order: ClientOrder = serde_json::from_str(json).unwrap();
+
+        // Should default to GTC
+        assert_eq!(order.time_in_force, TimeInForce::GTC);
+    }
+
+    /// Test that IOC can be specified via JSON
+    #[test]
+    fn test_ioc_via_json() {
+        let json = r#"{
+            "symbol": "BTC_USDT",
+            "side": "BUY",
+            "order_type": "LIMIT",
+            "time_in_force": "IOC",
+            "price": "85000.00",
+            "qty": "0.001"
+        }"#;
+
+        let order: ClientOrder = serde_json::from_str(json).unwrap();
+
+        assert_eq!(order.time_in_force, TimeInForce::IOC);
     }
 }

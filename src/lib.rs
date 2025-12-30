@@ -13,7 +13,6 @@
 //! - [`engine`] - Matching engine logic
 //! - [`balance`] - Enforced balance type
 //! - [`user_account`] - User account management
-//! - [`wal`] - Write-Ahead Log for order persistence
 //! - [`ledger`] - Settlement audit log
 //! - [`perf`] - Performance metrics
 //! - [`csv_io`] - CSV loading/saving
@@ -49,7 +48,6 @@ pub mod settlement_wal; // Phase 0x0D Settlement Service WAL
 pub mod ubscore;
 pub mod ubscore_wal; // Phase 0x0D UBSCore WAL
 pub mod user_account;
-pub mod wal;
 pub mod wal_v2; // Phase 0x0D Universal WAL Format
 pub mod websocket;
 
@@ -83,6 +81,9 @@ pub mod user_auth;
 // Sentinel Service (Phase 0x11-a: Real Chain Integration)
 pub mod sentinel;
 
+// Benchmark Harness (Phase 0x14-a: Extreme Optimization)
+pub mod bench;
+
 // Convenient re-exports at crate root
 pub use balance::Balance;
 pub use core_types::{AssetId, OrderId, SeqNum, TradeId, UserId};
@@ -96,7 +97,6 @@ pub use orderbook::OrderBook;
 pub use symbol_manager::{SymbolInfo, SymbolManager};
 pub use ubscore::UBSCore;
 pub use user_account::UserAccount;
-pub use wal::{WalConfig, WalWriter};
 
 // Account management re-exports (Phase 0x0A)
 pub use account::{

@@ -207,6 +207,36 @@ impl OrderBook {
         Some(order)
     }
 
+    /// Get reference to an order by ID (read-only)
+    pub fn get_order(&self, order_id: u64) -> Option<&InternalOrder> {
+        let (price, side) = self.order_index.get(&order_id).copied()?;
+        let orders = match side {
+            Side::Buy => self.bids.get(&(u64::MAX - price))?,
+            Side::Sell => self.asks.get(&price)?,
+        };
+        orders.iter().find(|o| o.order_id == order_id)
+    }
+
+    /// Get mutable reference to an order by ID
+    ///
+    /// Used for in-place modifications like ReduceOrder that preserve time priority.
+    /// Returns None if order not found.
+    ///
+    /// Complexity: O(1) index lookup + O(log n) tree access + O(k) queue scan
+    pub fn get_order_mut(&mut self, order_id: u64) -> Option<&mut InternalOrder> {
+        // O(1) - lookup price and side from index
+        let (price, side) = self.order_index.get(&order_id).copied()?;
+
+        // O(log n) - get the price level
+        let orders = match side {
+            Side::Buy => self.bids.get_mut(&(u64::MAX - price))?,
+            Side::Sell => self.asks.get_mut(&price)?,
+        };
+
+        // O(k) - find order in the queue at this price level
+        orders.iter_mut().find(|o| o.order_id == order_id)
+    }
+
     /// Get all orders as a Vec (for final dump/snapshot)
     ///
     /// Returns orders in price priority order:

@@ -274,6 +274,9 @@ pub fn run_pipeline_single_thread(
                                 });
                             }
                         }
+                        ValidAction::Reduce { .. } | ValidAction::Move { .. } => {
+                            // TODO: Implement for single-threaded pipeline
+                        }
                     }
                 }
             }

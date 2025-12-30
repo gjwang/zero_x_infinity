@@ -671,6 +671,12 @@ impl MatchingService {
                 let span = p_span!(TARGET_ME, LOG_ORDER, order_id = valid_order.order.order_id);
                 let _enter = span.enter();
 
+                tracing::info!(
+                    "[TRACE] ME Processing ID={} TIF={:?}",
+                    valid_order.order.order_id,
+                    valid_order.order.time_in_force
+                );
+
                 // Match order
                 let result =
                     MatchingEngine::process_order(&mut self.book, valid_order.order.clone());
@@ -781,6 +787,59 @@ impl MatchingService {
                     }
                 }
 
+                // [IOC EXPIRED HANDLING] Phase 0x14-b: Handle IOC orders that expired
+                // If order is EXPIRED (IOC with remaining qty), unlock the frozen balance
+                if result.order.status == OrderStatus::EXPIRED {
+                    let remaining_qty = result.order.remaining_qty();
+                    if remaining_qty > 0 {
+                        // Calculate unlock amount
+                        let mut temp_order = result.order.clone();
+                        temp_order.qty = remaining_qty;
+                        let unlock_amount =
+                            temp_order.calculate_cost(self.market.qty_unit).unwrap_or(0);
+                        let lock_asset_id = match result.order.side {
+                            Side::Buy => self.market.quote_id,
+                            Side::Sell => self.market.base_id,
+                        };
+
+                        // Send unlock request to UBSCore
+                        let unlock_req = BalanceUpdateRequest::Cancel {
+                            order_id: result.order.order_id,
+                            user_id: result.order.user_id,
+                            asset_id: lock_asset_id,
+                            unlock_amount,
+                            ingested_at_ns: valid_order.ingested_at_ns,
+                        };
+                        loop {
+                            match self.queues.balance_update_queue.push(unlock_req.clone()) {
+                                Ok(()) => break,
+                                Err(_) => {
+                                    self.stats.incr_backpressure("balance_update_queue");
+                                    std::thread::sleep(IDLE_SLEEP_US);
+                                }
+                            }
+                        }
+
+                        tracing::info!(
+                            "[TRACE] IOC Order {} EXPIRED: unlocking {} remaining qty",
+                            result.order.order_id,
+                            remaining_qty
+                        );
+                    }
+
+                    // Send OrderUpdate push for EXPIRED status
+                    let _ = self.queues.push_event_queue.push(
+                        crate::websocket::PushEvent::OrderUpdate {
+                            user_id: result.order.user_id,
+                            order_id: result.order.order_id,
+                            symbol_id: result.order.symbol_id,
+                            status: OrderStatus::EXPIRED,
+                            filled_qty: result.order.filled_qty,
+                            avg_price: None,
+                        },
+                    );
+                }
+
                 self.depth_dirty = true; // Mark depth as changed
 
                 // [PERSISTENCE] Phase 2.4: Write trades to WAL and trigger snapshots
@@ -878,8 +937,149 @@ impl MatchingService {
                             },
                         );
                     }
+
+                    // [FIX] Phase 0x14-b: Send MEResult to persist CANCELED status to TDengine
+                    let me_result = crate::messages::MEResult {
+                        order: cancelled_order.clone(),
+                        trades: vec![],
+                        maker_updates: vec![],
+                        final_status: OrderStatus::CANCELED,
+                        symbol_id: cancelled_order.symbol_id,
+                    };
+                    let _ = self.queues.me_result_queue.push(me_result);
                 }
                 self.depth_dirty = true; // Mark depth as changed
+            }
+            ValidAction::Reduce {
+                order_id,
+                user_id,
+                reduce_qty,
+                ingested_at_ns,
+            } => {
+                let span = p_span!(TARGET_ME, "REDUCE", order_id = order_id);
+                let _enter = span.enter();
+
+                // 1. Check order exists and belongs to user
+                let (lock_asset_id, unlock_amount) =
+                    if let Some(order) = self.book.get_order(order_id) {
+                        if order.user_id != user_id {
+                            tracing::error!(
+                                "[TRACE] Reduce Order {}: User mismatch (expected {}, got {})",
+                                order_id,
+                                order.user_id,
+                                user_id
+                            );
+                            return;
+                        }
+
+                        let remaining = order.qty.saturating_sub(order.filled_qty);
+                        let actual_reduce = if reduce_qty >= remaining {
+                            remaining
+                        } else {
+                            reduce_qty
+                        };
+
+                        let asset_id = match order.side {
+                            Side::Buy => self.market.quote_id,
+                            Side::Sell => self.market.base_id,
+                        };
+
+                        let mut temp_order = order.clone();
+                        temp_order.qty = actual_reduce;
+                        let amount = temp_order.calculate_cost(self.market.qty_unit).unwrap_or(0);
+
+                        (asset_id, amount)
+                    } else {
+                        return;
+                    };
+
+                // 2. Apply to Matching Engine
+                let reduced_order =
+                    MatchingEngine::reduce_order(&mut self.book, order_id, reduce_qty);
+                if let Some(ref order) = reduced_order {
+                    tracing::info!("[TRACE] Reduce Order {}: Success", order_id);
+
+                    // 3. Unlock frozen balance if needed
+                    if unlock_amount > 0 {
+                        let unlock_req = BalanceUpdateRequest::Cancel {
+                            order_id,
+                            user_id,
+                            asset_id: lock_asset_id,
+                            unlock_amount,
+                            ingested_at_ns,
+                        };
+                        let _ = self.queues.balance_update_queue.push(unlock_req);
+                    }
+
+                    // [FIX] Phase 0x14-b: Determine final status and persist
+                    // Check if order is still in book - if not, it was reduced to zero (removed)
+                    let is_removed = self.book.get_order(order_id).is_none();
+                    let final_status = if is_removed {
+                        // Reduced to zero (fully canceled)
+                        OrderStatus::CANCELED
+                    } else {
+                        // Partially reduced, still active
+                        order.status
+                    };
+
+                    // [PUSH] Notify client of reduce result
+                    let _ = self.queues.push_event_queue.push(
+                        crate::websocket::PushEvent::OrderUpdate {
+                            user_id,
+                            order_id,
+                            symbol_id: order.symbol_id,
+                            status: final_status,
+                            filled_qty: order.filled_qty,
+                            avg_price: None,
+                        },
+                    );
+
+                    // [FIX] Phase 0x14-b: Send MEResult to persist status to TDengine
+                    let mut order_copy = order.clone();
+                    order_copy.status = final_status;
+                    let me_result = crate::messages::MEResult {
+                        order: order_copy,
+                        trades: vec![],
+                        maker_updates: vec![],
+                        final_status,
+                        symbol_id: order.symbol_id,
+                    };
+                    let _ = self.queues.me_result_queue.push(me_result);
+
+                    self.depth_dirty = true;
+                }
+            }
+            ValidAction::Move {
+                order_id,
+                user_id,
+                new_price,
+                ingested_at_ns: _,
+            } => {
+                let span = p_span!(TARGET_ME, "MOVE", order_id = order_id);
+                let _enter = span.enter();
+
+                // Security check
+                // Security check
+                if let Some(order) = self.book.get_order(order_id)
+                    && order.user_id != user_id
+                {
+                    tracing::error!(
+                        "[TRACE] Move Order {}: User mismatch (expected {}, got {})",
+                        order_id,
+                        order.user_id,
+                        user_id
+                    );
+                    return;
+                }
+
+                if MatchingEngine::move_order(&mut self.book, order_id, new_price).is_some() {
+                    tracing::info!(
+                        "[TRACE] Move Order {}: Success (New Price {})",
+                        order_id,
+                        new_price
+                    );
+                    self.depth_dirty = true;
+                }
             }
         }
         self.stats

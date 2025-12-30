@@ -1,0 +1,597 @@
+# 0x14-a Benchmark Harness: Test Data Generation
+
+<h3>
+  <a href="#-english">🇺🇸 English</a>
+  &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
+  <a href="#-chinese">🇨🇳 中文</a>
+</h3>
+
+<div id="-english"></div>
+
+## 🇺🇸 English
+
+| Status | ✅ **IMPLEMENTED / QA VERIFIED** (Phase 0x14-a Complete) |
+| :--- | :--- |
+| **Date** | 2025-12-30 |
+| **Context** | Phase V: Extreme Optimization (Step 1) |
+| **Goal** | Re-implement Exchange-Core test data generation algorithm in Rust and verify correctness against golden data. |
+
+---
+
+### 1. Chapter Objectives
+
+| # | Goal | Deliverable |
+|---|------|-------------|
+| 1 | **Implement LCG PRNG** | `src/bench/java_random.rs` - Java-compatible random generator |
+| 2 | **Implement Order Generator** | `src/bench/order_generator.rs` - Deterministic order sequence |
+| 3 | **Verify Correctness** | Unit tests that compare generated data with `golden_*.csv` |
+
+**Success Criteria**: Generated data matches golden CSV byte-for-byte (same `order_id`, `price`, `size`, `uid` for each row).
+
+---
+
+### 2. Reference Algorithm: LCG PRNG
+
+The Exchange-Core project uses Java's `java.util.Random` as its PRNG. We must implement a bit-exact replica.
+
+#### 2.1 Java Random Implementation
+
+```rust
+/// Java-compatible Linear Congruential Generator
+pub struct JavaRandom {
+    seed: u64,
+}
+
+impl JavaRandom {
+    const MULTIPLIER: u64 = 0x5DEECE66D;
+    const ADDEND: u64 = 0xB;
+    const MASK: u64 = (1 << 48) - 1;
+
+    pub fn new(seed: i64) -> Self {
+        Self {
+            seed: (seed as u64 ^ Self::MULTIPLIER) & Self::MASK,
+        }
+    }
+
+    fn next(&mut self, bits: u32) -> i32 {
+        self.seed = self.seed
+            .wrapping_mul(Self::MULTIPLIER)
+            .wrapping_add(Self::ADDEND) & Self::MASK;
+        (self.seed >> (48 - bits)) as i32
+    }
+
+    pub fn next_int(&mut self, bound: i32) -> i32 {
+        assert!(bound > 0);
+        let bound = bound as u32;
+        if (bound & bound.wrapping_sub(1)) == 0 {
+            // Power of two
+            return ((bound as u64 * self.next(31) as u64) >> 31) as i32;
+        }
+        loop {
+            let bits = self.next(31) as u32;
+            let val = bits % bound;
+            if bits.wrapping_sub(val).wrapping_add(bound.wrapping_sub(1)) >= bits {
+                return val as i32;
+            }
+        }
+    }
+
+    pub fn next_long(&mut self) -> i64 {
+        ((self.next(32) as i64) << 32) + self.next(32) as i64
+    }
+
+    pub fn next_double(&mut self) -> f64 {
+        let a = (self.next(26) as u64) << 27;
+        let b = self.next(27) as u64;
+        (a + b) as f64 / ((1u64 << 53) as f64)
+    }
+}
+```
+
+#### 2.2 Seed Derivation
+
+Each test session derives its seed from `symbol_id` and `benchmark_seed`:
+
+```rust
+fn derive_session_seed(symbol_id: i32, benchmark_seed: i64) -> i64 {
+    let mut hash: i64 = 1;
+    hash = 31 * hash + (symbol_id as i64 * -177277);
+    hash = 31 * hash + (benchmark_seed * 10037 + 198267);
+    hash
+}
+```
+
+---
+
+### 3. Golden Data Reference
+
+**Location**: `docs/exchange_core_verification_kit/golden_data/`
+
+| File | Records | Seed | Description |
+|------|---------|------|-------------|
+| `golden_single_pair_margin.csv` | 11,000 | 1 | Margin (futures) contract |
+| `golden_single_pair_exchange.csv` | 11,000 | 1 | Spot exchange |
+
+**CSV Format**:
+```csv
+phase,command,order_id,symbol,price,size,action,order_type,uid
+```
+
+---
+
+### 4. Implementation Checklist
+
+- [x] **Step 1**: Create `src/bench/mod.rs`
+- [x] **Step 2**: Implement `JavaRandom` in `src/bench/java_random.rs`
+    - [x] Unit test: verify first 100 random numbers match Java output
+- [x] **Step 3**: Implement `TestOrdersGenerator` in `src/bench/order_generator.rs`
+    - [x] Pareto distribution for symbol/user weights
+    - [x] Order generation logic (GTC orders for FILL phase)
+    - [x] Seed derivation using `Objects.hash` formula
+- [x] **Step 4**: Load and compare with golden CSV
+    - [x] `#[test] fn test_golden_single_pair_margin()`
+    - [x] `#[test] fn test_golden_single_pair_exchange()`
+
+---
+
+### 5. Implementation Results
+
+> [!NOTE]
+> **✅ FILL PHASE: 100% BIT-EXACT MATCH** (1,000 orders)
+> **⚠️ BENCHMARK PHASE: Requires matching engine** (10,000 orders)
+
+#### 5.1 FILL Phase (Rows 1-1000)
+
+| Field | Match Status | Formula |
+|:-----:|:------------:|:--------|
+| **Price** | ✅ 100% | `pow(r,2)*deviation` + 4-value averaging |
+| **Size** | ✅ 100% | `1 + rand(6)*rand(6)*rand(6)` |
+| **Action** | ✅ 100% | `(rand(4)+priceDir>=2) ? BID : ASK` |
+| **UID** | ✅ 100% | Pareto user account generation |
+
+#### 5.2 BENCHMARK Phase Analysis
+
+| Component | Status | Notes |
+|:---------:|:------:|:------|
+| RNG Sequence | ✅ Aligned | `nextInt(4)` for action FIRST, then `nextInt(q_range)` |
+| Order Selection | ✅ Aligned | Uses `orderUids` iterator (BTreeMap deterministic) |
+| IOC Simulation | ✅ Implemented | Shadow order book with `simulate_ioc_match` |
+| Order Book Feedback | ❌ Gap | Java uses real matcher feedback for `lackOfOrders` |
+
+> [!IMPORTANT]
+> **BENCHMARK Phase Gap**: Java's `generateRandomOrder` uses `lastOrderBookOrdersSizeAsk/Bid` from the **real matching engine** (updated in `updateOrderBookSizeStat`). Without a full Rust matching engine, the shadow book diverges from Java's state.
+
+#### 5.3 Golden Data Scale
+
+| Dataset | FILL | BENCHMARK | Total |
+|:-------:|:----:|:---------:|:-----:|
+| `golden_single_pair_margin.csv` | 1,000 | 10,000 | 11,000 |
+| `golden_single_pair_exchange.csv` | 1,000 | 10,000 | 11,000 |
+
+#### 5.4 Key Implementation Details
+
+1. **JavaRandom** - Bit-exact `java.util.Random` LCG
+2. **Seed derivation**: `Objects.hash(symbol*-177277, seed*10037+198267)`
+3. **User accounts**: `1 + (int)paretoSample` formula
+4. **Currency order**: `[978, 840]` based on HashMap bucket index
+5. **CENTRAL_MOVE_ALPHA**: `0.01` (not 0.1)
+6. **Shadow Order Book**: `ask_orders`/`bid_orders` Vec with O(1) swap_remove
+
+---
+
+### 6. Verification Commands
+
+**One-Click Verification**:
+```bash
+# Run all golden data verification tests
+cargo test golden_ -- --nocapture
+```
+
+**Detailed Comparison Test**:
+```bash
+# Compare first 20 orders against golden CSV with full output
+cargo test test_generator_vs_golden_detailed -- --nocapture
+```
+
+**All Benchmark Tests**:
+```bash
+# Run all tests in the bench module
+cargo test bench:: -- --nocapture
+```
+
+**Expected Output**:
+```
+[  1] ✅ | Golden: id=1, price=34386, size=  1, action=BID, uid=377
+[  2] ✅ | Golden: id=2, price=34135, size=  1, action=BID, uid=110
+[  3] ✅ | Golden: id=3, price=34347, size=  2, action=BID, uid=459
+...
+[20] ✅ | Golden: id=20, price=34297, size=  1, action=BID, uid=491
+```
+
+---
+
+### 7. Fair Benchmark Procedure
+
+> [!IMPORTANT]
+> **Key to Fairness**: Generation and Execution must be separated. Java pre-generates all commands into memory before testing.
+
+#### 7.1 Four Phase Separation
+
+```
+Phase 1: Data Pre-generation ───────── ⏸️ Not Timed
+Phase 2: FILL (Pre-fill) ───────────── ⏸️ Not Timed  
+Phase 3: BENCHMARK (Stress) ────────── ⏱️ Timed Phase
+Phase 4: Verification ──────────────── ⏸️ Not Timed
+```
+
+#### 7.2 Rust Implementation Spec
+
+```rust
+// ✅ Correct: Pre-generate -> Then Execute
+let (fill_commands, benchmark_commands) = generator.pre_generate_all();
+
+// Phase 2: FILL (Not Timed)
+for cmd in &fill_commands {
+    exchange.execute(cmd);
+}
+
+// Phase 3: BENCHMARK (Timed Only)
+let start = Instant::now();
+for cmd in &benchmark_commands {
+    exchange.execute(cmd);
+}
+let mtps = benchmark_commands.len() as f64 / start.elapsed().as_secs_f64() / 1_000_000.0;
+```
+
+#### 7.3 Pre-generation Interface
+
+```rust
+impl TestOrdersGeneratorSession {
+    /// Pre-generate all commands for fair benchmarking
+    pub fn pre_generate_all(&mut self) -> (Vec<TestCommand>, Vec<TestCommand>) {
+        let fill_count = self.config.target_orders_per_side * 2;
+        let benchmark_count = self.config.symbol_messages;
+        
+        let fill: Vec<_> = (0..fill_count).map(|_| self.next_command()).collect();
+        let benchmark: Vec<_> = (0..benchmark_count).map(|_| self.next_command()).collect();
+        
+        (fill, benchmark)
+    }
+}
+```
+
+#### 7.4 Current Status vs ME Requirements
+
+| Task | Current | Needs ME |
+|:---|:---:|:---:|
+| Pre-gen Method `pre_generate_all()` | ✅ | - |
+| Generate 3M orders to memory | ✅ | - |
+| Export CSV for verification | ✅ | - |
+| Execute FILL Phase | - | ✅ |
+| Execute BENCHMARK Phase | - | ✅ |
+| Global Balance Verification | - | ✅ |
+
+---
+
+### 8. Phase 0x14-a Summary
+
+#### 8.1 Completed Components
+
+| Component | Status | Verification |
+|:---|:---:|:---|
+| **JavaRandom LCG PRNG** | ✅ | Bit-exact with Java |
+| **Seed Derivation** | ✅ | `Objects.hash` reproduction |
+| **TestOrdersGenerator** | ✅ | FILL 1000 rows 100% matched |
+| **Shadow OrderBook** | ✅ | IOC Simulation implemented |
+| **Pre-gen Interface** | ✅ | `pre_generate_all()`, `pre_generate_3m()` |
+| **Fair Test Procedure Docs** | ✅ | Section 7, Appendix B |
+
+#### 8.2 BENCHMARK Phase Gap Analysis
+
+| Cause | Description |
+|:---|:---|
+| **Matching Engine Feedback** | Java uses `lastOrderBookOrdersSizeAsk/Bid` to decide `growOrders`. |
+| **Impact** | Command type distribution (GTC vs IOC) differs slightly. |
+| **Solution** | Phase 0x14-b introduces full ME to reach 100% parity. |
+
+#### 8.3 Next Steps
+
+| Priority | Task | Dependency |
+|:---:|:---|:---|
+| **P0** | Implement Rust Matching Engine (Phase 0x14-b) | - |
+| **P1** | 3M Orders Stress Test Verification | Matching Engine |
+| **P2** | Latency Stats (HdrHistogram) | Matching Engine |
+
+<br>
+<div align="right"><a href="#-english">↑ Back to Top</a></div>
+<br>
+
+---
+
+<div id="-chinese"></div>
+
+## 🇨🇳 中文
+
+| 状态 | ✅ **已实施 / QA 验证通过** (Phase 0x14-a 完成) |
+| :--- | :--- |
+| **日期** | 2025-12-30 |
+| **上下文** | Phase V: 极致优化 (Step 1) |
+| **目标** | 用 Rust 重新实现 Exchange-Core 测试数据生成算法，并对比黄金数据验证正确性。 |
+
+---
+
+### 1. 章节目标
+
+| # | 目标 | 交付物 |
+|---|------|--------|
+| 1 | **实现 LCG PRNG** | `src/bench/java_random.rs` - Java 兼容随机数生成器 |
+| 2 | **实现订单生成器** | `src/bench/order_generator.rs` - 确定性订单序列 |
+| 3 | **验证正确性** | 单元测试对比生成数据与 `golden_*.csv` |
+
+**成功标准**: 生成的数据与黄金 CSV 逐字节匹配（每行的 `order_id`, `price`, `size`, `uid` 完全一致）。
+
+---
+
+### 2. 参考算法: LCG PRNG
+
+Exchange-Core 项目使用 Java 的 `java.util.Random` 作为 PRNG。我们必须实现一个比特级精确的副本。
+
+#### 2.1 Java Random Implementation
+
+```rust
+/// Java-compatible Linear Congruential Generator
+pub struct JavaRandom {
+    seed: u64,
+}
+
+impl JavaRandom {
+    const MULTIPLIER: u64 = 0x5DEECE66D;
+    const ADDEND: u64 = 0xB;
+    const MASK: u64 = (1 << 48) - 1;
+
+    pub fn new(seed: i64) -> Self {
+        Self {
+            seed: (seed as u64 ^ Self::MULTIPLIER) & Self::MASK,
+        }
+    }
+
+    fn next(&mut self, bits: u32) -> i32 {
+        self.seed = self.seed
+            .wrapping_mul(Self::MULTIPLIER)
+            .wrapping_add(Self::ADDEND) & Self::MASK;
+        (self.seed >> (48 - bits)) as i32
+    }
+
+    pub fn next_int(&mut self, bound: i32) -> i32 {
+        assert!(bound > 0);
+        let bound = bound as u32;
+        if (bound & bound.wrapping_sub(1)) == 0 {
+            // Power of two
+            return ((bound as u64 * self.next(31) as u64) >> 31) as i32;
+        }
+        loop {
+            let bits = self.next(31) as u32;
+            let val = bits % bound;
+            if bits.wrapping_sub(val).wrapping_add(bound.wrapping_sub(1)) >= bits {
+                return val as i32;
+            }
+        }
+    }
+
+    pub fn next_long(&mut self) -> i64 {
+        ((self.next(32) as i64) << 32) + self.next(32) as i64
+    }
+
+    pub fn next_double(&mut self) -> f64 {
+        let a = (self.next(26) as u64) << 27;
+        let b = self.next(27) as u64;
+        (a + b) as f64 / ((1u64 << 53) as f64)
+    }
+}
+```
+
+#### 2.2 Seed Derivation
+
+Each test session derives its seed from `symbol_id` and `benchmark_seed`:
+
+```rust
+fn derive_session_seed(symbol_id: i32, benchmark_seed: i64) -> i64 {
+    let mut hash: i64 = 1;
+    hash = 31 * hash + (symbol_id as i64 * -177277);
+    hash = 31 * hash + (benchmark_seed * 10037 + 198267);
+    hash
+}
+```
+
+---
+
+### 3. 黄金数据参考
+
+**位置**: `docs/exchange_core_verification_kit/golden_data/`
+
+| 文件 | 记录数 | Seed | 描述 |
+|------|--------|------|------|
+| `golden_single_pair_margin.csv` | 11,000 | 1 | 保证金（期货）合约 |
+| `golden_single_pair_exchange.csv` | 11,000 | 1 | 现货交易 |
+
+---
+
+### 4. 实施清单
+
+- [x] **步骤 1**: 创建 `src/bench/mod.rs`
+- [x] **步骤 2**: 在 `src/bench/java_random.rs` 中实现 `JavaRandom`
+    - [x] 单元测试: 验证前 100 个随机数与 Java 输出匹配
+- [x] **步骤 3**: 在 `src/bench/order_generator.rs` 中实现 `TestOrdersGenerator`
+    - [x] Pareto 分布用于用户权重
+    - [x] 订单生成逻辑 (GTC 阶段)
+    - [x] 使用 `Objects.hash` 公式进行种子派生
+- [x] **步骤 4**: 加载并对比黄金 CSV
+    - [x] `#[test] fn test_golden_single_pair_margin()`
+    - [x] `#[test] fn test_golden_single_pair_exchange()`
+
+---
+
+### 5. 实现结果
+
+> [!NOTE]
+> **✅ FILL 阶段: 100% 比特精确匹配** (1,000 订单)
+> **⚠️ BENCHMARK 阶段: 需要匹配引擎** (10,000 订单)
+
+#### 5.1 FILL 阶段 (行 1-1000)
+
+| 字段 | 匹配状态 | 公式 |
+|:----:|:--------:|:-----|
+| **Price** | ✅ 100% | `pow(r,2)*deviation` + 4 值平均 |
+| **Size** | ✅ 100% | `1 + rand(6)*rand(6)*rand(6)` |
+| **Action** | ✅ 100% | `(rand(4)+priceDir>=2) ? BID : ASK` |
+| **UID** | ✅ 100% | Pareto 用户账户生成 |
+
+#### 5.2 BENCHMARK 阶段分析
+
+| 组件 | 状态 | 说明 |
+|:----:|:----:|:-----|
+| RNG 序列 | ✅ 已对齐 | `nextInt(4)` action 优先，然后 `nextInt(q_range)` |
+| 订单选择 | ✅ 已对齐 | 使用 `orderUids` 迭代器 (BTreeMap 确定性) |
+| IOC 模拟 | ✅ 已实现 | 影子订单簿 `simulate_ioc_match` |
+| 订单簿反馈 | ❌ 缺口 | Java 使用真实匹配引擎反馈 `lackOfOrders` |
+
+> [!IMPORTANT]
+> **BENCHMARK 阶段缺口**: Java 的 `generateRandomOrder` 使用 **真实匹配引擎** 的 `lastOrderBookOrdersSizeAsk/Bid`（在 `updateOrderBookSizeStat` 中更新）。没有完整 Rust 匹配引擎，影子订单簿会与 Java 状态分歧。
+
+#### 5.3 关键实现细节
+
+1. **JavaRandom** - 比特级精确的 `java.util.Random` LCG
+2. **种子派生**: `Objects.hash(symbol*-177277, seed*10037+198267)`
+3. **用户账户**: `1 + (int)paretoSample` 公式
+4. **货币顺序**: `[978, 840]` 基于 HashMap bucket 索引
+5. **CENTRAL_MOVE_ALPHA**: `0.01` (不是 0.1)
+6. **影子订单簿**: `ask_orders`/`bid_orders` Vec 支持 O(1) swap_remove
+
+---
+
+### 6. 验证命令
+
+**一键验证**:
+```bash
+# 运行所有黄金数据验证测试
+cargo test golden_ -- --nocapture
+```
+
+**详细对比测试**:
+```bash
+# 逐行对比前 20 个订单与黄金 CSV
+cargo test test_generator_vs_golden_detailed -- --nocapture
+```
+
+**所有 Benchmark 测试**:
+```bash
+# 运行 bench 模块的所有测试
+cargo test bench:: -- --nocapture
+```
+
+**预期输出**:
+```
+[  1] ✅ | Golden: id=1, price=34386, size=  1, action=BID, uid=377
+[  2] ✅ | Golden: id=2, price=34135, size=  1, action=BID, uid=110
+[  3] ✅ | Golden: id=3, price=34347, size=  2, action=BID, uid=459
+...
+[20] ✅ | Golden: id=20, price=34297, size=  1, action=BID, uid=491
+```
+
+---
+
+### 7. 公平压测流程 (Fair Benchmark Procedure)
+
+> [!IMPORTANT]
+> **公平比较的关键**: 数据生成与执行必须分离。Java 在测试前预生成所有命令到内存。
+
+#### 7.1 四阶段分离
+
+```
+Phase 1: 数据预生成 ───────────── ⏸️ 不计时
+Phase 2: FILL (预填充) ──────────── ⏸️ 不计时  
+Phase 3: BENCHMARK (压测) ──────── ⏱️ 仅此阶段计时
+Phase 4: 验证 ────────────────── ⏸️ 不计时
+```
+
+#### 7.2 Rust 实现规范
+
+```rust
+// ✅ 正确: 预生成 → 再执行
+let (fill_commands, benchmark_commands) = generator.pre_generate_all();
+
+// Phase 2: FILL (不计时)
+for cmd in &fill_commands {
+    exchange.execute(cmd);
+}
+
+// Phase 3: BENCHMARK (仅此阶段计时)
+let start = Instant::now();
+for cmd in &benchmark_commands {
+    exchange.execute(cmd);
+}
+let mtps = benchmark_commands.len() as f64 / start.elapsed().as_secs_f64() / 1_000_000.0;
+```
+
+#### 7.3 预生成接口
+
+```rust
+impl TestOrdersGeneratorSession {
+    /// Pre-generate all commands for fair benchmarking
+    pub fn pre_generate_all(&mut self) -> (Vec<TestCommand>, Vec<TestCommand>) {
+        let fill_count = self.config.target_orders_per_side * 2;
+        let benchmark_count = self.config.symbol_messages;
+        
+        let fill: Vec<_> = (0..fill_count).map(|_| self.next_command()).collect();
+        let benchmark: Vec<_> = (0..benchmark_count).map(|_| self.next_command()).collect();
+        
+        (fill, benchmark)
+    }
+}
+```
+
+#### 7.4 现阶段可完成 vs 需要 ME 集成
+
+| 任务 | 现阶段 | 需 ME |
+|:---|:---:|:---:|
+| 预生成接口 `pre_generate_all()` | ✅ | - |
+| 生成 3M 订单到内存 | ✅ | - |
+| 导出 CSV 供验证 | ✅ | - |
+| 执行 FILL 阶段 | - | ✅ |
+| 执行 BENCHMARK 计时 | - | ✅ |
+| 全局余额验证 | - | ✅ |
+
+---
+
+### 8. Phase 0x14-a 总结
+
+#### 8.1 已完成组件
+
+| 组件 | 状态 | 验证 |
+|:---|:---:|:---|
+| **JavaRandom LCG PRNG** | ✅ | 与 Java 比特精确 |
+| **种子派生算法** | ✅ | `Objects.hash` 复现 |
+| **TestOrdersGenerator** | ✅ | FILL 1000 行 100% 匹配 |
+| **影子订单簿** | ✅ | IOC 模拟实现 |
+| **预生成接口** | ✅ | `pre_generate_all()`, `pre_generate_3m()` |
+| **公平测试流程文档** | ✅ | Section 7, Appendix B |
+
+#### 8.2 BENCHMARK 阶段差异分析
+
+| 原因 | 说明 |
+|:---|:---|
+| **匹配引擎反馈** | Java 使用 `lastOrderBookOrdersSizeAsk/Bid` 决定 `growOrders` |
+| **影响** | 命令类型分布略有不同（GTC vs IOC 比例） |
+| **解决方案** | Phase 0x14-b 实现完整匹配引擎后可达 100% |
+
+#### 8.3 下一步
+
+| 优先级 | 任务 | 依赖 |
+|:---:|:---|:---|
+| **P0** | 实现 Rust 匹配引擎 (Phase 0x14-b) | - |
+| **P1** | 3M 订单压测验证 | 匹配引擎 |
+| **P2** | 延迟统计 (HdrHistogram) | 匹配引擎 |
+
+<br>
+<div align="right"><a href="#-chinese">↑ 回到顶部</a></div>
+<br>

@@ -1,0 +1,58 @@
+============================================================
+0x14-b Order Commands E2E Test
+============================================================
+Gateway URL: http://localhost:8080
+Symbol: BTC_USDT
+Maker User: 1001
+Taker User: 1002
+
+✅ Gateway connected
+
+[TEST] GTC Order Rests in Book
+  Order ID: 17, Initial Status: ACCEPTED
+  Final Status: NEW
+
+[TEST] IOC Full Match → FILLED
+  Maker order: 18
+  IOC order: 19, Initial: ACCEPTED
+  IOC Final Status: FILLED
+
+[TEST] IOC Partial Fill → Not In Book
+  Maker order: 20 (qty=0.001)
+  IOC order: 21
+  IOC Final Status: EXPIRED
+
+[TEST] IOC No Match → Not In Book
+  IOC order: 22
+  IOC Final Status: EXPIRED
+
+[TEST] Cancel Order
+  Placed order: 23
+
+[TEST] ReduceOrder Priority Preservation
+  Reducing Order A (24) by 0.5
+
+[TEST] MoveOrder Priority Loss
+  Moving Order A (26) to 50000.00
+
+============================================================
+RESULTS
+============================================================
+  ✅ PASS: GTC Order Rests in Book
+           Order 17 accepted/in book
+  ✅ PASS: IOC Full Match
+           IOC order FILLED
+  ✅ PASS: IOC Partial Fill
+           IOC not in book (status=EXPIRED)
+  ✅ PASS: IOC No Match
+           IOC not in book (status=EXPIRED)
+  ❌ FAIL: Cancel Order
+           Cancel request failed
+  ❌ FAIL: Reduce Priority
+           Reduce request failed (likely missing endpoint)
+  ❌ FAIL: Move Priority
+           Move request failed (likely missing endpoint)
+
+Total: 4/7 tests passed
+
+⚠️  Some tests failed. Check Gateway logs for details.
