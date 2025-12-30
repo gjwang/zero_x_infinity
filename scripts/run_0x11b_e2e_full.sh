@@ -45,6 +45,7 @@ export BTC_WALLET="${BTC_WALLET:-sentinel_test}"
 GATEWAY_PID=""
 SENTINEL_PID=""
 ANVIL_PID=""
+BTC_STARTED_BY_SCRIPT=false
 
 # ============================================================================
 # Helper Functions
@@ -99,6 +100,12 @@ cleanup() {
     stop_process "$GATEWAY_PID" "Gateway"
     stop_process "$SENTINEL_PID" "Sentinel"
     stop_process "$ANVIL_PID" "Anvil"
+    
+    # Stop Docker Bitcoin if we started it
+    if [ "$BTC_STARTED_BY_SCRIPT" = "true" ]; then
+        log_info "Stopping Docker Bitcoin container..."
+        docker rm -f bitcoind-regtest 2>/dev/null || true
+    fi
 }
 
 trap cleanup EXIT
@@ -156,9 +163,44 @@ check_btc_node() {
         log_info "✅ BTC Node ready (height: ${height:-unknown})"
         return 0
     else
-        log_error "❌ BTC Node not running or not accessible"
-        log_info "   bitcoind -regtest -daemon"
-        return 1
+        log_warn "⚠️ BTC Node not running, attempting to start..."
+        
+        # Try Docker first (self-contained)
+        if command -v docker &> /dev/null; then
+            # Stop existing container if any
+            docker rm -f bitcoind-regtest 2>/dev/null || true
+            
+            log_info "   Starting Bitcoin via Docker..."
+            docker run -d --name bitcoind-regtest \
+                -p 18443:18443 \
+                ruimarinho/bitcoin-core:24 \
+                -printtoconsole -regtest -txindex \
+                -rpcuser="${BTC_RPC_USER}" \
+                -rpcpassword="${BTC_RPC_PASS}" \
+                -rpcallowip=0.0.0.0/0 \
+                -rpcbind=0.0.0.0 \
+                -fallbackfee=0.00001 > /dev/null 2>&1
+            
+            # Wait for RPC to become available
+            log_info "   Waiting for Bitcoin RPC..."
+            for i in $(seq 1 30); do
+                response=$(curl -s --user "${BTC_RPC_USER}:${BTC_RPC_PASS}" \
+                    --data-binary '{"jsonrpc":"1.0","id":"test","method":"getblockchaininfo","params":[]}' \
+                    -H 'content-type:text/plain;' "http://127.0.0.1:18443/" 2>&1)
+                if echo "$response" | grep -q '"result"'; then
+                    log_info "✅ BTC Node started via Docker"
+                    BTC_STARTED_BY_SCRIPT=true
+                    return 0
+                fi
+                sleep 1
+            done
+            log_error "❌ Failed to start BTC Node via Docker"
+            return 1
+        else
+            log_error "❌ BTC Node not running and Docker not available"
+            log_info "   Please start bitcoind manually: bitcoind -regtest -daemon"
+            return 1
+        fi
     fi
 }
 
