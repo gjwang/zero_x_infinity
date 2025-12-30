@@ -525,14 +525,24 @@ main() {
     
     TOTAL_TESTS=$((TOTAL_TESTS + 1))
     L3_STATUS="FAILED" # Default to failed
-    if uv run python3 L3_single_user_btc.py; then
-        log_info "✅ Level 3 PASSED: Single User BTC E2E"
-        TESTS_PASSED=$((TESTS_PASSED + 1))
-        L3_STATUS="PASSED"
+    mkdir -p "$LOG_DIR"
+    if PYTHONUNBUFFERED=1 uv run python3 L3_single_user_btc.py 2>&1 | tee "$LOG_DIR/L3_output.log"; then
+        # Check pipe status
+        if [ ${PIPESTATUS[0]} -eq 0 ]; then
+            log_info "✅ Level 3 PASSED: Single User BTC E2E"
+            TESTS_PASSED=$((TESTS_PASSED + 1))
+            L3_STATUS="PASSED"
+        else
+            log_warn "❌ Level 3 FAILED: Single User BTC E2E"
+            TESTS_FAILED=$((TESTS_FAILED + 1))
+            L3_STATUS="FAILED"
+            exit 1
+        fi
     else
         log_warn "❌ Level 3 FAILED: Single User BTC E2E"
         TESTS_FAILED=$((TESTS_FAILED + 1))
         L3_STATUS="FAILED"
+        exit 1
     fi
     
     # ========================================================================
@@ -546,14 +556,22 @@ main() {
     
     TOTAL_TESTS=$((TOTAL_TESTS + 1))
     L4_STATUS="FAILED" # Default to failed
-    if uv run python3 L4_two_user_matching.py; then
-        log_info "✅ Level 4 PASSED: Two User Matching E2E"
-        TESTS_PASSED=$((TESTS_PASSED + 1))
-        L4_STATUS="PASSED"
+    if PYTHONUNBUFFERED=1 uv run python3 L4_two_user_matching.py 2>&1 | tee "$LOG_DIR/L4_output.log"; then
+        if [ ${PIPESTATUS[0]} -eq 0 ]; then
+            log_info "✅ Level 4 PASSED: Two User Matching E2E"
+            TESTS_PASSED=$((TESTS_PASSED + 1))
+            L4_STATUS="PASSED"
+        else
+            log_warn "❌ Level 4 FAILED: Two User Matching E2E"
+            TESTS_FAILED=$((TESTS_FAILED + 1))
+            L4_STATUS="FAILED"
+            exit 1
+        fi
     else
         log_warn "❌ Level 4 FAILED: Two User Matching E2E"
         TESTS_FAILED=$((TESTS_FAILED + 1))
         L4_STATUS="FAILED"
+        exit 1
     fi
     
     # ========================================================================
