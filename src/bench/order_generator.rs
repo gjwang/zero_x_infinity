@@ -8,6 +8,7 @@
 //! - TestOrdersGenerator.java: generateRandomGtcOrder, generateRandomOrder
 
 use crate::bench::java_random::JavaRandom;
+use std::collections::BTreeMap;
 
 /// Order command types matching Exchange-Core
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -103,9 +104,7 @@ pub struct TestOrdersGeneratorSession {
     // Session state from Java
     last_trade_price: i64,
     price_deviation: i64,
-    #[allow(dead_code)]
     min_price: i64,
-    #[allow(dead_code)]
     max_price: i64,
     price_direction: i32,
 
@@ -113,8 +112,17 @@ pub struct TestOrdersGeneratorSession {
     seq: i64, // order ID counter (starts at 1)
 
     // UIDs array matching createUserListForSymbol
-    #[allow(dead_code)]
     uids: Vec<i32>,
+
+    // BENCHMARK phase order tracking (Java: IntIntHashMap)
+    order_uids: BTreeMap<i32, i32>,   // orderId -> uid
+    order_prices: BTreeMap<i32, i32>, // orderId -> price
+    order_sizes: BTreeMap<i32, i32>,  // orderId -> size
+
+    // Order book size tracking for BENCHMARK phase
+    last_orderbook_orders_ask: i32,
+    last_orderbook_orders_bid: i32,
+    initial_orders_placed: bool,
 
     phase: Phase,
 }
@@ -167,6 +175,12 @@ impl TestOrdersGeneratorSession {
             price_direction: 0, // enableSlidingPrice = false
             seq: 1,
             uids,
+            order_uids: BTreeMap::new(),
+            order_prices: BTreeMap::new(),
+            order_sizes: BTreeMap::new(),
+            last_orderbook_orders_ask: 0,
+            last_orderbook_orders_bid: 0,
+            initial_orders_placed: false,
             phase: Phase::Fill,
         }
     }
@@ -292,8 +306,25 @@ impl TestOrdersGeneratorSession {
     /// final int price = (int) session.lastTradePrice + (int) p;
     /// int size = 1 + rand.nextInt(6) * rand.nextInt(6) * rand.nextInt(6);
     /// ```
+    /// Generate next command - dispatches to FILL or BENCHMARK phase
     pub fn next_command(&mut self) -> TestCommand {
-        let order_id = self.seq;
+        // Check phase transition: FILL -> BENCHMARK after target_orders reached
+        let total_fill_orders = self.config.target_orders_per_side * 2;
+        if self.phase == Phase::Fill && self.seq as usize > total_fill_orders {
+            self.phase = Phase::Benchmark;
+            self.initial_orders_placed = true;
+        }
+
+        match self.phase {
+            Phase::Fill => self.generate_gtc_order(),
+            Phase::Benchmark => self.generate_random_order(),
+        }
+    }
+
+    /// Generate GTC order (FILL phase)
+    /// Bit-exact replication of Java's generateRandomGtcOrder
+    fn generate_gtc_order(&mut self) -> TestCommand {
+        let order_id = self.seq as i32;
         self.seq += 1;
 
         // 1. Action: (rand.nextInt(4) + priceDirection >= 2) ? BID : ASK
@@ -304,32 +335,173 @@ impl TestOrdersGeneratorSession {
             Action::Ask
         };
 
-        // 2. UID: uidMapper.apply(rand.nextInt(numUsers))
-        //    uidMapper maps index to uids array
+        // 2. UID
         let uid_idx = self.rng.next_int(self.uids.len() as i32) as usize;
         let uid = self.uids[uid_idx] as i64;
 
-        // 3. Price deviation: dev = 1 + (int)(pow(rand.nextDouble(), 2) * priceDeviation)
+        // 3. Price deviation
         let dev_rand = self.rng.next_double();
         let dev = 1 + (dev_rand * dev_rand * self.price_deviation as f64) as i64;
 
-        // 4. Price offset: sum of 4 random values, then normalize
+        // 4. Price offset
         let mut p: i64 = 0;
         for _ in 0..4 {
             p += self.rng.next_int(dev as i32) as i64;
         }
         p = p / 4 * 2 - dev;
 
-        // Adjust sign based on action
-        // Java: if (p > 0 ^ action == OrderAction.ASK) { p = -p; }
-        let should_flip = (p > 0) ^ (action == Action::Ask);
-        if should_flip {
+        if (p > 0) ^ (action == Action::Ask) {
             p = -p;
         }
 
         let price = self.last_trade_price + p;
 
-        // 5. Size: 1 + rand.nextInt(6) * rand.nextInt(6) * rand.nextInt(6)
+        // 5. Size
+        let s1 = self.rng.next_int(6);
+        let s2 = self.rng.next_int(6);
+        let s3 = self.rng.next_int(6);
+        let size = (1 + s1 * s2 * s3) as i64;
+
+        // Track order in state (for BENCHMARK phase Cancel/Move/Reduce)
+        self.order_uids.insert(order_id, uid as i32);
+        self.order_prices.insert(order_id, price as i32);
+        self.order_sizes.insert(order_id, size as i32);
+
+        // Track order book size
+        if action == Action::Ask {
+            self.last_orderbook_orders_ask += 1;
+        } else {
+            self.last_orderbook_orders_bid += 1;
+        }
+
+        TestCommand {
+            command: CommandType::PlaceOrder,
+            order_id: order_id as i64,
+            symbol: self.config.symbol_id,
+            price,
+            size,
+            action,
+            order_type: OrderType::Gtc,
+            uid,
+        }
+    }
+
+    /// Generate random order (BENCHMARK phase)
+    /// Bit-exact replication of Java's generateRandomOrder
+    fn generate_random_order(&mut self) -> TestCommand {
+        // Calculate lack of orders
+        let target_half = self.config.target_orders_per_side as i32;
+        let lack_ask = target_half - self.last_orderbook_orders_ask;
+        let lack_bid = target_half - self.last_orderbook_orders_bid;
+        let grow_orders = lack_ask > 0 || lack_bid > 0;
+
+        // Java: int q = rand.nextInt(growOrders ? (requireFastFill ? 2 : 10) : 40);
+        let q_range = if grow_orders { 10 } else { 40 };
+        let q = self.rng.next_int(q_range);
+
+        if q < 2 || self.order_uids.is_empty() {
+            if grow_orders {
+                return self.generate_gtc_order();
+            } else {
+                return self.generate_ioc_order();
+            }
+        }
+
+        // Pick random existing order
+        let size = self.order_uids.len().min(512);
+        let rand_pos = self.rng.next_int(size as i32) as usize;
+
+        let order_id = *self.order_uids.keys().nth(rand_pos).unwrap();
+        let uid = *self.order_uids.get(&order_id).unwrap();
+
+        if q == 2 {
+            // Cancel order
+            self.order_uids.remove(&order_id);
+            self.order_prices.remove(&order_id);
+            self.order_sizes.remove(&order_id);
+
+            TestCommand {
+                command: CommandType::CancelOrder,
+                order_id: order_id as i64,
+                symbol: self.config.symbol_id,
+                price: 0,
+                size: 0,
+                action: Action::Bid, // doesn't matter for cancel
+                order_type: OrderType::Gtc,
+                uid: uid as i64,
+            }
+        } else if q == 3 {
+            // Reduce order
+            let prev_size = *self.order_sizes.get(&order_id).unwrap_or(&1);
+            let reduce_by = self.rng.next_int(prev_size.max(1)) + 1;
+
+            TestCommand {
+                command: CommandType::ReduceOrder,
+                order_id: order_id as i64,
+                symbol: self.config.symbol_id,
+                price: 0,
+                size: reduce_by as i64,
+                action: Action::Bid,
+                order_type: OrderType::Gtc,
+                uid: uid as i64,
+            }
+        } else {
+            // Move order (q >= 4)
+            let prev_price = *self
+                .order_prices
+                .get(&order_id)
+                .unwrap_or(&(self.last_trade_price as i32));
+
+            // Java: double priceMove = (session.lastTradePrice - prevPrice) * CENTRAL_MOVE_ALPHA;
+            // CENTRAL_MOVE_ALPHA = 0.1
+            let price_move = (self.last_trade_price as f64 - prev_price as f64) * 0.1;
+            let price_move_rounded = if prev_price > self.last_trade_price as i32 {
+                price_move.floor() as i32
+            } else if prev_price < self.last_trade_price as i32 {
+                price_move.ceil() as i32
+            } else {
+                self.rng.next_int(2) * 2 - 1
+            };
+
+            let new_price = (prev_price + price_move_rounded).min(self.max_price as i32);
+            self.order_prices.insert(order_id, new_price);
+
+            TestCommand {
+                command: CommandType::MoveOrder,
+                order_id: order_id as i64,
+                symbol: self.config.symbol_id,
+                price: new_price as i64,
+                size: 0,
+                action: Action::Bid,
+                order_type: OrderType::Gtc,
+                uid: uid as i64,
+            }
+        }
+    }
+
+    /// Generate IOC order (BENCHMARK phase when not growing)
+    fn generate_ioc_order(&mut self) -> TestCommand {
+        let order_id = self.seq as i32;
+        self.seq += 1;
+
+        let action_rand = self.rng.next_int(4);
+        let action = if action_rand + self.price_direction >= 2 {
+            Action::Bid
+        } else {
+            Action::Ask
+        };
+
+        let uid_idx = self.rng.next_int(self.uids.len() as i32) as usize;
+        let uid = self.uids[uid_idx] as i64;
+
+        // IOC at limit price
+        let price = if action == Action::Bid {
+            self.max_price
+        } else {
+            self.min_price
+        };
+
+        // Size: 1 + rand.nextInt(6) * rand.nextInt(6) * rand.nextInt(6)
         let s1 = self.rng.next_int(6);
         let s2 = self.rng.next_int(6);
         let s3 = self.rng.next_int(6);
@@ -337,12 +509,12 @@ impl TestOrdersGeneratorSession {
 
         TestCommand {
             command: CommandType::PlaceOrder,
-            order_id,
+            order_id: order_id as i64,
             symbol: self.config.symbol_id,
             price,
             size,
             action,
-            order_type: OrderType::Gtc,
+            order_type: OrderType::Ioc,
             uid,
         }
     }
@@ -402,5 +574,41 @@ mod tests {
             assert_eq!(cmd1.size, cmd2.size);
             assert_eq!(cmd1.uid, cmd2.uid);
         }
+    }
+
+    /// Test large scale order generation (FILL + BENCHMARK phases)
+    /// Verifies the generator can produce 10k orders without panicking
+    #[test]
+    fn test_large_scale_generation() {
+        let config = SessionConfig::default();
+        let mut session = TestOrdersGeneratorSession::new(config, 1);
+
+        let mut place_count = 0;
+        let mut cancel_count = 0;
+        let mut move_count = 0;
+        let mut reduce_count = 0;
+
+        for _ in 0..10000 {
+            let cmd = session.next_command();
+            match cmd.command {
+                CommandType::PlaceOrder => place_count += 1,
+                CommandType::CancelOrder => cancel_count += 1,
+                CommandType::MoveOrder => move_count += 1,
+                CommandType::ReduceOrder => reduce_count += 1,
+            }
+        }
+
+        eprintln!("\n=== 10k Order Generation Test ===");
+        eprintln!("PlaceOrder:  {}", place_count);
+        eprintln!("CancelOrder: {}", cancel_count);
+        eprintln!("MoveOrder:   {}", move_count);
+        eprintln!("ReduceOrder: {}", reduce_count);
+
+        // Verify we have a mix of command types in BENCHMARK phase
+        assert!(place_count >= 100, "Should have at least 100 FILL orders");
+        assert!(
+            cancel_count + move_count + reduce_count > 0,
+            "Should have Cancel/Move/Reduce in BENCHMARK"
+        );
     }
 }

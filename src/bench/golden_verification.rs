@@ -317,4 +317,88 @@ mod tests {
             eprintln!("✅ All {} compared rows match!", compare_count);
         }
     }
+
+    /// **FULL VERIFICATION TEST**
+    ///
+    /// Verifies FILL phase (100 rows) for bit-exact match.
+    /// BENCHMARK phase (1000 rows) requires order book simulation and is not verified.
+    #[test]
+    fn test_golden_full_verification() {
+        use crate::bench::order_generator::{Action, SessionConfig, TestOrdersGeneratorSession};
+
+        let path = golden_data_dir().join("golden_single_pair_margin.csv");
+        if !path.exists() {
+            eprintln!("Warning: Golden data file not found: {:?}", path);
+            return;
+        }
+
+        let golden_rows = load_golden_csv(&path).expect("Failed to load golden CSV");
+
+        // RustPortingDataDumper: numAccounts=100, totalTransactionsNumber=1000
+        let config = SessionConfig {
+            target_orders_per_side: 50,
+            num_accounts: 100,
+            symbol_messages: 1000,
+            symbol_id: 40000,
+        };
+        let mut session = TestOrdersGeneratorSession::new(config, 1);
+
+        // Only verify FILL phase (first 100 orders)
+        // BENCHMARK phase (rows 101+) requires order book simulation
+        let fill_count = golden_rows.iter().filter(|r| r.phase == "FILL").count();
+        let mut matched = 0;
+        let mut mismatches: Vec<(usize, String)> = Vec::new();
+
+        eprintln!("\n=== FILL Phase Verification ===");
+        eprintln!("Verifying {} FILL orders...\n", fill_count);
+
+        for i in 0..fill_count {
+            let golden = &golden_rows[i];
+            let generated = session.next_command();
+
+            let gen_action = match generated.action {
+                Action::Bid => "BID",
+                Action::Ask => "ASK",
+            };
+
+            let matches = golden.order_id == generated.order_id
+                && golden.price == generated.price
+                && golden.size == generated.size
+                && golden.action == gen_action
+                && golden.uid == generated.uid;
+
+            if matches {
+                matched += 1;
+            } else {
+                mismatches.push((
+                    i + 1,
+                    format!(
+                        "Golden: id={}, price={}, size={}, action={}, uid={} | Ours: id={}, price={}, size={}, action={}, uid={}",
+                        golden.order_id, golden.price, golden.size, golden.action, golden.uid,
+                        generated.order_id, generated.price, generated.size, gen_action, generated.uid
+                    ),
+                ));
+            }
+        }
+
+        eprintln!("=== FILL Phase Results ===");
+        eprintln!("Total FILL rows: {}", fill_count);
+        eprintln!("Matched:         {}", matched);
+        eprintln!("Mismatches:      {}", mismatches.len());
+
+        if mismatches.is_empty() {
+            eprintln!("\n✅ FILL PHASE: ALL {} ROWS MATCH!", fill_count);
+            eprintln!("\nNote: BENCHMARK phase (1000 rows) requires order book simulation");
+            eprintln!("and is tested via golden CSV as input to the matching engine.");
+        } else {
+            eprintln!("\n❌ First {} mismatches:", mismatches.len().min(5));
+            for (row, detail) in mismatches.iter().take(5) {
+                eprintln!("  Row {}: {}", row, detail);
+            }
+            panic!(
+                "FILL phase verification failed: {}/{} rows matched",
+                matched, fill_count
+            );
+        }
+    }
 }
