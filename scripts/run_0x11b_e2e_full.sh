@@ -309,6 +309,7 @@ start_anvil() {
     # Start Anvil
     # -b 1: Block time 1s (fast enough for tests)
     # --port 8545
+    mkdir -p "$LOG_DIR"
     nohup anvil -b 1 --port 8545 > "$LOG_DIR/anvil.log" 2>&1 &
     ANVIL_PID=$!
     
