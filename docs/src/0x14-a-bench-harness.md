@@ -390,3 +390,34 @@ impl TestOrdersGeneratorSession {
 | 执行 BENCHMARK 计时 | - | ✅ |
 | 全局余额验证 | - | ✅ |
 
+---
+
+### 8. Phase 0x14-a 总结
+
+#### 8.1 已完成组件
+
+| 组件 | 状态 | 验证 |
+|:---|:---:|:---|
+| **JavaRandom LCG PRNG** | ✅ | 与 Java 比特精确 |
+| **种子派生算法** | ✅ | `Objects.hash` 复现 |
+| **TestOrdersGenerator** | ✅ | FILL 1000 行 100% 匹配 |
+| **影子订单簿** | ✅ | IOC 模拟实现 |
+| **预生成接口** | ✅ | `pre_generate_all()`, `pre_generate_3m()` |
+| **公平测试流程文档** | ✅ | Section 7, Appendix B |
+
+#### 8.2 BENCHMARK 阶段差异分析
+
+| 原因 | 说明 |
+|:---|:---|
+| **匹配引擎反馈** | Java 使用 `lastOrderBookOrdersSizeAsk/Bid` 决定 `growOrders` |
+| **影响** | 命令类型分布略有不同（GTC vs IOC 比例） |
+| **解决方案** | Phase 0x14-b 实现完整匹配引擎后可达 100% |
+
+#### 8.3 建议下一步
+
+| 优先级 | 任务 | 依赖 |
+|:---:|:---|:---|
+| **P0** | 合并 `0x14-a-bench-harness` → `main` | - |
+| **P1** | 实现 Rust 匹配引擎 (Phase 0x14-b) | - |
+| **P2** | 3M 订单压测验证 | 匹配引擎 |
+| **P3** | 延迟统计 (HdrHistogram) | 匹配引擎 |
