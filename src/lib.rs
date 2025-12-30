@@ -83,6 +83,9 @@ pub mod user_auth;
 // Sentinel Service (Phase 0x11-a: Real Chain Integration)
 pub mod sentinel;
 
+// Benchmark Harness (Phase 0x14-a: Extreme Optimization)
+pub mod bench;
+
 // Convenient re-exports at crate root
 pub use balance::Balance;
 pub use core_types::{AssetId, OrderId, SeqNum, TradeId, UserId};
