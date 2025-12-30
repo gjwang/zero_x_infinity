@@ -166,37 +166,76 @@ impl TestOrdersGeneratorSession {
         }
     }
 
-    /// Replicate Java's createUserListForSymbol
+    /// Replicate Java's createUserListForSymbol with currency filtering
     ///
-    /// Java code:
-    /// ```java
-    /// Random rand = new Random(spec.symbolId);
-    /// int uid = 1 + rand.nextInt(users2currencies.size() - 1);
-    /// // iterate through users starting from uid, wrapping around
-    /// ```
+    /// Java flow:
+    /// 1. generateUsers(numAccounts, currencies) - creates List<BitSet> with Pareto distribution
+    /// 2. createUserListForSymbol - filters users who have required currencies, iterates from symbol-seeded position
     fn create_user_list_for_symbol(symbol_id: i32, num_users: usize) -> Vec<i32> {
-        // For golden data, we simulate the user filtering logic
-        // The key is: iterate starting from a symbol-seeded random position
+        // Step 1: Generate user accounts like Java's generateUsers
+        let user_currencies = Self::generate_user_accounts(num_users);
 
+        // Step 2: Filter users for this symbol starting from symbol-seeded position
+        // Java: Random rand = new Random(spec.symbolId);
+        //       int uid = 1 + rand.nextInt(users2currencies.size() - 1);
         let mut rand = JavaRandom::new(symbol_id as i64);
-        let start_uid = 1 + rand.next_int((num_users - 1) as i32);
+        let start_uid = 1 + rand.next_int((num_users) as i32);
 
-        // In the real Java code, it filters users by currency accounts
-        // For our golden data test (100 users, simple case), we assume
-        // all users are valid, so the order is what matters
+        // For margin/futures (SYMBOLSPEC_EUR_USD), only quoteCurrency (USD=840) is required
+        const QUOTE_CURRENCY: i32 = 840; // USD
 
-        let mut uids = Vec::with_capacity(num_users);
+        let mut uids = Vec::new();
         let mut uid = start_uid;
+        let mut checked = 0;
 
-        for _ in 0..num_users {
-            uids.push(uid);
+        while uids.len() < num_users && checked < num_users {
+            if uid > 0
+                && (uid as usize) < user_currencies.len()
+                && user_currencies[uid as usize].contains(&QUOTE_CURRENCY)
+            {
+                uids.push(uid);
+            }
             uid += 1;
             if uid >= num_users as i32 {
                 uid = 1;
             }
+            checked += 1;
         }
 
         uids
+    }
+
+    /// Generate user accounts matching Java's UserCurrencyAccountsGenerator.generateUsers
+    ///
+    /// Uses Random(1) for currency selection and Pareto(1, 1.5) for account count
+    fn generate_user_accounts(num_users: usize) -> Vec<Vec<i32>> {
+        const CURRENCIES: [i32; 5] = [840, 978, 3762, 3928, 4141]; // USD, EUR, XBT, ETH, LTC
+
+        let mut rand = JavaRandom::new(1);
+        let mut accounts = Vec::with_capacity(num_users + 1);
+
+        // uid=0 has no accounts
+        accounts.push(Vec::new());
+
+        for _ in 1..=num_users {
+            // Pareto(1, 1.5) sample approximation
+            let r = rand.next_double();
+            let pareto_sample = 1.0 / (1.0 - r).powf(1.0 / 1.5);
+            let num_accounts = (pareto_sample.min(CURRENCIES.len() as f64) as usize).max(1);
+
+            let mut user_currencies = Vec::new();
+            while user_currencies.len() < num_accounts {
+                let idx = rand.next_int(CURRENCIES.len() as i32) as usize;
+                let currency = CURRENCIES[idx];
+                if !user_currencies.contains(&currency) {
+                    user_currencies.push(currency);
+                }
+            }
+
+            accounts.push(user_currencies);
+        }
+
+        accounts
     }
 
     /// Generate the next GTC order - **EXACT Java implementation**
