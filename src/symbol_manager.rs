@@ -236,8 +236,13 @@ impl SymbolManager {
 /// This avoids repeated lookups and ensures consistent formatting.
 ///
 /// # Example
-/// ```rust
-/// let formatter = symbol_mgr.money_formatter(symbol_id)?;
+/// ```rust,no_run
+/// # use zero_x_infinity::symbol_manager::{SymbolManager, MoneyFormatter};
+/// # let symbol_mgr = SymbolManager::new();
+/// # let symbol_id = 1;
+/// # let bids = vec![(1000, 100)];
+/// # let asks = vec![(1100, 100)];
+/// let formatter = symbol_mgr.money_formatter(symbol_id).unwrap();
 /// let formatted_bids = formatter.format_depth_levels(&bids);
 /// let formatted_asks = formatter.format_depth_levels(&asks);
 /// ```

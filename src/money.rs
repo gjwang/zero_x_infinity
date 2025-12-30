@@ -15,8 +15,8 @@
 //!
 //! ## Usage
 //! ```rust
-//! use crate::money::{parse_amount, format_amount, MoneyError};
-//!
+//! # use zero_x_infinity::money::{parse_amount, format_amount, MoneyError};
+//! # fn main() -> Result<(), MoneyError> {
 //! // Client sends "1.5" BTC
 //! let internal = parse_amount("1.5", 8)?;
 //! assert_eq!(internal, 150_000_000); // 1.5 BTC = 150M satoshi
@@ -24,6 +24,8 @@
 //! // Display balance to client
 //! let display = format_amount(150_000_000, 8, 4);
 //! assert_eq!(display, "1.5000");
+//! # Ok(())
+//! # }
 //! ```
 
 use crate::symbol_manager::{AssetInfo, SymbolManager};
@@ -77,8 +79,12 @@ pub enum MoneyError {
 ///
 /// # Example
 /// ```rust
+/// # use zero_x_infinity::money::parse_amount;
+/// # fn main() -> Result<(), zero_x_infinity::money::MoneyError> {
 /// let internal = parse_amount("1.5", 8)?;
 /// assert_eq!(internal, 150_000_000); // 1.5 BTC = 150M satoshi
+/// # Ok(())
+/// # }
 /// ```
 pub fn parse_amount(amount_str: &str, decimals: u32) -> Result<u64, MoneyError> {
     let amount_str = amount_str.trim();
@@ -220,6 +226,7 @@ pub fn parse_decimal(decimal: Decimal, decimals: u32) -> Result<u64, MoneyError>
 ///
 /// # Example
 /// ```rust
+/// # use zero_x_infinity::money::format_amount;
 /// let display = format_amount(150_000_000, 8, 4);
 /// assert_eq!(display, "1.5000");
 /// ```
