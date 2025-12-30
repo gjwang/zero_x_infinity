@@ -17,4 +17,4 @@ persistence:
 
 # PostgreSQL for account management (Phase 0x0A)
 # CI uses standard port 5432
-postgres_url: "postgresql://trading:trading123@localhost:5432/exchange_info_db?max_connections=20"
+postgres_url: "postgresql://trading:trading123@localhost:5432/exchange_info_db"

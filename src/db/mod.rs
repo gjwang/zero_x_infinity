@@ -11,13 +11,8 @@ pub struct Database {
 impl Database {
     /// Create a new database connection pool
     pub async fn connect(database_url: &str) -> Result<Self, sqlx::Error> {
-        let max_connections = std::env::var("PG_POOL_SIZE")
-            .ok()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(10);
-
         let pool = PgPoolOptions::new()
-            .max_connections(max_connections)
+            .max_connections(50)
             .acquire_timeout(Duration::from_secs(5))
             .connect(database_url)
             .await?;
