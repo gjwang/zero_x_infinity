@@ -29,7 +29,7 @@ CREATE TABLE chain_assets_tb (
     withdraw_fee DECIMAL(30, 8) DEFAULT 0,
     
     -- Operational Status
-    is_active BOOLEAN DEFAULT TRUE,
+    is_active BOOLEAN DEFAULT FALSE,  -- SECURITY: Default inactive for safe listing
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
 
