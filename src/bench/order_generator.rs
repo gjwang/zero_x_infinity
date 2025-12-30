@@ -114,15 +114,15 @@ pub struct TestOrdersGeneratorSession {
     // UIDs array matching createUserListForSymbol
     uids: Vec<i32>,
 
-    // BENCHMARK phase order tracking (Java: IntIntHashMap)
-    order_uids: BTreeMap<i32, i32>,   // orderId -> uid
-    order_prices: BTreeMap<i32, i32>, // orderId -> price
-    order_sizes: BTreeMap<i32, i32>,  // orderId -> size
+    // Shadow Order Book (per user spec section 3.4)
+    order_uids: BTreeMap<i32, i32>,     // orderId -> uid
+    order_prices: BTreeMap<i32, i32>,   // orderId -> price
+    order_sizes: BTreeMap<i32, i32>,    // orderId -> size
+    order_actions: BTreeMap<i32, bool>, // orderId -> is_ask
 
-    // Order book size tracking for BENCHMARK phase
-    last_orderbook_orders_ask: i32,
-    last_orderbook_orders_bid: i32,
-    initial_orders_placed: bool,
+    // Active order lists for random selection (O(1) swap_remove)
+    ask_orders: Vec<i32>,
+    bid_orders: Vec<i32>,
 
     phase: Phase,
 }
@@ -178,9 +178,9 @@ impl TestOrdersGeneratorSession {
             order_uids: BTreeMap::new(),
             order_prices: BTreeMap::new(),
             order_sizes: BTreeMap::new(),
-            last_orderbook_orders_ask: 0,
-            last_orderbook_orders_bid: 0,
-            initial_orders_placed: false,
+            order_actions: BTreeMap::new(),
+            ask_orders: Vec::new(),
+            bid_orders: Vec::new(),
             phase: Phase::Fill,
         }
     }
@@ -312,7 +312,6 @@ impl TestOrdersGeneratorSession {
         let total_fill_orders = self.config.target_orders_per_side * 2;
         if self.phase == Phase::Fill && self.seq as usize > total_fill_orders {
             self.phase = Phase::Benchmark;
-            self.initial_orders_placed = true;
         }
 
         match self.phase {
@@ -362,16 +361,18 @@ impl TestOrdersGeneratorSession {
         let s3 = self.rng.next_int(6);
         let size = (1 + s1 * s2 * s3) as i64;
 
-        // Track order in state (for BENCHMARK phase Cancel/Move/Reduce)
+        // Track order in shadow order book (per user spec section 3.4)
+        let is_ask = action == Action::Ask;
         self.order_uids.insert(order_id, uid as i32);
         self.order_prices.insert(order_id, price as i32);
         self.order_sizes.insert(order_id, size as i32);
+        self.order_actions.insert(order_id, is_ask);
 
-        // Track order book size
-        if action == Action::Ask {
-            self.last_orderbook_orders_ask += 1;
+        // Add to active order list for random selection
+        if is_ask {
+            self.ask_orders.push(order_id);
         } else {
-            self.last_orderbook_orders_bid += 1;
+            self.bid_orders.push(order_id);
         }
 
         TestCommand {
@@ -387,15 +388,15 @@ impl TestOrdersGeneratorSession {
     }
 
     /// Generate random order (BENCHMARK phase)
-    /// Bit-exact replication of Java's generateRandomOrder
+    /// Per user spec section 3.4: command generation decision tree
     fn generate_random_order(&mut self) -> TestCommand {
-        // Calculate lack of orders
+        // Calculate lack of orders using ask_orders/bid_orders length
         let target_half = self.config.target_orders_per_side as i32;
-        let lack_ask = target_half - self.last_orderbook_orders_ask;
-        let lack_bid = target_half - self.last_orderbook_orders_bid;
+        let lack_ask = target_half - self.ask_orders.len() as i32;
+        let lack_bid = target_half - self.bid_orders.len() as i32;
         let grow_orders = lack_ask > 0 || lack_bid > 0;
 
-        // Java: int q = rand.nextInt(growOrders ? (requireFastFill ? 2 : 10) : 40);
+        // Java: int q = rand.nextInt(growOrders ? (requireFastFill ? 2 : 10) : 40)
         let q_range = if grow_orders { 10 } else { 40 };
         let q = self.rng.next_int(q_range);
 
@@ -407,18 +408,36 @@ impl TestOrdersGeneratorSession {
             }
         }
 
-        // Pick random existing order
-        let size = self.order_uids.len().min(512);
-        let rand_pos = self.rng.next_int(size as i32) as usize;
+        // Pick random existing order (per spec section 3.4.2)
+        // Choose side based on random
+        let use_ask = self.rng.next_int(2) == 0;
+        let orders = if use_ask {
+            &self.ask_orders
+        } else {
+            &self.bid_orders
+        };
 
-        let order_id = *self.order_uids.keys().nth(rand_pos).unwrap();
+        if orders.is_empty() {
+            return self.generate_gtc_order();
+        }
+
+        let idx = self.rng.next_int(orders.len().min(512) as i32) as usize;
+        let order_id = orders[idx];
         let uid = *self.order_uids.get(&order_id).unwrap();
 
         if q == 2 {
-            // Cancel order
+            // Cancel order (per spec 3.4.2.B - use swap_remove for O(1))
+            if use_ask {
+                self.ask_orders.swap_remove(idx);
+            } else {
+                // Need to use mutable reference
+                let idx = self.bid_orders.iter().position(|&x| x == order_id).unwrap();
+                self.bid_orders.swap_remove(idx);
+            }
             self.order_uids.remove(&order_id);
             self.order_prices.remove(&order_id);
             self.order_sizes.remove(&order_id);
+            self.order_actions.remove(&order_id);
 
             TestCommand {
                 command: CommandType::CancelOrder,

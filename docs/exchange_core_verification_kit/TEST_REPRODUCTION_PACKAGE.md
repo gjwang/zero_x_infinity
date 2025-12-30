@@ -91,7 +91,156 @@ graph TD
 *   **IOC vs FOK_BUDGET**: 31 : 1 (在生成即时单时)
 *   **GTC vs IOC**: 动态平衡，基准测试时约为 45% : 35%
 
----
+### 3.3 BENCHMARK 阶段生成机制：影子订单簿
+
+> **重要**: BENCHMARK 阶段的 Cancel/Move/Reduce 命令依赖于**之前生成的 GTC 订单状态**。
+
+Java 代码在 `TestOrdersGeneratorSession` 中维护一个"影子订单簿"来跟踪状态：
+
+```java
+// 状态跟踪 Map
+LongLongHashMap orderPrices;  // orderId → price
+LongLongHashMap orderSizes;   // orderId → size
+LongIntHashMap orderUids;     // orderId → uid
+
+// 订单簿深度统计
+int askOrdersNum, bidOrdersNum;
+```
+
+**生成流程**:
+```
+新 GTC 订单 → 记录到 orderPrices/orderSizes/orderUids
+Cancel 命令 → 随机选择现有 orderId，从 Map 中删除
+Move 命令 → 随机选择 orderId，生成新价格，更新 Map
+Reduce 命令 → 随机选择 orderId，减少 size
+IOC 成交 → 模拟匹配，更新/删除对手方订单
+```
+
+### 3.4 影子订单簿实现规范 (完整复现)
+
+为了生成 Medium/Large/Huge 规模的测试数据，Rust 需要完整实现影子订单簿。
+
+#### 3.4.1 核心数据结构
+
+```rust
+struct ShadowOrderBook {
+    // 订单属性 Map
+    order_prices: HashMap<i64, i64>,    // orderId → price
+    order_sizes: HashMap<i64, i64>,     // orderId → size (剩余数量)
+    order_uids: HashMap<i64, i32>,      // orderId → uid
+    order_actions: HashMap<i64, bool>,  // orderId → is_ask (true=Ask, false=Bid)
+    
+    // 活跃订单列表 (用于随机选择)
+    ask_orders: Vec<i64>,  // Ask 侧活跃订单 ID
+    bid_orders: Vec<i64>,  // Bid 侧活跃订单 ID
+    
+    // 价格追踪
+    last_trade_price: i64,
+    best_ask: i64,
+    best_bid: i64,
+}
+```
+
+#### 3.4.2 状态更新规则
+
+**A. 新 GTC 订单**:
+```rust
+fn on_new_gtc(&mut self, order_id: i64, price: i64, size: i64, uid: i32, is_ask: bool) {
+    self.order_prices.insert(order_id, price);
+    self.order_sizes.insert(order_id, size);
+    self.order_uids.insert(order_id, uid);
+    self.order_actions.insert(order_id, is_ask);
+    if is_ask { self.ask_orders.push(order_id); }
+    else { self.bid_orders.push(order_id); }
+}
+```
+
+**B. Cancel 命令** (随机选择现有订单):
+```rust
+fn generate_cancel(&mut self, rng: &mut JavaRandom) -> Option<OrderCommand> {
+    let orders = if rng.next_int(2) == 0 { &mut self.ask_orders } else { &mut self.bid_orders };
+    if orders.is_empty() { return None; }
+    let idx = rng.next_int(orders.len() as i32) as usize;
+    let order_id = orders.swap_remove(idx);  // O(1) 删除
+    self.order_prices.remove(&order_id);
+    self.order_sizes.remove(&order_id);
+    Some(OrderCommand::Cancel { order_id, uid: self.order_uids.remove(&order_id).unwrap() })
+}
+```
+
+**C. Move 命令** (随机选择并更新价格):
+```rust
+fn generate_move(&mut self, rng: &mut JavaRandom) -> Option<OrderCommand> {
+    let is_ask = rng.next_int(2) == 0;
+    let orders = if is_ask { &self.ask_orders } else { &self.bid_orders };
+    if orders.is_empty() { return None; }
+    let order_id = orders[rng.next_int(orders.len() as i32) as usize];
+    let old_price = self.order_prices[&order_id];
+    let new_price = generate_new_price(rng, old_price, is_ask);  // 生成新价格
+    self.order_prices.insert(order_id, new_price);
+    Some(OrderCommand::Move { order_id, new_price })
+}
+```
+
+**D. Reduce 命令** (随机减少数量):
+```rust
+fn generate_reduce(&mut self, rng: &mut JavaRandom) -> Option<OrderCommand> {
+    // 类似 Cancel，但只减少 size 而非删除
+    let reduce_by = 1 + rng.next_int(current_size as i32 - 1);
+    self.order_sizes.insert(order_id, current_size - reduce_by as i64);
+    Some(OrderCommand::Reduce { order_id, reduce_by })
+}
+```
+
+**E. IOC 成交模拟**:
+```rust
+fn simulate_ioc_match(&mut self, ioc_cmd: &OrderCommand) {
+    // 简化模拟：假设 IOC 完全成交，消耗对手方最优价格订单
+    let opposite_orders = if ioc_cmd.is_ask { &mut self.bid_orders } else { &mut self.ask_orders };
+    let mut remaining = ioc_cmd.size;
+    while remaining > 0 && !opposite_orders.is_empty() {
+        let matched_id = opposite_orders[0];
+        let matched_size = self.order_sizes[&matched_id];
+        if matched_size <= remaining {
+            remaining -= matched_size;
+            opposite_orders.remove(0);
+            self.order_sizes.remove(&matched_id);
+        } else {
+            self.order_sizes.insert(matched_id, matched_size - remaining);
+            remaining = 0;
+        }
+    }
+    self.last_trade_price = ioc_cmd.price;
+}
+```
+
+#### 3.4.3 命令生成决策树
+
+```rust
+fn generate_next_command(&mut self, rng: &mut JavaRandom) -> OrderCommand {
+    let need_fill = self.ask_orders.len() < target_half || self.bid_orders.len() < target_half;
+    
+    if need_fill {
+        return self.generate_gtc(rng);
+    }
+    
+    let q = rng.next_int(8);  // 0-7
+    match q {
+        0 | 1 => {
+            if self.need_growth() { self.generate_gtc(rng) }
+            else { self.generate_ioc(rng) }
+        }
+        2 => self.generate_cancel(rng).unwrap_or_else(|| self.generate_gtc(rng)),
+        3 => self.generate_reduce(rng).unwrap_or_else(|| self.generate_gtc(rng)),
+        _ => self.generate_move(rng).unwrap_or_else(|| self.generate_gtc(rng)),
+    }
+}
+```
+
+> **验证方法**: 使用 `golden_single_pair_*.csv` 前 100-200 条命令验证影子订单簿实现的正确性，然后再扩展到大规模生成。
+
+
+
 
 ## 4. 指标采集标准 (Metrics Standard)
 
