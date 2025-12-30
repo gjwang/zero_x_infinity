@@ -26,7 +26,7 @@ from fastapi_amis_admin.admin.site import AdminSite
 
 from settings import settings
 from database import init_db, close_db
-from admin import AssetAdmin, SymbolAdmin, VIPLevelAdmin, AuditLogAdmin
+from admin import AssetAdmin, SymbolAdmin, VIPLevelAdmin, AuditLogAdmin, ChainAdmin, ChainAssetAdmin
 from auth import AuditLogMiddleware
 
 
@@ -180,7 +180,10 @@ site = AdminSite(
 )
 
 # Register admin pages
-site.register_admin(AssetAdmin, SymbolAdmin, VIPLevelAdmin, AuditLogAdmin)
+site.register_admin(
+    AssetAdmin, SymbolAdmin, VIPLevelAdmin, AuditLogAdmin,
+    ChainAdmin, ChainAssetAdmin  # ADR-005: Chain Config support
+)
 
 # CRITICAL: Add database middleware BEFORE mounting to properly wrap admin routes
 # Without this, UPDATE operations won't persist to database!
@@ -234,6 +237,41 @@ def health_check():
     return {
         "status": "ok",
         "service": "admin-dashboard"
+    }
+
+
+@app.get("/api/chain/detect/{chain_slug}/{contract_address}")
+async def detect_token_from_chain(chain_slug: str, contract_address: str):
+    """
+    Auto-Detect token decimals and symbol from blockchain RPC
+    SOP Phase 2: Chain Config - Verify on-chain before binding
+    
+    Note: This is a stub implementation. Production would call:
+    - chains_tb.rpc_urls to get endpoint
+    - EVM RPC eth_call for decimals() and symbol()
+    """
+    # Known tokens for development (hardcoded for now)
+    known_tokens = {
+        "0xdac17f958d2ee523a2206206994597c13d831ec7": {"symbol": "USDT", "decimals": 6},
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": {"symbol": "USDC", "decimals": 6},
+        "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984": {"symbol": "UNI", "decimals": 18},
+    }
+    
+    addr_lower = contract_address.lower()
+    if addr_lower in known_tokens:
+        return {
+            "status": "ok",
+            "chain": chain_slug,
+            "contract": contract_address,
+            "detected": known_tokens[addr_lower],
+        }
+    
+    # For unknown tokens, return error
+    return {
+        "status": "error",
+        "msg": f"Unable to detect token at {contract_address}. RPC integration pending.",
+        "chain": chain_slug,
+        "contract": contract_address,
     }
 
 

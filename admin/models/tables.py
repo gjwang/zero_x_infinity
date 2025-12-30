@@ -119,3 +119,41 @@ class AdminAuditLog(Base):
         Index("idx_audit_entity", "entity_type", "entity_id"),
         Index("idx_audit_trace_id", "trace_id"),  # UX-10
     )
+
+
+class Chain(Base):
+    """
+    Chain model - matches chains_tb
+    From: migrations/012_chain_assets.sql (ADR-005)
+    """
+    __tablename__ = "chains_tb"
+    
+    chain_slug: Mapped[str] = mapped_column(String(32), primary_key=True)
+    chain_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    network_id: Mapped[Optional[str]] = mapped_column(String(32))
+    scan_start_height: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    confirmation_blocks: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
+
+
+class ChainAsset(Base):
+    """
+    Chain Asset model - matches chain_assets_tb
+    From: migrations/012_chain_assets.sql (ADR-005)
+    Physical binding of logical assets to blockchain contracts
+    """
+    __tablename__ = "chain_assets_tb"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    chain_slug: Mapped[str] = mapped_column(String(32), ForeignKey("chains_tb.chain_slug"), nullable=False)
+    asset_id: Mapped[int] = mapped_column(Integer, ForeignKey("assets_tb.asset_id"), nullable=False)
+    contract_address: Mapped[Optional[str]] = mapped_column(String(128))  # NULL for native assets
+    decimals: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    min_deposit: Mapped[Optional[Decimal]] = mapped_column(Numeric(30, 8), default=0)
+    min_withdraw: Mapped[Optional[Decimal]] = mapped_column(Numeric(30, 8), default=0)
+    withdraw_fee: Mapped[Optional[Decimal]] = mapped_column(Numeric(30, 8), default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False)  # SECURITY: Default inactive
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
