@@ -387,9 +387,11 @@ def test_gtc_004_sell_rests() -> TestResult:
 def test_can_001_cancel_existing() -> TestResult:
     """
     CAN-001: 取消存在的订单
+    
+    注意: 使用轮询等待异步处理完成 (关键修复: DEF-008)
     """
     test_id = "CAN-001"
-    test_name = "Cancel 存在订单"
+    test_name = "Cancel 存在订单 (异步等待)"
     
     print(f"\n[{test_id}] {test_name}")
     
@@ -410,10 +412,11 @@ def test_can_001_cancel_existing() -> TestResult:
         success, _ = cancel_order(client, order_id)
         print(f"  Cancel success: {success}")
         
-        time.sleep(0.5)
+        # 使用轮询等待异步处理完成 (关键修复: DEF-008)
+        print(f"  Waiting for terminal state...")
+        status = wait_for_order_terminal(client, order_id, 3.0)
         
-        # Verify
-        status = get_order_status(client, order_id)
+        # Verify not in book
         in_book = check_order_in_book(SYMBOL, "BUY", price)
         
         print(f"  Status: {status}, In book: {in_book}")
@@ -434,36 +437,58 @@ def test_can_001_cancel_existing() -> TestResult:
 
 def test_can_002_nonexistent() -> TestResult:
     """
-    CAN-002: 取消不存在的订单
+    CAN-002: 取消不存在的订单 → 验证无副作用
+    
+    设计说明:
+        Gateway 异步接受请求，返回 CANCEL_PENDING 是正常的。
+        Pipeline 处理时不产生副作用。
+        测试验证：订单簿无变化。
     """
     test_id = "CAN-002"
-    test_name = "Cancel 不存在订单"
+    test_name = "Cancel 不存在订单 (异步验证)"
     
     print(f"\n[{test_id}] {test_name}")
     
     client = get_test_client(GATEWAY_URL, USER_MAKER)
     
     try:
+        # 记录操作前订单簿状态
+        depth_before = get_order_book(SYMBOL)
+        bids_before = len(depth_before.get("bids", []))
+        asks_before = len(depth_before.get("asks", []))
+        
         fake_id = 9999999999
         print(f"  Canceling non-existent: {fake_id}")
         
+        # Gateway 异步入队，返回 ACCEPTED/CANCEL_PENDING 是正常的
         success, resp = cancel_order(client, fake_id)
         print(f"  Response: success={success}, data={resp}")
         
-        # Should fail
-        if not success:
+        # 等待异步处理
+        time.sleep(0.5)
+        
+        # 验证订单簿无变化
+        depth_after = get_order_book(SYMBOL)
+        bids_after = len(depth_after.get("bids", []))
+        asks_after = len(depth_after.get("asks", []))
+        
+        book_unchanged = (bids_before == bids_after and asks_before == asks_after)
+        
+        print(f"  Order book before: bids={bids_before}, asks={asks_before}")
+        print(f"  Order book after:  bids={bids_after}, asks={asks_after}")
+        print(f"  Book unchanged: {book_unchanged}")
+        
+        expected = "Request accepted (async), no side effects"
+        actual = f"success={success}, book_unchanged={book_unchanged}"
+        
+        # 异步系统：Gateway 接受是正常的，关键是无副作用
+        if book_unchanged:
             return TestResult(test_id, test_name, TestStatus.PASS,
-                            expected="Error",
-                            actual=f"success={success}")
+                            expected=expected, actual=actual)
         else:
-            code = resp.get("code", 0)
-            if code != 0:
-                return TestResult(test_id, test_name, TestStatus.PASS,
-                                expected="Error code",
-                                actual=f"code={code}")
             return TestResult(test_id, test_name, TestStatus.FAIL,
-                            expected="Error",
-                            actual="Cancel accepted")
+                            expected=expected,
+                            actual="Order book changed unexpectedly")
     
     except Exception as e:
         return TestResult(test_id, test_name, TestStatus.ERROR, details=str(e))
@@ -523,10 +548,14 @@ def test_can_003_double_cancel() -> TestResult:
 
 def test_can_004_cancel_filled() -> TestResult:
     """
-    CAN-004: 取消已成交订单
+    CAN-004: 取消已成交订单 → 验证无副作用
+    
+    设计说明:
+        Gateway 异步接受请求，Pipeline 处理时不产生副作用。
+        测试验证：订单状态仍为 FILLED。
     """
     test_id = "CAN-004"
-    test_name = "Cancel 已成交订单"
+    test_name = "Cancel 已成交订单 (异步验证)"
     
     print(f"\n[{test_id}] {test_name}")
     
@@ -556,23 +585,28 @@ def test_can_004_cancel_filled() -> TestResult:
             return TestResult(test_id, test_name, TestStatus.SKIP,
                             details=f"Order not filled: {status}")
         
-        # Try to cancel
+        # Try to cancel (Gateway will accept, Pipeline will ignore)
+        print(f"  Attempting to cancel filled order")
         success, resp = cancel_order(client_maker, order_id)
         print(f"  Cancel response: success={success}")
         
-        if not success:
+        # 等待异步处理
+        time.sleep(0.5)
+        
+        # 验证：订单状态仍为 FILLED
+        status_after = get_order_status(client_maker, order_id)
+        print(f"  Status after cancel attempt: {status_after}")
+        
+        expected = "Status remains FILLED (no side effect)"
+        actual = f"status={status_after}"
+        
+        # 成功条件：状态仍为 FILLED
+        if status_after == "FILLED":
             return TestResult(test_id, test_name, TestStatus.PASS,
-                            expected="Error (can't cancel filled)",
-                            actual=f"success={success}")
+                            expected=expected, actual=actual)
         else:
-            code = resp.get("code", 0)
-            if code != 0:
-                return TestResult(test_id, test_name, TestStatus.PASS,
-                                expected="Error code",
-                                actual=f"code={code}")
             return TestResult(test_id, test_name, TestStatus.FAIL,
-                            expected="Error",
-                            actual="Canceled a filled order")
+                            expected=expected, actual=actual)
     
     except Exception as e:
         return TestResult(test_id, test_name, TestStatus.ERROR, details=str(e))

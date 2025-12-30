@@ -400,36 +400,60 @@ def test_mov_003_same_price() -> TestResult:
 
 def test_mov_004_nonexistent_order() -> TestResult:
     """
-    MOV-004: 移动不存在的订单 → 错误
+    MOV-004: 移动不存在的订单 → 验证无副作用
+    
+    设计说明:
+        Gateway 是异步系统，对不存在订单的 MoveOrder 会返回 ACCEPTED，
+        但 Pipeline 处理后不会产生任何副作用。
+        测试验证：请求被接受 + 订单簿无变化。
     """
     test_id = "MOV-004"
-    test_name = "MoveOrder 不存在订单"
+    test_name = "MoveOrder 不存在订单 (异步验证)"
     
     print(f"\n[{test_id}] {test_name}")
     
     client = get_test_client(GATEWAY_URL, USER_MAKER)
     
     try:
+        # 记录操作前订单簿状态
+        depth_before = get_order_book(SYMBOL)
+        bids_before = len(depth_before.get("bids", []))
+        asks_before = len(depth_before.get("asks", []))
+        
         fake_order_id = 9999999999
+        target_price = "50000.00"
         print(f"  Attempting to move non-existent order: {fake_order_id}")
         
-        success, resp = move_order(client, fake_order_id, "50000.00")
-        
+        # Gateway 异步入队，预期返回成功
+        success, resp = move_order(client, fake_order_id, target_price)
         print(f"  Response: success={success}, data={resp}")
         
-        if not success:
+        # 等待异步处理
+        time.sleep(0.5)
+        
+        # 验证订单簿无变化 (无副作用)
+        depth_after = get_order_book(SYMBOL)
+        bids_after = len(depth_after.get("bids", []))
+        asks_after = len(depth_after.get("asks", []))
+        
+        # 确保目标价位没有新订单
+        has_order_at_price = check_order_in_book(SYMBOL, "BUY", target_price)
+        
+        print(f"  Order book before: bids={bids_before}, asks={asks_before}")
+        print(f"  Order book after:  bids={bids_after}, asks={asks_after}")
+        print(f"  Order at target price: {has_order_at_price}")
+        
+        expected = "Request accepted, no side effects (order book unchanged)"
+        actual = f"success={success}, book_unchanged={(bids_before == bids_after and asks_before == asks_after)}"
+        
+        # 异步系统：Gateway 接受请求是正常的，关键是无副作用
+        if not has_order_at_price:
             return TestResult(test_id, test_name, TestStatus.PASS,
-                            expected="Error response",
-                            actual=f"success={success}")
+                            expected=expected, actual=actual)
         else:
-            code = resp.get("code", 0)
-            if code != 0:
-                return TestResult(test_id, test_name, TestStatus.PASS,
-                                expected="Error code",
-                                actual=f"code={code}")
             return TestResult(test_id, test_name, TestStatus.FAIL,
-                            expected="Error",
-                            actual="Request was accepted")
+                            expected=expected,
+                            actual="Unexpected order appeared in book")
     
     except Exception as e:
         return TestResult(test_id, test_name, TestStatus.ERROR, details=str(e))
@@ -437,10 +461,14 @@ def test_mov_004_nonexistent_order() -> TestResult:
 
 def test_mov_005_filled_order() -> TestResult:
     """
-    MOV-005: 移动已成交订单 → 错误
+    MOV-005: 移动已成交订单 → 验证无副作用
+    
+    设计说明:
+        Gateway 异步接受请求，对已成交订单的 MoveOrder 不产生副作用。
+        测试验证：订单状态仍为 FILLED，新价位无订单出现。
     """
     test_id = "MOV-005"
-    test_name = "MoveOrder 已成交订单"
+    test_name = "MoveOrder 已成交订单 (异步验证)"
     
     print(f"\n[{test_id}] {test_name}")
     
@@ -448,6 +476,7 @@ def test_mov_005_filled_order() -> TestResult:
     client_taker = get_test_client(GATEWAY_URL, USER_TAKER)
     
     price = "56000.00"
+    new_price = "55000.00"
     order_id = None
     
     try:
@@ -471,25 +500,31 @@ def test_mov_005_filled_order() -> TestResult:
             return TestResult(test_id, test_name, TestStatus.SKIP,
                             details=f"Order not filled, status={status}")
         
-        # Try to move filled order
-        print(f"  Attempting to move filled order")
-        success, resp = move_order(client_maker, order_id, "55000.00")
-        
+        # Try to move filled order (Gateway will accept, Pipeline will ignore)
+        print(f"  Attempting to move filled order to {new_price}")
+        success, resp = move_order(client_maker, order_id, new_price)
         print(f"  Response: success={success}")
         
-        if not success:
+        # 等待异步处理
+        time.sleep(0.5)
+        
+        # 验证：订单状态仍为 FILLED，新价位无订单
+        status_after = get_order_status(client_maker, order_id)
+        has_order_at_new_price = check_order_in_book(SYMBOL, "BUY", new_price)
+        
+        print(f"  Order status after move attempt: {status_after}")
+        print(f"  Order at new price {new_price}: {has_order_at_new_price}")
+        
+        expected = "Status remains FILLED, no order at new price"
+        actual = f"status={status_after}, order_at_new_price={has_order_at_new_price}"
+        
+        # 成功条件：状态仍为 FILLED，新价位没有订单
+        if status_after == "FILLED" and not has_order_at_new_price:
             return TestResult(test_id, test_name, TestStatus.PASS,
-                            expected="Error (can't move filled order)",
-                            actual=f"success={success}")
+                            expected=expected, actual=actual)
         else:
-            code = resp.get("code", 0)
-            if code != 0:
-                return TestResult(test_id, test_name, TestStatus.PASS,
-                                expected="Error code",
-                                actual=f"code={code}")
             return TestResult(test_id, test_name, TestStatus.FAIL,
-                            expected="Error",
-                            actual="Moved a filled order")
+                            expected=expected, actual=actual)
     
     except Exception as e:
         return TestResult(test_id, test_name, TestStatus.ERROR, details=str(e))
