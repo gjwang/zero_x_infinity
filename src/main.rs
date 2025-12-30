@@ -1072,7 +1072,10 @@ fn run_sentinel(app_config: &zero_x_infinity::config::AppConfig) -> anyhow::Resu
     let rt = tokio::runtime::Runtime::new().context("Failed to create tokio runtime")?;
 
     let pool = rt
-        .block_on(async { sqlx::PgPool::connect(postgres_url).await })
+        .block_on(async {
+            let db = zero_x_infinity::Database::connect(postgres_url).await?;
+            Ok::<_, sqlx::Error>(db.pool().clone())
+        })
         .context("Failed to connect to PostgreSQL")?;
 
     println!("  ✅ Connected to PostgreSQL");
