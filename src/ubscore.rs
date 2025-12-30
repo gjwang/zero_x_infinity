@@ -695,7 +695,7 @@ impl UBSCore {
         user_id: UserId,
         asset_id: AssetId,
         amount: u64,
-    ) -> Result<(u64, u64), &'static str> {
+    ) -> Result<(crate::messages::BalanceEvent, u64, u64), &'static str> {
         let account = self.accounts.get_mut(&user_id).ok_or("Account not found")?;
         let balance = account.get_balance_mut(asset_id)?;
 
@@ -707,7 +707,20 @@ impl UBSCore {
         // Directly withdraw from available (no freeze involved)
         balance.withdraw(amount)?;
 
-        Ok((balance.avail(), balance.frozen()))
+        let event = crate::messages::BalanceEvent::withdraw_transfer(
+            user_id,
+            asset_id,
+            amount,
+            balance.lock_version(),
+            balance.avail(),
+            balance.frozen(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos() as u64,
+        );
+
+        Ok((event, balance.avail(), balance.frozen()))
     }
 
     /// Deposit funds from internal transfer (Funding -> Spot)
@@ -722,7 +735,7 @@ impl UBSCore {
         user_id: UserId,
         asset_id: AssetId,
         amount: u64,
-    ) -> Result<(u64, u64), &'static str> {
+    ) -> Result<(crate::messages::BalanceEvent, u64, u64), &'static str> {
         // Lazy init: create account and asset if not exist
         let account = self
             .accounts
@@ -732,7 +745,21 @@ impl UBSCore {
         account.deposit(asset_id, amount)?;
 
         let balance = account.get_balance(asset_id).unwrap();
-        Ok((balance.avail(), balance.frozen()))
+
+        let event = crate::messages::BalanceEvent::deposit_transfer(
+            user_id,
+            asset_id,
+            amount,
+            balance.lock_version(),
+            balance.avail(),
+            balance.frozen(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos() as u64,
+        );
+
+        Ok((event, balance.avail(), balance.frozen()))
     }
 
     // ============================================================

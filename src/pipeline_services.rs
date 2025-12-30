@@ -215,7 +215,41 @@ impl UBSCoreService {
 
             // PHASE 1: COLLECT (Batch accumulation of intentions)
 
-            // 1.1 Process Settlements
+            // 1.1 Process Internal Transfers (Phase 0x0B-a) - PRIORITY 1 (User Creation/Deposit)
+            //
+            // NOTE: We intentionally process transfers BEFORE orders to ensure that
+            // funding operations (which might create users or top-up balances) completes
+            // before any new orders in the same batch are executed.
+            //
+            // This mitigates "UserNotFound" and "InsufficientBalance" race conditions
+            // when clients send Transfer and Order requests in rapid succession.
+            //
+            // TODO(Architecture): Currently we pull from two separate sources:
+            // - TransferReceiver (Channel)
+            // - OrderQueue (RingBuffer)
+            // This split introduces ordering indeterminacy.
+            // Ideally, we should unify ALL inputs (Transfers, Orders, Cancels) into
+            // a SINGLE FIFO QUEUE (e.g. Disruptor/RingBuffer) to guarantee strict
+            // global ordering based on arrival time.
+            if let Some(ref mut receiver) = self.transfer_receiver {
+                let transfer_count = process_transfer_requests(
+                    &mut self.ubscore,
+                    receiver,
+                    &mut self.processed_transfers,
+                    &mut self.batch_events,
+                    UBSC_TRANSFER_BATCH,
+                );
+                if transfer_count > 0 {
+                    did_work = true;
+                    // Log at INFO for now to debug tests
+                    tracing::info!(
+                        "[TRANSFER] Processed {} internal transfer requests",
+                        transfer_count
+                    );
+                }
+            }
+
+            // 1.2 Process Settlements
             for _ in 0..UBSC_SETTLE_BATCH {
                 if let Some(req) = self.queues.balance_update_queue.pop() {
                     did_work = true;
@@ -227,7 +261,7 @@ impl UBSCoreService {
                 }
             }
 
-            // 1.2 Process Orders
+            // 1.3 Process Orders
             for _ in 0..UBSC_ORDER_BATCH {
                 if let Some(action) = self.queues.order_queue.pop() {
                     tracing::info!("[TRACE] UBSC: Popped action from order_queue");
@@ -255,23 +289,6 @@ impl UBSCoreService {
                 }
             }
 
-            // 1.3 Process Internal Transfers (Phase 0x0B-a)
-            if let Some(ref mut receiver) = self.transfer_receiver {
-                let transfer_count = process_transfer_requests(
-                    &mut self.ubscore,
-                    receiver,
-                    &mut self.processed_transfers,
-                    UBSC_TRANSFER_BATCH,
-                );
-                if transfer_count > 0 {
-                    did_work = true;
-                    tracing::debug!(
-                        "[TRANSFER] Processed {} internal transfer requests",
-                        transfer_count
-                    );
-                }
-            }
-
             // PHASE 2 & 3: COMMIT & RELEASE (The actual atomic/visibility phase)
             if !self.batch_actions.is_empty() || !self.batch_events.is_empty() {
                 // Batch Timing: Focus on the IO bottleneck (WAL Flush)
@@ -279,6 +296,11 @@ impl UBSCoreService {
                 if let Err(e) = self.ubscore.commit() {
                     tracing::error!("CRITICAL: WAL commit failed: {}", e);
                 }
+                tracing::info!(
+                    "[DEBUG] UBSCore committed. batch_actions={}, batch_events={}",
+                    self.batch_actions.len(),
+                    self.batch_events.len()
+                );
                 self.stats
                     .add_settlement_time(commit_start.elapsed().as_nanos() as u64);
 
@@ -1183,6 +1205,7 @@ impl SettlementService {
                 }
 
                 if !batch.is_empty() {
+                    tracing::info!("[SETTLEMENT] Processing {} balance events", batch.len());
                     // TDengine: batch persist using shared function
                     if let Some(ref db) = db_client {
                         let start = std::time::Instant::now();
@@ -1195,6 +1218,11 @@ impl SettlementService {
                         .await
                         {
                             tracing::error!("[PERSIST] async batch balance snapshot failed: {}", e);
+                        } else {
+                            tracing::info!(
+                                "[PERSIST] async batch balance snapshot SUCCESS: {} events",
+                                batch.len()
+                            );
                         }
 
                         // 2. Balance events (for event sourcing/fee audit)

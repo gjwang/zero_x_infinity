@@ -433,6 +433,10 @@ pub enum BalanceEventType {
     SettleRestore,
     /// FeeReceived - platform fee income from trades
     FeeReceived,
+    /// TransferWithdraw - funds withdrawn for internal transfer (Spot -> Funding)
+    TransferWithdraw,
+    /// TransferDeposit - funds deposited from internal transfer (Funding -> Spot)
+    TransferDeposit,
 }
 
 impl BalanceEventType {
@@ -445,6 +449,8 @@ impl BalanceEventType {
             Self::Settle => "settle",
             Self::SettleRestore => "settle_restore",
             Self::FeeReceived => "fee_received",
+            Self::TransferWithdraw => "transfer_withdraw",
+            Self::TransferDeposit => "transfer_deposit",
         }
     }
 
@@ -458,6 +464,8 @@ impl BalanceEventType {
             Self::Settle => VersionSpace::Settle,
             Self::SettleRestore => VersionSpace::Settle,
             Self::FeeReceived => VersionSpace::Settle,
+            Self::TransferWithdraw => VersionSpace::Lock,
+            Self::TransferDeposit => VersionSpace::Lock,
         }
     }
 }
@@ -742,6 +750,54 @@ impl BalanceEvent {
             avail_after,
             frozen_after,
             0, // Ingestion time not available for deposits
+        )
+    }
+
+    /// Create a TransferWithdraw event
+    pub fn withdraw_transfer(
+        user_id: UserId,
+        asset_id: AssetId,
+        amount: u64,
+        lock_version: u64,
+        avail_after: u64,
+        frozen_after: u64,
+        ingested_at_ns: u64,
+    ) -> Self {
+        Self::new(
+            user_id,
+            asset_id,
+            BalanceEventType::TransferWithdraw,
+            lock_version,
+            SourceType::External, // Transfers are considered external to trading core
+            0,                    // ref_id not strictly required for internal
+            -(amount as i64),
+            avail_after,
+            frozen_after,
+            ingested_at_ns,
+        )
+    }
+
+    /// Create a TransferDeposit event
+    pub fn deposit_transfer(
+        user_id: UserId,
+        asset_id: AssetId,
+        amount: u64,
+        lock_version: u64,
+        avail_after: u64,
+        frozen_after: u64,
+        ingested_at_ns: u64,
+    ) -> Self {
+        Self::new(
+            user_id,
+            asset_id,
+            BalanceEventType::TransferDeposit,
+            lock_version,
+            SourceType::External,
+            0,
+            amount as i64,
+            avail_after,
+            frozen_after,
+            ingested_at_ns,
         )
     }
 
