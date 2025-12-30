@@ -204,10 +204,11 @@ impl TestOrdersGeneratorSession {
 
         // Java: while (uids.size() < numUsersToSelect && c < users2currencies.size())
         while uids.len() < num_users_to_select && c < users_size {
-            if uid > 0 && (uid as usize) < users_size {
-                if user_currencies[uid as usize].contains(&QUOTE_CURRENCY) {
-                    uids.push(uid);
-                }
+            if uid > 0
+                && (uid as usize) < users_size
+                && user_currencies[uid as usize].contains(&QUOTE_CURRENCY)
+            {
+                uids.push(uid);
             }
             uid += 1;
             if uid == users_size as i32 {
@@ -231,7 +232,11 @@ impl TestOrdersGeneratorSession {
     fn generate_user_accounts(num_accounts: usize) -> Vec<Vec<i32>> {
         // CURRENCIES_FUTURES from TestConstants:
         // Sets.newHashSet(CURRENECY_USD, CURRENECY_EUR) = {840, 978}
-        const CURRENCIES: [i32; 2] = [840, 978]; // USD=840, EUR=978
+        //
+        // Java HashSet iteration order depends on HashMap bucket index:
+        // For default capacity 16: 978 % 16 = 2, 840 % 16 = 8
+        // So EUR(978) comes BEFORE USD(840) in iteration!
+        const CURRENCIES: [i32; 2] = [978, 840]; // EUR first, then USD
 
         // Java uses TWO separate RNGs:
         // 1. Random(1) for currency selection
@@ -247,13 +252,12 @@ impl TestOrdersGeneratorSession {
         let mut accounts_quota = num_accounts as i32;
 
         while accounts_quota > 0 {
-            // Apache Commons Math ParetoDistribution.sample():
-            // return scale / FastMath.pow(n, 1 / shape);
-            // where scale=1, shape=1.5
+            // Java: int accountsToOpen = Math.min(Math.min(1 + (int)paretoDistribution.sample(), currencyCodes.length), totalAccountsQuota);
+            // Note: 1 + (int)sample, NOT max(1, (int)sample)
             let n = pareto_rand.next_double();
             let pareto_sample = 1.0 / n.powf(1.0 / 1.5);
-            let accounts_to_open = (pareto_sample.min(CURRENCIES.len() as f64) as i32)
-                .max(1)
+            let accounts_to_open = (1 + pareto_sample as i32)
+                .min(CURRENCIES.len() as i32)
                 .min(accounts_quota);
 
             // Currency selection using currency_rand
