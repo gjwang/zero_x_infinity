@@ -2,7 +2,7 @@ name: Verify 0x11b-Sentinel
 
 on:
   push:
-    branches: [ "0x11-b-sentinel-hardening" ] # Run specifically on this branch
+    branches: [ "0x11-b-sentinel-hardening", "main" ] # Run on feature branch and main
   workflow_dispatch:
 
 env:
