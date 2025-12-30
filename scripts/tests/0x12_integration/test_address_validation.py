@@ -54,8 +54,8 @@ def test_address_validation():
         addr = resp.json()["data"]["address"]
         print(f"   ℹ️  Generated BTC: {addr}")
         # Note: Mock generates '1'+hash (33 chars). Real is variable.
-        if addr.startswith("1") or addr.startswith("bc1"):
-            print("   ✅ Format OK (Starts with 1/bc1)")
+        if addr.startswith("1") or addr.startswith("bc1") or addr.startswith("bcrt1"):
+            print("   ✅ Format OK (Starts with 1/bc1/bcrt1)")
         else:
             print("   ❌ Format Mismatch")
             fail_count += 1
