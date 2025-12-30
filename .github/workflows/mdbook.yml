@@ -33,6 +33,11 @@ jobs:
           cargo run --release
           cargo run --release -- --baseline
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+            version: "0.5.11"
+
       - name: Generate performance report
         run: uv run scripts/generate_perf_report.py > docs/src/perf-report.md
 

@@ -84,14 +84,22 @@ VALUES (
 -- ============================================================================
 -- User 1001: Buyer (Needs USDT)
 -- User 1001: Buyer (Needs USDT)
+-- USDT has 6 decimals: 1000000 USDT = 1000000 * 10^6 = 1000000000000 atomic units
 INSERT INTO balances_tb (user_id, asset_id, available, frozen, version, account_type)
-VALUES (1001, 2, 1000000.00000000, 0.00000000, 1, 1) -- Spot
-ON CONFLICT (user_id, asset_id, account_type) DO NOTHING;
+VALUES (1001, 2, 1000000000000, 0, 1, 1) -- Spot (account_type=1): 1M USDT
+ON CONFLICT (user_id, asset_id, account_type) DO UPDATE SET available = EXCLUDED.available;
+
+-- User 1001: Funding balance for transfer testing
+-- 1000 USDT = 1000 * 10^6 = 1000000000 atomic units
+INSERT INTO balances_tb (user_id, asset_id, available, frozen, version, account_type)
+VALUES (1001, 2, 1000000000, 0, 1, 2) -- Funding (account_type=2): 1000 USDT
+ON CONFLICT (user_id, asset_id, account_type) DO UPDATE SET available = EXCLUDED.available;
 
 -- User 1002: Seller (Needs BTC)
+-- BTC has 8 decimals: 100 BTC = 100 * 10^8 = 10000000000 atomic units
 INSERT INTO balances_tb (user_id, asset_id, available, frozen, version, account_type)
-VALUES (1002, 1, 100.00000000, 0.00000000, 1, 1) -- Spot
-ON CONFLICT (user_id, asset_id, account_type) DO NOTHING;
+VALUES (1002, 1, 10000000000, 0, 1, 1) -- Spot: 100 BTC
+ON CONFLICT (user_id, asset_id, account_type) DO UPDATE SET available = EXCLUDED.available;
 
 -- ============================================================================
 -- Verification Query (optional for debugging)

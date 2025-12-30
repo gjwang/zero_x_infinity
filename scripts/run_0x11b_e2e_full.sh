@@ -45,6 +45,7 @@ export BTC_WALLET="${BTC_WALLET:-sentinel_test}"
 GATEWAY_PID=""
 SENTINEL_PID=""
 ANVIL_PID=""
+BTC_STARTED_BY_SCRIPT=false
 
 # ============================================================================
 # Helper Functions
@@ -99,6 +100,12 @@ cleanup() {
     stop_process "$GATEWAY_PID" "Gateway"
     stop_process "$SENTINEL_PID" "Sentinel"
     stop_process "$ANVIL_PID" "Anvil"
+    
+    # Stop Docker Bitcoin if we started it
+    if [ "$BTC_STARTED_BY_SCRIPT" = "true" ]; then
+        log_info "Stopping Docker Bitcoin container..."
+        docker rm -f bitcoind-regtest 2>/dev/null || true
+    fi
 }
 
 trap cleanup EXIT
@@ -125,11 +132,17 @@ run_migrations() {
     # Use existing unified database initialization script
     if [[ "${CLEAN_DB:-}" == "true" ]]; then
         log_warn "   Clean DB mode: using --reset flag..."
-        "$PROJECT_ROOT/scripts/db/init.sh" pg --reset 2>&1 | while read line; do
+        
+        # CRITICAL: Clean WAL data to ensure fresh state for matching engine
+        # Without this, old orders/balances persist in memory after DB reset
+        log_warn "   Cleaning WAL data (ubscore, matching, settlement)..."
+        rm -rf "$PROJECT_ROOT/data/ubscore/"* "$PROJECT_ROOT/data/matching/"* "$PROJECT_ROOT/data/settlement/"* 2>/dev/null || true
+        
+        "$PROJECT_ROOT/scripts/db/init.sh" --reset 2>&1 | while read line; do
             echo "   $line"
         done
     else
-        "$PROJECT_ROOT/scripts/db/init.sh" pg 2>&1 | while read line; do
+        "$PROJECT_ROOT/scripts/db/init.sh" 2>&1 | while read line; do
             echo "   $line"
         done
     fi
@@ -150,9 +163,44 @@ check_btc_node() {
         log_info "✅ BTC Node ready (height: ${height:-unknown})"
         return 0
     else
-        log_error "❌ BTC Node not running or not accessible"
-        log_info "   bitcoind -regtest -daemon"
-        return 1
+        log_warn "⚠️ BTC Node not running, attempting to start..."
+        
+        # Try Docker first (self-contained)
+        if command -v docker &> /dev/null; then
+            # Stop existing container if any
+            docker rm -f bitcoind-regtest 2>/dev/null || true
+            
+            log_info "   Starting Bitcoin via Docker..."
+            docker run -d --name bitcoind-regtest \
+                -p 18443:18443 \
+                ruimarinho/bitcoin-core:24 \
+                -printtoconsole -regtest -txindex \
+                -rpcuser="${BTC_RPC_USER}" \
+                -rpcpassword="${BTC_RPC_PASS}" \
+                -rpcallowip=0.0.0.0/0 \
+                -rpcbind=0.0.0.0 \
+                -fallbackfee=0.00001 > /dev/null 2>&1
+            
+            # Wait for RPC to become available
+            log_info "   Waiting for Bitcoin RPC..."
+            for i in $(seq 1 30); do
+                response=$(curl -s --user "${BTC_RPC_USER}:${BTC_RPC_PASS}" \
+                    --data-binary '{"jsonrpc":"1.0","id":"test","method":"getblockchaininfo","params":[]}' \
+                    -H 'content-type:text/plain;' "http://127.0.0.1:18443/" 2>&1)
+                if echo "$response" | grep -q '"result"'; then
+                    log_info "✅ BTC Node started via Docker"
+                    BTC_STARTED_BY_SCRIPT=true
+                    return 0
+                fi
+                sleep 1
+            done
+            log_error "❌ Failed to start BTC Node via Docker"
+            return 1
+        else
+            log_error "❌ BTC Node not running and Docker not available"
+            log_info "   Please start bitcoind manually: bitcoind -regtest -daemon"
+            return 1
+        fi
     fi
 }
 
@@ -231,6 +279,12 @@ start_anvil() {
 }
 
 start_gateway() {
+    # Determine target env
+    TARGET_ENV="dev"
+    if [ -n "$CI" ]; then
+        TARGET_ENV="ci"
+    fi
+
     log_step "[3/6] Starting Gateway HTTP Server..."
     
     # Check if already running
@@ -245,9 +299,11 @@ start_gateway() {
     mkdir -p "$LOG_DIR"
     if [ -n "$GATEWAY_BINARY" ]; then
         log_info "Using pre-built binary: $GATEWAY_BINARY"
-        nohup "$GATEWAY_BINARY" --gateway > "$LOG_DIR/gateway_e2e.log" 2>&1 &
+        cd "$PROJECT_ROOT"
+        nohup "$GATEWAY_BINARY" --gateway --env "$TARGET_ENV" > "$LOG_DIR/gateway_e2e.log" 2>&1 &
     else
-        nohup cargo run -- --gateway > "$LOG_DIR/gateway_e2e.log" 2>&1 &
+        # Limit handled in config/ci.yaml
+        nohup cargo run -- --gateway --env "$TARGET_ENV" > "$LOG_DIR/gateway_e2e.log" 2>&1 &
     fi
     GATEWAY_PID=$!
     
@@ -256,13 +312,20 @@ start_gateway() {
 }
 
 start_sentinel() {
+    # Determine target env
+    TARGET_ENV="dev"
+    if [ -n "$CI" ]; then
+        TARGET_ENV="ci"
+    fi
+
     log_step "[4/6] Starting Sentinel Service..."
     
     mkdir -p "$LOG_DIR"
+    # Note: PG connection limit is handled in config/ci.yaml via ?max_connections=20
     if [ -n "$GATEWAY_BINARY" ]; then
-         nohup "$GATEWAY_BINARY" --sentinel > "$LOG_DIR/sentinel_e2e.log" 2>&1 &
+         nohup "$GATEWAY_BINARY" --sentinel --env "$TARGET_ENV" > "$LOG_DIR/sentinel_e2e.log" 2>&1 &
     else
-         nohup cargo run -- --sentinel > "$LOG_DIR/sentinel_e2e.log" 2>&1 &
+         nohup cargo run -- --sentinel --env "$TARGET_ENV" > "$LOG_DIR/sentinel_e2e.log" 2>&1 &
     fi
     SENTINEL_PID=$!
     
@@ -309,6 +372,7 @@ start_anvil() {
     # Start Anvil
     # -b 1: Block time 1s (fast enough for tests)
     # --port 8545
+    mkdir -p "$LOG_DIR"
     nohup anvil -b 1 --port 8545 > "$LOG_DIR/anvil.log" 2>&1 &
     ANVIL_PID=$!
     
@@ -416,15 +480,31 @@ main() {
     log_info "📋 Level 1: Rust Unit Tests (Sentinel)"
     echo "════════════════════════════════════════════════════════════════════════"
     
-    ((TOTAL_TESTS++))
+    # Enable tracing to see exactly where it crashes
+    set -x
+    
+    # Simplify arithmetic
+    TOTAL_TESTS=$((TOTAL_TESTS + 1))
     L1_STATUS="FAILED" # Default to failed
-    if cargo test sentinel --quiet 2>&1 | tail -5; then
+    
+    # DEBUG: Check cargo availability
+    echo "DEBUG: Checking cargo version..."
+    cargo --version || echo "❌ Cargo command not found!"
+    
+    echo "DEBUG: Executing cargo test sentinel --no-fail-fast..."
+    set +e
+    cargo test sentinel --no-fail-fast
+    L1_EXIT_CODE=$?
+    set -e
+    echo "DEBUG: cargo test exited with code: $L1_EXIT_CODE"
+
+    if [ $L1_EXIT_CODE -eq 0 ]; then
         log_info "✅ Level 1 PASSED: Rust Sentinel Unit Tests"
-        ((TESTS_PASSED++))
+        TESTS_PASSED=$((TESTS_PASSED + 1))
         L1_STATUS="PASSED"
     else
         log_warn "❌ Level 1 FAILED: Rust Sentinel Unit Tests"
-        ((TESTS_FAILED++))
+        TESTS_FAILED=$((TESTS_FAILED + 1))
         log_error "Stopping early - fix unit tests first!"
         exit 1
     fi
@@ -440,26 +520,26 @@ main() {
     
     cd "$PROJECT_ROOT/scripts/tests/0x11b_sentinel"
     
-    ((TOTAL_TESTS++))
+    TOTAL_TESTS=$((TOTAL_TESTS + 1))
     L2_OUTPUT=$(uv run python3 L2_erc20_component.py 2>&1 || true)
     echo "$L2_OUTPUT" | tail -15
     
     if echo "$L2_OUTPUT" | grep -q "FAILED"; then
         log_warn "⚠️ Level 2 FAILED: ERC20 Component Test reported failure"
-        ((TESTS_FAILED++))
+        TESTS_FAILED=$((TESTS_FAILED + 1))
         L2_STATUS="FAILED"
     elif echo "$L2_OUTPUT" | grep -q "SKIPPED:"; then
         log_warn "⚠️ Level 2 SKIPPED: ERC20 Component Test (Environment limitation)"
-        ((TESTS_SKIPPED++))
+        TESTS_SKIPPED=$((TESTS_SKIPPED + 1))
         L2_STATUS="SKIPPED"
     elif echo "$L2_OUTPUT" | grep -q "ALL TESTS PASSED"; then
         # Exit code 0 and no FAILED/skipped string
         log_info "✅ Level 2 PASSED: ERC20 Component Test"
-        ((TESTS_PASSED++))
+        TESTS_PASSED=$((TESTS_PASSED + 1))
         L2_STATUS="PASSED"
     else
         log_warn "❌ Level 2 CRASHED: ERC20 Component Test"
-        ((TESTS_FAILED++))
+        TESTS_FAILED=$((TESTS_FAILED + 1))
         L2_STATUS="FAILED"
     fi
 
@@ -467,7 +547,7 @@ main() {
     log_info "📋 Level 2b: Fake Token Scenarios (Security)"
     if uv run python3 L2b_erc20_fake_scenarios.py; then
         log_info "✅ Level 2b PASSED: Fake Token Logic Verified"
-        ((TESTS_PASSED++))
+        TESTS_PASSED=$((TESTS_PASSED + 1))
     else
          log_warn "⚠️ Level 2b SKIPPED/FAILED"
          # Optional
@@ -477,10 +557,10 @@ main() {
     log_info "📋 Level 2c: Multi-Decimal Independent Suite"
     if uv run python3 test_erc20_independent.py --mode suite; then
         log_info "✅ Level 2c PASSED: Multi-Decimal Logic Verified"
-        ((TESTS_PASSED++))
+        TESTS_PASSED=$((TESTS_PASSED + 1))
     else
          log_warn "⚠️ Level 2c FAILED"
-         ((TESTS_FAILED++))
+         TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
     
     # ========================================================================
@@ -492,16 +572,26 @@ main() {
     echo "   Deposit → Transfer In → Trade → Transfer Out → Withdraw"
     echo "════════════════════════════════════════════════════════════════════════"
     
-    ((TOTAL_TESTS++))
+    TOTAL_TESTS=$((TOTAL_TESTS + 1))
     L3_STATUS="FAILED" # Default to failed
-    if uv run python3 L3_single_user_btc.py; then
-        log_info "✅ Level 3 PASSED: Single User BTC E2E"
-        ((TESTS_PASSED++))
-        L3_STATUS="PASSED"
+    mkdir -p "$LOG_DIR"
+    if PYTHONUNBUFFERED=1 uv run python3 L3_single_user_btc.py 2>&1 | tee "$LOG_DIR/L3_output.log"; then
+        # Check pipe status
+        if [ ${PIPESTATUS[0]} -eq 0 ]; then
+            log_info "✅ Level 3 PASSED: Single User BTC E2E"
+            TESTS_PASSED=$((TESTS_PASSED + 1))
+            L3_STATUS="PASSED"
+        else
+            log_warn "❌ Level 3 FAILED: Single User BTC E2E"
+            TESTS_FAILED=$((TESTS_FAILED + 1))
+            L3_STATUS="FAILED"
+            exit 1
+        fi
     else
         log_warn "❌ Level 3 FAILED: Single User BTC E2E"
-        ((TESTS_FAILED++))
+        TESTS_FAILED=$((TESTS_FAILED + 1))
         L3_STATUS="FAILED"
+        exit 1
     fi
     
     # ========================================================================
@@ -513,16 +603,41 @@ main() {
     echo "   User A sells BTC ↔ User B buys BTC → Trade matched"
     echo "════════════════════════════════════════════════════════════════════════"
     
-    ((TOTAL_TESTS++))
+    # CRITICAL: Restart Gateway to clear Order Book state from L3
+    # Without this, L3's unfilled orders remain in memory and interfere with L4
+    log_info "🔄 Restarting Gateway for clean Order Book state..."
+    stop_process "$GATEWAY_PID" "Gateway"
+    rm -rf "$PROJECT_ROOT/data/ubscore/"* "$PROJECT_ROOT/data/matching/"* "$PROJECT_ROOT/data/settlement/"* 2>/dev/null || true
+    sleep 2
+    
+    # Use pre-built binary if available to avoid recompilation delay
+    if [ -z "$GATEWAY_BINARY" ] && [ -f "$PROJECT_ROOT/target/debug/zero_x_infinity" ]; then
+        export GATEWAY_BINARY="$PROJECT_ROOT/target/debug/zero_x_infinity"
+    fi
+    start_gateway || exit 1
+    sleep 5
+    
+    # Restore test directory after gateway restart (cd in start_gateway changes cwd)
+    cd "$PROJECT_ROOT/scripts/tests/0x11b_sentinel"
+    
+    TOTAL_TESTS=$((TOTAL_TESTS + 1))
     L4_STATUS="FAILED" # Default to failed
-    if uv run python3 L4_two_user_matching.py; then
-        log_info "✅ Level 4 PASSED: Two User Matching E2E"
-        ((TESTS_PASSED++))
-        L4_STATUS="PASSED"
+    if PYTHONUNBUFFERED=1 uv run python3 L4_two_user_matching.py 2>&1 | tee "$LOG_DIR/L4_output.log"; then
+        if [ ${PIPESTATUS[0]} -eq 0 ]; then
+            log_info "✅ Level 4 PASSED: Two User Matching E2E"
+            TESTS_PASSED=$((TESTS_PASSED + 1))
+            L4_STATUS="PASSED"
+        else
+            log_warn "❌ Level 4 FAILED: Two User Matching E2E"
+            TESTS_FAILED=$((TESTS_FAILED + 1))
+            L4_STATUS="FAILED"
+            exit 1
+        fi
     else
         log_warn "❌ Level 4 FAILED: Two User Matching E2E"
-        ((TESTS_FAILED++))
+        TESTS_FAILED=$((TESTS_FAILED + 1))
         L4_STATUS="FAILED"
+        exit 1
     fi
     
     # ========================================================================
@@ -535,57 +650,57 @@ main() {
         echo "════════════════════════════════════════════════════════════════════════"
         
         # BTC Security
-        ((TOTAL_TESTS++))
+        TOTAL_TESTS=$((TOTAL_TESTS + 1))
         L5_BTC_STATUS="FAILED"
         if uv run python3 agent_c_security/test_btc_security.py 2>&1 | tail -10; then
             log_info "✅ BTC Security Tests PASSED"
-            ((TESTS_PASSED++))
+            TESTS_PASSED=$((TESTS_PASSED + 1))
             L5_BTC_STATUS="PASSED"
         else
             log_warn "❌ BTC Security Tests FAILED"
-            ((TESTS_FAILED++))
+            TESTS_FAILED=$((TESTS_FAILED + 1))
             L5_BTC_STATUS="FAILED"
         fi
         
         # ETH Security
-        ((TOTAL_TESTS++))
+        TOTAL_TESTS=$((TOTAL_TESTS + 1))
         L5_ETH_STATUS="FAILED"
         if uv run python3 agent_c_security/test_eth_security.py 2>&1 | tail -10; then
             log_info "✅ ETH Security Tests PASSED"
-            ((TESTS_PASSED++))
+            TESTS_PASSED=$((TESTS_PASSED + 1))
             L5_ETH_STATUS="PASSED"
         else
             log_warn "❌ ETH Security Tests FAILED"
-            ((TESTS_FAILED++))
+            TESTS_FAILED=$((TESTS_FAILED + 1))
             L5_ETH_STATUS="FAILED"
         fi
 
         # ====================================================================
         # Level 5a: System Boundary Tests (New: Agent A & C)
         # ====================================================================
-        ((TOTAL_TESTS++))
+        TOTAL_TESTS=$((TOTAL_TESTS + 1))
         L5a_BOUNDARY_STATUS="FAILED"
         log_info "📋 Running System Boundary Tests (Agent A: Min/Max)"
         if uv run python3 agent_a_edge/test_boundary_values.py 2>&1; then
             log_info "✅ Agent A Boundary Tests PASSED"
-            ((TESTS_PASSED++))
+            TESTS_PASSED=$((TESTS_PASSED + 1))
             L5a_BOUNDARY_STATUS="PASSED"
         else
             log_warn "❌ Agent A Boundary Tests FAILED"
-            ((TESTS_FAILED++))
+            TESTS_FAILED=$((TESTS_FAILED + 1))
             L5a_BOUNDARY_STATUS="FAILED"
         fi
 
-        ((TOTAL_TESTS++))
+        TOTAL_TESTS=$((TOTAL_TESTS + 1))
         L5a_OVERFLOW_STATUS="FAILED"
         log_info "📋 Running Overflow/Limit Tests (Agent C: 9.22 ETH)"
         if uv run python3 agent_c_security/test_overflow.py 2>&1; then
              log_info "✅ Agent C Overflow Tests PASSED"
-             ((TESTS_PASSED++))
+             TESTS_PASSED=$((TESTS_PASSED + 1))
              L5a_OVERFLOW_STATUS="PASSED"
         else
              log_warn "❌ Agent C Overflow Tests FAILED (System Limitation Confirmed)"
-             ((TESTS_FAILED++))
+             TESTS_FAILED=$((TESTS_FAILED + 1))
              L5a_OVERFLOW_STATUS="FAILED"
         fi
     else

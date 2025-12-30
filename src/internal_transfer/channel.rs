@@ -118,6 +118,7 @@ pub fn process_transfer_requests(
     ubscore: &mut UBSCore,
     receiver: &mut TransferReceiver,
     processed_set: &mut HashSet<InternalTransferId>,
+    event_buffer: &mut Vec<crate::messages::BalanceEvent>,
     max_per_batch: usize,
 ) -> usize {
     let mut count = 0;
@@ -125,7 +126,7 @@ pub fn process_transfer_requests(
     while count < max_per_batch {
         match receiver.try_recv() {
             Some(req) => {
-                let response = process_single_transfer(ubscore, &req, processed_set);
+                let response = process_single_transfer(ubscore, &req, processed_set, event_buffer);
                 // Send response (ignore errors if receiver dropped)
                 let _ = req.response_tx.send(response);
                 count += 1;
@@ -141,6 +142,7 @@ fn process_single_transfer(
     ubscore: &mut UBSCore,
     req: &TransferRequest,
     processed_set: &mut HashSet<InternalTransferId>,
+    event_buffer: &mut Vec<crate::messages::BalanceEvent>,
 ) -> TransferResponse {
     // Idempotency check
     if processed_set.contains(&req.transfer_id) {
@@ -161,8 +163,9 @@ fn process_single_transfer(
     };
 
     match result {
-        Ok((avail, frozen)) => {
+        Ok((event, avail, frozen)) => {
             processed_set.insert(req.transfer_id);
+            event_buffer.push(event);
             debug!(
                 transfer_id = %req.transfer_id,
                 op = ?req.op,

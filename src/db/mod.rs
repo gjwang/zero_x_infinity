@@ -12,7 +12,7 @@ impl Database {
     /// Create a new database connection pool
     pub async fn connect(database_url: &str) -> Result<Self, sqlx::Error> {
         let pool = PgPoolOptions::new()
-            .max_connections(10)
+            .max_connections(50)
             .acquire_timeout(Duration::from_secs(5))
             .connect(database_url)
             .await?;

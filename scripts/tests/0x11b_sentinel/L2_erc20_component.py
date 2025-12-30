@@ -164,7 +164,7 @@ def test_rust_unit_tests() -> TestResult:
             capture_output=True,
             text=True,
             timeout=60,
-            cwd="/Users/gjwang/eclipse-workspace/rust_source/zero_x_infinity"
+            cwd="."
         )
         
         if "test result: ok" in proc.stdout:

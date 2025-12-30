@@ -823,6 +823,7 @@ pub async fn get_orders(
 )]
 pub async fn get_trades(
     State(state): State<Arc<AppState>>,
+    Extension(user): Extension<crate::api_auth::AuthenticatedUser>,
     Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> Result<
     (
@@ -842,15 +843,19 @@ pub async fn get_trades(
         )
     })?;
 
+    // SEC-004 FIX: Extract user_id from authenticated user
+    let user_id = user.user_id as u64;
+
     // Parse query parameters
     let limit: usize = params
         .get("limit")
         .and_then(|s| s.parse().ok())
         .unwrap_or(100);
 
-    // Query trades from TDengine
-    match crate::persistence::queries::query_trades(
+    // Query user-specific trades from TDengine (SEC-004: filter by user_id)
+    match crate::persistence::queries::query_user_trades(
         db_client.taos(),
+        user_id,
         state.active_symbol_id,
         limit,
         &state.symbol_mgr,
@@ -1093,6 +1098,7 @@ pub async fn get_account(
     let user_id = user.user_id;
     tracing::info!("DEBUG: get_account called for user_id: {}", user_id);
 
+    // 1. Get Funding balances from Postgres (Source of truth for funding)
     let pg_db = state.pg_db.as_ref().ok_or_else(|| {
         (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -1103,19 +1109,57 @@ pub async fn get_account(
         )
     })?;
 
-    match crate::funding::service::TransferService::get_all_balances(pg_db.pool(), user_id).await {
-        Ok(balances) => {
-            let data = AccountResponseData { balances };
-            Ok((StatusCode::OK, Json(ApiResponse::success(data))))
+    let mut balances =
+        match crate::funding::service::TransferService::get_all_balances(pg_db.pool(), user_id)
+            .await
+        {
+            Ok(b) => b,
+            Err(e) => {
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<()>::error(
+                        error_codes::SERVICE_UNAVAILABLE,
+                        format!("Postgres query failed: {}", e),
+                    )),
+                ));
+            }
+        };
+
+    // Filter out any "spot" records from Postgres (if they exist due to legacy/residue)
+    // Design intent: Spot balances ONLY come from TDengine/Settlement.
+    balances.retain(|b| b.account_type != "spot");
+
+    // 2. Get Spot balances from TDengine (Source of truth for trading)
+    // Use PostgreSQL assets_tb as ONLY source of truth for asset configuration
+    if let Some(ref t_client) = state.db_client {
+        match crate::persistence::queries::query_all_balances_with_pg(
+            t_client.taos(),
+            pg_db.pool(),
+            user_id as u64,
+        )
+        .await
+        {
+            Ok(spot_balances) => {
+                for sb in spot_balances {
+                    // Map BalanceApiData to BalanceInfo
+                    balances.push(crate::funding::service::BalanceInfo {
+                        asset_id: 0, // Not strictly required for the response type
+                        asset: sb.asset,
+                        account_type: "spot".to_string(),
+                        available: sb.avail,
+                        frozen: sb.frozen,
+                    });
+                }
+            }
+            Err(e) => {
+                tracing::error!("TDengine Spot balance query failed: {}", e);
+                // We don't fail the whole request if TDengine is down, just return Funding
+            }
         }
-        Err(e) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error(
-                error_codes::SERVICE_UNAVAILABLE,
-                format!("Query failed: {}", e),
-            )),
-        )),
     }
+
+    let data = AccountResponseData { balances };
+    Ok((StatusCode::OK, Json(ApiResponse::success(data))))
 }
 
 /// Get K-Line data
@@ -1787,6 +1831,7 @@ pub async fn get_account_jwt(
     let user_id = claims.sub.parse::<i64>().unwrap_or_default();
     tracing::info!("DEBUG: get_account_jwt called for user_id: {}", user_id);
 
+    // 1. Get Funding balances from Postgres
     let pg_db = state.pg_db.as_ref().ok_or_else(|| {
         (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -1797,19 +1842,53 @@ pub async fn get_account_jwt(
         )
     })?;
 
-    match crate::funding::service::TransferService::get_all_balances(pg_db.pool(), user_id).await {
-        Ok(balances) => {
-            let data = AccountResponseData { balances };
-            Ok((StatusCode::OK, Json(ApiResponse::success(data))))
+    let mut balances =
+        match crate::funding::service::TransferService::get_all_balances(pg_db.pool(), user_id)
+            .await
+        {
+            Ok(b) => b,
+            Err(e) => {
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<()>::error(
+                        error_codes::SERVICE_UNAVAILABLE,
+                        format!("Postgres query failed: {}", e),
+                    )),
+                ));
+            }
+        };
+
+    // Filter out any "spot" records from Postgres
+    balances.retain(|b| b.account_type != "spot");
+
+    // 2. Get Spot balances from TDengine
+    if let Some(ref t_client) = state.db_client {
+        match crate::persistence::queries::query_all_balances(
+            t_client.taos(),
+            user_id as u64,
+            &state.symbol_mgr,
+        )
+        .await
+        {
+            Ok(spot_balances) => {
+                for sb in spot_balances {
+                    balances.push(crate::funding::service::BalanceInfo {
+                        asset_id: 0,
+                        asset: sb.asset,
+                        account_type: "spot".to_string(),
+                        available: sb.avail,
+                        frozen: sb.frozen,
+                    });
+                }
+            }
+            Err(e) => {
+                tracing::error!("TDengine Spot balance query failed: {}", e);
+            }
         }
-        Err(e) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error(
-                error_codes::SERVICE_UNAVAILABLE,
-                format!("Query failed: {}", e),
-            )),
-        )),
     }
+
+    let data = AccountResponseData { balances };
+    Ok((StatusCode::OK, Json(ApiResponse::success(data))))
 }
 
 // ============================================================================
