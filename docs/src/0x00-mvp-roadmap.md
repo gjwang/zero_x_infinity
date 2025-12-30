@@ -80,7 +80,7 @@ This project documents the complete journey of building a **1.3M orders/sec** ma
 
 | Chapter | Title | Description |
 |---------|-------|-------------|
-| 0x14 | [Extreme Optimization](./0x14-extreme-optimization.md) | 🚧 方法论 (Naming + Benchmarking) |
+| 0x14 | [Extreme Optimization](./0x14-extreme-optimization.md) | ✅ Methodology & Benchmark Harness (0x14-a) |
 | 0x15 | [Zero-Copy](./0x15-zero-copy.md) | Zero-copy deserialization with `rkyv` |
 | 0x16 | [CPU Affinity](./0x16-cpu-affinity.md) | Core pinning and cache line isolation |
 | 0x17 | [SIMD Matching](./0x17-simd-matching.md) | AVX-512 vectorized matching |

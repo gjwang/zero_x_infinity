@@ -112,7 +112,7 @@ graph TD
 | 0x11-a | [Real Chain Integration](./docs/src/0x11-a-real-chain.md) | ✅ BTC Sentinel MVP |
 | 0x11-b | [Sentinel Hardening](./docs/src/0x11-b-sentinel-hardening.md) | ✅ DEF-002 Fix, ADR-005/006 |
 | **Phase V** | **Extreme Optimization** | **"Metal Mode"** |
-| 0x14 | [Extreme Optimization](./docs/src/0x14-extreme-optimization.md) | 🚧 方法论 (Naming + Benchmarking) |
+| 0x14 | [Extreme Optimization](./docs/src/0x14-extreme-optimization.md) | ✅ Methodology & Benchmark Harness (0x14-a) |
 | 0x15 | [Zero-Copy](./docs/src/0x15-zero-copy.md) | Planned |
 | 0x16 | [CPU Affinity](./docs/src/0x16-cpu-affinity.md) | Planned |
 
