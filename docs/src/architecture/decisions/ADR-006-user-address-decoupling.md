@@ -1,7 +1,7 @@
 # ADR-006: User Address Decoupling for Account-Based Chains
 
 **Date**: 2025-12-30
-**Status**: Proposed
+**Status**: Accepted
 **Context**: Replaces `user_addresses` definition in `migrations/010_deposit_withdraw.sql` to enable "Hot Listing".
 
 ## 1. Problem Statement

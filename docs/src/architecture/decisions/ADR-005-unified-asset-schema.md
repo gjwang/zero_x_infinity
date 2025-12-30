@@ -1,7 +1,7 @@
 # ADR-005: Unified Chain-Asset Schema & Admin Integration
 
 **Date**: 2025-12-30
-**Status**: Proposed
+**Status**: Accepted
 **Supersedes**: ADR-004 (Partial), Design Doc 0x11-c (Draft)
 **Context**: Reconciling conflict between Admin's Logical Assets (`assets_tb`) and Sentinel's Physical Chains (`chain_assets`).
 
