@@ -994,7 +994,7 @@ mod tests {
         ubs.deposit(1, 1, 100_0000_0000).unwrap();
 
         // Withdraw 30 BTC for transfer
-        let (avail, frozen) = ubs.withdraw_for_transfer(1, 1, 30_0000_0000).unwrap();
+        let (_event, avail, frozen) = ubs.withdraw_for_transfer(1, 1, 30_0000_0000).unwrap();
 
         // Check: 70 avail, 0 frozen (no freeze for transfers)
         assert_eq!(avail, 70_0000_0000);
@@ -1029,7 +1029,7 @@ mod tests {
         ubs.deposit(1, 1, 50_0000_0000).unwrap();
 
         // Deposit 30 BTC from transfer
-        let (avail, frozen) = ubs.deposit_from_transfer(1, 1, 30_0000_0000).unwrap();
+        let (_event, avail, frozen) = ubs.deposit_from_transfer(1, 1, 30_0000_0000).unwrap();
 
         // Check: 80 avail
         assert_eq!(avail, 80_0000_0000);
@@ -1043,7 +1043,7 @@ mod tests {
         let mut ubs = UBSCore::new(manager, wal_config).unwrap();
 
         // Deposit 100 BTC to new user (lazy init)
-        let (avail, frozen) = ubs.deposit_from_transfer(999, 1, 100_0000_0000).unwrap();
+        let (_event, avail, frozen) = ubs.deposit_from_transfer(999, 1, 100_0000_0000).unwrap();
 
         // Check: 100 avail
         assert_eq!(avail, 100_0000_0000);
