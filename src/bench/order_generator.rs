@@ -598,6 +598,50 @@ impl TestOrdersGeneratorSession {
     pub fn phase(&self) -> Phase {
         self.phase
     }
+
+    /// Pre-generate all commands for fair benchmarking
+    /// Returns (fill_commands, benchmark_commands) tuple
+    /// Per Appendix B: data generation must be separated from execution
+    pub fn pre_generate_all(&mut self) -> (Vec<TestCommand>, Vec<TestCommand>) {
+        let fill_count = self.config.target_orders_per_side * 2;
+        let benchmark_count = self.config.symbol_messages;
+
+        let fill: Vec<_> = (0..fill_count).map(|_| self.next_command()).collect();
+        let benchmark: Vec<_> = (0..benchmark_count).map(|_| self.next_command()).collect();
+
+        (fill, benchmark)
+    }
+
+    /// Pre-generate 3M orders for SinglePair benchmark (matches Java SinglePairMargin/Exchange)
+    /// Returns (fill_commands, benchmark_commands) with 1000 FILL + 3M BENCHMARK
+    pub fn pre_generate_3m(&mut self) -> (Vec<TestCommand>, Vec<TestCommand>) {
+        let fill_count = 1000; // target_orders = 1000
+        let benchmark_count = 3_000_000; // totalTransactionsNumber
+
+        eprintln!(
+            "Pre-generating {} FILL + {} BENCHMARK commands...",
+            fill_count, benchmark_count
+        );
+
+        let fill: Vec<_> = (0..fill_count).map(|_| self.next_command()).collect();
+        eprintln!("  FILL phase complete.");
+
+        let benchmark: Vec<_> = (0..benchmark_count)
+            .enumerate()
+            .map(|(i, _)| {
+                if i % 500_000 == 0 && i > 0 {
+                    eprintln!("  Generated {}K BENCHMARK commands...", i / 1000);
+                }
+                self.next_command()
+            })
+            .collect();
+
+        eprintln!(
+            "  BENCHMARK phase complete. Total: {} commands",
+            fill_count + benchmark_count
+        );
+        (fill, benchmark)
+    }
 }
 
 #[cfg(test)]

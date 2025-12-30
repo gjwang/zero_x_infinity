@@ -326,3 +326,67 @@ cargo test bench:: -- --nocapture
 ...
 [20] ✅ | Golden: id=20, price=34297, size=  1, action=BID, uid=491
 ```
+
+---
+
+### 7. 公平压测流程 (Fair Benchmark Procedure)
+
+> [!IMPORTANT]
+> **公平比较的关键**: 数据生成与执行必须分离。Java 在测试前预生成所有命令到内存。
+
+#### 7.1 四阶段分离
+
+```
+Phase 1: 数据预生成 ───────────── ⏸️ 不计时
+Phase 2: FILL (预填充) ──────────── ⏸️ 不计时  
+Phase 3: BENCHMARK (压测) ──────── ⏱️ 仅此阶段计时
+Phase 4: 验证 ────────────────── ⏸️ 不计时
+```
+
+#### 7.2 Rust 实现规范
+
+```rust
+// ✅ 正确: 预生成 → 再执行
+let (fill_commands, benchmark_commands) = generator.pre_generate_all();
+
+// Phase 2: FILL (不计时)
+for cmd in &fill_commands {
+    exchange.execute(cmd);
+}
+
+// Phase 3: BENCHMARK (仅此阶段计时)
+let start = Instant::now();
+for cmd in &benchmark_commands {
+    exchange.execute(cmd);
+}
+let mtps = benchmark_commands.len() as f64 / start.elapsed().as_secs_f64() / 1_000_000.0;
+```
+
+#### 7.3 预生成接口
+
+```rust
+impl TestOrdersGeneratorSession {
+    /// Pre-generate all commands for fair benchmarking
+    pub fn pre_generate_all(&mut self) -> (Vec<TestCommand>, Vec<TestCommand>) {
+        let fill_count = self.config.target_orders_per_side * 2;
+        let benchmark_count = self.config.symbol_messages;
+        
+        let fill: Vec<_> = (0..fill_count).map(|_| self.next_command()).collect();
+        let benchmark: Vec<_> = (0..benchmark_count).map(|_| self.next_command()).collect();
+        
+        (fill, benchmark)
+    }
+}
+```
+
+#### 7.4 现阶段可完成 vs 需要 ME 集成
+
+| 任务 | 现阶段 | 需 ME |
+|:---|:---:|:---:|
+| 预生成接口 `pre_generate_all()` | ✅ | - |
+| 生成 3M 订单到内存 | ✅ | - |
+| 导出 CSV 供验证 | ✅ | - |
+| 执行 FILL 阶段 | - | ✅ |
+| 执行 BENCHMARK 计时 | - | ✅ |
+| 全局余额验证 | - | ✅ |
+
