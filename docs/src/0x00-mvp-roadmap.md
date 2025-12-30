@@ -71,15 +71,18 @@ This project documents the complete journey of building a **1.3M orders/sec** ma
 
 ---
 
-## ⏳ Phase V: Extreme Optimization
+## ⏳ Phase V: Extreme Optimization (Metal Mode)
 
-*Status: **Planned***
+*Status: **In Progress***
+
+> **Codename**: "Metal Mode"
+> **Goal**: Push Rust to the physical limits of the hardware.
 
 | Chapter | Title | Description |
 |---------|-------|-------------|
-| 0x14 | [Zero-Copy](./0x12-zero-copy.md) | Zero-copy deserialization |
-| 0x15 | [CPU Affinity](./0x13-cpu-affinity.md) | Cache-friendly optimization |
-| 0x16 | [SIMD Matching](./0x14-simd-matching.md) | Vectorized acceleration |
+| 0x14 | [Zero-Copy](./0x14-zero-copy.md) | Zero-copy deserialization with `rkyv` |
+| 0x15 | [CPU Affinity](./0x15-cpu-affinity.md) | Core pinning and cache line isolation |
+| 0x16 | [SIMD Matching](./0x16-simd-matching.md) | AVX-512 vectorized matching |
 
 ---
 
