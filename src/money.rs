@@ -20,7 +20,7 @@ use crate::symbol_manager::{AssetInfo, SymbolManager};
 use rust_decimal::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::ops::{Add, AddAssign, Deref, Sub, SubAssign};
+use std::ops::Deref;
 use thiserror::Error;
 
 // ============================================================================
@@ -39,11 +39,6 @@ pub struct ScaledAmount(u64);
 pub struct ScaledAmountSigned(i64);
 
 impl ScaledAmount {
-    /// Create from raw value. ONLY allowed within the crate for persistence/internal calc.
-    pub(crate) fn from_raw(val: u64) -> Self {
-        Self(val)
-    }
-
     pub fn to_raw(&self) -> u64 {
         self.0
     }
@@ -62,10 +57,6 @@ impl ScaledAmount {
 }
 
 impl ScaledAmountSigned {
-    pub(crate) fn from_raw(val: i64) -> Self {
-        Self(val)
-    }
-
     pub fn to_raw(&self) -> i64 {
         self.0
     }

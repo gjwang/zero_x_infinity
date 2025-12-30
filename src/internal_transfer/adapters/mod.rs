@@ -60,6 +60,9 @@ pub trait ServiceAdapter: Send + Sync {
 
 /// Mock adapter for testing
 #[cfg(test)]
+pub use mock::MockAdapter;
+
+#[cfg(test)]
 pub mod mock {
     use super::*;
     use std::collections::HashMap;
@@ -254,6 +257,3 @@ pub mod mock {
         }
     }
 }
-
-#[cfg(test)]
-pub use mock::MockAdapter;

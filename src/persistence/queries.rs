@@ -1188,16 +1188,13 @@ mod public_trades_tests {
         let side_buy: i8 = 0;
         let is_buy = side_buy == 0;
         let is_buyer_maker = !is_buy;
-        assert_eq!(
-            is_buyer_maker, false,
-            "BUY order: buyer is taker, not maker"
-        );
+        assert!(!is_buyer_maker, "BUY order: buyer is taker, not maker");
 
         // Case 2: side = 1 (SELL) -> is_buyer_maker = true
         let side_sell: i8 = 1;
         let is_buy = side_sell == 0;
         let is_buyer_maker = !is_buy;
-        assert_eq!(is_buyer_maker, true, "SELL order: buyer is maker");
+        assert!(is_buyer_maker, "SELL order: buyer is maker");
     }
 
     #[test]

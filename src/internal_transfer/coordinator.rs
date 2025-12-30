@@ -10,9 +10,7 @@ use super::adapters::ServiceAdapter;
 use super::db::TransferDb;
 use super::error::TransferError;
 use super::state::TransferState;
-use super::types::{
-    InternalTransferId, OpResult, ScaledAmount, ServiceId, TransferRecord, TransferRequest,
-};
+use super::types::{InternalTransferId, OpResult, ServiceId, TransferRecord, TransferRequest};
 
 /// Transfer Coordinator - orchestrates FSM-based processing
 pub struct TransferCoordinator {

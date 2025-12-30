@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use super::error::TransferError;
 use super::state::TransferState;
-use super::types::{InternalTransferId, ScaledAmount, ServiceId, TransferRecord, TransferType};
+use super::types::{InternalTransferId, ServiceId, TransferRecord, TransferType};
 
 /// Transfer database operations
 pub struct TransferDb {

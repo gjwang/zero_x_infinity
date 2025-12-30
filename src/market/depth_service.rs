@@ -167,10 +167,11 @@ mod tests {
         queues.depth_event_queue.push(test_snapshot).unwrap();
 
         // Manually update (simulating what run() does)
-        if let Some(snap) = queues.depth_event_queue.pop() {
-            if let Ok(mut current) = service.current_snapshot.write() {
-                *current = snap;
-            }
+        if let (Some(snap), Ok(mut current)) = (
+            queues.depth_event_queue.pop(),
+            service.current_snapshot.write(),
+        ) {
+            *current = snap;
         }
 
         // Now should have data

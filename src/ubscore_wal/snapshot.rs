@@ -193,7 +193,6 @@ fn calculate_crc64(data: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Balance;
 
     fn create_test_accounts() -> FxHashMap<u64, UserAccount> {
         let mut accounts = FxHashMap::default();
