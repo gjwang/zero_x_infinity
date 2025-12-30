@@ -35,14 +35,19 @@ Based on code review of `src/engine.rs`, `src/models.rs`, `src/orderbook.rs`:
 
 #### ❌ Missing (Required for 0x14-b)
 
-| Feature | Generator Requirement | Current Status | Action |
+> Based on `src/bench/order_generator.rs` analysis:
+
+| Feature | Generator Line | Current Status | Priority |
 | :--- | :--- | :--- | :--- |
-| **TimeInForce** | `Gtc`, `Ioc` | **Not Implemented** | Add `TimeInForce` enum to `models.rs` |
-| **IOC Logic** | Remainder expires, never rests | **Not Implemented** | Modify `process_order()` to check TIF |
-| **CancelOrder Command** | `CommandType::CancelOrder` | ✅ **Implemented** | Full chain: Gateway → Pipeline → OrderBook → WAL |
-| **ReduceOrder Command** | `CommandType::ReduceOrder` | **Not Implemented** | Add `Engine::reduce_order()` |
-| **MoveOrder Command** | `CommandType::MoveOrder` | **Not Implemented** | Add `Engine::move_order()` (cancel+place) |
-| **FOKBudget** | Low usage in Spot | Not needed for MVP | Defer |
+| **TimeInForce::IOC** | L555 `generate_ioc_order()` | ❌ Not Implemented | **P0** |
+| **ReduceOrder** | L472 | ❌ Not Implemented | **P1** |
+| **MoveOrder** | L504 | ❌ Not Implemented | **P1** |
+
+#### ✅ Not Required (Generator Unused)
+
+| Feature | Notes |
+| :--- | :--- |
+| **FokBudget** | Defined at L43 but **never generated**. Skip for MVP. |
 
 ---
 
@@ -130,16 +135,32 @@ The Matching Engine must process orders **sequentially** based on `seq_id`.
 
 ---
 
-### 1. 差距分析 (Gap Analysis)
+### 1. 差距分析 (基于 Generator 代码审查)
 
-当前的 Rust `models.rs` 和 `orderbook.rs` 不足以支持 `TestOrdersGenerator` 的输出要求。
+> 基于 `src/bench/order_generator.rs` 实际使用分析：
 
-| 特性 | 生成器输出 | 当前 Rust 模型 | 差距 |
-| :--- | :--- | :--- | :--- |
-| **生效时间 (TIF)** | `Gtc`, `Ioc` | 隐式 `GTC` | 缺少 `TimeInForce` 枚举 (必须支持 IOC)。 |
-| **订单类型** | `PlaceOrder` (Limit), `FokBudget` | `Limit`, `Market` | `FokBudget` (按金额市价买入) 未定义。 |
-| **修改操作** | `Cancel`, `Move`, `Reduce` | 仅 `Cancel` | `Move` (取消并替换) 和 `Reduce` (减仓) 逻辑缺失。 |
-| **撮合逻辑** | 价格-时间优先 | 仅存储 (无引擎) | **无撮合引擎**。OrderBook 目前仅作为容器。 |
+#### ✅ 已实现
+
+| 功能 | 位置 | 说明 |
+| :--- | :--- | :--- |
+| **MatchingEngine** | `src/engine.rs` | `process_order()`, `match_buy()`, `match_sell()` |
+| **PlaceOrder** | L379, L549 | Limit + Market |
+| **CancelOrder** | L455 | 完整链路: Gateway → Pipeline → OrderBook → WAL |
+| **GTC (隐式)** | L385, L461... | 当前默认行为 |
+
+#### ❌ 需新增
+
+| 功能 | 生成器行号 | 优先级 |
+| :--- | :--- | :--- |
+| **TimeInForce::IOC** | L555 `generate_ioc_order()` | **P0** |
+| **ReduceOrder** | L472 | **P1** |
+| **MoveOrder** | L504 | **P1** |
+
+#### ✅ 不需要 (生成器未使用)
+
+| 功能 | 说明 |
+| :--- | :--- |
+| **FokBudget** | 定义于 L43 但 **从未生成**。本次跳过。 |
 
 ---
 
