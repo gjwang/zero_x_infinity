@@ -951,23 +951,21 @@ pub async fn get_account(
         )
     })?;
 
-    let mut balances = match crate::funding::service::TransferService::get_all_balances(
-        pg_db.pool(),
-        user_id as i64,
-    )
-    .await
-    {
-        Ok(b) => b,
-        Err(e) => {
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error(
-                    error_codes::SERVICE_UNAVAILABLE,
-                    format!("Postgres query failed: {}", e),
-                )),
-            ));
-        }
-    };
+    let mut balances =
+        match crate::funding::service::TransferService::get_all_balances(pg_db.pool(), user_id)
+            .await
+        {
+            Ok(b) => b,
+            Err(e) => {
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<()>::error(
+                        error_codes::SERVICE_UNAVAILABLE,
+                        format!("Postgres query failed: {}", e),
+                    )),
+                ));
+            }
+        };
 
     // Filter out any "spot" records from Postgres (if they exist due to legacy/residue)
     // Design intent: Spot balances ONLY come from TDengine/Settlement.

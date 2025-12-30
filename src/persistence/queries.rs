@@ -588,7 +588,7 @@ pub async fn query_all_balances(
         };
 
         let asset_decimals = match symbol_mgr.get_asset_decimal(row.asset_id) {
-            Some(d) => d as u32,
+            Some(d) => d,
             None => {
                 tracing::error!(
                     "CRITICAL: Missing decimals for asset_id {} in balance query. Skipping.",

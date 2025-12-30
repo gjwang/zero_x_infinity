@@ -164,7 +164,7 @@ fn process_single_transfer(
 
     match result {
         Ok((event, avail, frozen)) => {
-            processed_set.insert(req.transfer_id.clone());
+            processed_set.insert(req.transfer_id);
             event_buffer.push(event);
             debug!(
                 transfer_id = %req.transfer_id,
