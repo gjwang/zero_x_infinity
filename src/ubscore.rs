@@ -31,7 +31,6 @@ use crate::models::{InternalOrder, Side};
 use crate::pipeline::{BalanceUpdateRequest, OrderAction, ValidAction};
 use crate::symbol_manager::SymbolManager;
 use crate::user_account::UserAccount;
-use crate::wal::{WalConfig, WalWriter};
 // Phase 0x0D: New WAL + Snapshot
 use crate::ubscore_wal::{UBSCoreConfig, UBSCoreRecovery, UBSCoreWalWriter};
 
@@ -49,9 +48,6 @@ use std::io;
 pub struct UBSCore {
     /// User accounts - the authoritative balance state
     accounts: FxHashMap<UserId, UserAccount>,
-    /// Write-Ahead Log for order persistence (OLD - for backward compat)
-    #[allow(dead_code)]
-    wal: Option<WalWriter>,
     /// New WAL writer (Phase 0x0D)
     wal_v2: Option<UBSCoreWalWriter>,
     /// Symbol manager for symbol → asset lookup
@@ -63,29 +59,8 @@ pub struct UBSCore {
 }
 
 impl UBSCore {
-    /// Create a new UBSCore with given symbol manager (legacy WAL)
-    pub fn new(manager: SymbolManager, wal_config: WalConfig) -> io::Result<Self> {
-        let wal_path = wal_config.path.clone();
-        let wal = WalWriter::new(wal_config)?;
-
-        // Extract directory from WAL path for data_dir
-        let data_dir = std::path::Path::new(&wal_path)
-            .parent()
-            .map(|p| p.to_path_buf())
-            .unwrap_or_else(|| std::path::PathBuf::from("."));
-
-        Ok(Self {
-            accounts: FxHashMap::default(),
-            wal: Some(wal),
-            wal_v2: None,
-            manager,
-            next_seq_id: 1,
-            data_dir,
-        })
-    }
-
     /// Create a new UBSCore with recovery (Phase 0x0D)
-    pub fn new_with_recovery(manager: SymbolManager, config: UBSCoreConfig) -> io::Result<Self> {
+    pub fn new(manager: SymbolManager, config: UBSCoreConfig) -> io::Result<Self> {
         // 1. Recover state from snapshot + WAL
         let recovery = UBSCoreRecovery::new(&config.data_dir);
         let state = recovery.recover(&manager)?;
@@ -97,7 +72,6 @@ impl UBSCore {
 
         Ok(Self {
             accounts: state.accounts,
-            wal: None,
             wal_v2: Some(wal_v2),
             manager,
             next_seq_id: state.next_seq_id,
@@ -200,9 +174,6 @@ impl UBSCore {
     /// Commit: Flush WAL to disk for durability.
     /// Caller should only release results collected from methods after this succeeds.
     pub fn commit(&mut self) -> io::Result<()> {
-        if let Some(ref mut wal) = self.wal {
-            wal.flush()?;
-        }
         if let Some(ref mut wal) = self.wal_v2 {
             wal.flush()?;
         }
@@ -242,11 +213,7 @@ impl UBSCore {
 
     /// Get current WAL sequence number
     pub fn current_seq(&self) -> SeqNum {
-        if let Some(ref wal) = self.wal {
-            wal.current_seq()
-        } else {
-            self.next_seq_id
-        }
+        self.next_seq_id
     }
 
     // ============================================================
@@ -352,9 +319,7 @@ impl UBSCore {
         let lock_amount = order.calculate_cost(qty_unit).unwrap_or(0);
 
         // 2. Persist to WAL FIRST
-        let seq_id = if let Some(ref mut wal) = self.wal {
-            wal.append(&order).map_err(|_| RejectReason::SystemBusy)?
-        } else if let Some(ref mut wal) = self.wal_v2 {
+        let seq_id = if let Some(ref mut wal) = self.wal_v2 {
             wal.append_order(&order)
                 .map_err(|_| RejectReason::SystemBusy)?
         } else {
@@ -812,9 +777,6 @@ impl UBSCore {
 
     /// Flush WAL to disk
     pub fn flush_wal(&mut self) -> io::Result<()> {
-        if let Some(ref mut wal) = self.wal {
-            wal.flush()?;
-        }
         if let Some(ref mut wal) = self.wal_v2 {
             wal.flush()?;
         }
@@ -823,11 +785,7 @@ impl UBSCore {
 
     /// Get WAL statistics
     pub fn wal_stats(&self) -> (u64, u64) {
-        if let Some(ref wal) = self.wal {
-            (wal.total_entries(), wal.total_bytes())
-        } else {
-            (self.next_seq_id - 1, 0)
-        }
+        (self.next_seq_id - 1, 0)
     }
 }
 
@@ -855,19 +813,15 @@ mod tests {
         manager
     }
 
-    fn test_wal_config() -> WalConfig {
-        WalConfig {
-            path: format!("target/test_ubscore_{}.wal", std::process::id()),
-            flush_interval_entries: 0,
-            sync_on_flush: false,
-        }
+    fn test_ubscore_config() -> UBSCoreConfig {
+        UBSCoreConfig::new(format!("target/test_ubscore_{}", std::process::id()))
     }
 
     #[test]
     fn test_deposit_and_query() {
         let manager = test_manager();
-        let wal_config = test_wal_config();
-        let mut ubs = UBSCore::new(manager, wal_config).unwrap();
+        let config = test_ubscore_config();
+        let mut ubs = UBSCore::new(manager, config).unwrap();
 
         // Deposit 100 BTC (in satoshi)
         ubs.deposit(1, 1, 100_0000_0000).unwrap();
@@ -881,8 +835,8 @@ mod tests {
     #[test]
     fn test_process_order_success() {
         let manager = test_manager();
-        let wal_config = test_wal_config();
-        let mut ubs = UBSCore::new(manager, wal_config).unwrap();
+        let config = test_ubscore_config();
+        let mut ubs = UBSCore::new(manager, config).unwrap();
 
         // Setup: deposit 100 BTC to user 1
         ubs.deposit(1, 1, 100_0000_0000).unwrap();
@@ -907,8 +861,8 @@ mod tests {
     #[test]
     fn test_process_order_insufficient_balance() {
         let manager = test_manager();
-        let wal_config = test_wal_config();
-        let mut ubs = UBSCore::new(manager, wal_config).unwrap();
+        let config = test_ubscore_config();
+        let mut ubs = UBSCore::new(manager, config).unwrap();
 
         // Setup: deposit only 5 BTC
         ubs.deposit(1, 1, 5_0000_0000).unwrap();
@@ -924,8 +878,8 @@ mod tests {
     #[test]
     fn test_unlock() {
         let manager = test_manager();
-        let wal_config = test_wal_config();
-        let mut ubs = UBSCore::new(manager, wal_config).unwrap();
+        let config = test_ubscore_config();
+        let mut ubs = UBSCore::new(manager, config).unwrap();
 
         // Setup and process order
         ubs.deposit(1, 1, 100_0000_0000).unwrap();
@@ -949,8 +903,8 @@ mod tests {
     #[test]
     fn test_cancel_order_flow_with_version() {
         let manager = test_manager();
-        let wal_config = test_wal_config();
-        let mut ubs = UBSCore::new(manager, wal_config).unwrap();
+        let config = test_ubscore_config();
+        let mut ubs = UBSCore::new(manager, config).unwrap();
 
         // Setup: deposit 100 BTC
         ubs.deposit(1, 1, 100_0000_0000).unwrap();
@@ -986,8 +940,8 @@ mod tests {
     #[test]
     fn test_partial_fill_then_cancel() {
         let manager = test_manager();
-        let wal_config = test_wal_config();
-        let mut ubs = UBSCore::new(manager, wal_config).unwrap();
+        let config = test_ubscore_config();
+        let mut ubs = UBSCore::new(manager, config).unwrap();
 
         // Setup: deposit 100 BTC
         ubs.deposit(1, 1, 100_0000_0000).unwrap();
@@ -1031,8 +985,8 @@ mod tests {
     #[test]
     fn test_withdraw_for_transfer() {
         let manager = test_manager();
-        let wal_config = test_wal_config();
-        let mut ubs = UBSCore::new(manager, wal_config).unwrap();
+        let config = test_ubscore_config();
+        let mut ubs = UBSCore::new(manager, config).unwrap();
 
         // Setup: deposit 100 BTC to user 1
         ubs.deposit(1, 1, 100_0000_0000).unwrap();
@@ -1051,8 +1005,8 @@ mod tests {
     #[test]
     fn test_withdraw_for_transfer_insufficient() {
         let manager = test_manager();
-        let wal_config = test_wal_config();
-        let mut ubs = UBSCore::new(manager, wal_config).unwrap();
+        let config = test_ubscore_config();
+        let mut ubs = UBSCore::new(manager, config).unwrap();
 
         // Setup: deposit only 50 BTC
         ubs.deposit(1, 1, 50_0000_0000).unwrap();
@@ -1066,8 +1020,8 @@ mod tests {
     #[test]
     fn test_deposit_from_transfer_existing_account() {
         let manager = test_manager();
-        let wal_config = test_wal_config();
-        let mut ubs = UBSCore::new(manager, wal_config).unwrap();
+        let config = test_ubscore_config();
+        let mut ubs = UBSCore::new(manager, config).unwrap();
 
         // Setup: existing account with 50 BTC
         ubs.deposit(1, 1, 50_0000_0000).unwrap();
@@ -1083,8 +1037,8 @@ mod tests {
     #[test]
     fn test_deposit_from_transfer_new_account() {
         let manager = test_manager();
-        let wal_config = test_wal_config();
-        let mut ubs = UBSCore::new(manager, wal_config).unwrap();
+        let config = test_ubscore_config();
+        let mut ubs = UBSCore::new(manager, config).unwrap();
 
         // Deposit 100 BTC to new user (lazy init)
         let (avail, frozen) = ubs.deposit_from_transfer(999, 1, 100_0000_0000).unwrap();
@@ -1109,8 +1063,8 @@ mod tests {
         use crate::models::{Side, Trade};
 
         let manager = test_manager();
-        let wal_config = test_wal_config();
-        let mut ubs = UBSCore::new(manager, wal_config).unwrap();
+        let config = test_ubscore_config();
+        let mut ubs = UBSCore::new(manager, config).unwrap();
 
         // Setup accounts - buyer needs quote for lock, base for receive
         // seller needs base for lock, quote for receive
@@ -1188,8 +1142,8 @@ mod tests {
         use crate::models::{Side, Trade};
 
         let manager = test_manager();
-        let wal_config = test_wal_config();
-        let mut ubs = UBSCore::new(manager, wal_config).unwrap();
+        let config = test_ubscore_config();
+        let mut ubs = UBSCore::new(manager, config).unwrap();
 
         // Setup accounts with known balances
         ubs.deposit(1, 1, 10_0000_0000).unwrap(); // Buyer: 10 BTC

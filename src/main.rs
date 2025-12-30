@@ -33,7 +33,6 @@ use zero_x_infinity::pipeline_mt::run_pipeline_multi_thread;
 use zero_x_infinity::pipeline_runner::run_pipeline_single_thread;
 use zero_x_infinity::ubscore::UBSCore;
 use zero_x_infinity::ubscore_wal::UBSCoreConfig;
-use zero_x_infinity::wal::WalConfig;
 
 // ============================================================
 // OUTPUT DIRECTORY
@@ -332,34 +331,19 @@ fn run() -> anyhow::Result<()> {
         // Load initial balances
         let accounts = load_balances_and_deposit(&format!("{}/balances_init.csv", input_dir))?;
 
-        // Create output paths
+        // Create output paths (for ledger/events only, WAL now in data_dir)
         std::fs::create_dir_all(output_dir).context("Failed to create output directory")?;
         let ledger_path = format!("{}/t2_ledger.csv", output_dir);
         let events_path = format!("{}/t2_events.csv", output_dir);
-        let wal_path = format!("{}/orders.wal", output_dir);
 
-        // Initialize services (use the SHARED OrderBook)
+        // Initialize services
         let mut ledger = LedgerWriter::new(&ledger_path);
         ledger.enable_event_logging(&events_path);
 
-        let wal_config = WalConfig {
-            path: wal_path,
-            flush_interval_entries: 100,
-            sync_on_flush: false,
-        };
-
-        // Phase 0x0D: Use WAL v2 with recovery if enabled
-        let mut ubscore = if app_config.ubscore_persistence.enabled {
-            tracing::info!(
-                "[UBSCore] Persistence enabled: data_dir={}",
-                app_config.ubscore_persistence.data_dir
-            );
-            let ubscore_config = UBSCoreConfig::new(&app_config.ubscore_persistence.data_dir);
-            UBSCore::new_with_recovery((*symbol_mgr).clone(), ubscore_config)
-                .context("Failed to create UBSCore with recovery")?
-        } else {
-            UBSCore::new((*symbol_mgr).clone(), wal_config).context("Failed to create UBSCore")?
-        };
+        // Initialize UBSCore (Standardizing on WAL v2 with auto-recovery)
+        let ubscore_config = UBSCoreConfig::new(&app_config.ubscore_persistence.data_dir);
+        let mut ubscore = UBSCore::new((*symbol_mgr).clone(), ubscore_config)
+            .context("Failed to initialize UBSCore")?;
 
         // Transfer initial balances to UBSCore and pre-create TDengine tables
         let symbol_info = symbol_mgr
@@ -535,7 +519,6 @@ fn run() -> anyhow::Result<()> {
     let events_path = format!("{}/t2_events.csv", output_dir); // New: BalanceEvent log
     let order_events_path = format!("{}/t2_order_events.csv", output_dir); // New: OrderEvent log
     let summary_path = format!("{}/t2_summary.txt", output_dir);
-    let wal_path = format!("{}/orders.wal", output_dir);
 
     std::fs::create_dir_all(output_dir).context("Failed to create output directory")?;
 
@@ -585,15 +568,10 @@ fn run() -> anyhow::Result<()> {
     let (accepted, rejected, total_trades, perf, final_accounts, final_book) = if pipeline_mt_mode {
         println!("    Using Multi-Thread Pipeline (4 threads)...");
 
-        // Create UBSCore and initialize with deposits
-        let wal_config = WalConfig {
-            path: wal_path.clone(),
-            flush_interval_entries: 100,
-            sync_on_flush: false,
-        };
-
+        // Create UBSCore and initialize (Standardizing on WAL v2)
+        let ubscore_config = UBSCoreConfig::new(&app_config.ubscore_persistence.data_dir);
         let mut ubscore =
-            UBSCore::new(symbol_mgr.clone(), wal_config).context("Failed to create UBSCore")?;
+            UBSCore::new(symbol_mgr.clone(), ubscore_config).context("Failed to create UBSCore")?;
 
         // Transfer initial balances to UBSCore via deposit()
         let mut deposit_count = 0u64;
@@ -672,15 +650,10 @@ fn run() -> anyhow::Result<()> {
     } else if pipeline_mode {
         println!("    Using Ring Buffer Pipeline (Single Thread)...");
 
-        // Create UBSCore and initialize with deposits
-        let wal_config = WalConfig {
-            path: wal_path.clone(),
-            flush_interval_entries: 100,
-            sync_on_flush: false,
-        };
-
+        // Create UBSCore (Standardizing on WAL v2)
+        let ubscore_config = UBSCoreConfig::new(&app_config.ubscore_persistence.data_dir);
         let mut ubscore =
-            UBSCore::new(symbol_mgr.clone(), wal_config).context("Failed to create UBSCore")?;
+            UBSCore::new(symbol_mgr.clone(), ubscore_config).context("Failed to create UBSCore")?;
 
         // Transfer initial balances to UBSCore via deposit()
         let mut deposit_count = 0u64;
@@ -764,15 +737,10 @@ fn run() -> anyhow::Result<()> {
     } else if ubscore_mode {
         println!("    Using UBSCore pipeline (WAL + Balance Lock)...");
 
-        // Create UBSCore and initialize with deposits
-        let wal_config = WalConfig {
-            path: wal_path.clone(),
-            flush_interval_entries: 100, // Group commit every 100 orders
-            sync_on_flush: false,        // Faster for benchmarks
-        };
-
+        // Create UBSCore (Standardizing on WAL v2)
+        let ubscore_config = UBSCoreConfig::new(&app_config.ubscore_persistence.data_dir);
         let mut ubscore =
-            UBSCore::new(symbol_mgr.clone(), wal_config).context("Failed to create UBSCore")?;
+            UBSCore::new(symbol_mgr.clone(), ubscore_config).context("Failed to create UBSCore")?;
 
         // Transfer initial balances to UBSCore via deposit()
         // Also record Deposit events for complete audit trail
@@ -858,14 +826,10 @@ fn run() -> anyhow::Result<()> {
     } else {
         println!("    Using basic matching engine (No WAL, No Pipeline)...");
 
-        let wal_config = WalConfig {
-            path: wal_path.clone(),
-            flush_interval_entries: 100,
-            sync_on_flush: false,
-        };
-
+        // Create UBSCore (Standardizing on WAL v2)
+        let ubscore_config = UBSCoreConfig::new(&app_config.ubscore_persistence.data_dir);
         let mut ubscore =
-            UBSCore::new(symbol_mgr.clone(), wal_config).context("Failed to create UBSCore")?;
+            UBSCore::new(symbol_mgr.clone(), ubscore_config).context("Failed to create UBSCore")?;
 
         // Initial deposits
         for (user_id, account) in &accounts {
