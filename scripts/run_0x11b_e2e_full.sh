@@ -243,7 +243,12 @@ start_gateway() {
     fi
     
     mkdir -p "$LOG_DIR"
-    nohup cargo run -- --gateway > "$LOG_DIR/gateway_e2e.log" 2>&1 &
+    if [ -n "$GATEWAY_BINARY" ]; then
+        log_info "Using pre-built binary: $GATEWAY_BINARY"
+        nohup "$GATEWAY_BINARY" --gateway > "$LOG_DIR/gateway_e2e.log" 2>&1 &
+    else
+        nohup cargo run -- --gateway > "$LOG_DIR/gateway_e2e.log" 2>&1 &
+    fi
     GATEWAY_PID=$!
     
     wait_for_port 8080 "Gateway" 30 || return 1
@@ -254,7 +259,11 @@ start_sentinel() {
     log_step "[4/6] Starting Sentinel Service..."
     
     mkdir -p "$LOG_DIR"
-    nohup cargo run -- --sentinel > "$LOG_DIR/sentinel_e2e.log" 2>&1 &
+    if [ -n "$GATEWAY_BINARY" ]; then
+         nohup "$GATEWAY_BINARY" --sentinel > "$LOG_DIR/sentinel_e2e.log" 2>&1 &
+    else
+         nohup cargo run -- --sentinel > "$LOG_DIR/sentinel_e2e.log" 2>&1 &
+    fi
     SENTINEL_PID=$!
     
     # Sentinel doesn't have HTTP port, wait for log output

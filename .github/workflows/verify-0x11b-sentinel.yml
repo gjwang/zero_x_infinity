@@ -1,0 +1,97 @@
+name: Verify 0x11b-Sentinel
+
+on:
+  push:
+    branches: [ "0x11-b-sentinel-hardening" ] # Run specifically on this branch
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  SQLX_OFFLINE: true
+
+jobs:
+  verify-sentinel:
+    name: Sentinel & Chain Config E2E
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: exchange_info_db
+          POSTGRES_USER: trading
+          POSTGRES_PASSWORD: trading123
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U trading -d exchange_info_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      # Setup Rust
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+            toolchain: 1.83.0
+      
+      - uses: Swatinem/rust-cache@v2
+
+      # Setup Python
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+            version: "0.5.11"
+      
+      - name: Install Dependencies
+        run: uv sync
+
+      # Start Bitcoind (Regtest)
+      - name: Start Bitcoind
+        run: |
+          docker run -d --name bitcoind -p 18443:18443 ruimarinho/bitcoin-core:24 \
+            -printtoconsole -regtest -txindex -rpcuser=admin -rpcpassword=admin -rpcallowip=0.0.0.0/0 -rpcbind=0.0.0.0
+          
+          # Wait for RPC port
+          timeout 30s bash -c 'until curl -s --user admin:admin --data-binary "{\"jsonrpc\":\"1.0\",\"id\":\"ping\",\"method\":\"getnetworkinfo\",\"params\":[]}" http://127.0.0.1:18443/ > /dev/null; do sleep 1; done'
+          echo "✅ Bitcoind is ready"
+
+      # Start Anvil (Optional - script handles it or skips)
+      # Installing foundry is slow?
+      - name: Install Foundry (Anvil)
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      # Build Binary
+      - name: Build Release Binary
+        run: cargo build --release --bin zero_x_infinity
+
+      # Run Script
+      - name: Run 0x11b E2E
+        env:
+          PG_HOST: localhost
+          PG_PORT: 5432
+          PG_USER: trading
+          PG_PASSWORD: trading123
+          PG_DB: exchange_info_db
+          BTC_RPC_URL: http://127.0.0.1:18443
+          BTC_RPC_USER: admin
+          BTC_RPC_PASS: admin
+          BTC_WALLET: sentinel_test
+          # Force DB clean for reliable test
+          CLEAN_DB: true
+        run: |
+           export GATEWAY_BINARY=$(pwd)/target/release/zero_x_infinity
+           chmod +x scripts/run_0x11b_e2e_full.sh
+           ./scripts/run_0x11b_e2e_full.sh
+
+      # Upload Logs
+      - name: Upload Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-sentinel-e2e
+          path: logs/
