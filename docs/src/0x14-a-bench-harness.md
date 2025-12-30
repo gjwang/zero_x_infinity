@@ -152,6 +152,37 @@ phase,command,order_id,symbol,price,size,action,order_type,uid
 
 ---
 
+### 6. Verification Commands
+
+**One-Click Verification**:
+```bash
+# Run all golden data verification tests
+cargo test golden_ -- --nocapture
+```
+
+**Detailed Comparison Test**:
+```bash
+# Compare first 20 orders against golden CSV with full output
+cargo test test_generator_vs_golden_detailed -- --nocapture
+```
+
+**All Benchmark Tests**:
+```bash
+# Run all tests in the bench module
+cargo test bench:: -- --nocapture
+```
+
+**Expected Output**:
+```
+[  1] ✅ | Golden: id=1, price=34386, size=  1, action=BID, uid=11
+[  2] ✅ | Golden: id=2, price=34135, size=  1, action=BID, uid= 2
+[  3] ✅ | Golden: id=3, price=34347, size=  2, action=BID, uid=13
+...
+[20] ✅ | Golden: id=20, price=34297, size=  1, action=BID, uid=50
+```
+
+---
+
 <div id="-chinese"></div>
 
 ## 🇨🇳 中文
@@ -224,3 +255,33 @@ Exchange-Core 项目使用 Java 的 `java.util.Random` 作为 PRNG。我们必�
 4. 货币顺序: `[978, 840]` 基于 HashMap bucket 索引
 5. 用户选择: `min(users.size, max(2, symbolMessages/5))`
 
+---
+
+### 6. 验证命令
+
+**一键验证**:
+```bash
+# 运行所有黄金数据验证测试
+cargo test golden_ -- --nocapture
+```
+
+**详细对比测试**:
+```bash
+# 逐行对比前 20 个订单与黄金 CSV
+cargo test test_generator_vs_golden_detailed -- --nocapture
+```
+
+**所有 Benchmark 测试**:
+```bash
+# 运行 bench 模块的所有测试
+cargo test bench:: -- --nocapture
+```
+
+**预期输出**:
+```
+[  1] ✅ | Golden: id=1, price=34386, size=  1, action=BID, uid=11
+[  2] ✅ | Golden: id=2, price=34135, size=  1, action=BID, uid= 2
+[  3] ✅ | Golden: id=3, price=34347, size=  2, action=BID, uid=13
+...
+[20] ✅ | Golden: id=20, price=34297, size=  1, action=BID, uid=50
+```
