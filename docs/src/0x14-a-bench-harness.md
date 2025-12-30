@@ -1,4 +1,4 @@
-# 0x14-a Benchmark Harness: The Metal Foundation
+# 0x14-a Benchmark Harness: Test Data Generation
 
 <h3>
   <a href="#-english">🇺🇸 English</a>
@@ -11,45 +11,30 @@
 ## 🇺🇸 English
 
 > **Phase V, Step 1**
-> **Objective**: Build the Tier 2 Pipeline Benchmark infrastructure using the Exchange-Core Verification Kit.
+> **Objective**: Re-implement the Exchange-Core test data generation algorithm in Rust and verify correctness against golden data.
 
 ---
 
-### 1. Chapter Overview
+### 1. Chapter Objectives
 
-This chapter establishes the **"Metal Harness"** – a dedicated benchmark environment that isolates the matching engine from external noise (Network, Disk I/O) and measures pure CPU/Memory performance.
+| # | Goal | Deliverable |
+|---|------|-------------|
+| 1 | **Implement LCG PRNG** | `src/bench/java_random.rs` - Java-compatible random generator |
+| 2 | **Implement Order Generator** | `src/bench/order_generator.rs` - Deterministic order sequence |
+| 3 | **Verify Correctness** | Unit tests that compare generated data with `golden_*.csv` |
 
-**Prerequisites**:
-*   Chapter [0x14: Extreme Optimization](./0x14-extreme-optimization.md) (Methodology)
-*   `docs/exchange_core_verification_kit/` (Golden Data)
+**Success Criteria**: Generated data matches golden CSV byte-for-byte (same `order_id`, `price`, `size`, `uid` for each row).
 
 ---
 
-### 2. Golden Data Integration
+### 2. Reference Algorithm: LCG PRNG
 
-We use pre-generated CSV files from the Exchange-Core project to ensure bit-accurate parity with the Java reference implementation.
+The Exchange-Core project uses Java's `java.util.Random` as its PRNG. We must implement a bit-exact replica.
 
-#### 2.1 Data Files
-
-| File | Records | Description |
-|------|---------|-------------|
-| `golden_single_pair_margin.csv` | 1,100 | Futures (margin) contract test data |
-| `golden_single_pair_exchange.csv` | 1,100 | Spot exchange test data |
-
-**CSV Format**:
-```csv
-phase,command,order_id,symbol,price,size,action,order_type,uid
-PREFILL,PLACE_ORDER,1,0,12345,100,BID,GTC,42
-BENCHMARK,PLACE_ORDER,2,0,12340,50,ASK,IOC,17
-...
-```
-
-#### 2.2 LCG PRNG Implementation
-
-To generate larger datasets deterministically, we implement the Java-compatible Linear Congruential Generator:
+#### 2.1 Java Random Implementation
 
 ```rust
-/// Java-compatible LCG PRNG
+/// Java-compatible Linear Congruential Generator
 pub struct JavaRandom {
     seed: u64,
 }
@@ -66,51 +51,82 @@ impl JavaRandom {
     }
 
     fn next(&mut self, bits: u32) -> i32 {
-        self.seed = (self.seed.wrapping_mul(Self::MULTIPLIER).wrapping_add(Self::ADDEND)) & Self::MASK;
+        self.seed = self.seed
+            .wrapping_mul(Self::MULTIPLIER)
+            .wrapping_add(Self::ADDEND) & Self::MASK;
         (self.seed >> (48 - bits)) as i32
     }
 
     pub fn next_int(&mut self, bound: i32) -> i32 {
-        // ... Java Random.nextInt(bound) logic
+        assert!(bound > 0);
+        let bound = bound as u32;
+        if (bound & bound.wrapping_sub(1)) == 0 {
+            // Power of two
+            return ((bound as u64 * self.next(31) as u64) >> 31) as i32;
+        }
+        loop {
+            let bits = self.next(31) as u32;
+            let val = bits % bound;
+            if bits.wrapping_sub(val).wrapping_add(bound.wrapping_sub(1)) >= bits {
+                return val as i32;
+            }
+        }
     }
+
+    pub fn next_long(&mut self) -> i64 {
+        ((self.next(32) as i64) << 32) + self.next(32) as i64
+    }
+
+    pub fn next_double(&mut self) -> f64 {
+        let a = (self.next(26) as u64) << 27;
+        let b = self.next(27) as u64;
+        (a + b) as f64 / ((1u64 << 53) as f64)
+    }
+}
+```
+
+#### 2.2 Seed Derivation
+
+Each test session derives its seed from `symbol_id` and `benchmark_seed`:
+
+```rust
+fn derive_session_seed(symbol_id: i32, benchmark_seed: i64) -> i64 {
+    let mut hash: i64 = 1;
+    hash = 31 * hash + (symbol_id as i64 * -177277);
+    hash = 31 * hash + (benchmark_seed * 10037 + 198267);
+    hash
 }
 ```
 
 ---
 
-### 3. Metal Harness Architecture
+### 3. Golden Data Reference
 
-```
-benches/metal_pipeline.rs
-├── Criterion Benchmark Group
-│   ├── "baseline_serde" - Current bincode/serde pipeline
-│   └── "baseline_raw"   - Pre-parsed order vector
-├── Mock Components
-│   ├── MockRingBuffer   - In-memory queue (no crossbeam)
-│   └── MockWAL          - No-op persistence
-├── Data Loaders
-│   ├── load_golden_csv  - Load from CSV files
-│   └── generate_orders  - Use LCG to generate N orders
-└── Metrics
-    ├── Throughput (TPS)
-    └── Latency (P50, P99, Worst)
+**Location**: `docs/exchange_core_verification_kit/golden_data/`
+
+| File | Records | Seed | Description |
+|------|---------|------|-------------|
+| `golden_single_pair_margin.csv` | 1,100 | 1 | Margin (futures) contract |
+| `golden_single_pair_exchange.csv` | 1,100 | 1 | Spot exchange |
+
+**CSV Format**:
+```csv
+phase,command,order_id,symbol,price,size,action,order_type,uid
 ```
 
 ---
 
 ### 4. Implementation Checklist
 
-- [ ] **Step 1**: Implement `JavaRandom` LCG PRNG
-    - [ ] Pass unit tests against golden data
-- [ ] **Step 2**: Create `benches/metal_pipeline.rs`
-    - [ ] Setup Criterion benchmark group
-    - [ ] Add CSV loader
-- [ ] **Step 3**: Mock Components
-    - [ ] `MockRingBuffer` (simple `VecDeque`)
-    - [ ] `MockWAL` (no-op)
-- [ ] **Step 4**: Establish Baseline
-    - [ ] Run benchmarks
-    - [ ] Document "Red Line" metrics
+- [ ] **Step 1**: Create `src/bench/mod.rs`
+- [ ] **Step 2**: Implement `JavaRandom` in `src/bench/java_random.rs`
+    - [ ] Unit test: verify first 100 random numbers match Java output
+- [ ] **Step 3**: Implement `TestOrdersGenerator` in `src/bench/order_generator.rs`
+    - [ ] Pareto distribution for symbol/user weights
+    - [ ] Order generation logic (GTC, IOC, Cancel, Move, Reduce)
+- [ ] **Step 4**: Load and compare with golden CSV
+    - [ ] `#[test] fn test_golden_single_pair_margin()`
+    - [ ] `#[test] fn test_golden_single_pair_exchange()`
 
 ---
 
@@ -119,67 +135,47 @@ benches/metal_pipeline.rs
 ## 🇨🇳 中文
 
 > **Phase V, 步骤 1**
-> **目标**: 使用 Exchange-Core Verification Kit 构建 Tier 2 流水线基准测试基础设施。
+> **目标**: 用 Rust 重新实现 Exchange-Core 测试数据生成算法，并对比黄金数据验证正确性。
 
 ---
 
-### 1. 章节概述
+### 1. 章节目标
 
-本章建立 **"Metal Harness (金属测试脚手架)"** – 一个专用的基准测试环境，将撮合引擎与外部噪声（网络、磁盘 I/O）隔离，测量纯 CPU/内存性能。
+| # | 目标 | 交付物 |
+|---|------|--------|
+| 1 | **实现 LCG PRNG** | `src/bench/java_random.rs` - Java 兼容随机数生成器 |
+| 2 | **实现订单生成器** | `src/bench/order_generator.rs` - 确定性订单序列 |
+| 3 | **验证正确性** | 单元测试对比生成数据与 `golden_*.csv` |
 
-**前置条件**:
-*   章节 [0x14: Extreme Optimization](./0x14-extreme-optimization.md) (方法论)
-*   `docs/exchange_core_verification_kit/` (黄金数据)
-
----
-
-### 2. 黄金数据集成
-
-我们使用从 Exchange-Core 项目预生成的 CSV 文件，确保与 Java 参考实现完全一致。
-
-#### 2.1 数据文件
-
-| 文件 | 记录数 | 描述 |
-|------|--------|------|
-| `golden_single_pair_margin.csv` | 1,100 | 期货（保证金）合约测试数据 |
-| `golden_single_pair_exchange.csv` | 1,100 | 现货交易测试数据 |
-
-#### 2.2 LCG PRNG 实现
-
-为了确定性地生成更大规模的数据集，我们实现 Java 兼容的线性同余发生器 (LCG)。
+**成功标准**: 生成的数据与黄金 CSV 逐字节匹配（每行的 `order_id`, `price`, `size`, `uid` 完全一致）。
 
 ---
 
-### 3. Metal Harness 架构
+### 2. 参考算法: LCG PRNG
 
-```
-benches/metal_pipeline.rs
-├── Criterion 基准测试组
-│   ├── "baseline_serde" - 当前 bincode/serde 流水线
-│   └── "baseline_raw"   - 预解析订单向量
-├── Mock 组件
-│   ├── MockRingBuffer   - 内存队列 (无 crossbeam)
-│   └── MockWAL          - 空操作持久化
-├── 数据加载器
-│   ├── load_golden_csv  - 从 CSV 文件加载
-│   └── generate_orders  - 使用 LCG 生成 N 个订单
-└── 指标
-    ├── 吞吐量 (TPS)
-    └── 延迟 (P50, P99, 最差)
-```
+Exchange-Core 项目使用 Java 的 `java.util.Random` 作为 PRNG。我们必须实现一个比特级精确的副本。
+
+---
+
+### 3. 黄金数据参考
+
+**位置**: `docs/exchange_core_verification_kit/golden_data/`
+
+| 文件 | 记录数 | Seed | 描述 |
+|------|--------|------|------|
+| `golden_single_pair_margin.csv` | 1,100 | 1 | 保证金（期货）合约 |
+| `golden_single_pair_exchange.csv` | 1,100 | 1 | 现货交易 |
 
 ---
 
 ### 4. 实施清单
 
-- [ ] **步骤 1**: 实现 `JavaRandom` LCG PRNG
-    - [ ] 通过黄金数据单元测试
-- [ ] **步骤 2**: 创建 `benches/metal_pipeline.rs`
-    - [ ] 设置 Criterion 基准测试组
-    - [ ] 添加 CSV 加载器
-- [ ] **步骤 3**: Mock 组件
-    - [ ] `MockRingBuffer` (简单的 `VecDeque`)
-    - [ ] `MockWAL` (空操作)
-- [ ] **步骤 4**: 建立基线
-    - [ ] 运行基准测试
-    - [ ] 记录 "Red Line" 指标
+- [ ] **步骤 1**: 创建 `src/bench/mod.rs`
+- [ ] **步骤 2**: 在 `src/bench/java_random.rs` 中实现 `JavaRandom`
+    - [ ] 单元测试: 验证前 100 个随机数与 Java 输出匹配
+- [ ] **步骤 3**: 在 `src/bench/order_generator.rs` 中实现 `TestOrdersGenerator`
+    - [ ] Pareto 分布用于交易对/用户权重
+    - [ ] 订单生成逻辑 (GTC, IOC, Cancel, Move, Reduce)
+- [ ] **步骤 4**: 加载并对比黄金 CSV
+    - [ ] `#[test] fn test_golden_single_pair_margin()`
+    - [ ] `#[test] fn test_golden_single_pair_exchange()`
