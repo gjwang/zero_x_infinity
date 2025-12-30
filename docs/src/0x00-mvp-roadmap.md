@@ -1,7 +1,7 @@
 # 0x00 Project Roadmap
 
 > **Vision**: Build a production-grade cryptocurrency exchange from Hello World to Microsecond Latency.
-> **Current Status**: Phase III (Resilience & Funding) - Sentinel Integration.
+> **Current Status**: Phase V (Extreme Optimization) - Order Commands parity complete.
 
 ---
 
@@ -80,10 +80,12 @@ This project documents the complete journey of building a **1.3M orders/sec** ma
 
 | Chapter | Title | Description |
 |---------|-------|-------------|
-| 0x14 | [Extreme Optimization](./0x14-extreme-optimization.md) | ✅ Methodology & Benchmark Harness (0x14-a) |
-| 0x15 | [Zero-Copy](./0x15-zero-copy.md) | Zero-copy deserialization with `rkyv` |
-| 0x16 | [CPU Affinity](./0x16-cpu-affinity.md) | Core pinning and cache line isolation |
-| 0x17 | [SIMD Matching](./0x17-simd-matching.md) | AVX-512 vectorized matching |
+| 0x14 | [Extreme Optimization](./0x14-extreme-optimization.md) | Architecture Manifesto |
+| 0x14-a | [Benchmark Harness](./0x14-a-bench-harness.md) | ✅ 100% Bit-exact Parity (FILL) |
+| 0x14-b | [Order Commands](./0x14-b-order-commands.md) | ✅ IOC, Move, Reduce (Feature Parity) |
+| 0x15 | [Zero-Copy](./0x15-zero-copy.md) | Planned |
+| 0x16 | [CPU Affinity](./0x16-cpu-affinity.md) | Planned |
+| 0x17 | [SIMD Matching](./0x17-simd-matching.md) | Planned |
 
 ---
 
@@ -99,6 +101,7 @@ This project documents the complete journey of building a **1.3M orders/sec** ma
 | `v0.0F-admin-dashboard` | 0x0F | Admin Operations Dashboard |
 | `v0.11-a-funding-qa` | 0x11-a | Real Chain Sentinel MVP (Deposit/Withdraw) |
 | `v0.11-b-sentinel-hardening` | 0x11-b | DEF-002 Fix, ADR-005/006, Hot Listing |
+| `v0.14-b-order-commands` | 0x14-b | ✅ IOC, Move, Reduce (Bit-exact Parity) |
 
 ---
 
@@ -113,4 +116,4 @@ This project documents the complete journey of building a **1.3M orders/sec** ma
 
 ---
 
-*Last Updated: 2025-12-29*
+*Last Updated: 2025-12-31*

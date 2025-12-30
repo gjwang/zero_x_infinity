@@ -112,9 +112,12 @@ graph TD
 | 0x11-a | [Real Chain Integration](./docs/src/0x11-a-real-chain.md) | ✅ BTC Sentinel MVP |
 | 0x11-b | [Sentinel Hardening](./docs/src/0x11-b-sentinel-hardening.md) | ✅ DEF-002 Fix, ADR-005/006 |
 | **Phase V** | **Extreme Optimization** | **"Metal Mode"** |
-| 0x14 | [Extreme Optimization](./docs/src/0x14-extreme-optimization.md) | ✅ Methodology & Benchmark Harness (0x14-a) |
+| 0x14 | [Extreme Optimization](./docs/src/0x14-extreme-optimization.md) | Architecture Manifesto |
+| 0x14-a | [Benchmark Harness](./docs/src/0x14-a-bench-harness.md) | ✅ 100% Bit-exact Parity (FILL) |
+| 0x14-b | [Order Commands](./docs/src/0x14-b-order-commands.md) | ✅ IOC, Move, Reduce (Feature Parity) |
 | 0x15 | [Zero-Copy](./docs/src/0x15-zero-copy.md) | Planned |
 | 0x16 | [CPU Affinity](./docs/src/0x16-cpu-affinity.md) | Planned |
+| 0x17 | [SIMD Matching](./docs/src/0x17-simd-matching.md) | Planned |
 
 
 ---
@@ -292,7 +295,15 @@ graph TD
 | 0x0F | [Admin Dashboard](./docs/src/0x0F-admin-dashboard.md) | 管理后台 + Trace ID 证据链 |
 | 0x10 | [Web Frontend](./docs/src/0x10-web-frontend.md) | 前端外包需求文档 |
 | 0x11 | [Deposit & Withdraw](./docs/src/0x11-deposit-withdraw.md) | ✅ 充值与提现 (Mock Chain) |
-| 0x11-a | [Real Chain Integration](./docs/src/0x11-a-real-chain.md) | 🚧 真实区块链集成 |
+| 0x11-a | [Real Chain Integration](./docs/src/0x11-a-real-chain.md) | ✅ BTC Sentinel MVP |
+| 0x11-b | [Sentinel Hardening](./docs/src/0x11-b-sentinel-hardening.md) | ✅ Multi-chain & Security (ADR-005/006) |
+| **Phase V** | **极致优化 (Extreme Optimization)** | **"Metal Mode"** |
+| 0x14 | [Extreme Optimization](./docs/src/0x14-extreme-optimization.md) | 架构宣言 |
+| 0x14-a | [Benchmark Harness](./docs/src/0x14-a-bench-harness.md) | ✅ 100% 比特精确对齐 (FILL phase) |
+| 0x14-b | [Order Commands](./docs/src/0x14-b-order-commands.md) | ✅ IOC, Move, Reduce (功能补全) |
+| 0x15 | [Zero-Copy](./docs/src/0x15-zero-copy.md) | 计划中 |
+| 0x16 | [CPU Affinity](./docs/src/0x16-cpu-affinity.md) | 计划中 |
+| 0x17 | [SIMD Matching](./docs/src/0x17-simd-matching.md) | 计划中 |
 
 ---
 
