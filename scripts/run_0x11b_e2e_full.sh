@@ -419,8 +419,19 @@ main() {
     
     ((TOTAL_TESTS++))
     L1_STATUS="FAILED" # Default to failed
-    # Remove --quiet and tail to see actual output in CI
-    if cargo test sentinel --no-fail-fast; then
+    
+    # DEBUG: Check cargo availability
+    echo "DEBUG: Checking cargo version..."
+    cargo --version || echo "❌ Cargo command not found!"
+    
+    echo "DEBUG: Executing cargo test sentinel --no-fail-fast..."
+    set +e
+    cargo test sentinel --no-fail-fast
+    L1_EXIT_CODE=$?
+    set -e
+    echo "DEBUG: cargo test exited with code: $L1_EXIT_CODE"
+
+    if [ $L1_EXIT_CODE -eq 0 ]; then
         log_info "✅ Level 1 PASSED: Rust Sentinel Unit Tests"
         ((TESTS_PASSED++))
         L1_STATUS="PASSED"
