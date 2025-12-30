@@ -378,12 +378,19 @@ class TwoUserOrderMatchingE2E:
                 print(f"   ✅ User A BTC transferred to Spot")
                 self.add_result("3.1 User A Transfer", True)
                 
-                # IMMEDIATE VERIFY: Query Spot balance right now
-                spot_btc = self.get_spot_balance(self.user_a_api_client, "BTC")
+                # RETRY VERIFY: Poll Spot balance (async TDengine write may take ~100ms)
+                spot_btc = Decimal("0")
+                for retry in range(10):  # Max 2 seconds (10 * 200ms)
+                    time.sleep(0.2)  # Wait 200ms between polls
+                    spot_btc = self.get_spot_balance(self.user_a_api_client, "BTC")
+                    if spot_btc >= self.trade_quantity:
+                        print(f"   ✅ VERIFIED: Spot BTC = {spot_btc} (after {retry+1} poll(s))")
+                        break
+                    self.debug(f"Polling Spot balance... {retry+1}/10, got {spot_btc}")
+                
                 if spot_btc < self.trade_quantity:
-                    print(f"   ❌ FAIL: Spot balance {spot_btc} < expected {self.trade_quantity}")
+                    print(f"   ❌ FAIL: Spot balance {spot_btc} < expected {self.trade_quantity} after 2s")
                     return self.add_result("3.1.1 User A Spot Verify", False)
-                print(f"   ✅ VERIFIED: Spot BTC = {spot_btc}")
             else:
                 print(f"   ❌ Transfer failed: {resp.json().get('msg', resp.status_code)}")
                 return self.add_result("3.1 User A Transfer", False)
@@ -422,12 +429,19 @@ class TwoUserOrderMatchingE2E:
             if resp.status_code == 200 and resp.json().get("code") == 0:
                 print(f"   ✅ User B USDT transferred to Spot")
                 
-                # IMMEDIATE VERIFY: Query Spot balance right now
-                spot_usdt = self.get_spot_balance(self.user_b_api_client, "USDT")
+                # RETRY VERIFY: Poll Spot balance (async TDengine write may take ~100ms)
+                spot_usdt = Decimal("0")
+                for retry in range(10):  # Max 2 seconds (10 * 200ms)
+                    time.sleep(0.2)  # Wait 200ms between polls
+                    spot_usdt = self.get_spot_balance(self.user_b_api_client, "USDT")
+                    if spot_usdt >= self.trade_value:
+                        print(f"   ✅ VERIFIED: Spot USDT = {spot_usdt} (after {retry+1} poll(s))")
+                        break
+                    self.debug(f"Polling Spot balance... {retry+1}/10, got {spot_usdt}")
+                
                 if spot_usdt < self.trade_value:
-                    print(f"   ❌ FAIL: Spot USDT {spot_usdt} < expected {self.trade_value}")
+                    print(f"   ❌ FAIL: Spot USDT {spot_usdt} < expected {self.trade_value} after 2s")
                     return self.add_result("3.2.1 User B Spot Verify", False)
-                print(f"   ✅ VERIFIED: Spot USDT = {spot_usdt}")
                 self.add_result("3.2 User B USDT", True, f"{usdt_amount} USDT")
             else:
                 print(f"   ❌ Transfer failed: {resp.json().get('msg', resp.status_code)}")
