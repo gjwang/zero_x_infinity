@@ -5,7 +5,7 @@
 //! 2. Generating trades
 //! 3. Updating order status
 
-use crate::models::{InternalOrder, OrderResult, OrderStatus, OrderType, Side, Trade};
+use crate::models::{InternalOrder, OrderResult, OrderStatus, OrderType, Side, TimeInForce, Trade};
 use crate::orderbook::OrderBook;
 
 /// Pending trade info (before final Trade creation)
@@ -26,9 +26,10 @@ impl MatchingEngine {
     ///
     /// # Flow:
     /// 1. Try to match against opposite side
-    /// 2. Update order status based on fill result
-    /// 3. If partially filled or unfilled, rest in book
-    /// 4. Return order status and any trades generated
+    /// 2. Update order status based on fill result and TimeInForce
+    /// 3. If GTC and partially filled or unfilled, rest in book
+    /// 4. If IOC, expire any unfilled remainder (NEVER rest)
+    /// 5. Return order status and any trades generated
     pub fn process_order(book: &mut OrderBook, mut order: InternalOrder) -> OrderResult {
         let (pending_trades, maker_orders) = match order.side {
             Side::Buy => Self::match_buy(book, &mut order),
@@ -52,17 +53,19 @@ impl MatchingEngine {
             })
             .collect();
 
-        // Update status and rest order (matches original logic exactly)
+        // Update status based on fill result and TimeInForce
         if order.is_filled() {
             order.status = OrderStatus::FILLED;
-        } else if order.filled_qty > 0 {
-            // Partially filled, rest remaining
-            order.status = OrderStatus::PARTIALLY_FILLED;
-            if order.order_type == OrderType::Limit {
-                book.rest_order(order.clone());
-            }
+        } else if order.time_in_force == TimeInForce::IOC {
+            // IOC: expire any unfilled remainder, NEVER rest in book
+            order.status = OrderStatus::EXPIRED;
+            // IOC orders NEVER rest in book
         } else {
-            // No fills, rest entire order
+            // GTC: rest unfilled remainder in book
+            if order.filled_qty > 0 {
+                order.status = OrderStatus::PARTIALLY_FILLED;
+            }
+            // Rest in book if LIMIT order
             if order.order_type == OrderType::Limit {
                 book.rest_order(order.clone());
             }
@@ -73,6 +76,68 @@ impl MatchingEngine {
             trades,
             maker_orders,
         }
+    }
+
+    /// Reduce an order's quantity in-place (preserves time priority)
+    ///
+    /// This modifies the order's qty without changing its position in the queue.
+    /// If reduce_by >= remaining qty, the order is removed entirely.
+    ///
+    /// # Arguments
+    /// * `book` - The order book
+    /// * `order_id` - ID of order to reduce
+    /// * `reduce_by` - Amount to reduce qty by
+    ///
+    /// # Returns
+    /// * `Some(order)` - The modified (or removed) order
+    /// * `None` - Order not found
+    pub fn reduce_order(
+        book: &mut OrderBook,
+        order_id: u64,
+        reduce_by: u64,
+    ) -> Option<InternalOrder> {
+        // First check if reducing to zero or below
+        if let Some(order) = book.get_order_mut(order_id) {
+            let remaining = order.qty.saturating_sub(order.filled_qty);
+            if reduce_by >= remaining {
+                // Remove entirely
+                book.remove_order_by_id(order_id)
+            } else {
+                // Reduce in place (preserves priority)
+                order.qty = order.qty.saturating_sub(reduce_by);
+                Some(order.clone())
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Move an order to a new price (Cancel + Place, loses priority)
+    ///
+    /// This is implemented as atomic cancel + place at new price.
+    /// The order loses its time priority (equivalent to cancel and re-submit).
+    ///
+    /// # Arguments
+    /// * `book` - The order book
+    /// * `order_id` - ID of order to move
+    /// * `new_price` - New price for the order
+    ///
+    /// # Returns
+    /// * `Some(order)` - The moved order with new price
+    /// * `None` - Order not found
+    pub fn move_order(
+        book: &mut OrderBook,
+        order_id: u64,
+        new_price: u64,
+    ) -> Option<InternalOrder> {
+        // Cancel the existing order
+        let mut order = book.remove_order_by_id(order_id)?;
+
+        // Update price and re-insert
+        order.price = new_price;
+        book.rest_order(order.clone());
+
+        Some(order)
     }
 
     /// Match a buy order against asks (sell orders)
@@ -375,5 +440,201 @@ mod tests {
 
         assert_eq!(result.trades.len(), 3);
         assert_eq!(result.order.filled_qty, 10); // 3 + 4 + 3 from third
+    }
+
+    // =========================================================
+    // IOC (Immediate-or-Cancel) Tests
+    // =========================================================
+
+    fn make_ioc_order(id: u64, user_id: u64, price: u64, qty: u64, side: Side) -> InternalOrder {
+        let mut order = InternalOrder::new(id, user_id, 0, price, qty, side);
+        order.time_in_force = TimeInForce::IOC;
+        order
+    }
+
+    #[test]
+    fn test_ioc_full_match() {
+        let mut book = OrderBook::new();
+
+        // Add sell order (GTC, will rest)
+        let sell = make_order(1, 1, 100, 10, Side::Sell);
+        MatchingEngine::process_order(&mut book, sell);
+
+        // IOC buy matches fully
+        let ioc_buy = make_ioc_order(2, 2, 100, 10, Side::Buy);
+        let result = MatchingEngine::process_order(&mut book, ioc_buy);
+
+        assert_eq!(result.trades.len(), 1);
+        assert_eq!(result.order.status, OrderStatus::FILLED);
+        assert_eq!(result.order.filled_qty, 10);
+    }
+
+    #[test]
+    fn test_ioc_partial_fill_expire() {
+        let mut book = OrderBook::new();
+
+        // Add sell order with only 60 qty
+        let sell = make_order(1, 1, 100, 60, Side::Sell);
+        MatchingEngine::process_order(&mut book, sell);
+
+        // IOC buy for 100 qty - should fill 60, expire 40
+        let ioc_buy = make_ioc_order(2, 2, 100, 100, Side::Buy);
+        let result = MatchingEngine::process_order(&mut book, ioc_buy);
+
+        assert_eq!(result.trades.len(), 1);
+        assert_eq!(result.trades[0].qty, 60);
+        assert_eq!(result.order.filled_qty, 60);
+        assert_eq!(result.order.status, OrderStatus::EXPIRED); // Remainder expired
+    }
+
+    #[test]
+    fn test_ioc_no_match_expire() {
+        let mut book = OrderBook::new();
+
+        // Empty book - IOC should expire immediately
+        let ioc_buy = make_ioc_order(1, 1, 100, 10, Side::Buy);
+        let result = MatchingEngine::process_order(&mut book, ioc_buy);
+
+        assert!(result.trades.is_empty());
+        assert_eq!(result.order.status, OrderStatus::EXPIRED);
+    }
+
+    #[test]
+    fn test_ioc_never_rests_in_book() {
+        let mut book = OrderBook::new();
+
+        // IOC buy with no matching orders
+        let ioc_buy = make_ioc_order(1, 1, 100, 10, Side::Buy);
+        MatchingEngine::process_order(&mut book, ioc_buy);
+
+        // Verify IOC order is NOT in the book
+        assert!(book.best_bid().is_none(), "IOC should never rest in book");
+        assert!(
+            book.all_orders().is_empty(),
+            "IOC should never be in all_orders()"
+        );
+    }
+
+    #[test]
+    fn test_ioc_partial_fill_never_rests() {
+        let mut book = OrderBook::new();
+
+        // Add small sell order
+        let sell = make_order(1, 1, 100, 5, Side::Sell);
+        MatchingEngine::process_order(&mut book, sell);
+
+        // IOC buy for 10, fills 5, remainder should NOT rest
+        let ioc_buy = make_ioc_order(2, 2, 100, 10, Side::Buy);
+        MatchingEngine::process_order(&mut book, ioc_buy);
+
+        // Book should be empty (sell consumed, IOC didn't rest)
+        assert!(book.best_bid().is_none(), "IOC remainder should not rest");
+        assert!(book.best_ask().is_none(), "Sell should be consumed");
+    }
+
+    // =========================================================
+    // ReduceOrder Tests
+    // =========================================================
+
+    #[test]
+    fn test_reduce_order_preserves_priority() {
+        let mut book = OrderBook::new();
+
+        // Add two orders at same price
+        let order1 = make_order(1, 1, 100, 100, Side::Buy);
+        let order2 = make_order(2, 2, 100, 50, Side::Buy);
+        MatchingEngine::process_order(&mut book, order1);
+        MatchingEngine::process_order(&mut book, order2);
+
+        // Reduce order 1 by 30
+        let result = MatchingEngine::reduce_order(&mut book, 1, 30);
+
+        assert!(result.is_some());
+        let reduced = result.unwrap();
+        assert_eq!(reduced.order_id, 1);
+        assert_eq!(reduced.qty, 70); // 100 - 30
+
+        // Order 1 should still be first in queue (priority preserved)
+        let orders = book.all_orders();
+        assert_eq!(orders.len(), 2);
+        assert_eq!(orders[0].order_id, 1);
+        assert_eq!(orders[1].order_id, 2);
+    }
+
+    #[test]
+    fn test_reduce_order_to_zero_removes() {
+        let mut book = OrderBook::new();
+
+        let order = make_order(1, 1, 100, 100, Side::Buy);
+        MatchingEngine::process_order(&mut book, order);
+
+        // Reduce by full amount
+        let result = MatchingEngine::reduce_order(&mut book, 1, 100);
+
+        assert!(result.is_some());
+        assert!(book.all_orders().is_empty(), "Order should be removed");
+        assert!(book.best_bid().is_none());
+    }
+
+    #[test]
+    fn test_reduce_order_nonexistent() {
+        let mut book = OrderBook::new();
+
+        let result = MatchingEngine::reduce_order(&mut book, 999, 10);
+        assert!(result.is_none());
+    }
+
+    // =========================================================
+    // MoveOrder Tests
+    // =========================================================
+
+    #[test]
+    fn test_move_order_changes_price() {
+        let mut book = OrderBook::new();
+
+        let order = make_order(1, 1, 100, 10, Side::Buy);
+        MatchingEngine::process_order(&mut book, order);
+
+        assert_eq!(book.best_bid(), Some(100));
+
+        // Move to new price
+        let result = MatchingEngine::move_order(&mut book, 1, 105);
+
+        assert!(result.is_some());
+        let moved = result.unwrap();
+        assert_eq!(moved.price, 105);
+        assert_eq!(book.best_bid(), Some(105));
+    }
+
+    #[test]
+    fn test_move_order_loses_priority() {
+        let mut book = OrderBook::new();
+
+        // Add two orders at same price
+        let order1 = make_order(1, 1, 100, 10, Side::Buy);
+        let order2 = make_order(2, 2, 100, 10, Side::Buy);
+        MatchingEngine::process_order(&mut book, order1);
+        MatchingEngine::process_order(&mut book, order2);
+
+        // Order 1 has priority (inserted first)
+        let orders_before = book.all_orders();
+        assert_eq!(orders_before[0].order_id, 1);
+
+        // Move order 1 to same price level
+        MatchingEngine::move_order(&mut book, 1, 100);
+
+        // Order 1 should now be AFTER order 2 (priority lost)
+        let orders_after = book.all_orders();
+        assert_eq!(orders_after.len(), 2);
+        assert_eq!(orders_after[0].order_id, 2);
+        assert_eq!(orders_after[1].order_id, 1);
+    }
+
+    #[test]
+    fn test_move_order_nonexistent() {
+        let mut book = OrderBook::new();
+
+        let result = MatchingEngine::move_order(&mut book, 999, 100);
+        assert!(result.is_none());
     }
 }

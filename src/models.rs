@@ -68,6 +68,37 @@ pub enum OrderStatus {
 }
 
 // ============================================================
+// TIME IN FORCE - Order execution policy
+// ============================================================
+
+/// Time-in-force policy for order execution
+///
+/// This controls how long an order remains active and how it handles
+/// partial fills:
+/// - GTC: Rest in order book until filled or cancelled
+/// - IOC: Execute immediately, cancel unfilled remainder
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum TimeInForce {
+    #[default]
+    #[serde(rename = "GTC")]
+    GTC, // Good Till Cancel (default): order rests in book until filled/cancelled
+    #[serde(rename = "IOC")]
+    IOC, // Immediate or Cancel: fill what's possible, expire remainder
+}
+
+impl TryFrom<u8> for TimeInForce {
+    type Error = &'static str;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Self::GTC),
+            1 => Ok(Self::IOC),
+            _ => Err("Invalid TimeInForce value"),
+        }
+    }
+}
+
+// ============================================================
 // INTERNAL ORDER (the core order type used throughout the system)
 // ============================================================
 
@@ -85,6 +116,7 @@ pub struct InternalOrder {
     pub filled_qty: u64,
     pub side: Side,
     pub order_type: OrderType,
+    pub time_in_force: TimeInForce,
     pub status: OrderStatus,
     pub lock_version: u64,
     pub seq_id: u64,
@@ -113,6 +145,7 @@ impl InternalOrder {
             filled_qty: 0,
             side,
             order_type: OrderType::Limit,
+            time_in_force: TimeInForce::GTC,
             status: OrderStatus::NEW,
             lock_version: 0,
             seq_id: 0,
@@ -139,6 +172,7 @@ impl InternalOrder {
             qty,
             side,
             order_type: OrderType::Limit,
+            time_in_force: TimeInForce::GTC,
             status: OrderStatus::NEW,
             filled_qty: 0,
             lock_version: 0,
@@ -165,6 +199,7 @@ impl InternalOrder {
             filled_qty: 0,
             side,
             order_type: OrderType::Market,
+            time_in_force: TimeInForce::IOC, // Market orders are IOC by nature
             status: OrderStatus::NEW,
             ingested_at_ns: 0,
             lock_version: 0,

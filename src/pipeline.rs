@@ -99,6 +99,20 @@ pub enum OrderAction {
         /// Timestamp when order was ingested (nanoseconds)
         ingested_at_ns: u64,
     },
+    /// Reduce an order's quantity
+    Reduce {
+        order_id: u64,
+        user_id: u64,
+        reduce_qty: u64,
+        ingested_at_ns: u64,
+    },
+    /// Move an order to a new price
+    Move {
+        order_id: u64,
+        user_id: u64,
+        new_price: u64,
+        ingested_at_ns: u64,
+    },
 }
 
 /// Result from UBSCore processing
@@ -142,6 +156,20 @@ pub enum ValidAction {
         /// The user ID (for validation/logging)
         user_id: u64,
         /// Timestamp when order was ingested (nanoseconds)
+        ingested_at_ns: u64,
+    },
+    /// Reduce an order's quantity
+    Reduce {
+        order_id: u64,
+        user_id: u64,
+        reduce_qty: u64,
+        ingested_at_ns: u64,
+    },
+    /// Move an order to a new price
+    Move {
+        order_id: u64,
+        user_id: u64,
+        new_price: u64,
         ingested_at_ns: u64,
     },
 }

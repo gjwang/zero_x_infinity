@@ -13,7 +13,7 @@ use crate::pipeline::OrderAction;
 use super::state::AppState;
 use super::types::{
     AccountResponseData, ApiResponse, CancelOrderRequest, ClientOrder, DepthApiData,
-    OrderResponseData, error_codes,
+    MoveOrderRequest, OrderResponseData, ReduceOrderRequest, decimal_to_u64, error_codes,
 };
 
 use crate::symbol_manager::SymbolManager;
@@ -149,6 +149,7 @@ pub async fn create_order(
     // 1. Extract user_id from authenticated user
     let user_id = user.user_id as u64;
     tracing::info!("[TRACE] Create Order: Received from User {}", user_id);
+    tracing::info!("[TRACE] Request Details: {:?}", req);
 
     // 2. Validate and parse ClientOrder
     let validated =
@@ -276,6 +277,163 @@ pub async fn cancel_order(
             accepted_at: now_ms(),
         })),
     ))
+}
+
+/// Reduce order quantity
+#[utoipa::path(
+    post,
+    path = "/api/v1/private/order/reduce",
+    request_body(content = ReduceOrderRequest, description = "Reduce order quantity", content_type = "application/json"),
+    responses(
+        (status = 202, description = "Reduce request accepted", content_type = "application/json"),
+        (status = 400, description = "Invalid parameters"),
+        (status = 401, description = "Authentication failed"),
+        (status = 503, description = "Service unavailable")
+    ),
+    security(("ed25519_auth" = [])),
+    tag = "Trading"
+)]
+pub async fn reduce_order(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<crate::api_auth::AuthenticatedUser>,
+    Json(req): Json<ReduceOrderRequest>,
+) -> Result<(StatusCode, Json<ApiResponse<OrderResponseData>>), (StatusCode, Json<ApiResponse<()>>)>
+{
+    let user_id = user.user_id as u64;
+    let symbol_info = state
+        .symbol_mgr
+        .get_symbol_info_by_id(state.active_symbol_id)
+        .ok_or((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error(
+                error_codes::INTERNAL_ERROR,
+                "Active symbol not found",
+            )),
+        ))?;
+
+    let reduce_qty_u64 =
+        decimal_to_u64(req.reduce_qty, symbol_info.base_decimals).map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<()>::error(error_codes::INVALID_PARAMETER, e)),
+            )
+        })?;
+
+    tracing::info!(
+        "[TRACE] Reduce Order {}: Received from User {}",
+        req.order_id,
+        user_id
+    );
+
+    let action = OrderAction::Reduce {
+        order_id: req.order_id,
+        user_id,
+        reduce_qty: reduce_qty_u64,
+        ingested_at_ns: now_ns(),
+    };
+
+    if state.order_queue.push(action).is_err() {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ApiResponse::<()>::error(
+                error_codes::SERVICE_UNAVAILABLE,
+                "Order queue is full",
+            )),
+        ));
+    }
+
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(ApiResponse::success(OrderResponseData {
+            order_id: req.order_id,
+            cid: None,
+            order_status: "ACCEPTED".to_string(),
+            accepted_at: now_ms(),
+        })),
+    ))
+}
+
+/// Move order price
+#[utoipa::path(
+    post,
+    path = "/api/v1/private/order/move",
+    request_body(content = MoveOrderRequest, description = "Move order to new price", content_type = "application/json"),
+    responses(
+        (status = 202, description = "Move request accepted", content_type = "application/json"),
+        (status = 400, description = "Invalid parameters"),
+        (status = 401, description = "Authentication failed"),
+        (status = 503, description = "Service unavailable")
+    ),
+    security(("ed25519_auth" = [])),
+    tag = "Trading"
+)]
+pub async fn move_order(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<crate::api_auth::AuthenticatedUser>,
+    Json(req): Json<MoveOrderRequest>,
+) -> Result<(StatusCode, Json<ApiResponse<OrderResponseData>>), (StatusCode, Json<ApiResponse<()>>)>
+{
+    let user_id = user.user_id as u64;
+    let symbol_info = state
+        .symbol_mgr
+        .get_symbol_info_by_id(state.active_symbol_id)
+        .ok_or((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error(
+                error_codes::INTERNAL_ERROR,
+                "Active symbol not found",
+            )),
+        ))?;
+
+    let new_price_u64 = decimal_to_u64(req.new_price, symbol_info.price_decimal).map_err(|e| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<()>::error(error_codes::INVALID_PARAMETER, e)),
+        )
+    })?;
+
+    tracing::info!(
+        "[TRACE] Move Order {}: Received from User {}",
+        req.order_id,
+        user_id
+    );
+
+    let action = OrderAction::Move {
+        order_id: req.order_id,
+        user_id,
+        new_price: new_price_u64,
+        ingested_at_ns: now_ns(),
+    };
+
+    if state.order_queue.push(action).is_err() {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ApiResponse::<()>::error(
+                error_codes::SERVICE_UNAVAILABLE,
+                "Order queue is full",
+            )),
+        ));
+    }
+
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(ApiResponse::success(OrderResponseData {
+            order_id: req.order_id,
+            cid: None,
+            order_status: "ACCEPTED".to_string(),
+            accepted_at: now_ms(),
+        })),
+    ))
+}
+
+/// Cancel order by ID (DELETE method)
+pub async fn cancel_order_by_id(
+    state: State<Arc<AppState>>,
+    user: Extension<crate::api_auth::AuthenticatedUser>,
+    Path(order_id): Path<u64>,
+) -> Result<(StatusCode, Json<ApiResponse<OrderResponseData>>), (StatusCode, Json<ApiResponse<()>>)>
+{
+    cancel_order(state, user, Json(CancelOrderRequest { order_id })).await
 }
 
 /// Create internal transfer endpoint

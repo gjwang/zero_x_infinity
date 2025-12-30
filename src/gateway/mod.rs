@@ -287,6 +287,12 @@ pub async fn run_server(
         // Trading operations
         .route("/order", post(handlers::create_order))
         .route("/cancel", post(handlers::cancel_order))
+        .route(
+            "/order/{order_id}",
+            axum::routing::delete(handlers::cancel_order_by_id),
+        )
+        .route("/order/reduce", post(handlers::reduce_order))
+        .route("/order/move", post(handlers::move_order))
         // Internal transfers (Phase 0x0B-a)
         .route("/transfer", post(handlers::create_transfer))
         .route("/transfer/{req_id}", get(handlers::get_transfer))

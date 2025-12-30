@@ -18,7 +18,7 @@
 //! | Group commit (1ms) | ~1µs amortized | ~1M/s |
 
 use crate::core_types::SeqNum;
-use crate::models::InternalOrder;
+use crate::models::{InternalOrder, TimeInForce};
 use std::fs::{File, OpenOptions};
 use std::io::{self, BufWriter, Write};
 use std::path::Path;
@@ -68,7 +68,7 @@ impl WalEntry {
     /// Serialize to CSV line (development format)
     pub fn to_csv_line(&self) -> String {
         format!(
-            "{},{},{},{},{},{},{},{:?},{:?},{}\n",
+            "{},{},{},{},{},{},{},{:?},{:?},{:?},{}\n",
             self.seq_id,
             self.timestamp_ns,
             self.order.order_id,
@@ -78,6 +78,7 @@ impl WalEntry {
             self.order.qty,
             self.order.side,
             self.order.order_type,
+            self.order.time_in_force,
             self.order.ingested_at_ns,
         )
     }
@@ -306,7 +307,12 @@ impl WalReader {
             _ => return None,
         };
 
-        let ingested_at_ns: u64 = parts[9].trim().parse().unwrap_or(0);
+        let time_in_force = match parts[9].trim() {
+            "IOC" => TimeInForce::IOC,
+            _ => TimeInForce::GTC,
+        };
+
+        let ingested_at_ns: u64 = parts[10].trim().parse().unwrap_or(0);
 
         let order = InternalOrder {
             order_id,
@@ -317,6 +323,7 @@ impl WalReader {
             filled_qty: 0,
             side,
             order_type,
+            time_in_force,
             status: OrderStatus::NEW,
             ingested_at_ns,
             lock_version: 0,
@@ -435,7 +442,7 @@ mod tests {
         };
 
         let csv = entry.to_csv_line();
-        // Format: seq_id,timestamp,order_id,user_id,symbol_id,price,qty,side,type,ingested_at
-        assert!(csv.contains("1,1234567890,42,100,0,50000,1000,Buy,Limit,0"));
+        // Format: seq_id,timestamp,order_id,user_id,symbol_id,price,qty,side,type,tif,ingested_at
+        assert!(csv.contains("1,1234567890,42,100,0,50000,1000,Buy,Limit,GTC,0"));
     }
 }

@@ -114,7 +114,9 @@ impl UBSCore {
     {
         use crate::messages::ValidOrder;
         use crate::pipeline::ValidAction;
-        use crate::ubscore_wal::wal::{CancelPayload, OrderPayload, UBSCoreWalReader};
+        use crate::ubscore_wal::wal::{
+            CancelPayload, MovePayload, OrderPayload, ReducePayload, UBSCoreWalReader,
+        };
 
         let wal_file = self.data_dir.join("wal/current.wal");
         if !wal_file.exists() {
@@ -147,6 +149,8 @@ impl UBSCore {
                         side,
                         order_type: crate::models::OrderType::try_from(payload.order_type)
                             .unwrap_or(crate::models::OrderType::Limit),
+                        time_in_force: crate::models::TimeInForce::try_from(payload.time_in_force)
+                            .unwrap_or(crate::models::TimeInForce::GTC),
                         status: crate::models::OrderStatus::NEW,
                         lock_version: 0,
                         seq_id: entry.header.seq_id,
@@ -166,6 +170,26 @@ impl UBSCore {
                         order_id: payload.order_id,
                         user_id: payload.user_id,
                         ingested_at_ns: 0, // In WAL v2 we don't store ingest time for cancel yet
+                    })
+                }
+                crate::wal_v2::WalEntryType::Reduce => {
+                    let payload: ReducePayload = bincode::deserialize(&entry.payload)
+                        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+                    callback(ValidAction::Reduce {
+                        order_id: payload.order_id,
+                        user_id: payload.user_id,
+                        reduce_qty: payload.reduce_qty,
+                        ingested_at_ns: 0,
+                    })
+                }
+                crate::wal_v2::WalEntryType::Move => {
+                    let payload: MovePayload = bincode::deserialize(&entry.payload)
+                        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+                    callback(ValidAction::Move {
+                        order_id: payload.order_id,
+                        user_id: payload.user_id,
+                        new_price: payload.new_price,
+                        ingested_at_ns: 0,
                     })
                 }
                 _ => Ok(true), // Skip other types (Deposit/Withdraw aren't needed by ME)
@@ -392,14 +416,61 @@ impl UBSCore {
                 order_id,
                 user_id,
                 ingested_at_ns,
-            } => Ok((
-                vec![ValidAction::Cancel {
-                    order_id,
-                    user_id,
-                    ingested_at_ns,
-                }],
-                vec![],
-            )),
+            } => {
+                // Persist to WAL
+                if let Some(ref mut wal) = self.wal_v2 {
+                    let _ = wal
+                        .append_cancel(&crate::ubscore_wal::wal::CancelOrder { order_id, user_id });
+                }
+                Ok((
+                    vec![ValidAction::Cancel {
+                        order_id,
+                        user_id,
+                        ingested_at_ns,
+                    }],
+                    vec![],
+                ))
+            }
+            OrderAction::Reduce {
+                order_id,
+                user_id,
+                reduce_qty,
+                ingested_at_ns,
+            } => {
+                // Persist to WAL
+                if let Some(ref mut wal) = self.wal_v2 {
+                    let _ = wal.append_reduce(order_id, user_id, reduce_qty);
+                }
+                Ok((
+                    vec![ValidAction::Reduce {
+                        order_id,
+                        user_id,
+                        reduce_qty,
+                        ingested_at_ns,
+                    }],
+                    vec![],
+                ))
+            }
+            OrderAction::Move {
+                order_id,
+                user_id,
+                new_price,
+                ingested_at_ns,
+            } => {
+                // Persist to WAL
+                if let Some(ref mut wal) = self.wal_v2 {
+                    let _ = wal.append_move(order_id, user_id, new_price);
+                }
+                Ok((
+                    vec![ValidAction::Move {
+                        order_id,
+                        user_id,
+                        new_price,
+                        ingested_at_ns,
+                    }],
+                    vec![],
+                ))
+            }
         }
     }
 

@@ -190,7 +190,9 @@ pub async fn query_order(
                 0 => "NEW",
                 1 => "PARTIALLY_FILLED",
                 2 => "FILLED",
-                3 => "CANCELLED",
+                3 => "CANCELED",
+                4 => "REJECTED",
+                5 => "EXPIRED",
                 _ => "UNKNOWN",
             }
             .to_string(),
@@ -262,7 +264,9 @@ pub async fn query_orders(
                 0 => "NEW",
                 1 => "PARTIALLY_FILLED",
                 2 => "FILLED",
-                3 => "CANCELLED",
+                3 => "CANCELED",
+                4 => "REJECTED",
+                5 => "EXPIRED",
                 _ => "UNKNOWN",
             }
             .to_string(),
