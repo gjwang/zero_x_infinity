@@ -27,6 +27,14 @@ from common.chain_utils_extended import (
     setup_jwt_user, BTC_REQUIRED_CONFIRMATIONS
 )
 
+# Import Ed25519 auth library for trades API
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')))
+try:
+    from scripts.lib.api_auth import ApiClient
+    HAS_API_AUTH = True
+except ImportError:
+    HAS_API_AUTH = False
+
 
 class TwoUserOrderMatchingE2E:
     """Two-user order matching with strict amount verification"""
@@ -38,14 +46,20 @@ class TwoUserOrderMatchingE2E:
         self.gateway = GatewayClientExtended()
         self.results = []
         
-        # User A: BTC seller
+        # User A: BTC seller (JWT + API Key for trades)
         self.user_a_id = None
         self.user_a_headers = None
+        self.user_a_api_key = None
+        self.user_a_api_secret = None
+        self.user_a_api_client = None
         self.user_a_btc_deposit = Decimal("1.0")
         
-        # User B: BTC buyer
+        # User B: BTC buyer (JWT + API Key for trades)
         self.user_b_id = None
         self.user_b_headers = None
+        self.user_b_api_key = None
+        self.user_b_api_secret = None
+        self.user_b_api_client = None
         
         # Trade parameters
         self.trade_price = Decimal("50000")  # USDT per BTC
@@ -137,6 +151,26 @@ class TwoUserOrderMatchingE2E:
             self.user_a_id, _, self.user_a_headers = setup_jwt_user()
             print(f"   ✅ User A: {self.user_a_id}")
             self.add_result("1.1 User A Created", True)
+            
+            # Create API Key for User A (for trades API)
+            if HAS_API_AUTH:
+                api_key_resp = requests.post(
+                    f"{self.gateway.base_url}/api/v1/user/apikeys",
+                    json={"label": "L4 Test User A"},
+                    headers=self.user_a_headers
+                )
+                if api_key_resp.status_code == 201:
+                    api_data = api_key_resp.json().get("data", {})
+                    self.user_a_api_key = api_data.get("api_key")
+                    self.user_a_api_secret = api_data.get("api_secret")
+                    self.user_a_api_client = ApiClient(
+                        api_key=self.user_a_api_key,
+                        private_key_hex=self.user_a_api_secret,
+                        base_url=self.gateway.base_url
+                    )
+                    print(f"   ✅ User A API Key created")
+                else:
+                    print(f"   ⚠️ API Key creation failed: {api_key_resp.status_code}")
         except Exception as e:
             print(f"   ❌ Failed: {e}")
             return self.add_result("1.1 User A Created", False)
@@ -147,6 +181,26 @@ class TwoUserOrderMatchingE2E:
             self.user_b_id, _, self.user_b_headers = setup_jwt_user()
             print(f"   ✅ User B: {self.user_b_id}")
             self.add_result("1.2 User B Created", True)
+            
+            # Create API Key for User B (for trades API)
+            if HAS_API_AUTH:
+                api_key_resp = requests.post(
+                    f"{self.gateway.base_url}/api/v1/user/apikeys",
+                    json={"label": "L4 Test User B"},
+                    headers=self.user_b_headers
+                )
+                if api_key_resp.status_code == 201:
+                    api_data = api_key_resp.json().get("data", {})
+                    self.user_b_api_key = api_data.get("api_key")
+                    self.user_b_api_secret = api_data.get("api_secret")
+                    self.user_b_api_client = ApiClient(
+                        api_key=self.user_b_api_key,
+                        private_key_hex=self.user_b_api_secret,
+                        base_url=self.gateway.base_url
+                    )
+                    print(f"   ✅ User B API Key created")
+                else:
+                    print(f"   ⚠️ API Key creation failed: {api_key_resp.status_code}")
         except Exception as e:
             print(f"   ❌ Failed: {e}")
             return self.add_result("1.2 User B Created", False)
@@ -364,17 +418,53 @@ class TwoUserOrderMatchingE2E:
         
         time.sleep(2)  # Wait for matching
         
-        # Check User A trades
-        # NOTE: /api/v1/private/trades requires API Key auth (Ed25519 signature), not JWT
-        # This is beyond the scope of this E2E test which focuses on deposit/transfer flow
+        # Check User A trades using Ed25519 API Key authentication
         print("\\n📋 5.1 User A Trade History")
-        print("   📋 Skipped: Requires API Key auth (Ed25519), not JWT")
-        self.add_result("5.1 User A Trades", True, "Skipped (API Key auth required)")
+        if self.user_a_api_client:
+            try:
+                resp = self.user_a_api_client.get("/api/v1/private/trades", params={"symbol": "BTC_USDT"})
+                if resp.status_code == 200:
+                    trades = resp.json().get("data", [])
+                    if trades:
+                        print(f"   ✅ User A has {len(trades)} trade(s)")
+                        for t in trades[:3]:
+                            print(f"      {t.get('side')}: {t.get('qty')} @ {t.get('price')}")
+                        self.add_result("5.1 User A Trades", True, f"{len(trades)} trades")
+                    else:
+                        print(f"   📋 No trades yet (orders may not have matched)")
+                        self.add_result("5.1 User A Trades", True, "No trades")
+                else:
+                    print(f"   ❌ Trades API returned {resp.status_code}: {resp.text[:100]}")
+                    self.add_result("5.1 User A Trades", False)
+            except Exception as e:
+                print(f"   ⚠️ Exception: {e}")
+                self.add_result("5.1 User A Trades", False)
+        else:
+            print("   ⚠️ No API client (pynacl not installed)")
+            self.add_result("5.1 User A Trades", True, "Skipped (no pynacl)")
         
-        # Check User B trades (same reason as 5.1)
+        # Check User B trades using Ed25519 API Key authentication
         print("\\n📋 5.2 User B Trade History")
-        print("   📋 Skipped: Requires API Key auth (Ed25519), not JWT")
-        self.add_result("5.2 User B Trades", True, "Skipped (API Key auth required)")
+        if self.user_b_api_client:
+            try:
+                resp = self.user_b_api_client.get("/api/v1/private/trades", params={"symbol": "BTC_USDT"})
+                if resp.status_code == 200:
+                    trades = resp.json().get("data", [])
+                    if trades:
+                        print(f"   ✅ User B has {len(trades)} trade(s)")
+                        self.add_result("5.2 User B Trades", True, f"{len(trades)} trades")
+                    else:
+                        print(f"   📋 No trades yet")
+                        self.add_result("5.2 User B Trades", True, "No trades")
+                else:
+                    print(f"   ❌ Trades API returned {resp.status_code}: {resp.text[:100]}")
+                    self.add_result("5.2 User B Trades", False)
+            except Exception as e:
+                print(f"   ⚠️ Exception: {e}")
+                self.add_result("5.2 User B Trades", False)
+        else:
+            print("   ⚠️ No API client (pynacl not installed)")
+            self.add_result("5.2 User B Trades", True, "Skipped (no pynacl)")
         
         # Final balance check
         print("\\n📋 5.3 Final Balance Verification")
