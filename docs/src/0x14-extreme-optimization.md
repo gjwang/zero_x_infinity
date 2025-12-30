@@ -64,13 +64,60 @@ We introduce **Tier 2 Pipeline Benchmarks**:
 
 **Goal**: Establish the **"Red Line"** – the current baseline performance under ideal conditions. All future optimizations will be measured against this.
 
-#### 2.3 The "Metal Harness"
+---
+
+### 3. The Golden Data Strategy
+
+To ensure our benchmarks are reproducible and comparable to industry standards, we adopt the **Exchange-Core Verification Kit**.
+
+#### 3.1 Reference: Exchange-Core
+
+[exchange-core](https://github.com/exchange-core/exchange-core) is a well-known open-source Java matching engine. Its test suite provides:
+
+*   **Deterministic Data Generation**: Using a Java-compatible LCG (Linear Congruential Generator) PRNG.
+*   **Standard Datasets**: From `SinglePair` (1K orders) to `Huge` (30M orders).
+*   **Performance Baselines**: Documented latency percentiles on reference hardware.
+
+#### 3.2 Golden Data Files
+
+We have pre-generated "golden" CSV files using the exact Java algorithm (Seed = 1):
+
+| File | Records | Use Case |
+|------|---------|----------|
+| `golden_single_pair_margin.csv` | 1,100 | Futures margin contract verification |
+| `golden_single_pair_exchange.csv` | 1,100 | Spot exchange verification |
+
+**CSV Format**: `phase,command,order_id,symbol,price,size,action,order_type,uid`
+
+These files serve as the **ground truth** for verifying that our Rust LCG PRNG and order generator match the Java implementation byte-for-byte.
+
+#### 3.3 Performance Targets (Reference Hardware)
+
+From the original Java benchmarks (Intel Xeon X5690 @ 3.47GHz):
+
+| Operation | Mean Latency |
+|-----------|--------------|
+| Move Order | ~0.5 µs |
+| Cancel Order | ~0.7 µs |
+| Place Order | ~1.0 µs |
+
+| Rate (ops/sec) | P50 | P99 | Worst |
+|----------------|-----|-----|-------|
+| 1 M | 0.5 µs | 4.0 µs | 45 µs |
+| 3 M | 0.7 µs | 15.0 µs | 60 µs |
+
+> **Target**: Rust implementation on modern hardware (i9-13900K) should achieve **< 200ns** core latency.
+
+---
+
+### 4. The "Metal Harness"
 
 We will build a dedicated benchmark harness:
 
 ```
 benches/metal_pipeline.rs
-├── Pre-allocated 1M orders in memory
+├── LCG PRNG (Java-compatible)
+├── Load orders from golden_data/*.csv
 ├── Mock RingBuffer (no crossbeam overhead)
 ├── Mock WAL (no fsync)
 └── Measures: Latency (P50, P99), Throughput (TPS)
@@ -78,7 +125,7 @@ benches/metal_pipeline.rs
 
 This harness is the foundation of Phase V. Without it, any optimization is just guesswork.
 
-
+---
 
 <div id="-chinese"></div>
 
@@ -138,18 +185,63 @@ This harness is the foundation of Phase V. Without it, any optimization is just 
 
 **目标**：建立 **"Red Line (红线)"** – 理想条件下的当前基线性能。所有后续优化都将以此为基准进行衡量。
 
-#### 2.3 "Metal Harness" (金属测试脚手架)
+---
+
+### 3. 黄金数据策略 (Golden Data Strategy)
+
+为了确保我们的基准测试可重现且与业界标准可比，我们采用 **Exchange-Core Verification Kit**。
+
+#### 3.1 参考项目: Exchange-Core
+
+[exchange-core](https://github.com/exchange-core/exchange-core) 是一个知名的开源 Java 撮合引擎。其测试套件提供了：
+
+*   **确定性数据生成**: 使用 Java 兼容的 LCG (线性同余发生器) PRNG。
+*   **标准数据集**: 从 `SinglePair` (1K 订单) 到 `Huge` (3000万订单)。
+*   **性能基线**: 在参考硬件上记录的延迟百分位数据。
+
+#### 3.2 黄金数据文件
+
+我们使用精确的 Java 算法 (Seed = 1) 预生成了"黄金" CSV 文件：
+
+| 文件 | 记录数 | 用途 |
+|------|--------|------|
+| `golden_single_pair_margin.csv` | 1,100 | 期货保证金合约验证 |
+| `golden_single_pair_exchange.csv` | 1,100 | 现货交易验证 |
+
+**CSV 格式**: `phase,command,order_id,symbol,price,size,action,order_type,uid`
+
+这些文件作为**真相来源 (Ground Truth)**，用于验证我们的 Rust LCG PRNG 和订单生成器与 Java 实现完全一致。
+
+#### 3.3 性能目标 (参考硬件)
+
+来自原始 Java 基准测试 (Intel Xeon X5690 @ 3.47GHz)：
+
+| 操作 | 平均延迟 |
+|------|----------|
+| Move Order | ~0.5 µs |
+| Cancel Order | ~0.7 µs |
+| Place Order | ~1.0 µs |
+
+| 速率 (ops/sec) | P50 | P99 | 最差 |
+|----------------|-----|-----|------|
+| 1 M | 0.5 µs | 4.0 µs | 45 µs |
+| 3 M | 0.7 µs | 15.0 µs | 60 µs |
+
+> **目标**: Rust 实现在现代硬件 (i9-13900K) 上应达到 **< 200ns** 核心延迟。
+
+---
+
+### 4. "Metal Harness" (金属测试脚手架)
 
 我们将构建一个专用的基准测试脚手架：
 
 ```
 benches/metal_pipeline.rs
-├── 预分配 100 万订单在内存中
+├── LCG PRNG (Java 兼容)
+├── 从 golden_data/*.csv 加载订单
 ├── Mock RingBuffer (无 crossbeam 开销)
 ├── Mock WAL (无 fsync)
 └── 测量指标: 延迟 (P50, P99), 吞吐量 (TPS)
 ```
 
 这个脚手架是 Phase V 的基础。没有它，任何优化都只是猜测。
-
-
