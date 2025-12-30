@@ -11,15 +11,15 @@
 #   2. 或者使用 --with-gateway 参数自动启动
 #
 # 用法:
-#   ./run_qa_ci.sh              # 假设 Gateway 已运行
-#   ./run_qa_ci.sh --with-gateway  # 自动启动 Gateway
+#   ./scripts/test_0x14b_qa.sh              # 假设 Gateway 已运行
+#   ./scripts/test_0x14b_qa.sh --with-gateway  # 自动启动 Gateway
 #
 # =============================================================================
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 GATEWAY_URL="${GATEWAY_URL:-http://localhost:8080}"
 GATEWAY_PID=""
 
@@ -54,10 +54,10 @@ check_gateway() {
     lsof -i :8080 > /dev/null 2>&1
 }
 
-# Function to wait for Gateway
+# Function to wait for Gateway (allows time for compilation)
 wait_for_gateway() {
-    echo -n "⏳ Waiting for Gateway..."
-    for i in {1..30}; do
+    echo -n "⏳ Waiting for Gateway (may compile first)..."
+    for i in {1..120}; do
         if check_gateway; then
             echo -e " ${GREEN}Ready!${NC}"
             return 0

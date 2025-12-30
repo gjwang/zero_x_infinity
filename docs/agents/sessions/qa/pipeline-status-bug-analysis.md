@@ -173,9 +173,9 @@ Total: 43/43 PASS
 
 ```bash
 # 方式 1: 使用 Shell 脚本 (推荐用于 CI)
-./scripts/tests/0x14b_matching/run_qa_ci.sh
+./scripts/test_0x14b_qa.sh --with-gateway
 
-# 方式 2: 直接运行 Python
+# 方式 2: 直接运行 Python (需先启动 Gateway)
 python3 scripts/tests/0x14b_matching/run_all_qa_tests.py
 ```
 
@@ -186,12 +186,8 @@ python3 scripts/tests/0x14b_matching/run_all_qa_tests.py
 0x14b-qa-tests:
   runs-on: ubuntu-latest
   steps:
-    - name: Start Gateway
-      run: cargo run --release -- --gateway --env dev &
-    - name: Wait for Gateway
-      run: sleep 10
     - name: Run QA Tests
-      run: ./scripts/tests/0x14b_matching/run_qa_ci.sh
+      run: ./scripts/test_0x14b_qa.sh --with-gateway
 ```
 
 ### 预期输出
