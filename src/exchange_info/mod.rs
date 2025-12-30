@@ -6,10 +6,12 @@
 //! - Validation logic for asset and symbol names
 
 pub mod asset;
+pub mod chain;
 pub mod symbol;
 pub mod validation;
 
 // Re-export commonly used types
 pub use asset::{Asset, AssetManager};
+pub use chain::ChainManager;
 pub use symbol::{Symbol, SymbolManager};
 pub use validation::{AssetName, SymbolName, ValidationError};

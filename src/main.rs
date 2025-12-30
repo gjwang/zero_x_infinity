@@ -1077,6 +1077,10 @@ fn run_sentinel(app_config: &zero_x_infinity::config::AppConfig) -> anyhow::Resu
 
     println!("  ✅ Connected to PostgreSQL");
 
+    // Initialize ChainManager for hot reloading
+    use zero_x_infinity::exchange_info::ChainManager;
+    let chain_manager = std::sync::Arc::new(ChainManager::new(pool.clone()));
+
     println!("\n[3] Initializing scanners...");
 
     // Create worker
@@ -1113,9 +1117,22 @@ fn run_sentinel(app_config: &zero_x_infinity::config::AppConfig) -> anyhow::Resu
         let eth_config = EthChainConfig::from_file(&eth_ref.config_path)
             .map_err(|e| anyhow::anyhow!("Failed to load ETH config: {}", e))?;
 
-        let scanner = EthScanner::new_mock(eth_config);
-        worker.add_scanner(Box::new(scanner));
-        println!("  ✅ ETH Scanner initialized (mock mode)");
+        // Try real RPC first, fallback to mock if unavailable
+        let scanner: Box<dyn zero_x_infinity::sentinel::ChainScanner> =
+            match EthScanner::new(eth_config.clone()) {
+                Ok(mut s) => {
+                    println!("  ✅ ETH Scanner initialized (real RPC mode)");
+                    s.set_chain_manager(chain_manager.clone());
+                    Box::new(s)
+                }
+                Err(e) => {
+                    println!("  ⚠️ ETH real RPC failed: {}, using mock mode", e);
+                    let mut s = EthScanner::new_mock(eth_config);
+                    s.set_chain_manager(chain_manager.clone());
+                    Box::new(s)
+                }
+            };
+        worker.add_scanner(scanner);
     }
 
     println!("\n  Total scanners: {}", worker.scanner_count());

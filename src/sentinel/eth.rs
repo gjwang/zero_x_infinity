@@ -8,22 +8,34 @@
 use super::config::EthChainConfig;
 use super::error::ScannerError;
 use super::scanner::{ChainScanner, DetectedDeposit, NodeHealth, ScannedBlock};
+use crate::exchange_info::ChainManager;
 use async_trait::async_trait;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::str::FromStr;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
+use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
+
+/// ETH Scanner that connects to Ethereum node via JSON-RPC
+/// Mutable state for hot reloading
+struct ScannerState {
+    /// Monitored contracts: Address(lower) -> (Symbol, Decimals)
+    contracts: HashMap<String, (String, u8)>,
+    last_refresh: Instant,
+}
 
 /// ETH Scanner that connects to Ethereum node via JSON-RPC
 pub struct EthScanner {
     config: EthChainConfig,
+    /// DB Chain Manager for Hot Reload
+    chain_manager: Option<Arc<ChainManager>>,
     /// HTTP client for RPC calls
     client: Option<Arc<Mutex<reqwest::Client>>>,
-    /// Set of monitored addresses (lowercase for comparison)
-    watched_addresses: HashSet<String>,
+    /// Mutable state (Hot Reloadable)
+    state: Arc<RwLock<ScannerState>>,
     /// Mock mode for testing without real node
     mock_mode: bool,
     /// Mock blocks for testing
@@ -143,8 +155,12 @@ impl EthScanner {
 
         Ok(Self {
             config,
+            chain_manager: None,
             client: Some(Arc::new(Mutex::new(client))),
-            watched_addresses: HashSet::new(),
+            state: Arc::new(RwLock::new(ScannerState {
+                contracts: HashMap::new(),
+                last_refresh: Instant::now(),
+            })),
             mock_mode: false,
             mock_blocks: Vec::new(),
         })
@@ -154,8 +170,12 @@ impl EthScanner {
     pub fn new_mock(config: EthChainConfig) -> Self {
         Self {
             config,
+            chain_manager: None,
             client: None,
-            watched_addresses: HashSet::new(),
+            state: Arc::new(RwLock::new(ScannerState {
+                contracts: HashMap::new(),
+                last_refresh: Instant::now(),
+            })),
             mock_mode: true,
             mock_blocks: Vec::new(),
         }
@@ -170,17 +190,31 @@ impl EthScanner {
     /// Addresses are normalized to lowercase for case-insensitive matching
     pub fn reload_addresses(&mut self, addresses: Vec<String>) {
         debug!("Reloading {} ETH addresses", addresses.len());
-        self.watched_addresses = addresses.into_iter().map(|a| a.to_lowercase()).collect();
+        let mut state = self.state.write().unwrap();
+        state.contracts.clear();
+        for addr in addresses {
+            // Default to UNKNOWN/18 for manual reload
+            state
+                .contracts
+                .insert(addr.to_lowercase(), ("UNKNOWN".to_string(), 18));
+        }
     }
 
     /// Check if an address is being watched (case-insensitive)
     pub fn is_watched(&self, address: &str) -> bool {
-        self.watched_addresses.contains(&address.to_lowercase())
+        let state = self.state.read().unwrap();
+        state.contracts.contains_key(&address.to_lowercase())
     }
 
     /// Get the number of watched addresses
     pub fn watched_count(&self) -> usize {
-        self.watched_addresses.len()
+        let state = self.state.read().unwrap();
+        state.contracts.len()
+    }
+
+    /// Set ChainManager for hot reloading
+    pub fn set_chain_manager(&mut self, manager: Arc<ChainManager>) {
+        self.chain_manager = Some(manager);
     }
 
     /// Get config reference
@@ -232,6 +266,9 @@ impl EthScanner {
 
     /// Scan a block for ETH deposits to watched addresses
     async fn scan_block_for_deposits(&self, height: u64) -> Result<ScannedBlock, ScannerError> {
+        // Hot Reload: Refresh addresses from DB if needed (debounced)
+        self.refresh_config().await;
+
         let height_hex = format!("0x{:x}", height);
 
         // Get block with transactions
@@ -360,20 +397,60 @@ impl EthScanner {
 
     /// Get token info (asset name, decimals) from contract address
     /// TODO: Load from database assets_tb in production
+    /// Get token info (asset name, decimals) from contract address
+    /// Uses cached config from state
     fn get_token_info(&self, contract_address: &str) -> (String, u8) {
-        // Hardcoded for common tokens - in production, load from assets_tb
         let addr_lower = contract_address.to_lowercase();
+        let state = self.state.read().unwrap();
 
-        // Common mainnet addresses (for reference)
-        match addr_lower.as_str() {
-            // USDT (Tether) - various networks
-            "0xdac17f958d2ee523a2206206994597c13d831ec7" => ("USDT".to_string(), 6),
-            // USDC - various networks
-            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48" => ("USDC".to_string(), 6),
-            // Default: unknown ERC20 with 18 decimals
-            _ => {
-                warn!("Unknown ERC20 contract: {}", contract_address);
-                ("ERC20".to_string(), 18)
+        if let Some((symbol, decimals)) = state.contracts.get(&addr_lower) {
+            return (symbol.clone(), *decimals);
+        }
+
+        // Fallback or Unknown
+        warn!("Unknown ERC20 contract: {}", contract_address);
+        ("ERC20".to_string(), 18)
+    }
+
+    /// Refresh configuration from DB if needed
+    pub async fn refresh_config(&self) {
+        if let Some(manager) = &self.chain_manager {
+            // Check last refresh time (read lock)
+            {
+                let state = self.state.read().unwrap();
+                if state.last_refresh.elapsed() < Duration::from_secs(60) {
+                    return;
+                }
+            }
+
+            info!("Refreshing ETH scanner config from DB...");
+            match manager.get_assets_by_chain("ETH").await {
+                Ok(assets) => {
+                    let mut new_contracts = HashMap::new();
+                    for asset in assets {
+                        if let Some(addr) = asset.contract_address {
+                            new_contracts.insert(
+                                addr.to_lowercase(),
+                                (asset.asset_symbol, asset.decimals as u8),
+                            );
+                        }
+                    }
+
+                    let mut state = self.state.write().unwrap();
+                    if new_contracts.len() != state.contracts.len() {
+                        info!(
+                            "Scanner config updated: {} contracts watched",
+                            new_contracts.len()
+                        );
+                    }
+                    state.contracts = new_contracts;
+                    state.last_refresh = Instant::now();
+                }
+                Err(e) => {
+                    error!("Failed to refresh chain config: {}", e);
+                    let mut state = self.state.write().unwrap();
+                    state.last_refresh = Instant::now();
+                }
             }
         }
     }
@@ -486,11 +563,19 @@ impl ChainScanner for EthScanner {
 
     fn reload_addresses(&mut self, addresses: Vec<String>) {
         debug!("Reloading {} ETH addresses", addresses.len());
-        self.watched_addresses = addresses.into_iter().map(|a| a.to_lowercase()).collect();
+        let mut state = self.state.write().unwrap();
+        state.contracts.clear();
+        for addr in addresses {
+            // Default to UNKNOWN/18 for manual reload
+            state
+                .contracts
+                .insert(addr.to_lowercase(), ("UNKNOWN".to_string(), 18));
+        }
     }
 
     fn watched_count(&self) -> usize {
-        self.watched_addresses.len()
+        let state = self.state.read().unwrap();
+        state.contracts.len()
     }
 }
 
@@ -559,10 +644,11 @@ mod tests {
         assert!(scanner.mock_mode);
     }
 
-    #[test]
-    fn test_address_watching_case_insensitive() {
+    #[tokio::test]
+    async fn test_address_watching_case_insensitive() {
         let mut scanner = EthScanner::new_mock(test_config());
 
+        // Use new method for test
         scanner.reload_addresses(vec![
             "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045".to_string(), // Vitalik
         ]);
