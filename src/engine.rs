@@ -637,4 +637,55 @@ mod tests {
         let result = MatchingEngine::move_order(&mut book, 999, 100);
         assert!(result.is_none());
     }
+
+    /// MOV-001 Scenario: Move order from different price to existing order's price
+    /// A is placed at 90, B is placed at 100, A is moved to 100
+    /// Then a sell at 100 should match B first (not A)
+    #[test]
+    fn test_mov_001_priority_loss_scenario() {
+        let mut book = OrderBook::new();
+
+        // 1. Place Order A at 90 (first)
+        let order_a = make_order(1, 1, 90, 10, Side::Buy);
+        MatchingEngine::process_order(&mut book, order_a);
+        assert_eq!(book.best_bid(), Some(90));
+
+        // 2. Place Order B at 100 (second)
+        let order_b = make_order(2, 2, 100, 10, Side::Buy);
+        MatchingEngine::process_order(&mut book, order_b);
+        assert_eq!(book.best_bid(), Some(100)); // B is now best bid
+
+        // 3. Move A to 100 (same price as B)
+        let moved = MatchingEngine::move_order(&mut book, 1, 100);
+        assert!(moved.is_some());
+        assert_eq!(moved.unwrap().price, 100);
+
+        // 4. Verify order in book: B should be first, A should be second
+        let orders = book.all_orders();
+        assert_eq!(orders.len(), 2);
+        assert_eq!(
+            orders[0].order_id, 2,
+            "B should be first (had priority at 100)"
+        );
+        assert_eq!(
+            orders[1].order_id, 1,
+            "A should be second (moved, lost priority)"
+        );
+
+        // 5. Match with a Sell at 100 for 10 qty (only matches one order)
+        let sell_order = make_order(3, 3, 100, 10, Side::Sell);
+        let result = MatchingEngine::process_order(&mut book, sell_order);
+
+        // 6. B should be matched (FILLED), A should remain
+        assert_eq!(result.trades.len(), 1);
+        assert_eq!(
+            result.trades[0].buyer_order_id, 2,
+            "Trade should be with order B (id=2)"
+        );
+
+        // 7. Check remaining orders - only A should be left
+        let remaining = book.all_orders();
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].order_id, 1, "Only A should remain");
+    }
 }

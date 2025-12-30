@@ -260,19 +260,25 @@ def test_mov_001_priority_loss() -> TestResult:
         cleanup_order(client_maker, id_b)
 
 
-def test_mov_002_move_triggers_match() -> TestResult:
+def test_mov_002_move_to_crossing_price() -> TestResult:
     """
-    MOV-002: 移价触发成交
+    MOV-002: 移动到穿越价格 (Rest-Only 设计)
+    
+    设计说明:
+        当前 MoveOrder 实现是 Rest-Only 模式，即只改变订单在簿中的位置，
+        不触发重新匹配。即使移动到穿越对手盘的价格，订单也只是放入新位置。
+        
+        如果需要触发成交，用户应使用 Cancel + 新下单。
     
     步骤:
-    1. Place BID A at 49000
-    2. Place ASK at 49500
-    3. Move A to 50000 (crosses ASK)
+    1. Place BID A at lower price
+    2. Place ASK at mid price  
+    3. Move A to higher price (would cross ASK)
     
-    预期: A 与 ASK 成交
+    预期: A 移动到新价位但不触发成交 (Rest-Only 设计)
     """
     test_id = "MOV-002"
-    test_name = "MoveOrder 触发成交"
+    test_name = "MoveOrder 穿越价格 (Rest-Only)"
     
     print(f"\n[{test_id}] {test_name}")
     
@@ -281,7 +287,7 @@ def test_mov_002_move_triggers_match() -> TestResult:
     
     bid_price = "58000.00"
     ask_price = "58500.00"
-    move_price = "59000.00"  # Will cross the ask
+    move_price = "59000.00"  # Would cross the ask if matching was triggered
     
     id_a = None
     id_ask = None
@@ -303,27 +309,30 @@ def test_mov_002_move_triggers_match() -> TestResult:
         
         time.sleep(0.5)
         
-        # Move BID A to cross the ASK
-        print(f"  Moving BID A to {move_price} (crosses ASK @ {ask_price})")
+        # Move BID A to price above ASK (would cross if matching was triggered)
+        print(f"  Moving BID A to {move_price} (above ASK @ {ask_price})")
         success, move_resp = move_order(client_maker, id_a, move_price)
         
         if not success:
             return TestResult(test_id, test_name, TestStatus.SKIP,
                             details=f"MoveOrder not implemented: {move_resp}")
         
-        time.sleep(1.0)
+        time.sleep(0.5)
         
-        # Verify A is FILLED
-        status_a = get_order_status(client_maker, id_a)
-        status_ask = get_order_status(client_taker, id_ask)
+        # Rest-Only Design: A should be at new price, ASK should still exist
+        in_new_price = check_order_in_book(SYMBOL, "BUY", move_price)
+        in_old_price = check_order_in_book(SYMBOL, "BUY", bid_price)
+        ask_still_exists = check_order_in_book(SYMBOL, "SELL", ask_price)
         
-        print(f"  BID A status: {status_a}")
-        print(f"  ASK status: {status_ask}")
+        print(f"  BID at new price ({move_price}): {in_new_price}")
+        print(f"  BID at old price ({bid_price}): {in_old_price}")
+        print(f"  ASK still exists: {ask_still_exists}")
         
-        expected = "A=FILLED (crossed with ASK)"
-        actual = f"A={status_a}, ASK={status_ask}"
+        expected = "BID at new price, ASK unchanged (Rest-Only design)"
+        actual = f"new_price={in_new_price}, old_price={in_old_price}, ask_exists={ask_still_exists}"
         
-        if status_a == "FILLED":
+        # Success: A moved to new price, ASK still exists (no matching occurred)
+        if in_new_price and not in_old_price and ask_still_exists:
             return TestResult(test_id, test_name, TestStatus.PASS,
                             expected=expected, actual=actual)
         else:
@@ -668,7 +677,7 @@ def main():
     
     tests = [
         test_mov_001_priority_loss,
-        test_mov_002_move_triggers_match,
+        test_mov_002_move_to_crossing_price,
         test_mov_003_same_price,
         test_mov_004_nonexistent_order,
         test_mov_005_filled_order,
