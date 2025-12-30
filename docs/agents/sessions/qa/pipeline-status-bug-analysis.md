@@ -133,3 +133,70 @@ ValidAction::Cancel { order_id, user_id, ingested_at_ns } => {
 1. **P0**: Cancel 状态持久化 (CAN-001 直接影响用户体验)
 2. **P1**: Reduce 状态持久化 (RED-002/003)
 3. **P2**: Reduce WebSocket 推送 (可选,非阻塞)
+
+---
+
+## ✅ 修复完成总结 (2025-12-31)
+
+### 已实施的修复
+
+| 修复项 | 文件 | 描述 |
+|--------|------|------|
+| Cancel MEResult | `pipeline_services.rs:893-942` | Cancel 成功后发送 MEResult 到 `me_result_queue` |
+| Reduce MEResult | `pipeline_services.rs:1013-1047` | Reduce 成功后发送 MEResult，检查是否从簿中移除 |
+| Reduce WebSocket | `pipeline_services.rs:1022-1032` | 添加 OrderUpdate WebSocket 推送 |
+| Reduce 状态检测 | `pipeline_services.rs:1015-1020` | 改为检查订单是否仍在簿中判断 CANCELED |
+
+### 新增单元测试
+
+| 测试 | 文件 | 描述 |
+|------|------|------|
+| `test_mov_001_priority_loss_scenario` | `engine.rs:644-682` | 验证 MoveOrder 优先级丢失逻辑正确 |
+
+### 测试结果
+
+```
+✅ IOC Tests: 9/9
+✅ MoveOrder Tests: 7/7
+✅ ReduceOrder Tests: 5/5
+✅ GTC/Cancel Tests: 9/9
+✅ Edge Cases: 10/10
+────────────────────────
+Total: 43/43 PASS
+```
+
+---
+
+## 🧪 测试方法
+
+### 一键运行所有 QA 测试
+
+```bash
+# 方式 1: 使用 Shell 脚本 (推荐用于 CI)
+./scripts/tests/0x14b_matching/run_qa_ci.sh
+
+# 方式 2: 直接运行 Python
+python3 scripts/tests/0x14b_matching/run_all_qa_tests.py
+```
+
+### CI 集成
+
+```yaml
+# .github/workflows 示例
+0x14b-qa-tests:
+  runs-on: ubuntu-latest
+  steps:
+    - name: Start Gateway
+      run: cargo run --release -- --gateway --env dev &
+    - name: Wait for Gateway
+      run: sleep 10
+    - name: Run QA Tests
+      run: ./scripts/tests/0x14b_matching/run_qa_ci.sh
+```
+
+### 预期输出
+
+```
+✅ QA 0x14-b TEST SUITE: ALL MODULES PASSED
+Exit code: 0
+```
