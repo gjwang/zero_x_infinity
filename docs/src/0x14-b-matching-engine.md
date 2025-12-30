@@ -39,7 +39,7 @@ Based on code review of `src/engine.rs`, `src/models.rs`, `src/orderbook.rs`:
 | :--- | :--- | :--- | :--- |
 | **TimeInForce** | `Gtc`, `Ioc` | **Not Implemented** | Add `TimeInForce` enum to `models.rs` |
 | **IOC Logic** | Remainder expires, never rests | **Not Implemented** | Modify `process_order()` to check TIF |
-| **CancelOrder Command** | `CommandType::CancelOrder` | `OrderBook::cancel_order()` exists but no Engine API | Expose via `Engine::cancel()` |
+| **CancelOrder Command** | `CommandType::CancelOrder` | ✅ **Implemented** | Full chain: Gateway → Pipeline → OrderBook → WAL |
 | **ReduceOrder Command** | `CommandType::ReduceOrder` | **Not Implemented** | Add `Engine::reduce_order()` |
 | **MoveOrder Command** | `CommandType::MoveOrder` | **Not Implemented** | Add `Engine::move_order()` (cancel+place) |
 | **FOKBudget** | Low usage in Spot | Not needed for MVP | Defer |
