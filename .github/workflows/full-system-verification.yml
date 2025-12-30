@@ -1,0 +1,76 @@
+name: Full System Verification
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *' # Nightly run
+
+env:
+  CARGO_TERM_COLOR: always
+  SQLX_OFFLINE: true
+
+jobs:
+  verify-all:
+    name: Master E2E Suite
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: exchange_info_db
+          POSTGRES_USER: trading
+          POSTGRES_PASSWORD: trading123
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U trading -d exchange_info_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      tdengine:
+        image: tdengine/tdengine:latest
+        ports:
+          - 6030:6030
+          - 6041:6041
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+           toolchain: 1.83.0 # Match project version
+      
+      - uses: Swatinem/rust-cache@v2
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.5.11"
+      
+      - name: Install Python dependencies
+        run: uv sync
+        
+      - name: Build Binary
+        run: cargo build --release --bin zero_x_infinity
+        
+      - name: Run Master Verification Script
+        env:
+          PG_HOST: localhost
+          PG_PORT: 5432
+          PG_USER: trading
+          PG_PASSWORD: trading123
+          PG_DB: exchange_info_db
+          TD_HOST: localhost
+          TD_PORT: 6041
+        run: |
+          chmod +x scripts/verify_full_system.sh
+          ./scripts/verify_full_system.sh
+
+      - name: Upload Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-verification-logs
+          path: logs/
