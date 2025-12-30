@@ -1,4 +1,4 @@
 asset_id,asset,decimals,display_decimals,can_internal_transfer
 1,BTC,8,6,true
-2,USDT,2,2,true
+2,USDT,8,2,true
 3,ETH,8,4,true

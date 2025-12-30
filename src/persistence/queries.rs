@@ -546,6 +546,166 @@ pub async fn query_balance(
     }))
 }
 
+/// Query all latest balances for a user (Spot only) from TDengine
+pub async fn query_all_balances(
+    taos: &Taos,
+    user_id: u64,
+    symbol_mgr: &SymbolManager,
+) -> Result<Vec<BalanceApiData>> {
+    // Query last values per asset for this user from the supertable
+    // Use explicit last() with aliases to ensure proper deserialization
+    let sql = format!(
+        "SELECT last(ts) as ts, last(avail) as avail, last(frozen) as frozen, last(lock_version) as lock_version, last(settle_version) as settle_version, asset_id FROM trading.balances WHERE user_id = {} GROUP BY asset_id",
+        user_id
+    );
+
+    let mut result = taos
+        .query(&sql)
+        .await
+        .map_err(|e| anyhow::anyhow!("Query all balances failed: {}", e))?;
+
+    let rows: Vec<BalanceRowWithAsset> = result
+        .deserialize()
+        .try_collect()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to deserialize all balances: {}", e))?;
+
+    let mut balances = Vec::with_capacity(rows.len());
+
+    for row in rows {
+        // Get asset info for formatting (raw -> decimal conversion)
+        // CRITICAL: Never use default values for unknown assets - this is financial data!
+        let asset_name = match symbol_mgr.get_asset_name(row.asset_id) {
+            Some(name) => name,
+            None => {
+                tracing::error!(
+                    "CRITICAL: Unknown asset_id {} in TDengine balance query for user {}. This indicates data integrity issue! Skipping.",
+                    row.asset_id,
+                    user_id
+                );
+                continue; // Skip this invalid record
+            }
+        };
+
+        let asset_decimals = match symbol_mgr.get_asset_decimal(row.asset_id) {
+            Some(d) => d as u32,
+            None => {
+                tracing::error!(
+                    "CRITICAL: Missing decimals for asset_id {} in balance query. Skipping.",
+                    row.asset_id
+                );
+                continue;
+            }
+        };
+
+        let asset_display_decimals = symbol_mgr
+            .get_asset_display_decimals(row.asset_id)
+            .unwrap_or(asset_decimals);
+
+        tracing::debug!(
+            "TDengine balance: asset_id={}, asset={}, avail_raw={}, decimals={}",
+            row.asset_id,
+            asset_name,
+            row.avail,
+            asset_decimals
+        );
+
+        // format_amount converts raw atomic units (e.g., 1100000000) to decimal string (e.g., "11.00000000")
+        balances.push(BalanceApiData {
+            user_id,
+            asset: asset_name,
+            avail: format_amount(row.avail as u64, asset_decimals, asset_display_decimals),
+            frozen: format_amount(row.frozen as u64, asset_decimals, asset_display_decimals),
+            lock_version: row.lock_version as u64,
+            settle_version: row.settle_version as u64,
+            updated_at: row.ts.to_rfc3339(),
+        });
+    }
+
+    Ok(balances)
+}
+
+/// Query all latest balances for a user (Spot only) from TDengine
+/// Uses PostgreSQL `assets_tb` as the ONLY source of truth for asset configuration
+pub async fn query_all_balances_with_pg(
+    taos: &Taos,
+    pg_pool: &sqlx::PgPool,
+    user_id: u64,
+) -> Result<Vec<BalanceApiData>> {
+    // Query last values per asset for this user from TDengine
+    let sql = format!(
+        "SELECT last(ts) as ts, last(avail) as avail, last(frozen) as frozen, last(lock_version) as lock_version, last(settle_version) as settle_version, asset_id FROM trading.balances WHERE user_id = {} GROUP BY asset_id",
+        user_id
+    );
+
+    let mut result = taos
+        .query(&sql)
+        .await
+        .map_err(|e| anyhow::anyhow!("Query all balances failed: {}", e))?;
+
+    let rows: Vec<BalanceRowWithAsset> = result
+        .deserialize()
+        .try_collect()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to deserialize all balances: {}", e))?;
+
+    let mut balances = Vec::with_capacity(rows.len());
+
+    for row in rows {
+        // Query PostgreSQL for asset configuration (ONLY source of truth!)
+        let asset_info: Option<(String, i16)> =
+            sqlx::query_as("SELECT asset, decimals FROM assets_tb WHERE asset_id = $1")
+                .bind(row.asset_id as i32)
+                .fetch_optional(pg_pool)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to query asset info: {}", e))?;
+
+        let (asset_name, decimals) = match asset_info {
+            Some((name, dec)) => (name, dec as u32),
+            None => {
+                tracing::error!(
+                    "CRITICAL: Unknown asset_id {} in TDengine balance query for user {}. Not found in PostgreSQL assets_tb! Skipping.",
+                    row.asset_id,
+                    user_id
+                );
+                continue;
+            }
+        };
+
+        tracing::debug!(
+            "TDengine balance (PG lookup): asset_id={}, asset={}, avail_raw={}, decimals={}",
+            row.asset_id,
+            asset_name,
+            row.avail,
+            decimals
+        );
+
+        // format_amount converts raw atomic units to decimal string
+        balances.push(BalanceApiData {
+            user_id,
+            asset: asset_name,
+            avail: format_amount(row.avail as u64, decimals, decimals),
+            frozen: format_amount(row.frozen as u64, decimals, decimals),
+            lock_version: row.lock_version as u64,
+            settle_version: row.settle_version as u64,
+            updated_at: row.ts.to_rfc3339(),
+        });
+    }
+
+    Ok(balances)
+}
+
+/// Helper struct for deserializing multi-record balance queries with asset_id tag
+#[derive(Debug, Deserialize)]
+struct BalanceRowWithAsset {
+    pub ts: DateTime<Utc>,
+    pub avail: i64,
+    pub frozen: i64,
+    pub lock_version: i64,
+    pub settle_version: i64,
+    pub asset_id: u32,
+}
+
 /// K-Line record from TDengine
 #[derive(Debug, Deserialize)]
 struct KLineRow {

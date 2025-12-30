@@ -131,7 +131,7 @@ pub async fn batch_upsert_balance_events(
     for (i, event) in events.iter().enumerate() {
         write!(
             sql,
-            "balances_{}_{} VALUES({}, {}, {}, 0, 0) ",
+            "trading.balances_{}_{} VALUES({}, {}, {}, 0, 0) ",
             event.user_id,
             event.asset_id,
             now_us + i as i64,
@@ -160,7 +160,7 @@ pub async fn batch_upsert_balance_events(
         let key = (event.user_id, event.asset_id);
         if !created.contains(&key) {
             let create_sql = format!(
-                "CREATE TABLE IF NOT EXISTS balances_{}_{} USING balances TAGS ({}, {})",
+                "CREATE TABLE IF NOT EXISTS trading.balances_{}_{} USING trading.balances TAGS ({}, {})",
                 event.user_id, event.asset_id, event.user_id, event.asset_id
             );
             let _ = taos.exec(&create_sql).await; // Ignore error (may already exist)
