@@ -207,24 +207,38 @@ impl TestOrdersGeneratorSession {
 
     /// Generate user accounts matching Java's UserCurrencyAccountsGenerator.generateUsers
     ///
-    /// Uses Random(1) for currency selection and Pareto(1, 1.5) for account count
-    fn generate_user_accounts(num_users: usize) -> Vec<Vec<i32>> {
+    /// **CRITICAL**: numAccounts is total ACCOUNT quota, not user count!
+    /// Java code:
+    /// ```java
+    /// int totalAccountsQuota = accountsToCreate;  // e.g. 100
+    /// do {
+    ///     int accountsToOpen = 1 + (int) paretoDistribution.sample();
+    ///     totalAccountsQuota -= accountsToOpen;
+    ///     result.add(bitSet);
+    /// } while (totalAccountsQuota > 0);
+    /// ```
+    /// So 100 accounts creates ~20-50 users (each user has 1-5 accounts)
+    fn generate_user_accounts(num_accounts: usize) -> Vec<Vec<i32>> {
         const CURRENCIES: [i32; 5] = [840, 978, 3762, 3928, 4141]; // USD, EUR, XBT, ETH, LTC
 
         let mut rand = JavaRandom::new(1);
-        let mut accounts = Vec::with_capacity(num_users + 1);
+        let mut accounts = Vec::new();
 
         // uid=0 has no accounts
         accounts.push(Vec::new());
 
-        for _ in 1..=num_users {
-            // Pareto(1, 1.5) sample approximation
+        let mut accounts_quota = num_accounts as i32;
+
+        while accounts_quota > 0 {
+            // Pareto(1, 1.5) sample: min 1, typically 1-5
             let r = rand.next_double();
             let pareto_sample = 1.0 / (1.0 - r).powf(1.0 / 1.5);
-            let num_accounts = (pareto_sample.min(CURRENCIES.len() as f64) as usize).max(1);
+            let accounts_to_open = (pareto_sample.min(CURRENCIES.len() as f64) as i32)
+                .max(1)
+                .min(accounts_quota);
 
             let mut user_currencies = Vec::new();
-            while user_currencies.len() < num_accounts {
+            while user_currencies.len() < accounts_to_open as usize {
                 let idx = rand.next_int(CURRENCIES.len() as i32) as usize;
                 let currency = CURRENCIES[idx];
                 if !user_currencies.contains(&currency) {
@@ -232,6 +246,7 @@ impl TestOrdersGeneratorSession {
                 }
             }
 
+            accounts_quota -= accounts_to_open;
             accounts.push(user_currencies);
         }
 
