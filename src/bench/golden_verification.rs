@@ -87,7 +87,7 @@ mod tests {
         }
 
         let rows = load_golden_csv(&path).expect("Failed to load golden CSV");
-        assert_eq!(rows.len(), 1100, "Expected 1100 rows in golden CSV");
+        assert_eq!(rows.len(), 11000, "Expected 11000 rows in golden CSV");
 
         // Verify first row matches expected values
         let first = &rows[0];
@@ -99,7 +99,7 @@ mod tests {
         assert_eq!(first.size, 1);
         assert_eq!(first.action, "BID");
         assert_eq!(first.order_type, "GTC");
-        assert_eq!(first.uid, 11);
+        assert_eq!(first.uid, 393);
     }
 
     /// Verify we can load the exchange golden CSV
@@ -112,7 +112,7 @@ mod tests {
         }
 
         let rows = load_golden_csv(&path).expect("Failed to load golden CSV");
-        assert_eq!(rows.len(), 1100, "Expected 1100 rows in golden CSV");
+        assert_eq!(rows.len(), 11000, "Expected 11000 rows in golden CSV");
     }
 
     /// First-pass comparison: verify our generator produces consistent output
@@ -194,7 +194,7 @@ mod tests {
         eprintln!("BENCHMARK phase: {} orders", bench_count);
 
         // Verify basic properties
-        assert_eq!(golden_rows.len(), 1100);
+        assert_eq!(golden_rows.len(), 11000);
         assert!(fill_count > 0, "Expected some FILL phase orders");
     }
 
@@ -208,18 +208,18 @@ mod tests {
 
         let rows = load_golden_csv(&path).expect("Failed to load golden CSV");
 
-        // Expected first 10 orders from golden CSV
+        // Expected first 10 orders from golden CSV (updated for 11k scale)
         let expected = [
-            (1, 34386, 1, "BID", 11),   // order 1
-            (2, 34135, 1, "BID", 2),    // order 2
-            (3, 34347, 2, "BID", 13),   // order 3
-            (4, 34150, 9, "BID", 38),   // order 4
-            (5, 34152, 13, "BID", 50),  // order 5
-            (6, 34391, 76, "ASK", 30),  // order 6
-            (7, 34253, 7, "BID", 8),    // order 7
-            (8, 34342, 25, "BID", 29),  // order 8
-            (9, 34621, 1, "ASK", 36),   // order 9
-            (10, 34971, 16, "ASK", 39), // order 10
+            (1, 34386, 1, "BID", 393),   // order 1
+            (2, 34135, 1, "BID", 677),   // order 2
+            (3, 34347, 2, "BID", 577),   // order 3
+            (4, 34150, 9, "BID", 325),   // order 4
+            (5, 34152, 13, "BID", 116),  // order 5
+            (6, 34391, 76, "ASK", 172),  // order 6
+            (7, 34253, 7, "BID", 975),   // order 7
+            (8, 34342, 25, "BID", 26),   // order 8
+            (9, 34621, 1, "ASK", 723),   // order 9
+            (10, 34971, 16, "ASK", 414), // order 10
         ];
 
         for (i, (order_id, price, size, action, uid)) in expected.iter().enumerate() {

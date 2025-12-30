@@ -572,9 +572,16 @@ mod tests {
         };
         let mut session = TestOrdersGeneratorSession::new(config, 1);
 
-        for i in 0..30 {
+        // Generate FILL phase orders (20 total = 10 per side)
+        for i in 0..20 {
             let cmd = session.next_command();
-            assert_eq!(cmd.order_id, (i + 1) as i64);
+            assert_eq!(cmd.order_id, (i + 1) as i64); // Sequential in FILL phase
+            assert!(cmd.uid >= 1);
+        }
+
+        // BENCHMARK phase: order_ids may reuse existing for Cancel/Move/Reduce
+        for _ in 0..10 {
+            let cmd = session.next_command();
             assert!(cmd.uid >= 1);
         }
     }
