@@ -61,8 +61,8 @@
 
 ## 🔶 第四阶段：交易集成与验证 (Trading Integration)
 
-- [0x12 Real Trading Verification | 全链路验证 (Mock Removal)](./0x00-mvp-roadmap.md) <!-- Placeholder link until doc exists -->
-- [0x13 Market Data Experience | 行情数据体验 (WS Verification)](./0x00-mvp-roadmap.md) <!-- Placeholder link until doc exists -->
+- [0x12 Real Trading Verification | 全链路验证 (Mock Removal)](./0x12-real-trading.md)
+- [0x13 Market Data Experience | 行情数据体验 (WS Verification)](./0x13-market-data.md)
 
 ---
 
