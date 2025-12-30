@@ -92,4 +92,41 @@ impl ChainManager {
         .fetch_all(&self.pool)
         .await
     }
+
+    /// Lookup user_id by chain address (ADR-006 Dual-Lookup: Address → User)
+    pub async fn get_user_by_address(
+        &self,
+        chain_slug: &str,
+        address: &str,
+    ) -> Result<Option<i64>> {
+        let result = sqlx::query_scalar!(
+            r#"
+            SELECT user_id
+            FROM user_chain_addresses
+            WHERE chain_slug = $1 AND LOWER(address) = LOWER($2)
+            "#,
+            chain_slug,
+            address
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(result)
+    }
+
+    /// Get all watched addresses for a chain (for Sentinel startup)
+    pub async fn get_watched_addresses(&self, chain_slug: &str) -> Result<Vec<String>> {
+        let addresses = sqlx::query_scalar!(
+            r#"
+            SELECT address
+            FROM user_chain_addresses
+            WHERE chain_slug = $1
+            "#,
+            chain_slug
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(addresses)
+    }
 }
