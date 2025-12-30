@@ -134,7 +134,10 @@ phase,command,order_id,symbol,price,size,action,order_type,uid
 ### 5. Implementation Results
 
 > [!NOTE]
-> **✅ 100% BIT-EXACT MATCH ACHIEVED** - All fields now match the Java reference implementation exactly.
+> **✅ FILL PHASE: 100% BIT-EXACT MATCH** (1,000 orders)
+> **⚠️ BENCHMARK PHASE: Requires matching engine** (10,000 orders)
+
+#### 5.1 FILL Phase (Rows 1-1000)
 
 | Field | Match Status | Formula |
 |:-----:|:------------:|:--------|
@@ -143,12 +146,33 @@ phase,command,order_id,symbol,price,size,action,order_type,uid
 | **Action** | ✅ 100% | `(rand(4)+priceDir>=2) ? BID : ASK` |
 | **UID** | ✅ 100% | Pareto user account generation |
 
-**Key Implementation Details**:
-1. `JavaRandom` - Bit-exact `java.util.Random` LCG
-2. Seed derivation: `Objects.hash(symbol*-177277, seed*10037+198267)`
-3. User accounts: `1 + (int)paretoSample` formula
-4. Currency order: `[978, 840]` based on HashMap bucket index
-5. User selection: `min(users.size, max(2, symbolMessages/5))`
+#### 5.2 BENCHMARK Phase Analysis
+
+| Component | Status | Notes |
+|:---------:|:------:|:------|
+| RNG Sequence | ✅ Aligned | `nextInt(4)` for action FIRST, then `nextInt(q_range)` |
+| Order Selection | ✅ Aligned | Uses `orderUids` iterator (BTreeMap deterministic) |
+| IOC Simulation | ✅ Implemented | Shadow order book with `simulate_ioc_match` |
+| Order Book Feedback | ❌ Gap | Java uses real matcher feedback for `lackOfOrders` |
+
+> [!IMPORTANT]
+> **BENCHMARK Phase Gap**: Java's `generateRandomOrder` uses `lastOrderBookOrdersSizeAsk/Bid` from the **real matching engine** (updated in `updateOrderBookSizeStat`). Without a full Rust matching engine, the shadow book diverges from Java's state.
+
+#### 5.3 Golden Data Scale
+
+| Dataset | FILL | BENCHMARK | Total |
+|:-------:|:----:|:---------:|:-----:|
+| `golden_single_pair_margin.csv` | 1,000 | 10,000 | 11,000 |
+| `golden_single_pair_exchange.csv` | 1,000 | 10,000 | 11,000 |
+
+#### 5.4 Key Implementation Details
+
+1. **JavaRandom** - Bit-exact `java.util.Random` LCG
+2. **Seed derivation**: `Objects.hash(symbol*-177277, seed*10037+198267)`
+3. **User accounts**: `1 + (int)paretoSample` formula
+4. **Currency order**: `[978, 840]` based on HashMap bucket index
+5. **CENTRAL_MOVE_ALPHA**: `0.01` (not 0.1)
+6. **Shadow Order Book**: `ask_orders`/`bid_orders` Vec with O(1) swap_remove
 
 ---
 
@@ -239,7 +263,10 @@ Exchange-Core 项目使用 Java 的 `java.util.Random` 作为 PRNG。我们必�
 ### 5. 实现结果
 
 > [!NOTE]
-> **✅ 100% 比特级精确匹配已达成** - 所有字段现在与 Java 参考实现完全匹配。
+> **✅ FILL 阶段: 100% 比特精确匹配** (1,000 订单)
+> **⚠️ BENCHMARK 阶段: 需要匹配引擎** (10,000 订单)
+
+#### 5.1 FILL 阶段 (行 1-1000)
 
 | 字段 | 匹配状态 | 公式 |
 |:----:|:--------:|:-----|
@@ -248,12 +275,26 @@ Exchange-Core 项目使用 Java 的 `java.util.Random` 作为 PRNG。我们必�
 | **Action** | ✅ 100% | `(rand(4)+priceDir>=2) ? BID : ASK` |
 | **UID** | ✅ 100% | Pareto 用户账户生成 |
 
-**关键实现细节**:
-1. `JavaRandom` - 比特级精确的 `java.util.Random` LCG
-2. 种子派生: `Objects.hash(symbol*-177277, seed*10037+198267)`
-3. 用户账户: `1 + (int)paretoSample` 公式
-4. 货币顺序: `[978, 840]` 基于 HashMap bucket 索引
-5. 用户选择: `min(users.size, max(2, symbolMessages/5))`
+#### 5.2 BENCHMARK 阶段分析
+
+| 组件 | 状态 | 说明 |
+|:----:|:----:|:-----|
+| RNG 序列 | ✅ 已对齐 | `nextInt(4)` action 优先，然后 `nextInt(q_range)` |
+| 订单选择 | ✅ 已对齐 | 使用 `orderUids` 迭代器 (BTreeMap 确定性) |
+| IOC 模拟 | ✅ 已实现 | 影子订单簿 `simulate_ioc_match` |
+| 订单簿反馈 | ❌ 缺口 | Java 使用真实匹配引擎反馈 `lackOfOrders` |
+
+> [!IMPORTANT]
+> **BENCHMARK 阶段缺口**: Java 的 `generateRandomOrder` 使用 **真实匹配引擎** 的 `lastOrderBookOrdersSizeAsk/Bid`（在 `updateOrderBookSizeStat` 中更新）。没有完整 Rust 匹配引擎，影子订单簿会与 Java 状态分歧。
+
+#### 5.3 关键实现细节
+
+1. **JavaRandom** - 比特级精确的 `java.util.Random` LCG
+2. **种子派生**: `Objects.hash(symbol*-177277, seed*10037+198267)`
+3. **用户账户**: `1 + (int)paretoSample` 公式
+4. **货币顺序**: `[978, 840]` 基于 HashMap bucket 索引
+5. **CENTRAL_MOVE_ALPHA**: `0.01` (不是 0.1)
+6. **影子订单簿**: `ask_orders`/`bid_orders` Vec 支持 O(1) swap_remove
 
 ---
 

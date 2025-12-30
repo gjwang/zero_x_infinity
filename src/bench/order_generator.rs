@@ -388,18 +388,38 @@ impl TestOrdersGeneratorSession {
     }
 
     /// Generate random order (BENCHMARK phase)
-    /// Per user spec section 3.4: command generation decision tree
+    /// Exact replica of Java TestOrdersGenerator.generateRandomOrder (L341-447)
     fn generate_random_order(&mut self) -> TestCommand {
-        // Calculate lack of orders using ask_orders/bid_orders length
+        // Java L346-347: Calculate lack of orders
         let target_half = self.config.target_orders_per_side as i32;
         let lack_ask = target_half - self.ask_orders.len() as i32;
         let lack_bid = target_half - self.bid_orders.len() as i32;
-        let grow_orders = lack_ask > 0 || lack_bid > 0;
 
-        // Java: int q = rand.nextInt(growOrders ? (requireFastFill ? 2 : 10) : 40)
+        // Java L348-356: Check if initial orders placed (simplified - we track via phase)
+        // Java L358-360: FIRST RNG CALL - action decision BEFORE q!
+        let action_rand = self.rng.next_int(4);
+        let action = if action_rand + self.price_direction >= 2 {
+            Action::Bid
+        } else {
+            Action::Ask
+        };
+
+        // Java L362: lackOfOrders depends on action
+        let lack_of_orders = if action == Action::Ask {
+            lack_ask
+        } else {
+            lack_bid
+        };
+
+        // Java L364-366: requireFastFill and growOrders
+        let grow_orders = lack_of_orders > 0;
+
+        // Java L375-377: SECOND RNG CALL - q decision
+        // Note: requireFastFill=true when filledAtSeq==null OR lack > threshold, simplified to 10
         let q_range = if grow_orders { 10 } else { 40 };
         let q = self.rng.next_int(q_range);
 
+        // Java L379-386: If q < 2 or no orders, generate GTC/IOC
         if q < 2 || self.order_uids.is_empty() {
             if grow_orders {
                 return self.generate_gtc_order();
@@ -408,36 +428,28 @@ impl TestOrdersGeneratorSession {
             }
         }
 
-        // Pick random existing order (per spec section 3.4.2)
-        // Choose side based on random
-        let use_ask = self.rng.next_int(2) == 0;
-        let orders = if use_ask {
-            &self.ask_orders
-        } else {
-            &self.bid_orders
-        };
+        // Java L391-401: THIRD RNG CALL - pick random order from orderUids
+        // Java uses HashMap iteration order (deterministic with LinkedHashMap or BTreeMap)
+        let size = self.order_uids.len().min(512);
+        let rand_pos = self.rng.next_int(size as i32) as usize;
 
-        if orders.is_empty() {
-            return self.generate_gtc_order();
-        }
-
-        let idx = self.rng.next_int(orders.len().min(512) as i32) as usize;
-        let order_id = orders[idx];
+        // Get order at rand_pos by iterating (matches Java iterator behavior)
+        let order_id = *self.order_uids.keys().nth(rand_pos).unwrap();
         let uid = *self.order_uids.get(&order_id).unwrap();
 
+        // Java L408-446: Command type based on q
         if q == 2 {
-            // Cancel order (per spec 3.4.2.B - use swap_remove for O(1))
-            if use_ask {
-                self.ask_orders.swap_remove(idx);
-            } else {
-                // Need to use mutable reference
-                let idx = self.bid_orders.iter().position(|&x| x == order_id).unwrap();
-                self.bid_orders.swap_remove(idx);
-            }
+            // Java L408-411: Cancel order
             self.order_uids.remove(&order_id);
             self.order_prices.remove(&order_id);
             self.order_sizes.remove(&order_id);
             self.order_actions.remove(&order_id);
+            // Remove from ask_orders or bid_orders
+            if let Some(pos) = self.ask_orders.iter().position(|&x| x == order_id) {
+                self.ask_orders.swap_remove(pos);
+            } else if let Some(pos) = self.bid_orders.iter().position(|&x| x == order_id) {
+                self.bid_orders.swap_remove(pos);
+            }
 
             TestCommand {
                 command: CommandType::CancelOrder,
@@ -445,12 +457,14 @@ impl TestOrdersGeneratorSession {
                 symbol: self.config.symbol_id,
                 price: 0,
                 size: 0,
-                action: Action::Bid, // doesn't matter for cancel
+                action: Action::Bid,
                 order_type: OrderType::Gtc,
                 uid: uid as i64,
             }
         } else if q == 3 {
-            // Reduce order
+            // Java L413-418: Reduce order
+            // Java L416-417: int prevSize = session.orderSizes.get(orderId);
+            //                int reduceBy = session.rand.nextInt(prevSize) + 1;
             let prev_size = *self.order_sizes.get(&order_id).unwrap_or(&1);
             let reduce_by = self.rng.next_int(prev_size.max(1)) + 1;
 
@@ -465,23 +479,24 @@ impl TestOrdersGeneratorSession {
                 uid: uid as i64,
             }
         } else {
-            // Move order (q >= 4)
+            // Java L420-445: Move order (q >= 4)
             let prev_price = *self
                 .order_prices
                 .get(&order_id)
                 .unwrap_or(&(self.last_trade_price as i32));
 
-            // Java: double priceMove = (session.lastTradePrice - prevPrice) * CENTRAL_MOVE_ALPHA;
-            // CENTRAL_MOVE_ALPHA = 0.1
-            let price_move = (self.last_trade_price as f64 - prev_price as f64) * 0.1;
+            // Java L426-434: Calculate priceMove
+            let price_move = (self.last_trade_price as f64 - prev_price as f64) * 0.01; // CENTRAL_MOVE_ALPHA = 0.01
             let price_move_rounded = if prev_price > self.last_trade_price as i32 {
                 price_move.floor() as i32
             } else if prev_price < self.last_trade_price as i32 {
                 price_move.ceil() as i32
             } else {
+                // Java L433: rand.nextInt(2) * 2 - 1
                 self.rng.next_int(2) * 2 - 1
             };
 
+            // Java L436: newPrice = min(prevPrice + priceMoveRounded, maxPrice)
             let new_price = (prev_price + price_move_rounded).min(self.max_price as i32);
             self.order_prices.insert(order_id, new_price);
 
@@ -526,6 +541,10 @@ impl TestOrdersGeneratorSession {
         let s3 = self.rng.next_int(6);
         let size = (1 + s1 * s2 * s3) as i64;
 
+        // Simulate IOC matching (per spec 3.4.2.E)
+        // This updates the shadow order book state
+        self.simulate_ioc_match(action, size, price);
+
         TestCommand {
             command: CommandType::PlaceOrder,
             order_id: order_id as i64,
@@ -536,6 +555,44 @@ impl TestOrdersGeneratorSession {
             order_type: OrderType::Ioc,
             uid,
         }
+    }
+
+    /// Simulate IOC order matching against opposite side of order book
+    /// Per user spec section 3.4.2.E
+    fn simulate_ioc_match(&mut self, ioc_action: Action, ioc_size: i64, ioc_price: i64) {
+        // IOC consumes orders from the opposite side
+        let is_ioc_ask = ioc_action == Action::Ask;
+        let opposite_orders = if is_ioc_ask {
+            &mut self.bid_orders
+        } else {
+            &mut self.ask_orders
+        };
+
+        let mut remaining = ioc_size;
+
+        // Consume orders until IOC is filled or no more matching orders
+        while remaining > 0 && !opposite_orders.is_empty() {
+            let matched_id = opposite_orders[0];
+            let matched_size = *self.order_sizes.get(&matched_id).unwrap_or(&0) as i64;
+
+            if matched_size <= remaining {
+                // Fully consume this order
+                remaining -= matched_size;
+                opposite_orders.remove(0);
+                self.order_uids.remove(&matched_id);
+                self.order_prices.remove(&matched_id);
+                self.order_sizes.remove(&matched_id);
+                self.order_actions.remove(&matched_id);
+            } else {
+                // Partially consume this order
+                self.order_sizes
+                    .insert(matched_id, (matched_size - remaining) as i32);
+                remaining = 0;
+            }
+        }
+
+        // Update last trade price
+        self.last_trade_price = ioc_price;
     }
 
     pub fn phase(&self) -> Phase {

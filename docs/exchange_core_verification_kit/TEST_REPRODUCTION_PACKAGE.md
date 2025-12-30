@@ -496,19 +496,123 @@ fn generate_order_price(rng: &mut JavaRandom, last_price: i64, deviation: i64, i
 
 ---
 
-## 附录 B: 测试执行流程
+## 附录 B: 测试执行流程 (关键)
 
-### B.1 完整 7 步流程
+> **⚠️ 重要**: 测试流程的一致性直接影响性能对比的公平性。生成数据会消耗 CPU，必须与基准测试阶段**严格分离**。
 
-1. **创建交易所实例** - 配置 RingBuffer, ME, RE 数量
-2. **加载交易对** - `ADD_SYMBOLS` 命令
-3. **初始化用户** - `ADD_USER` + `ADJUST_BALANCE` 命令
-4. **预填充订单簿** - FILL Phase (GTC 订单)
-5. **基准测试** - BENCHMARK Phase (混合命令)
-6. **收集指标** - 吞吐量 (MT/s), 延迟百分位
-7. **验证** - 全局余额为零，状态哈希一致
+### B.1 Java 原版执行架构
 
-### B.2 全局验证规则
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Phase 1: 数据预生成 (CPU 密集)                      │
+│   prepareTestDataAsync() → CompletableFuture<List<OrderCommand>>    │
+│   - 在测试开始前完成                                                   │
+│   - 所有命令存储在内存 (List)                                          │
+│   - 生成期间的 CPU/内存开销不计入基准测试                                │
+└─────────────────────────────────────────────────────────────────────┘
+                                  ↓
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Phase 2: 预填充 (FILL)                            │
+│   loadSymbolsUsersAndPrefillOrdersNoLog(testDataFutures)            │
+│   - 从内存读取 FILL 阶段命令                                          │
+│   - 执行用户创建、余额注入、订单簿预填充                                 │
+│   - 不计时                                                           │
+└─────────────────────────────────────────────────────────────────────┘
+                                  ↓
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Phase 3: 基准测试 (BENCHMARK) ← 仅此阶段计时        │
+│   benchmarkMtps(apiCommandsBenchmark)                               │
+│   - 从内存读取 BENCHMARK 阶段命令                                     │
+│   - 计算吞吐量 (MT/s)                                                │
+│   - 采集延迟百分位                                                    │
+└─────────────────────────────────────────────────────────────────────┘
+                                  ↓
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Phase 4: 验证                                     │
+│   - 全局余额校验 (必须为零)                                           │
+│   - 订单簿状态哈希对比                                                │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### B.2 Java 源码关键调用
+
+```java
+// 1. 数据预生成 (测试前完成，不计时)
+TestDataFutures testDataFutures = prepareTestDataAsync(testDataParameters, 1);
+
+// 2. 等待生成完成并加载
+container.loadSymbolsUsersAndPrefillOrdersNoLog(testDataFutures);
+
+// 3. 基准测试 (仅此阶段计时！)
+float perfMt = container.benchmarkMtps(
+    testDataFutures.getGenResult().join().apiCommandsBenchmark.join()
+);
+
+// 4. 验证
+assertTrue(container.totalBalanceReport().isGlobalBalancesAllZero());
+assertEquals(expectedOrderBook, container.requestCurrentOrderBook(symbolId));
+```
+
+### B.3 Rust 实现要求
+
+**必须**实现相同的两阶段分离：
+
+```rust
+// ❌ 错误: 边生成边执行 (生成 CPU 开销会计入基准测试)
+for _ in 0..num_commands {
+    let cmd = generator.generate_next();  // CPU 消耗
+    exchange.execute(cmd);  // 计时包含生成开销
+}
+
+// ✅ 正确: 预生成全部命令，再执行
+let benchmark_commands: Vec<OrderCommand> = (0..num_commands)
+    .map(|_| generator.generate_next())
+    .collect();  // 生成阶段，不计时
+
+// 基准测试阶段，仅计时
+let start = Instant::now();
+for cmd in &benchmark_commands {
+    exchange.execute(cmd);
+}
+let elapsed = start.elapsed();
+```
+
+### B.4 性能对比公平性
+
+| 方案 | 公平性 | 说明 |
+|:---|:---:|:---|
+| **A. 预生成到内存** | ✅ 公平 | 与 Java 一致，推荐 |
+| **B. 预生成到 CSV** | ⚠️ 可接受 | 文件 I/O 可能影响延迟 |
+| **C. 边生成边执行** | ❌ 不公平 | 生成 CPU 计入基准测试 |
+
+### B.5 迭代测试流程
+
+Java 原版会多次迭代测试并取平均值：
+
+```rust
+let mut results = Vec::new();
+for iteration in 0..num_iterations {
+    // 重置交易所状态
+    exchange.reset();
+    
+    // 重新加载 (从预生成的内存数据)
+    load_symbols_and_users(&mut exchange, &test_data);
+    prefill_order_book(&mut exchange, &fill_commands);
+    
+    // 基准测试
+    let perf = benchmark(&mut exchange, &benchmark_commands);
+    results.push(perf);
+    
+    // 验证
+    assert!(exchange.verify_global_balance());
+    
+    // GC 等待
+    std::thread::sleep(Duration::from_millis(100));
+}
+let avg_mt = results.iter().sum::<f64>() / results.len() as f64;
+```
+
+### B.6 全局验证规则
 
 ```rust
 fn verify_global_balance(exchange: &Exchange) -> bool {
@@ -517,13 +621,159 @@ fn verify_global_balance(exchange: &Exchange) -> bool {
     exchange.total_balance_report().is_all_zero()
 }
 
-fn verify_state_hash(before: u64, after: u64) -> bool {
-    // 持久化恢复后状态哈希必须一致
-    before == after
+fn verify_orderbook_state(exchange: &Exchange, expected: &OrderBookSnapshot) -> bool {
+    exchange.request_orderbook(symbol_id) == *expected
 }
 ```
 
 ---
+
+
+## 附录 C: BENCHMARK 阶段 RNG 调用序列 (关键)
+
+> **⚠️ 注意**: BENCHMARK 阶段每个命令类型的 RNG 调用顺序必须与 Java 源码**完全一致**，否则序列会发散。
+
+### C.1 generateRandomOrder 主入口
+
+```java
+// 每个 BENCHMARK 命令的生成入口
+private static OrderCommand generateRandomOrder(TestOrdersGeneratorSession session) {
+    Random rand = session.rand;
+    
+    // ===== RNG 调用 #1: 决定 action =====
+    OrderAction action = (rand.nextInt(4) + session.priceDirection >= 2) 
+        ? OrderAction.BID : OrderAction.ASK;
+    
+    // 计算 lackOfOrders (不消耗 RNG)
+    int lackOfOrders = ...;
+    boolean requireFastFill = ...;
+    boolean growOrders = lackOfOrders > 0;
+    
+    // ===== RNG 调用 #2: 决定命令类型 q =====
+    int q = rand.nextInt(growOrders ? (requireFastFill ? 2 : 10) : 40);
+    
+    if (q < 2 || session.orderUids.isEmpty()) {
+        if (growOrders) {
+            return generateRandomGtcOrder(session);      // → C.2
+        } else {
+            return generateRandomInstantOrder(session);  // → C.3
+        }
+    }
+    
+    // ===== RNG 调用 #3: 选择现有订单位置 =====
+    int size = Math.min(session.orderUids.size(), 512);
+    int randPos = rand.nextInt(size);
+    // 从 orderUids 迭代获取 orderId
+    
+    if (q == 2) {
+        // CANCEL: 无额外 RNG 调用
+        return OrderCommand.cancel(orderId, uid);
+        
+    } else if (q == 3) {
+        // ===== REDUCE: RNG 调用 #4 =====
+        int reduceBy = rand.nextInt(prevSize) + 1;
+        return OrderCommand.reduce(orderId, uid, reduceBy);
+        
+    } else {
+        // MOVE (q >= 4)
+        // 价格计算不消耗 RNG，除非 prevPrice == lastTradePrice:
+        if (prevPrice == lastTradePrice) {
+            // ===== RNG 调用 #4 (条件): 随机方向 =====
+            priceMoveRounded = rand.nextInt(2) * 2 - 1;
+        }
+        return OrderCommand.update(orderId, uid, newPrice);
+    }
+}
+```
+
+### C.2 generateRandomGtcOrder RNG 序列
+
+```java
+private static OrderCommand generateRandomGtcOrder(TestOrdersGeneratorSession session) {
+    Random rand = session.rand;
+    
+    // ===== RNG #1: action =====
+    OrderAction action = (rand.nextInt(4) + priceDirection >= 2) ? BID : ASK;
+    
+    // ===== RNG #2: uid =====
+    int uid = uidMapper.apply(rand.nextInt(numUsers));
+    
+    // ===== RNG #3: price deviation base =====
+    int dev = 1 + (int)(Math.pow(rand.nextDouble(), 2) * priceDeviation);
+    
+    // ===== RNG #4-7: price offset (4 次调用) =====
+    long p = 0;
+    for (int i = 0; i < 4; i++) {
+        p += rand.nextInt(dev);  // 4 次 nextInt
+    }
+    
+    // ===== RNG #8-10: size (3 次调用) =====
+    int size = 1 + rand.nextInt(6) * rand.nextInt(6) * rand.nextInt(6);
+    
+    return PLACE_ORDER;  // 总计: 10 次 RNG 调用
+}
+```
+
+### C.3 generateRandomInstantOrder RNG 序列
+
+```java
+private static OrderCommand generateRandomInstantOrder(TestOrdersGeneratorSession session) {
+    Random rand = session.rand;
+    
+    // ===== RNG #1: action =====
+    OrderAction action = (rand.nextInt(4) + priceDirection >= 2) ? BID : ASK;
+    
+    // ===== RNG #2: uid =====
+    int uid = uidMapper.apply(rand.nextInt(numUsers));
+    
+    if (avalancheIOC) {
+        // ===== RNG #3: size (long) =====
+        long bigRand = rand.nextLong();
+        // ...
+    } else {
+        // ===== RNG #3: 决定 IOC vs FOK_BUDGET (1:31) =====
+        if (rand.nextInt(32) == 0) {
+            // FOK_BUDGET
+            // ===== RNG #4-6: size (3 次) =====
+            size = 1 + rand.nextInt(8) * rand.nextInt(8) * rand.nextInt(8);
+        } else {
+            // IOC
+            // ===== RNG #4-6: size (3 次) =====
+            size = 1 + rand.nextInt(6) * rand.nextInt(6) * rand.nextInt(6);
+        }
+    }
+    
+    return PLACE_ORDER;  // 总计: 6 次 RNG 调用
+}
+```
+
+### C.4 命令类型 RNG 调用总结
+
+| 命令类型 | nextInt/nextDouble 调用次数 | 备注 |
+|:---|:---:|:---|
+| **FILL GTC** | 10 | action(1) + uid(1) + dev(1) + price(4) + size(3) |
+| **BENCHMARK GTC** | 10 | 同上 |
+| **IOC** | 6 | action(1) + uid(1) + type_check(1) + size(3) |
+| **FOK_BUDGET** | 6 | action(1) + uid(1) + type_check(1) + size(3) |
+| **CANCEL** | 3 | action(1) + q(1) + pos(1) |
+| **REDUCE** | 4 | action(1) + q(1) + pos(1) + reduceBy(1) |
+| **MOVE** | 3 或 4 | action(1) + q(1) + pos(1) + [方向](条件) |
+
+### C.5 调试建议
+
+```rust
+// 在每个 RNG 调用后打印状态
+fn debug_rng_call(rng: &JavaRandom, call_name: &str, result: i64) {
+    eprintln!("RNG[{}]: {} = {} (seed={})", 
+              call_count, call_name, result, rng.seed);
+}
+
+// 对比 Java 输出
+// Java 侧添加: System.out.println("RNG: " + result);
+```
+
+---
+
 
 **End of Specification**
 **Prepared for**: Exchange Core Rust Porting Team

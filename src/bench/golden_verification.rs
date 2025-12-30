@@ -343,16 +343,15 @@ mod tests {
         };
         let mut session = TestOrdersGeneratorSession::new(config, 1);
 
-        // Only verify FILL phase (first 100 orders)
-        // BENCHMARK phase (rows 101+) requires order book simulation
-        let fill_count = golden_rows.iter().filter(|r| r.phase == "FILL").count();
+        // Verify ALL rows (FILL + BENCHMARK) with IOC simulation
+        let total_rows = golden_rows.len();
         let mut matched = 0;
         let mut mismatches: Vec<(usize, String)> = Vec::new();
 
-        eprintln!("\n=== FILL Phase Verification ===");
-        eprintln!("Verifying {} FILL orders...\n", fill_count);
+        eprintln!("\n=== Full 11k Verification (FILL + BENCHMARK) ===");
+        eprintln!("Verifying {} total orders...\n", total_rows);
 
-        for i in 0..fill_count {
+        for i in 0..total_rows {
             let golden = &golden_rows[i];
             let generated = session.next_command();
 
@@ -378,26 +377,31 @@ mod tests {
                         generated.order_id, generated.price, generated.size, gen_action, generated.uid
                     ),
                 ));
+                // Stop after first 5 mismatches to avoid flooding output
+                if mismatches.len() >= 5 {
+                    break;
+                }
             }
         }
 
-        eprintln!("=== FILL Phase Results ===");
-        eprintln!("Total FILL rows: {}", fill_count);
-        eprintln!("Matched:         {}", matched);
-        eprintln!("Mismatches:      {}", mismatches.len());
+        eprintln!("=== Full Verification Results ===");
+        eprintln!("Total rows:  {}", total_rows);
+        eprintln!("Matched:     {}", matched);
+        eprintln!("Mismatches:  {}", mismatches.len());
 
         if mismatches.is_empty() {
-            eprintln!("\n✅ FILL PHASE: ALL {} ROWS MATCH!", fill_count);
-            eprintln!("\nNote: BENCHMARK phase (1000 rows) requires order book simulation");
-            eprintln!("and is tested via golden CSV as input to the matching engine.");
+            eprintln!(
+                "\n✅ ALL {} ROWS MATCH - Ready for 3M scale generation",
+                total_rows
+            );
         } else {
-            eprintln!("\n❌ First {} mismatches:", mismatches.len().min(5));
-            for (row, detail) in mismatches.iter().take(5) {
+            eprintln!("\n❌ First {} mismatches:", mismatches.len());
+            for (row, detail) in &mismatches {
                 eprintln!("  Row {}: {}", row, detail);
             }
             panic!(
-                "FILL phase verification failed: {}/{} rows matched",
-                matched, fill_count
+                "Full verification failed: {}/{} rows matched",
+                matched, total_rows
             );
         }
     }
