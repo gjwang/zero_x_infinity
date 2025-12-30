@@ -106,8 +106,8 @@ fn derive_session_seed(symbol_id: i32, benchmark_seed: i64) -> i64 {
 
 | File | Records | Seed | Description |
 |------|---------|------|-------------|
-| `golden_single_pair_margin.csv` | 1,100 | 1 | Margin (futures) contract |
-| `golden_single_pair_exchange.csv` | 1,100 | 1 | Spot exchange |
+| `golden_single_pair_margin.csv` | 11,000 | 1 | Margin (futures) contract |
+| `golden_single_pair_exchange.csv` | 11,000 | 1 | Spot exchange |
 
 **CSV Format**:
 ```csv
@@ -174,11 +174,11 @@ cargo test bench:: -- --nocapture
 
 **Expected Output**:
 ```
-[  1] ✅ | Golden: id=1, price=34386, size=  1, action=BID, uid=11
-[  2] ✅ | Golden: id=2, price=34135, size=  1, action=BID, uid= 2
-[  3] ✅ | Golden: id=3, price=34347, size=  2, action=BID, uid=13
+[  1] ✅ | Golden: id=1, price=34386, size=  1, action=BID, uid=377
+[  2] ✅ | Golden: id=2, price=34135, size=  1, action=BID, uid=110
+[  3] ✅ | Golden: id=3, price=34347, size=  2, action=BID, uid=459
 ...
-[20] ✅ | Golden: id=20, price=34297, size=  1, action=BID, uid=50
+[20] ✅ | Golden: id=20, price=34297, size=  1, action=BID, uid=491
 ```
 
 ---
@@ -216,8 +216,8 @@ Exchange-Core 项目使用 Java 的 `java.util.Random` 作为 PRNG。我们必�
 
 | 文件 | 记录数 | Seed | 描述 |
 |------|--------|------|------|
-| `golden_single_pair_margin.csv` | 1,100 | 1 | 保证金（期货）合约 |
-| `golden_single_pair_exchange.csv` | 1,100 | 1 | 现货交易 |
+| `golden_single_pair_margin.csv` | 11,000 | 1 | 保证金（期货）合约 |
+| `golden_single_pair_exchange.csv` | 11,000 | 1 | 现货交易 |
 
 ---
 
@@ -279,9 +279,9 @@ cargo test bench:: -- --nocapture
 
 **预期输出**:
 ```
-[  1] ✅ | Golden: id=1, price=34386, size=  1, action=BID, uid=11
-[  2] ✅ | Golden: id=2, price=34135, size=  1, action=BID, uid= 2
-[  3] ✅ | Golden: id=3, price=34347, size=  2, action=BID, uid=13
+[  1] ✅ | Golden: id=1, price=34386, size=  1, action=BID, uid=377
+[  2] ✅ | Golden: id=2, price=34135, size=  1, action=BID, uid=110
+[  3] ✅ | Golden: id=3, price=34347, size=  2, action=BID, uid=459
 ...
-[20] ✅ | Golden: id=20, price=34297, size=  1, action=BID, uid=50
+[20] ✅ | Golden: id=20, price=34297, size=  1, action=BID, uid=491
 ```
