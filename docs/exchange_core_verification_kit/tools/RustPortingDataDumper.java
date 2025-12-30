@@ -29,12 +29,12 @@ public class RustPortingDataDumper {
 
     private void dumpDataset(Path dir, String filename, TestDataParameters.TestDataParametersBuilder builder)
             throws Exception {
-        // Reduced size for golden data
-        // 1000 transactions is enough for logic verification
+        // Use parameters closer to original Java SinglePair config
+        // 10K transactions for verification, 2K users (same as original)
         TestDataParameters params = builder
-                .totalTransactionsNumber(1000)
-                .targetOrderBookOrdersTotal(100)
-                .numAccounts(100)
+                .totalTransactionsNumber(10_000)
+                .targetOrderBookOrdersTotal(1000)
+                .numAccounts(2000)
                 .build();
 
         System.out.println("Generating data for " + filename + "...");

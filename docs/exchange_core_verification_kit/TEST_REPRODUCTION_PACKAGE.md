@@ -55,16 +55,31 @@ Session_Seed = Hash
 
 ## 2. 标准数据集定义 (Standard Datasets)
 
-| 数据集 | 用户数 | 订单簿深度 | 交易次数 | 交易对 | 说明 |
-|:---|---:|---:|---:|---:|:---|
-| **SinglePairMargin** | 2,000 | 1,000 | 3M | 1 | 基础功能验证 |
-| **SinglePairExchange** | 2,000 | 1,000 | 3M | 1 | 现货撮合验证 |
-| **Medium** | 3.3M | 1M | 3M | 10k | 内存容量验证 |
-| **Large** | 10M | 3M | 3M | 50k | 生产级规模 |
-| **Huge** | 33M | 30M | 10M | 100k | 极限压力测试 |
+### 2.1 精确参数表 (来自 Java 源码)
 
-**货币定义**:
-- `USD (840)`, `EUR (978)`, `XBT (3762)`, `ETH (3928)`, `LTC (4141)`
+| 数据集 | `numAccounts` | `targetOrderBookOrdersTotal` | `totalTransactionsNumber` | `numSymbols` |
+|:---|---:|---:|---:|---:|
+| **SinglePairMargin** | 2,000 | 1,000 | 3,000,000 | 1 |
+| **SinglePairExchange** | 2,000 | 1,000 | 3,000,000 | 1 |
+| **Medium** | 3,300,000 | 1,000,000 | 3,000,000 | 10,000 |
+| **Large** | 10,000,000 | 3,000,000 | 3,000,000 | 50,000 |
+| **Huge** | 33,000,000 | 30,000,000 | 10,000,000 | 100,000 |
+
+### 2.2 货币配置
+
+| 货币 | ID | 用途 |
+|:---|---:|:---|
+| USD | 840 | SinglePairMargin, Multi-Symbol |
+| EUR | 978 | SinglePairMargin, Multi-Symbol |
+| XBT | 3762 | SinglePairExchange, Multi-Symbol |
+| ETH | 3928 | SinglePairExchange, Multi-Symbol |
+| LTC | 4141 | Multi-Symbol only |
+
+| 数据集 | 货币集合 |
+|:---|:---|
+| SinglePairMargin | `{840, 978}` (USD, EUR) |
+| SinglePairExchange | `{3762, 3928}` (XBT, ETH) |
+| Medium/Large/Huge | `{840, 978, 3762, 3928, 4141}` (全部 5 种) |
 
 ---
 
@@ -286,9 +301,9 @@ fn generate_next_command(&mut self, rng: &mut JavaRandom) -> OrderCommand {
 
 位于 `docs/exchange_core_verification_kit/golden_data/` 目录下：
 
-**核心订单数据**:
-1.  **`golden_single_pair_margin.csv`** (1100 records): 期货模式测试样本
-2.  **`golden_single_pair_exchange.csv`** (1100 records): 现货模式测试样本
+**核心订单数据** (`totalTransactionsNumber=10,000`, `numAccounts=2,000`):
+1.  **`golden_single_pair_margin.csv`** (11,000 records): 期货模式测试样本
+2.  **`golden_single_pair_exchange.csv`** (11,000 records): 现货模式测试样本
     - **格式**: `phase,command,order_id,symbol,price,size,action,order_type,uid`
     - *Seed = 1*
 
@@ -342,5 +357,174 @@ fn generate_next_command(&mut self, rng: &mut JavaRandom) -> OrderCommand {
 
 ---
 
+## 附录 A: Multi-Symbol 生成规范 (Medium/Large/Huge)
+
+### A.1 交易对规格生成器
+
+Multi-Symbol 数据集需要随机生成 N 个交易对规格：
+
+```rust
+fn generate_symbol_specs(num_symbols: usize, currencies: &[i32], rng: &mut JavaRandom) -> Vec<SymbolSpec> {
+    let mut specs = Vec::with_capacity(num_symbols);
+    for symbol_id in 0..num_symbols {
+        let is_futures = rng.next_boolean();
+        let base_currency = currencies[rng.next_int(currencies.len() as i32) as usize];
+        let quote_currency = loop {
+            let q = currencies[rng.next_int(currencies.len() as i32) as usize];
+            if q != base_currency { break q; }
+        };
+        specs.push(SymbolSpec {
+            symbol_id: symbol_id as i32,
+            symbol_type: if is_futures { FUTURES } else { EXCHANGE },
+            base_currency,
+            quote_currency,
+            base_scale_k: 1 + rng.next_int(10000) as i64,
+            quote_scale_k: 1 + rng.next_int(10000) as i64,
+            margin_buy: if is_futures { 1000 + rng.next_int(10000) as i64 } else { 0 },
+            margin_sell: if is_futures { 1000 + rng.next_int(10000) as i64 } else { 0 },
+        });
+    }
+    specs
+}
+```
+
+### A.2 用户货币账户生成器
+
+使用 Pareto 分布决定每个用户持有的货币种类：
+
+```rust
+fn generate_user_accounts(num_users: usize, currencies: &[i32], rng: &mut JavaRandom) -> Vec<HashSet<i32>> {
+    // Pareto(scale=1, shape=1.5): 大多数用户持有 1-2 种货币，少数持有全部
+    let pareto_shape = 1.5;
+    let mut accounts = Vec::with_capacity(num_users);
+    for _ in 0..num_users {
+        let num_currencies = (1.0 / rng.next_double().powf(1.0 / pareto_shape)).min(currencies.len() as f64) as usize;
+        let mut user_currencies = HashSet::new();
+        while user_currencies.len() < num_currencies.max(1) {
+            user_currencies.insert(currencies[rng.next_int(currencies.len() as i32) as usize]);
+        }
+        accounts.push(user_currencies);
+    }
+    accounts
+}
+```
+
+### A.3 Pareto 订单权重分布
+
+决定每个交易对的订单比例：
+
+```rust
+fn create_symbol_weights(num_symbols: usize, rng: &mut JavaRandom) -> Vec<f64> {
+    // Pareto(scale=0.001, shape=1.5): 少数交易对获得大部分订单
+    let scale = 0.001;
+    let shape = 1.5;
+    let raw: Vec<f64> = (0..num_symbols)
+        .map(|_| scale / rng.next_double().powf(1.0 / shape))
+        .collect();
+    let sum: f64 = raw.iter().sum();
+    raw.iter().map(|x| x / sum).collect()  // 归一化
+}
+
+// 使用权重选择交易对
+fn select_symbol(weights: &[f64], rng: &mut JavaRandom) -> usize {
+    let r = rng.next_double();
+    let mut cumulative = 0.0;
+    for (i, w) in weights.iter().enumerate() {
+        cumulative += w;
+        if r < cumulative { return i; }
+    }
+    weights.len() - 1
+}
+```
+
+### A.4 用户货币过滤
+
+为特定交易对筛选可用用户：
+
+```rust
+fn filter_users_for_symbol(
+    accounts: &[HashSet<i32>], 
+    symbol: &SymbolSpec
+) -> Vec<usize> {
+    accounts.iter().enumerate()
+        .filter(|(_, currencies)| {
+            currencies.contains(&symbol.quote_currency) &&
+            (symbol.symbol_type == FUTURES || currencies.contains(&symbol.base_currency))
+        })
+        .map(|(uid, _)| uid + 1)  // UID 从 1 开始
+        .collect()
+}
+```
+
+### A.5 Per-Symbol 影子订单簿
+
+每个交易对维护独立的状态：
+
+```rust
+struct MultiSymbolGenerator {
+    symbol_books: HashMap<i32, ShadowOrderBook>,  // symbolId → 影子订单簿
+    symbol_weights: Vec<f64>,
+    users_for_symbol: HashMap<i32, Vec<usize>>,
+}
+
+fn generate_next(&mut self, rng: &mut JavaRandom) -> OrderCommand {
+    let symbol_id = select_symbol(&self.symbol_weights, rng);
+    let book = self.symbol_books.get_mut(&symbol_id).unwrap();
+    let users = &self.users_for_symbol[&symbol_id];
+    book.generate_next_command(rng, users)
+}
+```
+
+### A.6 价格生成算法
+
+```rust
+fn generate_initial_price(rng: &mut JavaRandom) -> i64 {
+    // 初始价格: 10^(3.3 + rand*1.5 + rand*1.5) ≈ 2000 ~ 2000000
+    (10.0_f64.powf(3.3 + rng.next_double() * 1.5 + rng.next_double() * 1.5)) as i64
+}
+
+fn generate_price_deviation(price: i64) -> i64 {
+    (price as f64 * 0.05).min(10000.0) as i64  // 最大 5% 或 10000 点
+}
+
+fn generate_order_price(rng: &mut JavaRandom, last_price: i64, deviation: i64, is_ask: bool) -> i64 {
+    let offset = (rng.next_double().powi(2) * deviation as f64) as i64;
+    if is_ask { last_price + 1 + offset }
+    else { last_price - 1 - offset }
+}
+```
+
+---
+
+## 附录 B: 测试执行流程
+
+### B.1 完整 7 步流程
+
+1. **创建交易所实例** - 配置 RingBuffer, ME, RE 数量
+2. **加载交易对** - `ADD_SYMBOLS` 命令
+3. **初始化用户** - `ADD_USER` + `ADJUST_BALANCE` 命令
+4. **预填充订单簿** - FILL Phase (GTC 订单)
+5. **基准测试** - BENCHMARK Phase (混合命令)
+6. **收集指标** - 吞吐量 (MT/s), 延迟百分位
+7. **验证** - 全局余额为零，状态哈希一致
+
+### B.2 全局验证规则
+
+```rust
+fn verify_global_balance(exchange: &Exchange) -> bool {
+    // 所有货币的: 用户余额总和 + 挂单冻结总和 == 初始注入总和
+    // 即: 无资金凭空产生或消失
+    exchange.total_balance_report().is_all_zero()
+}
+
+fn verify_state_hash(before: u64, after: u64) -> bool {
+    // 持久化恢复后状态哈希必须一致
+    before == after
+}
+```
+
+---
+
 **End of Specification**
 **Prepared for**: Exchange Core Rust Porting Team
+

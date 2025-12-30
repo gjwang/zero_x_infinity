@@ -75,9 +75,9 @@ pub struct SessionConfig {
 impl Default for SessionConfig {
     fn default() -> Self {
         Self {
-            target_orders_per_side: 50, // 100 total / 2 sides
-            num_accounts: 100,          // From RustPortingDataDumper
-            symbol_messages: 1000,      // totalTransactionsNumber
+            target_orders_per_side: 500, // 1000 total / 2 sides
+            num_accounts: 2000,          // From updated RustPortingDataDumper
+            symbol_messages: 10000,      // totalTransactionsNumber
             symbol_id: 40000,
         }
     }

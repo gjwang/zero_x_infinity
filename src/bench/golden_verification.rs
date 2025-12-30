@@ -251,11 +251,11 @@ mod tests {
         let golden_rows = load_golden_csv(&path).expect("Failed to load golden CSV");
 
         // Create generator with same config as Java reference
-        // RustPortingDataDumper: numAccounts=100, totalTransactionsNumber=1000
+        // RustPortingDataDumper: numAccounts=2000, totalTransactionsNumber=10000
         let config = SessionConfig {
-            target_orders_per_side: 50, // FILL phase has 100 orders = 50 per side
-            num_accounts: 100,          // From RustPortingDataDumper
-            symbol_messages: 1000,      // totalTransactionsNumber
+            target_orders_per_side: 500, // FILL phase has 1000 orders = 500 per side
+            num_accounts: 2000,          // From updated RustPortingDataDumper
+            symbol_messages: 10000,      // totalTransactionsNumber
             symbol_id: 40000,
         };
         let mut session = TestOrdersGeneratorSession::new(config, 1);
@@ -336,9 +336,9 @@ mod tests {
 
         // RustPortingDataDumper: numAccounts=100, totalTransactionsNumber=1000
         let config = SessionConfig {
-            target_orders_per_side: 50,
-            num_accounts: 100,
-            symbol_messages: 1000,
+            target_orders_per_side: 500,
+            num_accounts: 2000,
+            symbol_messages: 10000,
             symbol_id: 40000,
         };
         let mut session = TestOrdersGeneratorSession::new(config, 1);
