@@ -417,7 +417,11 @@ main() {
     log_info "📋 Level 1: Rust Unit Tests (Sentinel)"
     echo "════════════════════════════════════════════════════════════════════════"
     
-    ((TOTAL_TESTS++))
+    # Enable tracing to see exactly where it crashes
+    set -x
+    
+    # Simplify arithmetic
+    TOTAL_TESTS=$((TOTAL_TESTS + 1))
     L1_STATUS="FAILED" # Default to failed
     
     # DEBUG: Check cargo availability
