@@ -1,5 +1,6 @@
 use super::chain_adapter::ChainClient;
 use crate::account::{AssetManager, Database};
+use crate::money;
 use rust_decimal::prelude::*;
 use sqlx::Row;
 use std::sync::Arc;
@@ -71,15 +72,9 @@ impl DepositService {
             .map_err(DepositError::Database)?
             .ok_or_else(|| DepositError::AssetNotFound(asset_name.to_string()))?;
 
-        // Scale to i64
-        let scale_factor = Decimal::from(10u64.pow(asset.decimals as u32));
-        let amount_scaled = (amount * scale_factor)
-            .to_i64()
-            .ok_or(DepositError::InvalidAmount)?;
-
-        if amount_scaled <= 0 {
-            return Err(DepositError::InvalidAmount);
-        }
+        // Scale to i64 using unified money module
+        let amount_scaled = money::parse_decimal(amount, asset.decimals as u32)
+            .map_err(|_| DepositError::InvalidAmount)? as i64;
 
         // 3. Insert Deposit Record (CONFIRMING -> SUCCESS immediately for Mock)
         // In real system, scanner might set CONFIRMING, then update later.
@@ -194,10 +189,9 @@ impl DepositService {
             let amount_raw: i64 = row.get("amount");
             let decimals: i16 = row.get("decimals");
 
-            // Scaling logic
-            let scale_factor = Decimal::from(10u64.pow(decimals as u32));
-            let amount_decimal = Decimal::from(amount_raw) / scale_factor;
-            let amount_str = format!("{:.prec$}", amount_decimal, prec = decimals as usize);
+            // Use unified money module for formatting
+            let amount_str =
+                money::format_amount_signed(amount_raw, decimals as u32, decimals as u32);
 
             records.push(DepositRecord {
                 tx_hash: row.get("tx_hash"),

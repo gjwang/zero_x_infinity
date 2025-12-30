@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use super::coordinator::TransferCoordinator;
 use super::error::TransferError;
 use super::types::{InternalTransferId, ServiceId, TransferRequest as CoreTransferRequest};
+use crate::money;
 
 // ============================================================================
 // API Request/Response Types
@@ -116,61 +117,23 @@ fn parse_account_type(s: &str) -> Result<ServiceId, TransferError> {
 }
 
 /// Parse amount from string to u64 with decimals
+/// Delegates to crate::money::parse_amount for unified implementation
 fn parse_amount(s: &str, decimals: u32) -> Result<u64, TransferError> {
-    // Remove any whitespace
-    let s = s.trim();
-
-    if s.is_empty() {
-        return Err(TransferError::InvalidAmount);
-    }
-
-    // Parse as decimal
-    let parts: Vec<&str> = s.split('.').collect();
-
-    let (whole, frac) = match parts.len() {
-        1 => (parts[0], ""),
-        2 => (parts[0], parts[1]),
-        _ => return Err(TransferError::InvalidAmount),
-    };
-
-    // Parse whole part
-    let whole_num: u64 = whole.parse().map_err(|_| TransferError::InvalidAmount)?;
-
-    // **PRECISION VALIDATION**: Check if fractional part exceeds asset decimals
-    // QA TC-P0-04: Reject amounts with excessive precision instead of truncating
-    if frac.len() > decimals as usize {
-        return Err(TransferError::PrecisionOverflow {
-            provided: frac.len() as u32,
-            max: decimals,
-        });
-    }
-
-    // Parse fractional part (pad to decimals)
-    let frac_str = format!("{:0<width$}", frac, width = decimals as usize);
-    let frac_num: u64 = frac_str[..decimals as usize]
-        .parse()
-        .map_err(|_| TransferError::InvalidAmount)?;
-
-    // Combine
-    let multiplier = 10u64.pow(decimals);
-    let amount = whole_num
-        .checked_mul(multiplier)
-        .and_then(|v| v.checked_add(frac_num))
-        .ok_or(TransferError::InvalidAmount)?;
-
-    if amount == 0 {
-        return Err(TransferError::InvalidAmount);
-    }
-
-    Ok(amount)
+    money::parse_amount(s, decimals).map_err(|e| match e {
+        money::MoneyError::InvalidAmount => TransferError::InvalidAmount,
+        money::MoneyError::PrecisionOverflow { provided, max } => {
+            TransferError::PrecisionOverflow { provided, max }
+        }
+        money::MoneyError::Overflow => TransferError::AmountTooLarge,
+        money::MoneyError::InvalidFormat(_) => TransferError::InvalidAmount,
+        _ => TransferError::InvalidAmount,
+    })
 }
 
 /// Format amount from u64 to string with decimals
+/// Delegates to crate::money::format_amount_full for unified implementation
 fn format_amount(amount: u64, decimals: u32) -> String {
-    let divisor = 10u64.pow(decimals);
-    let whole = amount / divisor;
-    let frac = amount % divisor;
-    format!("{}.{:0>width$}", whole, frac, width = decimals as usize)
+    money::format_amount_full(amount, decimals)
 }
 
 /// Map TransferError to (StatusCode, error_code, message)

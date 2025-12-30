@@ -1,16 +1,17 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use taos::*;
 use utoipa::ToSchema;
 
+use crate::money;
 use crate::symbol_manager::SymbolManager;
 
 /// Format internal u64 to display string with specified decimals
+/// Delegates to crate::money for unified implementation
+#[inline]
 fn format_amount(value: u64, decimals: u32, display_decimals: u32) -> String {
-    let decimal_value = Decimal::from(value) / Decimal::from(10u64.pow(decimals));
-    format!("{:.prec$}", decimal_value, prec = display_decimals as usize)
+    money::format_amount(value, decimals, display_decimals)
 }
 
 /// Order record from TDengine (matches database schema)
