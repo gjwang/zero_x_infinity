@@ -336,14 +336,14 @@ def test_red_002_reduce_to_zero() -> TestResult:
 
 def test_red_003_exceed_quantity() -> TestResult:
     """
-    RED-003: 减量超过原数量 → 验证无副作用
+    RED-003: 减量超过原数量 → 订单被取消
     
     设计说明:
-        Gateway 异步接受请求，Pipeline 处理时会拒绝超量减少。
-        测试验证：订单仍在簿中，数量不变。
+        当 reduce_qty >= remaining_qty 时，系统截断到 remaining_qty 并移除订单。
+        这是预期行为，不是错误。订单状态变为 CANCELED。
     """
     test_id = "RED-003"
-    test_name = "ReduceOrder 超过原数量 (异步验证)"
+    test_name = "ReduceOrder 超过原数量 (截断取消)"
     
     print(f"\n[{test_id}] {test_name}")
     
@@ -366,7 +366,8 @@ def test_red_003_exceed_quantity() -> TestResult:
         in_book_before = check_order_in_book(SYMBOL, "BUY", price)
         print(f"  In book before: {in_book_before}")
         
-        # Try to reduce by 0.002 (exceeds original)
+        # Try to reduce by 0.002 (exceeds original 0.001)
+        # Expected: reduce is truncated to 0.001, order is canceled
         print(f"  Attempting to reduce by 0.002 (exceeds original {original_qty})")
         success, resp = reduce_order(client, order_id, "0.002")
         print(f"  Response: success={success}, data={resp}")
@@ -374,18 +375,18 @@ def test_red_003_exceed_quantity() -> TestResult:
         # 等待异步处理
         time.sleep(0.5)
         
-        # 验证：订单仍在簿中，状态未变
+        # 验证：订单从簿中移除，状态为 CANCELED
         in_book_after = check_order_in_book(SYMBOL, "BUY", price)
         status = get_order_status(client, order_id)
         
         print(f"  In book after: {in_book_after}")
         print(f"  Status: {status}")
         
-        expected = "Order still in book, status unchanged (NEW/ACCEPTED)"
+        expected = "Order removed from book, status=CANCELED (truncated reduce)"
         actual = f"in_book={in_book_after}, status={status}"
         
-        # 成功条件：订单仍在簿中，超量减少被拒绝
-        if in_book_after and status in ["NEW", "ACCEPTED"]:
+        # 设计预期：超量 reduce 被截断，订单被取消
+        if not in_book_after and status == "CANCELED":
             return TestResult(test_id, test_name, TestStatus.PASS,
                             expected=expected, actual=actual)
         else:

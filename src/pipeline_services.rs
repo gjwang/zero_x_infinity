@@ -937,6 +937,16 @@ impl MatchingService {
                             },
                         );
                     }
+
+                    // [FIX] Phase 0x14-b: Send MEResult to persist CANCELED status to TDengine
+                    let me_result = crate::messages::MEResult {
+                        order: cancelled_order.clone(),
+                        trades: vec![],
+                        maker_updates: vec![],
+                        final_status: OrderStatus::CANCELED,
+                        symbol_id: cancelled_order.symbol_id,
+                    };
+                    let _ = self.queues.me_result_queue.push(me_result);
                 }
                 self.depth_dirty = true; // Mark depth as changed
             }
@@ -984,7 +994,9 @@ impl MatchingService {
                     };
 
                 // 2. Apply to Matching Engine
-                if MatchingEngine::reduce_order(&mut self.book, order_id, reduce_qty).is_some() {
+                let reduced_order =
+                    MatchingEngine::reduce_order(&mut self.book, order_id, reduce_qty);
+                if let Some(ref order) = reduced_order {
                     tracing::info!("[TRACE] Reduce Order {}: Success", order_id);
 
                     // 3. Unlock frozen balance if needed
@@ -998,6 +1010,41 @@ impl MatchingService {
                         };
                         let _ = self.queues.balance_update_queue.push(unlock_req);
                     }
+
+                    // [FIX] Phase 0x14-b: Determine final status and persist
+                    // Check if order is still in book - if not, it was reduced to zero (removed)
+                    let is_removed = self.book.get_order(order_id).is_none();
+                    let final_status = if is_removed {
+                        // Reduced to zero (fully canceled)
+                        OrderStatus::CANCELED
+                    } else {
+                        // Partially reduced, still active
+                        order.status
+                    };
+
+                    // [PUSH] Notify client of reduce result
+                    let _ = self.queues.push_event_queue.push(
+                        crate::websocket::PushEvent::OrderUpdate {
+                            user_id,
+                            order_id,
+                            symbol_id: order.symbol_id,
+                            status: final_status,
+                            filled_qty: order.filled_qty,
+                            avg_price: None,
+                        },
+                    );
+
+                    // [FIX] Phase 0x14-b: Send MEResult to persist status to TDengine
+                    let mut order_copy = order.clone();
+                    order_copy.status = final_status;
+                    let me_result = crate::messages::MEResult {
+                        order: order_copy,
+                        trades: vec![],
+                        maker_updates: vec![],
+                        final_status,
+                        symbol_id: order.symbol_id,
+                    };
+                    let _ = self.queues.me_result_queue.push(me_result);
 
                     self.depth_dirty = true;
                 }
