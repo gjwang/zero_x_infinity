@@ -3,7 +3,7 @@
 ## 📦 交付物
 
 - [x] Test Checklist: `docs/agents/sessions/qa/0x14-b-test-checklist.md`
-- [x] Architecture Overview: `docs/src/0x14-b-matching-engine.md`
+- [x] Architecture Overview: `docs/src/0x14-b-order-commands.md`
 - [x] Key Test Scenarios: 见下文
 
 ## 🎯 测试目标
@@ -39,7 +39,7 @@
 
 ## 🔗 相关文档
 
-- Architecture Design: [0x14-b-matching-engine.md](../../../../docs/src/0x14-b-matching-engine.md)
+- Architecture Design: [0x14-b-order-commands.md](../../../../docs/src/0x14-b-order-commands.md)
 - Generator (for reference): [0x14-a-bench-harness.md](../../../../docs/src/0x14-a-bench-harness.md)
 
 ## 📞 Ready for Test Planning

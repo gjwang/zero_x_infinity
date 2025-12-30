@@ -2,7 +2,7 @@
 
 ## 📦 设计交付物
 
-- [x] Architecture Design: `docs/src/0x14-b-matching-engine.md`
+- [x] Architecture Design: `docs/src/0x14-b-order-commands.md`
 - [x] Implementation Plan: 本文档
 - [x] Test Checklist: `docs/agents/sessions/qa/0x14-b-test-checklist.md`
 
@@ -100,7 +100,7 @@ impl MatchingEngine {
 
 ## 🔗 相关文档
 
-- Architecture: [0x14-b-matching-engine.md](../../../../docs/src/0x14-b-matching-engine.md)
+- Architecture: [0x14-b-order-commands.md](../../../../docs/src/0x14-b-order-commands.md)
 - Generator Spec: [0x14-a-bench-harness.md](../../../../docs/src/0x14-a-bench-harness.md)
 - Generator Code: `src/bench/order_generator.rs` (L472, L504, L555)
 

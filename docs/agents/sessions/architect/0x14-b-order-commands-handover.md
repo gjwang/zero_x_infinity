@@ -9,7 +9,7 @@
 ## 1. Objective
 Implement a feature-complete Spot Matching Engine in Rust that supports the `TestOrdersGenerator` requirements, specifically `IOC` (Immediate-or-Cancel) orders and `TimeInForce` logic.
 
-**Design Spec**: [docs/src/0x14-b-matching-engine.md](../../../../docs/src/0x14-b-matching-engine.md)
+**Design Spec**: [docs/src/0x14-b-order-commands.md](../../../../docs/src/0x14-b-order-commands.md)
 
 ## 2. Developer Tasks
 
