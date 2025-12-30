@@ -23,10 +23,10 @@ CREATE TABLE chain_assets_tb (
     contract_address VARCHAR(128),  -- NULL for Native, 0x... for Tokens
     decimals SMALLINT NOT NULL,     -- Chain-specific decimals (e.g. 6 for USDT)
     
-    -- Chain-Specific Overrides (Business Rules)
-    min_deposit DECIMAL(30, 8) DEFAULT 0,
-    min_withdraw DECIMAL(30, 8) DEFAULT 0,
-    withdraw_fee DECIMAL(30, 8) DEFAULT 0,
+    -- Chain-Specific Overrides (Business Rules - stored as atomic units e.g. Satoshis/Wei)
+    min_deposit BIGINT DEFAULT 0,
+    min_withdraw BIGINT DEFAULT 0,
+    withdraw_fee BIGINT DEFAULT 0,
     
     -- Operational Status
     is_active BOOLEAN DEFAULT FALSE,  -- SECURITY: Default inactive for safe listing

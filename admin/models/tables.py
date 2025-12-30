@@ -151,9 +151,9 @@ class ChainAsset(Base):
     asset_id: Mapped[int] = mapped_column(Integer, ForeignKey("assets_tb.asset_id"), nullable=False)
     contract_address: Mapped[Optional[str]] = mapped_column(String(128))  # NULL for native assets
     decimals: Mapped[int] = mapped_column(SmallInteger, nullable=False)
-    min_deposit: Mapped[Optional[Decimal]] = mapped_column(Numeric(30, 8), default=0)
-    min_withdraw: Mapped[Optional[Decimal]] = mapped_column(Numeric(30, 8), default=0)
-    withdraw_fee: Mapped[Optional[Decimal]] = mapped_column(Numeric(30, 8), default=0)
+    min_deposit: Mapped[Optional[int]] = mapped_column(BigInteger, default=0)   # Atomic units (Satoshis/Wei)
+    min_withdraw: Mapped[Optional[int]] = mapped_column(BigInteger, default=0)  # Atomic units
+    withdraw_fee: Mapped[Optional[int]] = mapped_column(BigInteger, default=0)  # Atomic units
     is_active: Mapped[bool] = mapped_column(Boolean, default=False)  # SECURITY: Default inactive
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=func.now(), onupdate=func.now())

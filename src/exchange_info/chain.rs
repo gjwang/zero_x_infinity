@@ -1,4 +1,3 @@
-use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Result};
 
@@ -23,9 +22,9 @@ pub struct ChainAsset {
     pub asset_symbol: String, // Joined from assets_tb
     pub contract_address: Option<String>,
     pub decimals: i16,
-    pub min_deposit: Option<Decimal>,
-    pub min_withdraw: Option<Decimal>,
-    pub withdraw_fee: Option<Decimal>,
+    pub min_deposit: Option<i64>,  // Atomic units (Satoshis/Wei)
+    pub min_withdraw: Option<i64>, // Atomic units
+    pub withdraw_fee: Option<i64>, // Atomic units
     pub is_active: Option<bool>,
 }
 
