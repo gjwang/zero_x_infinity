@@ -13,7 +13,7 @@ set -e
 # 4. API Surface: OpenAPI E2E & Admin API
 #
 # Usage:
-#   ./scripts/verify_full_system.sh
+#   ./scripts/verify_e2e_suite.sh
 # 
 # Env Vars:
 #   GATEWAY_BINARY: Path to gateway binary (default: target/release/zero_x_infinity)

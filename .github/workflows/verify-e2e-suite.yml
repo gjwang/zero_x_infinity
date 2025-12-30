@@ -65,8 +65,8 @@ jobs:
           TD_HOST: localhost
           TD_PORT: 6041
         run: |
-          chmod +x scripts/verify_full_system.sh
-          ./scripts/verify_full_system.sh
+          chmod +x scripts/verify_e2e_suite.sh
+          ./scripts/verify_e2e_suite.sh
 
       - name: Upload Logs
         if: always()
