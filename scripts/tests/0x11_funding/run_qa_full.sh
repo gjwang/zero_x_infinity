@@ -39,6 +39,10 @@ trap cleanup EXIT
 log_info "Initializing DB..."
 "$PROJECT_ROOT/scripts/db/init.sh" pg
 
+# Clean transactional data for fresh test state
+log_info "Cleaning transactional data..."
+"$PROJECT_ROOT/scripts/db/clean.sh" pg
+
 # Wait for DB
 wait_for_postgres
 

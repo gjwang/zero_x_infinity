@@ -80,25 +80,13 @@ PGPASSWORD="${PG_PASSWORD}" psql -h "${PG_HOST}" -p "${PG_PORT}" -U "${PG_USER}"
 -- Enable internal transfer for USDT (add 0x10 = 16 to flags)
 UPDATE assets_tb SET asset_flags = asset_flags | 16 WHERE asset_id = 2;
 
--- Ensure balances table exists
-CREATE TABLE IF NOT EXISTS balances_tb (
-    id SERIAL PRIMARY KEY,
-    user_id BIGINT NOT NULL,
-    asset_id INT NOT NULL,
-    account_type INT NOT NULL DEFAULT 1,
-    available DECIMAL(30, 8) NOT NULL DEFAULT 0,
-    frozen DECIMAL(30, 8) NOT NULL DEFAULT 0,
-    version INT NOT NULL DEFAULT 1,
-    status INT NOT NULL DEFAULT 1,
-    UNIQUE (user_id, asset_id, account_type)
-);
-
 -- CLEAN SLATE: Delete ALL balances for test user
 DELETE FROM balances_tb WHERE user_id = 1001;
 
--- Create ONLY Funding balance: 1000 USDT (Unit Amount, not scaled)
-INSERT INTO balances_tb (user_id, asset_id, account_type, available, frozen, status)
-VALUES (1001, 2, 2, 1000, 0, 1);
+-- Create ONLY Funding balance: 1000 USDT (USDT has 6 decimals, so 1000 * 10^6 = 1_000_000_000)
+-- account_type: 1 = spot, 2 = funding
+INSERT INTO balances_tb (user_id, asset_id, account_type, available, frozen, version)
+VALUES (1001, 2, 2, 1000000000, 0, 1);
 
 -- Clear old transfer records for clean test
 DELETE FROM transfer_operations_tb WHERE transfer_id IN (

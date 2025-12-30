@@ -43,6 +43,10 @@ clean_postgres() {
     psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "$PG_DB" -c "
         -- Clean transactional tables (if they exist)
         TRUNCATE TABLE transfers_tb CASCADE;
+        TRUNCATE TABLE deposit_history CASCADE;
+        TRUNCATE TABLE withdraw_history CASCADE;
+        TRUNCATE TABLE fsm_transfers_tb CASCADE;
+        TRUNCATE TABLE transfer_operations_tb CASCADE;
     " 2>/dev/null || true
     
     log_info "✅ PostgreSQL cleaned"
