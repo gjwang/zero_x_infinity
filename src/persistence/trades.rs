@@ -6,11 +6,11 @@ use taos::*;
 ///
 /// For each trade, we insert TWO records (one for buyer, one for seller)
 pub async fn insert_trade(taos: &Taos, trade: &Trade, symbol_id: u32) -> Result<()> {
-    let table_name = format!("trades_{}", symbol_id);
+    let table_name = format!("trading.trades_{}", symbol_id);
 
     // Create subtable if not exists
     let create_subtable = format!(
-        "CREATE TABLE IF NOT EXISTS {} USING trades TAGS ({})",
+        "CREATE TABLE IF NOT EXISTS {} USING trading.trades TAGS ({})",
         table_name, symbol_id
     );
     taos.exec(&create_subtable)
@@ -70,11 +70,11 @@ pub async fn insert_trade_record(
     role: u8,
     symbol_id: u32,
 ) -> Result<()> {
-    let table_name = format!("trades_{}", symbol_id);
+    let table_name = format!("trading.trades_{}", symbol_id);
 
     // Create subtable if not exists
     let create_subtable = format!(
-        "CREATE TABLE IF NOT EXISTS {} USING trades TAGS ({})",
+        "CREATE TABLE IF NOT EXISTS {} USING trading.trades TAGS ({})",
         table_name, symbol_id
     );
     taos.exec(&create_subtable)

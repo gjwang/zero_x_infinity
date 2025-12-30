@@ -125,11 +125,17 @@ run_migrations() {
     # Use existing unified database initialization script
     if [[ "${CLEAN_DB:-}" == "true" ]]; then
         log_warn "   Clean DB mode: using --reset flag..."
-        "$PROJECT_ROOT/scripts/db/init.sh" pg --reset 2>&1 | while read line; do
+        
+        # CRITICAL: Clean WAL data to ensure fresh state for matching engine
+        # Without this, old orders/balances persist in memory after DB reset
+        log_warn "   Cleaning WAL data (ubscore, matching, settlement)..."
+        rm -rf "$PROJECT_ROOT/data/ubscore/"* "$PROJECT_ROOT/data/matching/"* "$PROJECT_ROOT/data/settlement/"* 2>/dev/null || true
+        
+        "$PROJECT_ROOT/scripts/db/init.sh" --reset 2>&1 | while read line; do
             echo "   $line"
         done
     else
-        "$PROJECT_ROOT/scripts/db/init.sh" pg 2>&1 | while read line; do
+        "$PROJECT_ROOT/scripts/db/init.sh" 2>&1 | while read line; do
             echo "   $line"
         done
     fi
@@ -251,6 +257,7 @@ start_gateway() {
     mkdir -p "$LOG_DIR"
     if [ -n "$GATEWAY_BINARY" ]; then
         log_info "Using pre-built binary: $GATEWAY_BINARY"
+        cd "$PROJECT_ROOT"
         nohup "$GATEWAY_BINARY" --gateway --env "$TARGET_ENV" > "$LOG_DIR/gateway_e2e.log" 2>&1 &
     else
         # Limit handled in config/ci.yaml
@@ -553,6 +560,23 @@ main() {
     log_info "📋 Level 4: Two User E2E (Order Matching)"
     echo "   User A sells BTC ↔ User B buys BTC → Trade matched"
     echo "════════════════════════════════════════════════════════════════════════"
+    
+    # CRITICAL: Restart Gateway to clear Order Book state from L3
+    # Without this, L3's unfilled orders remain in memory and interfere with L4
+    log_info "🔄 Restarting Gateway for clean Order Book state..."
+    stop_process "$GATEWAY_PID" "Gateway"
+    rm -rf "$PROJECT_ROOT/data/ubscore/"* "$PROJECT_ROOT/data/matching/"* "$PROJECT_ROOT/data/settlement/"* 2>/dev/null || true
+    sleep 2
+    
+    # Use pre-built binary if available to avoid recompilation delay
+    if [ -z "$GATEWAY_BINARY" ] && [ -f "$PROJECT_ROOT/target/debug/zero_x_infinity" ]; then
+        export GATEWAY_BINARY="$PROJECT_ROOT/target/debug/zero_x_infinity"
+    fi
+    start_gateway || exit 1
+    sleep 5
+    
+    # Restore test directory after gateway restart (cd in start_gateway changes cwd)
+    cd "$PROJECT_ROOT/scripts/tests/0x11b_sentinel"
     
     TOTAL_TESTS=$((TOTAL_TESTS + 1))
     L4_STATUS="FAILED" # Default to failed

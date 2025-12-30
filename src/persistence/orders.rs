@@ -4,11 +4,11 @@ use taos::*;
 
 /// Insert a new order into TDengine
 pub async fn insert_order(taos: &Taos, order: &InternalOrder, symbol_id: u32) -> Result<()> {
-    let table_name = format!("orders_{}", symbol_id);
+    let table_name = format!("trading.orders_{}", symbol_id);
 
     // Create subtable if not exists
     let create_subtable = format!(
-        "CREATE TABLE IF NOT EXISTS {} USING orders TAGS ({})",
+        "CREATE TABLE IF NOT EXISTS {} USING trading.orders TAGS ({})",
         table_name, symbol_id
     );
     taos.exec(&create_subtable)
@@ -77,7 +77,7 @@ pub async fn batch_insert_me_results(
         let cid = o.cid.as_deref().unwrap_or("");
         write!(
             orders_sql,
-            "orders_{} VALUES({}, {}, {}, {}, {}, {}, {}, {}, {}, '{}') ",
+            "trading.orders_{} VALUES({}, {}, {}, {}, {}, {}, {}, {}, {}, '{}') ",
             r.symbol_id,
             now_us + ts_offset,
             o.order_id,
@@ -98,7 +98,7 @@ pub async fn batch_insert_me_results(
             let m_cid = m.cid.as_deref().unwrap_or("");
             write!(
                 orders_sql,
-                "orders_{} VALUES({}, {}, {}, {}, {}, {}, {}, {}, {}, '{}') ",
+                "trading.orders_{} VALUES({}, {}, {}, {}, {}, {}, {}, {}, {}, '{}') ",
                 r.symbol_id,
                 now_us + ts_offset,
                 m.order_id,
@@ -127,7 +127,7 @@ pub async fn batch_insert_me_results(
             for r in results {
                 if !created_symbols.contains(&r.symbol_id) {
                     let create_sql = format!(
-                        "CREATE TABLE IF NOT EXISTS orders_{} USING orders TAGS ({})",
+                        "CREATE TABLE IF NOT EXISTS trading.orders_{} USING trading.orders TAGS ({})",
                         r.symbol_id, r.symbol_id
                     );
                     let _ = taos.exec(&create_sql).await;
@@ -161,7 +161,7 @@ pub async fn batch_insert_me_results(
                 // Note: fee=0 here, actual fee is in balance_events table
                 write!(
                     trades_sql,
-                    "trades_{} VALUES({}, {}, {}, {}, {}, {}, {}, 0, {}) ",
+                    "trading.trades_{} VALUES({}, {}, {}, {}, {}, {}, {}, 0, {}) ",
                     r.symbol_id,
                     now_us + ts_offset,
                     t.trade_id,
@@ -179,7 +179,7 @@ pub async fn batch_insert_me_results(
                 // Note: fee=0 here, actual fee is in balance_events table
                 write!(
                     trades_sql,
-                    "trades_{} VALUES({}, {}, {}, {}, {}, {}, {}, 0, {}) ",
+                    "trading.trades_{} VALUES({}, {}, {}, {}, {}, {}, {}, 0, {}) ",
                     r.symbol_id,
                     now_us + ts_offset,
                     t.trade_id,
@@ -210,7 +210,7 @@ pub async fn batch_insert_me_results(
                 for r in results {
                     if !created_symbols.contains(&r.symbol_id) {
                         let create_sql = format!(
-                            "CREATE TABLE IF NOT EXISTS trades_{} USING trades TAGS ({})",
+                            "CREATE TABLE IF NOT EXISTS trading.trades_{} USING trading.trades TAGS ({})",
                             r.symbol_id, r.symbol_id
                         );
                         let _ = taos.exec(&create_sql).await;
@@ -240,11 +240,11 @@ pub async fn update_order_status(
     status: OrderStatus,
     cid: Option<&str>,
 ) -> Result<()> {
-    let table_name = format!("orders_{}", symbol_id);
+    let table_name = format!("trading.orders_{}", symbol_id);
 
     // Create subtable if not exists
     let create_subtable = format!(
-        "CREATE TABLE IF NOT EXISTS {} USING orders TAGS ({})",
+        "CREATE TABLE IF NOT EXISTS {} USING trading.orders TAGS ({})",
         table_name, symbol_id
     );
     taos.exec(&create_subtable)
