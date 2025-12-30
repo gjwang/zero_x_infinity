@@ -251,11 +251,11 @@ mod tests {
         let golden_rows = load_golden_csv(&path).expect("Failed to load golden CSV");
 
         // Create generator with same config as Java reference
-        // Golden data uses: symbol=40000, seed=1
-        // UIDs in golden data range from 2-50, suggesting ~50 users
+        // RustPortingDataDumper: numAccounts=100, totalTransactionsNumber=1000
         let config = SessionConfig {
             target_orders_per_side: 50, // FILL phase has 100 orders = 50 per side
-            num_users: 50,              // Based on golden UID range
+            num_accounts: 100,          // From RustPortingDataDumper
+            symbol_messages: 1000,      // totalTransactionsNumber
             symbol_id: 40000,
         };
         let mut session = TestOrdersGeneratorSession::new(config, 1);

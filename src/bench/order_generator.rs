@@ -66,7 +66,8 @@ pub enum Phase {
 #[derive(Debug, Clone)]
 pub struct SessionConfig {
     pub target_orders_per_side: usize,
-    pub num_users: usize,
+    pub num_accounts: usize,    // Total account quota for generateUsers
+    pub symbol_messages: usize, // For numUsersToSelect calculation
     pub symbol_id: i32,
 }
 
@@ -74,7 +75,8 @@ impl Default for SessionConfig {
     fn default() -> Self {
         Self {
             target_orders_per_side: 50, // 100 total / 2 sides
-            num_users: 100,             // From RustPortingDataDumper
+            num_accounts: 100,          // From RustPortingDataDumper
+            symbol_messages: 1000,      // totalTransactionsNumber
             symbol_id: 40000,
         }
     }
@@ -149,8 +151,11 @@ impl TestOrdersGeneratorSession {
         // Generate UIDs array matching createUserListForSymbol
         // Java: Random rand = new Random(spec.symbolId);
         //       int uid = 1 + rand.nextInt(users2currencies.size() - 1);
-        //       ... iterate to collect valid users
-        let uids = Self::create_user_list_for_symbol(config.symbol_id, config.num_users);
+        let uids = Self::create_user_list_for_symbol(
+            config.symbol_id,
+            config.num_accounts,
+            config.symbol_messages,
+        );
 
         Self {
             rng,
@@ -169,37 +174,46 @@ impl TestOrdersGeneratorSession {
     /// Replicate Java's createUserListForSymbol with currency filtering
     ///
     /// Java flow:
-    /// 1. generateUsers(numAccounts, currencies) - creates List<BitSet> with Pareto distribution
-    /// 2. createUserListForSymbol - filters users who have required currencies, iterates from symbol-seeded position
-    fn create_user_list_for_symbol(symbol_id: i32, num_users: usize) -> Vec<i32> {
-        // Step 1: Generate user accounts like Java's generateUsers
-        let user_currencies = Self::generate_user_accounts(num_users);
+    /// 1. generateUsers(numAccounts, currencies) - creates List<BitSet>
+    /// 2. createUserListForSymbol - filters users, limited by numUsersToSelect
+    fn create_user_list_for_symbol(
+        symbol_id: i32,
+        num_accounts: usize,
+        symbol_messages: usize,
+    ) -> Vec<i32> {
+        // Step 1: Generate user accounts
+        let user_currencies = Self::generate_user_accounts(num_accounts);
+        let users_size = user_currencies.len();
 
-        // Step 2: Filter users for this symbol starting from symbol-seeded position
+        // Step 2: Calculate numUsersToSelect
+        // Java: int numUsersToSelect = Math.min(users2currencies.size(), Math.max(2, symbolMessagesExpected / 5));
+        let num_users_to_select = users_size.min((2_usize).max(symbol_messages / 5));
+
+        // Step 3: Filter users starting from symbol-seeded position
         // Java: Random rand = new Random(spec.symbolId);
         //       int uid = 1 + rand.nextInt(users2currencies.size() - 1);
         let mut rand = JavaRandom::new(symbol_id as i64);
-        let start_uid = 1 + rand.next_int((num_users) as i32);
+        let start_uid = 1 + rand.next_int((users_size - 1) as i32);
 
-        // For margin/futures (SYMBOLSPEC_EUR_USD), only quoteCurrency (USD=840) is required
+        // For FUTURES_CONTRACT, only quoteCurrency (USD=840) is required
         const QUOTE_CURRENCY: i32 = 840; // USD
 
         let mut uids = Vec::new();
         let mut uid = start_uid;
-        let mut checked = 0;
+        let mut c = 0;
 
-        while uids.len() < num_users && checked < num_users {
-            if uid > 0
-                && (uid as usize) < user_currencies.len()
-                && user_currencies[uid as usize].contains(&QUOTE_CURRENCY)
-            {
-                uids.push(uid);
+        // Java: while (uids.size() < numUsersToSelect && c < users2currencies.size())
+        while uids.len() < num_users_to_select && c < users_size {
+            if uid > 0 && (uid as usize) < users_size {
+                if user_currencies[uid as usize].contains(&QUOTE_CURRENCY) {
+                    uids.push(uid);
+                }
             }
             uid += 1;
-            if uid >= num_users as i32 {
+            if uid == users_size as i32 {
                 uid = 1;
             }
-            checked += 1;
+            c += 1;
         }
 
         uids
@@ -215,7 +229,9 @@ impl TestOrdersGeneratorSession {
     ///     new JDKRandomGenerator(0), 1, 1.5);                  // separate RNG!
     /// ```
     fn generate_user_accounts(num_accounts: usize) -> Vec<Vec<i32>> {
-        const CURRENCIES: [i32; 5] = [840, 978, 3762, 3928, 4141]; // USD, EUR, XBT, ETH, LTC
+        // CURRENCIES_FUTURES from TestConstants:
+        // Sets.newHashSet(CURRENECY_USD, CURRENECY_EUR) = {840, 978}
+        const CURRENCIES: [i32; 2] = [840, 978]; // USD=840, EUR=978
 
         // Java uses TWO separate RNGs:
         // 1. Random(1) for currency selection
@@ -285,9 +301,9 @@ impl TestOrdersGeneratorSession {
         };
 
         // 2. UID: uidMapper.apply(rand.nextInt(numUsers))
-        //    UID_PLAIN_MAPPER: i -> i + 1
-        //    So uid = rand.nextInt(numUsers) + 1
-        let uid = (self.rng.next_int(self.config.num_users as i32) + 1) as i64;
+        //    uidMapper maps index to uids array
+        let uid_idx = self.rng.next_int(self.uids.len() as i32) as usize;
+        let uid = self.uids[uid_idx] as i64;
 
         // 3. Price deviation: dev = 1 + (int)(pow(rand.nextDouble(), 2) * priceDeviation)
         let dev_rand = self.rng.next_double();
