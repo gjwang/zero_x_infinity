@@ -1,46 +1,49 @@
-# Architect → QA: 0x10.5 Backend Gaps Test Requirements
+# Architect → QA: 0x14-b Matching Engine Test Requirements
 
-## 📦 Deliverables
+## 📦 交付物
 
-- [x] Test Specification: `docs/src/0x10-qa-test-plan.md`
-- [x] Architecture Overview: `docs/src/0x10-backend-gaps.md`
-- [x] Design Walkthrough: (See 0x10-backend-gaps 2.3)
+- [x] Test Checklist: `docs/agents/sessions/qa/0x14-b-test-checklist.md`
+- [x] Architecture Overview: `docs/src/0x14-b-matching-engine.md`
+- [x] Key Test Scenarios: 见下文
 
-## 🎯 Test Goal
+## 🎯 测试目标
 
-**ONE SENTENCE**: Verify that Public Market Data APIs and WebSocket Streams return correct, timely data matching the matching engine's activity.
+**ONE SENTENCE**: 验证现货撮合引擎正确支持 GTC/IOC 订单类型，行为与 Exchange-Core 一致。
 
-## 🔑 Key Test Scenarios
+## 🔑 关键测试场景
 
-### Must Test (P0)
-1.  **Public Trade History**: `GET /api/v1/public/trades` returns correct trades after an order match.
-2.  **Ticker Accuracy**: `market.ticker` WebSocket updates `v` (Msg Volume) and `c` (Close Price) correctly.
-3.  **Real-time Push**: `market.trade` WebSocket event arrives < 10ms after REST `order` response (network permitting).
+### 必须测试 (P0)
+1. **GTC Maker**: 无对手盘时订单进入订单簿
+2. **IOC Expire**: 部分成交后剩余部分立即过期 (绝不入簿)
+3. **Price-Time Priority**: 同价位按 FIFO 撮合
 
-### Should Test (P1)
-1.  **Pagination**: `fromId` parameter correctly pages through trade history.
-2.  **Symbol Filter**: Requesting `BTC_USDT` does NOT return `ETH_USDT` trades.
+### 应该测试 (P1)
+1. **Market Sweep**: 市价单跨多档成交
+2. **ReduceOrder**: 减量后保留优先级
+3. **MoveOrder**: 改价后优先级丢失
 
-### Can Test (P2)
-1.  **High Concurrency**: 1000 WS clients subscribing simultaneously (Load Test).
+### 可以测试 (P2)
+1. **FOK (Fill or Kill)**: 全部成交或全部取消 (可选实现)
 
-## ⚠️ Test Difficulty Warning
+## ⚠️ 测试难点预警
 
-| Difficulty | Reason | Suggestion |
-|------------|--------|------------|
-| **Timing Verification** | WS is async; exact 10ms check is hard. | Use automated script to timestamp "Order Ack" vs "WS Event". |
-| **Rollover Logic** | 24h Ticker needs sliding window. | Verify "Open Price" changes as window slides (hard to mock 24h). |
+| 难点 | 原因 | 建议方法 |
+|------|------|----------|
+| IOC 残留检查 | 需验证订单簿状态 | 每次 IOC 后检查 `book.all_orders()` |
+| 优先级验证 | 需跟踪订单顺序 | 同价位提交多订单，验证匹配顺序 |
 
-## 📝 Test Data Suggestion
+## 📝 测试数据建议
 
-- Use `fixtures/test_with_cancel_highbal` to generate initial baseline data.
-- Need to create new test data: Continuous trading script (e.g., ping-pong bot) to verify Ticker updates.
+- 使用 `fixtures/orders.csv` 或内联测试数据
+- 关键字段: `order_id`, `price`, `qty`, `time_in_force`
 
-## 🔗 Related Documents
-- Implementation Plan: `docs/agents/sessions/shared/arch-to-dev-handover.md`
+## 🔗 相关文档
+
+- Architecture Design: [0x14-b-matching-engine.md](../../../../docs/src/0x14-b-matching-engine.md)
+- Generator (for reference): [0x14-a-bench-harness.md](../../../../docs/src/0x14-a-bench-harness.md)
 
 ## 📞 Ready for Test Planning
 
-**Architect Signature**: @Antigravity (Architect Role)
-**Date**: 2025-12-27
-**Status**: ✅ Ready for QA review
+Architect签名: @Architect AI  
+Date: 2025-12-30  
+Status: ✅ Ready for QA review
