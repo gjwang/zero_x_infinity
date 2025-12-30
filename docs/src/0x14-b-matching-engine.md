@@ -20,14 +20,29 @@
 
 ### 1. Gap Analysis
 
-The current Rust `models.rs` and `orderbook.rs` are insufficient to support the `TestOrdersGenerator` output.
+Based on code review of `src/engine.rs`, `src/models.rs`, `src/orderbook.rs`:
 
-| Feature | Generator Output | Current Rust Model | Gap |
+#### ✅ Already Implemented
+
+| Feature | Location | Notes |
+| :--- | :--- | :--- |
+| **MatchingEngine** | `src/engine.rs` | `process_order()`, `match_buy()`, `match_sell()` |
+| **Price-Time Priority** | `engine.rs:80-165` | Lowest ask first (buy), highest bid first (sell), FIFO |
+| **Limit Orders** | `engine.rs:61-68` | Unfilled remainder rests in book |
+| **Market Orders** | `engine.rs:90-94` | `u64::MAX` price for buy, matches all |
+| **Order Status** | `models.rs:57-68` | NEW, PARTIALLY_FILLED, FILLED, CANCELED, REJECTED, EXPIRED |
+| **OrderBook** | `orderbook.rs` | BTreeMap storage, `cancel_order()` by ID+price+side |
+
+#### ❌ Missing (Required for 0x14-b)
+
+| Feature | Generator Requirement | Current Status | Action |
 | :--- | :--- | :--- | :--- |
-| **Time In Force** | `Gtc`, `Ioc` | Implicit `GTC` Only | Missing `TimeInForce` enum (IOC support needed). |
-| **Order Types** | `PlaceOrder` (Limit), `FokBudget` | `Limit`, `Market` | `FokBudget` (Market Buy by Cost) undefined. |
-| **Modifications** | `Cancel`, `Move`, `Reduce` | `Cancel` Only | `Move` (Cancel/Replace) and `Reduce` (Modify Qty) logic missing. |
-| **Matching** | Price-Time Priority | Storage Only (No Engine) | **No Matching Engine**. OrderBook is just storage. |
+| **TimeInForce** | `Gtc`, `Ioc` | **Not Implemented** | Add `TimeInForce` enum to `models.rs` |
+| **IOC Logic** | Remainder expires, never rests | **Not Implemented** | Modify `process_order()` to check TIF |
+| **CancelOrder Command** | `CommandType::CancelOrder` | `OrderBook::cancel_order()` exists but no Engine API | Expose via `Engine::cancel()` |
+| **ReduceOrder Command** | `CommandType::ReduceOrder` | **Not Implemented** | Add `Engine::reduce_order()` |
+| **MoveOrder Command** | `CommandType::MoveOrder` | **Not Implemented** | Add `Engine::move_order()` (cancel+place) |
+| **FOKBudget** | Low usage in Spot | Not needed for MVP | Defer |
 
 ---
 
