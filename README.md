@@ -109,7 +109,8 @@ graph TD
 | 0x0F | [Admin Dashboard](./docs/src/0x0F-admin-dashboard.md) | FastAPI Amis Admin + Trace ID |
 | 0x10 | [Web Frontend](./docs/src/0x10-web-frontend.md) | Frontend Outsourcing Requirement |
 | 0x11 | [Deposit & Withdraw](./docs/src/0x11-deposit-withdraw.md) | ✅ Mock Chain Integration |
-| 0x11-a | [Real Chain Integration](./docs/src/0x11-a-real-chain.md) | 🚧 Real-world Blockchain Integration |
+| 0x11-a | [Real Chain Integration](./docs/src/0x11-a-real-chain.md) | ✅ BTC Sentinel MVP |
+| 0x11-b | [Sentinel Hardening](./docs/src/0x11-b-sentinel-hardening.md) | ✅ DEF-002 Fix, ADR-005/006 |
 
 ---
 

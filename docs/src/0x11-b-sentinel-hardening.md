@@ -12,11 +12,11 @@
 
 | Status | ✅ **COMPLETE (Core)** |
 | :--- | :--- |
-| **Date** | 2025-12-29 |
+| **Date** | 2025-12-30 |
 | **Context** | Phase 0x11-a Extension: Hardening Sentinel for Production |
-| **Goal** | Fix SegWit blindness (DEF-002) and implement ETH/ERC20 support. |
+| **Goal** | Fix SegWit blindness (DEF-002), implement ETH/ERC20 & ADR-005/006. |
 | **Branch** | `0x11-b-sentinel-hardening` |
-| **Latest Commit** | `d383b6c` |
+| **Latest Commit** | `d307e12` |
 
 ---
 

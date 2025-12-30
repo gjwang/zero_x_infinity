@@ -51,6 +51,7 @@
 - [0x0E OpenAPI Integration | OpenAPI 集成](./0x0E-openapi-integration.md)
 - [0x0F Admin Dashboard | 管理后台](./0x0F-admin-dashboard.md)
     - [Testing Guide | 测试指南](./0x0F-admin-testing.md)
+    - [Token Listing SOP | 上币操作手册](./manuals/0x0F-token-listing-sop.md)
 - [0x10 Web Frontend | 前端外包需求](./0x10-web-frontend.md)
 - [0x11 Deposit & Withdraw | 充值与提现 (Mock Chain)](./0x11-deposit-withdraw.md)
 - [0x11-a Real Chain Integration | 真实链集成 (Sentinel)](./0x11-a-real-chain.md)
@@ -92,5 +93,7 @@
 - [Build Verification Guide](./build-verification-guide.md)
 - [Database Selection: TDengine](./database-selection-tdengine.md)
 - [ADR-001: WebSocket Security (Strict Auth)](./architecture/decisions/ADR-001-websocket-security-auth-enforcement.md)
+- [ADR-005: Unified Chain-Asset Schema](./architecture/decisions/ADR-005-unified-asset-schema.md)
+- [ADR-006: User Address Decoupling](./architecture/decisions/ADR-006-user-address-decoupling.md)
 - [AR-001: Request for Auth Design](./architecture/requests/AR-001-websocket-auth-design.md)
 

@@ -45,7 +45,7 @@ This project documents the complete journey of building a **1.3M orders/sec** ma
 
 ## 🔶 Phase III: Resilience & Funding
 
-*Status: **In Progress***
+*Status: **Complete***
 
 | Chapter | Title | Description | Status |
 |---------|-------|--------------|---|
@@ -54,7 +54,7 @@ This project documents the complete journey of building a **1.3M orders/sec** ma
 | 0x0F | [Admin Dashboard](./0x0F-admin-dashboard.md) | Ops Panel, KYC, hot-reload | ✅ Done |
 | 0x11 | [Deposit & Withdraw](./0x11-deposit-withdraw.md) | Mock Chain integration, Idempotency | ✅ Done |
 | 0x11-a | [Real Chain Integration](./0x11-a-real-chain.md) | Sentinel Service (Pull Model) | ✅ MVP Done |
-| 0x11-b | Real Chain Hardening | Sentinel **SegWit Fix (P2WPKH)** & ETH Support | 🚧 Next Step |
+| 0x11-b | Sentinel Hardening | **SegWit Fix (DEF-002)** & ETH/ERC20 & ADR-005/006 | ✅ Done |
 
 ---
 
@@ -94,6 +94,7 @@ This project documents the complete journey of building a **1.3M orders/sec** ma
 | `v0.0D-persistence` | 0x0D | Universal WAL & Snapshot persistence |
 | `v0.0F-admin-dashboard` | 0x0F | Admin Operations Dashboard |
 | `v0.11-a-funding-qa` | 0x11-a | Real Chain Sentinel MVP (Deposit/Withdraw) |
+| `v0.11-b-sentinel-hardening` | 0x11-b | DEF-002 Fix, ADR-005/006, Hot Listing |
 
 ---
 
