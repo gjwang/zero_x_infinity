@@ -82,9 +82,9 @@ impl WithdrawService {
             .ok_or_else(|| WithdrawError::AssetNotFound(asset_name.to_string()))?;
 
         // Scale to i64 using unified money module
-        let amount_scaled = money::parse_decimal(amount, asset.decimals as u32)
+        let amount_scaled = *money::parse_decimal(amount, asset.decimals as u32)
             .map_err(|_| WithdrawError::InvalidAmount)? as i64;
-        let fee_scaled = money::parse_decimal(fee, asset.decimals as u32)
+        let fee_scaled = *money::parse_decimal(fee, asset.decimals as u32)
             .map_err(|_| WithdrawError::InvalidAmount)? as i64;
 
         // 2. Lock & Check Balance

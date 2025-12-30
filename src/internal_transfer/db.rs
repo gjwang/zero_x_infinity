@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use super::error::TransferError;
 use super::state::TransferState;
-use super::types::{InternalTransferId, ServiceId, TransferRecord, TransferType};
+use super::types::{InternalTransferId, ScaledAmount, ServiceId, TransferRecord, TransferType};
 
 /// Transfer database operations
 pub struct TransferDb {
@@ -64,7 +64,7 @@ impl TransferDb {
         .bind(&record.cid)
         .bind(record.user_id as i64)
         .bind(record.asset_id as i32)
-        .bind(rust_decimal::Decimal::from(record.amount))
+        .bind(rust_decimal::Decimal::from(*record.amount))
         .bind(record.transfer_type.id())
         .bind(record.source.id())
         .bind(record.state.id())
@@ -265,7 +265,7 @@ impl TransferDb {
             transfer_type,
             user_id: row.get::<i64, _>("user_id") as u64,
             asset_id: row.get::<i32, _>("asset_id") as u32,
-            amount: amount_u64,
+            amount: amount_u64.into(),
             state,
             error: row.get("error_message"),
             retry_count: row.get("retry_count"),

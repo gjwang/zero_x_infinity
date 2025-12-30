@@ -12,7 +12,7 @@ pub use trading::TradingAdapter;
 
 use async_trait::async_trait;
 
-use super::types::{InternalTransferId, OpResult};
+use super::types::{InternalTransferId, OpResult, ScaledAmount};
 
 /// Service adapter trait for balance operations
 ///
@@ -32,7 +32,7 @@ pub trait ServiceAdapter: Send + Sync {
         transfer_id: InternalTransferId,
         user_id: u64,
         asset_id: u32,
-        amount: u64,
+        amount: ScaledAmount,
     ) -> OpResult;
 
     /// Deposit funds to this service (credit)
@@ -44,7 +44,7 @@ pub trait ServiceAdapter: Send + Sync {
         transfer_id: InternalTransferId,
         user_id: u64,
         asset_id: u32,
-        amount: u64,
+        amount: ScaledAmount,
     ) -> OpResult;
 
     /// Rollback a previous withdraw (refund)
@@ -130,7 +130,7 @@ pub mod mock {
             transfer_id: InternalTransferId,
             _user_id: u64,
             _asset_id: u32,
-            _amount: u64,
+            _amount: ScaledAmount,
         ) -> OpResult {
             self.withdraw_count.fetch_add(1, Ordering::SeqCst);
 
@@ -151,7 +151,7 @@ pub mod mock {
             transfer_id: InternalTransferId,
             _user_id: u64,
             _asset_id: u32,
-            _amount: u64,
+            _amount: ScaledAmount,
         ) -> OpResult {
             self.deposit_count.fetch_add(1, Ordering::SeqCst);
 
@@ -203,7 +203,7 @@ pub mod mock {
                     crate::internal_transfer::InternalTransferId::new(),
                     1001,
                     1,
-                    1000,
+                    1000.into(),
                 )
                 .await;
             assert!(result.is_success());
@@ -214,7 +214,7 @@ pub mod mock {
                     crate::internal_transfer::InternalTransferId::new(),
                     1001,
                     1,
-                    1000,
+                    1000.into(),
                 )
                 .await;
             assert!(result.is_success());
@@ -231,7 +231,7 @@ pub mod mock {
                     crate::internal_transfer::InternalTransferId::new(),
                     1001,
                     1,
-                    1000,
+                    1000.into(),
                 )
                 .await;
             assert!(result.is_explicit_fail());
@@ -247,7 +247,7 @@ pub mod mock {
                     crate::internal_transfer::InternalTransferId::new(),
                     1001,
                     1,
-                    1000,
+                    1000.into(),
                 )
                 .await;
             assert!(result.is_pending());

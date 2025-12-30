@@ -11,7 +11,7 @@ use tracing::{debug, error, warn};
 
 use super::ServiceAdapter;
 use crate::internal_transfer::channel::{TransferOp, TransferResponse, TransferSender};
-use crate::internal_transfer::types::{InternalTransferId, OpResult};
+use crate::internal_transfer::types::{InternalTransferId, OpResult, ScaledAmount};
 
 /// Trading account adapter
 ///
@@ -138,13 +138,13 @@ impl ServiceAdapter for TradingAdapter {
         transfer_id: InternalTransferId,
         user_id: u64,
         asset_id: u32,
-        amount: u64,
+        amount: ScaledAmount,
     ) -> OpResult {
         debug!(
             transfer_id = %transfer_id,
             user_id = user_id,
             asset_id = asset_id,
-            amount = amount,
+            amount = *amount,
             "Trading withdraw"
         );
 
@@ -157,7 +157,13 @@ impl ServiceAdapter for TradingAdapter {
         // Production mode: Use channel to UBSCore
         if let Some(ref channel) = self.channel {
             match channel
-                .send_request(transfer_id, TransferOp::Withdraw, user_id, asset_id, amount)
+                .send_request(
+                    transfer_id,
+                    TransferOp::Withdraw,
+                    user_id,
+                    asset_id,
+                    *amount,
+                )
                 .await
             {
                 Ok(TransferResponse::Success { .. }) => {
@@ -183,17 +189,17 @@ impl ServiceAdapter for TradingAdapter {
             let key = (user_id, asset_id);
             let current = *balances.get(&key).unwrap_or(&0);
 
-            if current < amount {
+            if current < *amount {
                 warn!(
                     transfer_id = %transfer_id,
                     current = current,
-                    requested = amount,
+                    requested = *amount,
                     "Insufficient trading balance"
                 );
                 return OpResult::Failed("Insufficient balance".to_string());
             }
 
-            balances.insert(key, current - amount);
+            balances.insert(key, current - *amount);
         }
 
         #[cfg(not(test))]
@@ -215,13 +221,13 @@ impl ServiceAdapter for TradingAdapter {
         transfer_id: InternalTransferId,
         user_id: u64,
         asset_id: u32,
-        amount: u64,
+        amount: ScaledAmount,
     ) -> OpResult {
         debug!(
             transfer_id = %transfer_id,
             user_id = user_id,
             asset_id = asset_id,
-            amount = amount,
+            amount = *amount,
             "Trading deposit"
         );
 
@@ -234,7 +240,7 @@ impl ServiceAdapter for TradingAdapter {
         // Production mode: Use channel to UBSCore
         if let Some(ref channel) = self.channel {
             match channel
-                .send_request(transfer_id, TransferOp::Deposit, user_id, asset_id, amount)
+                .send_request(transfer_id, TransferOp::Deposit, user_id, asset_id, *amount)
                 .await
             {
                 Ok(TransferResponse::Success { .. }) => {
@@ -259,7 +265,7 @@ impl ServiceAdapter for TradingAdapter {
             let mut balances = self.test_balances.lock().unwrap();
             let key = (user_id, asset_id);
             let current = *balances.get(&key).unwrap_or(&0);
-            balances.insert(key, current + amount);
+            balances.insert(key, current + *amount);
         }
 
         #[cfg(not(test))]
@@ -371,7 +377,7 @@ mod tests {
         adapter.set_test_balance(1001, 1, 10000);
 
         let result = adapter
-            .withdraw(InternalTransferId::new(), 1001, 1, 5000)
+            .withdraw(InternalTransferId::new(), 1001, 1, 5000.into())
             .await;
         assert!(result.is_success());
         assert_eq!(adapter.get_test_balance(1001, 1), 5000);
@@ -383,7 +389,7 @@ mod tests {
         adapter.set_test_balance(1001, 1, 1000);
 
         let result = adapter
-            .withdraw(InternalTransferId::new(), 1001, 1, 5000)
+            .withdraw(InternalTransferId::new(), 1001, 1, 5000.into())
             .await;
         assert!(result.is_explicit_fail());
         // Balance unchanged
@@ -396,7 +402,7 @@ mod tests {
         adapter.set_test_balance(1001, 1, 5000);
 
         let result = adapter
-            .deposit(InternalTransferId::new(), 1001, 1, 3000)
+            .deposit(InternalTransferId::new(), 1001, 1, 3000.into())
             .await;
         assert!(result.is_success());
         assert_eq!(adapter.get_test_balance(1001, 1), 8000);
@@ -409,12 +415,12 @@ mod tests {
         let transfer_id = InternalTransferId::new();
 
         // First call
-        let result1 = adapter.withdraw(transfer_id, 1001, 1, 5000).await;
+        let result1 = adapter.withdraw(transfer_id, 1001, 1, 5000.into()).await;
         assert!(result1.is_success());
         assert_eq!(adapter.get_test_balance(1001, 1), 5000);
 
         // Second call with same transfer_id - should be idempotent
-        let result2 = adapter.withdraw(transfer_id, 1001, 1, 5000).await;
+        let result2 = adapter.withdraw(transfer_id, 1001, 1, 5000.into()).await;
         assert!(result2.is_success());
         // Balance should NOT change again
         assert_eq!(adapter.get_test_balance(1001, 1), 5000);

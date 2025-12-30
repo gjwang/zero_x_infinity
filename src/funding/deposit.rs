@@ -73,7 +73,7 @@ impl DepositService {
             .ok_or_else(|| DepositError::AssetNotFound(asset_name.to_string()))?;
 
         // Scale to i64 using unified money module
-        let amount_scaled = money::parse_decimal(amount, asset.decimals as u32)
+        let amount_scaled = *money::parse_decimal(amount, asset.decimals as u32)
             .map_err(|_| DepositError::InvalidAmount)? as i64;
 
         // 3. Insert Deposit Record (CONFIRMING -> SUCCESS immediately for Mock)

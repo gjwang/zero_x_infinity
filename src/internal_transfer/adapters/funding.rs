@@ -9,7 +9,7 @@ use tracing::{debug, error, warn};
 
 use super::ServiceAdapter;
 use crate::internal_transfer::db::{OpType, check_operation, record_operation};
-use crate::internal_transfer::types::{InternalTransferId, OpResult, ServiceId};
+use crate::internal_transfer::types::{InternalTransferId, OpResult, ScaledAmount, ServiceId};
 
 /// Funding account adapter
 ///
@@ -39,13 +39,13 @@ impl ServiceAdapter for FundingAdapter {
         transfer_id: InternalTransferId,
         user_id: u64,
         asset_id: u32,
-        amount: u64,
+        amount: ScaledAmount,
     ) -> OpResult {
         debug!(
             transfer_id = %transfer_id,
             user_id = user_id,
             asset_id = asset_id,
-            amount = amount,
+            amount = *amount,
             "Funding withdraw"
         );
 
@@ -179,7 +179,7 @@ impl ServiceAdapter for FundingAdapter {
 
         // Check sufficient balance
         // use atomic units directly
-        if available < amount as i64 {
+        if available < *amount as i64 {
             let _ = tx.rollback().await;
             let _ = record_operation(
                 &self.pool,
@@ -202,7 +202,7 @@ impl ServiceAdapter for FundingAdapter {
             WHERE user_id = $2 AND asset_id = $3 AND account_type = $4
             "#,
         )
-        .bind(amount as i64)
+        .bind(*amount as i64)
         .bind(user_id as i64)
         .bind(asset_id as i32)
         .bind(FUNDING_ACCOUNT_TYPE)
@@ -241,13 +241,13 @@ impl ServiceAdapter for FundingAdapter {
         transfer_id: InternalTransferId,
         user_id: u64,
         asset_id: u32,
-        amount: u64,
+        amount: ScaledAmount,
     ) -> OpResult {
         debug!(
             transfer_id = %transfer_id,
             user_id = user_id,
             asset_id = asset_id,
-            amount = amount,
+            amount = *amount,
             "Funding deposit"
         );
 
@@ -301,7 +301,7 @@ impl ServiceAdapter for FundingAdapter {
         .bind(user_id as i64)
         .bind(asset_id as i32)
         .bind(FUNDING_ACCOUNT_TYPE)
-        .bind(amount as i64)
+        .bind(*amount as i64)
         .execute(&self.pool)
         .await;
 

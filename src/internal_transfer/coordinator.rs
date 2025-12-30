@@ -10,7 +10,9 @@ use super::adapters::ServiceAdapter;
 use super::db::TransferDb;
 use super::error::TransferError;
 use super::state::TransferState;
-use super::types::{InternalTransferId, OpResult, ServiceId, TransferRecord, TransferRequest};
+use super::types::{
+    InternalTransferId, OpResult, ScaledAmount, ServiceId, TransferRecord, TransferRequest,
+};
 
 /// Transfer Coordinator - orchestrates FSM-based processing
 pub struct TransferCoordinator {
@@ -37,7 +39,7 @@ impl TransferCoordinator {
     /// Re-validates critical parameters to prevent internal calls bypassing API.
     pub async fn create(&self, req: TransferRequest) -> Result<InternalTransferId, TransferError> {
         // === Defense-in-Depth Layer 2: Coordinator Validation ===
-        if req.amount == 0 {
+        if *req.amount == 0 {
             return Err(TransferError::InvalidAmount);
         }
 
@@ -555,12 +557,13 @@ mod tests {
         let coordinator = TransferCoordinator::new(db, funding, trading);
 
         // Test zero amount
-        let req = TransferRequest::new(ServiceId::Funding, ServiceId::Trading, 1001, 1, 0);
+        let req = TransferRequest::new(ServiceId::Funding, ServiceId::Trading, 1001, 1, 0.into());
         let result = coordinator.create(req).await;
         assert!(matches!(result, Err(TransferError::InvalidAmount)));
 
         // Test same source and target
-        let req = TransferRequest::new(ServiceId::Funding, ServiceId::Funding, 1001, 1, 1000);
+        let req =
+            TransferRequest::new(ServiceId::Funding, ServiceId::Funding, 1001, 1, 1000.into());
         let result = coordinator.create(req).await;
         assert!(matches!(result, Err(TransferError::SameAccount)));
     }

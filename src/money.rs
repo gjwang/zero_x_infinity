@@ -14,23 +14,116 @@
 //! - The authoritative source for decimals is `SymbolManager`
 //!
 //! ## Usage
-//! ```rust
-//! # use zero_x_infinity::money::{parse_amount, format_amount, MoneyError};
-//! # fn main() -> Result<(), MoneyError> {
-//! // Client sends "1.5" BTC
-//! let internal = parse_amount("1.5", 8)?;
-//! assert_eq!(internal, 150_000_000); // 1.5 BTC = 150M satoshi
-//!
-//! // Display balance to client
-//! let display = format_amount(150_000_000, 8, 4);
-//! assert_eq!(display, "1.5000");
-//! # Ok(())
-//! # }
-//! ```
+//! (Internal utilities for money handling. Use `SymbolManager` for public API.)
 
 use crate::symbol_manager::{AssetInfo, SymbolManager};
 use rust_decimal::prelude::*;
+use serde::{Deserialize, Serialize};
+use std::fmt;
+use std::ops::{Add, AddAssign, Deref, Sub, SubAssign};
 use thiserror::Error;
+
+// ============================================================================
+// Core Money Types (Newtype Wrappers)
+// ============================================================================
+
+/// Represents an unsigned monetary amount scaled by 10^decimals.
+/// Internal value is private to force construction through audited money logic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ScaledAmount(u64);
+
+/// Represents a signed monetary amount scaled by 10^decimals.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ScaledAmountSigned(i64);
+
+impl ScaledAmount {
+    /// Create from raw value. ONLY allowed within the crate for persistence/internal calc.
+    pub(crate) fn from_raw(val: u64) -> Self {
+        Self(val)
+    }
+
+    pub fn to_raw(&self) -> u64 {
+        self.0
+    }
+
+    pub fn is_zero(&self) -> bool {
+        self.0 == 0
+    }
+
+    pub fn checked_add(self, other: Self) -> Option<Self> {
+        self.0.checked_add(other.0).map(Self)
+    }
+
+    pub fn checked_sub(self, other: Self) -> Option<Self> {
+        self.0.checked_sub(other.0).map(Self)
+    }
+}
+
+impl ScaledAmountSigned {
+    pub(crate) fn from_raw(val: i64) -> Self {
+        Self(val)
+    }
+
+    pub fn to_raw(&self) -> i64 {
+        self.0
+    }
+
+    pub fn is_zero(&self) -> bool {
+        self.0 == 0
+    }
+
+    pub fn abs(self) -> ScaledAmount {
+        ScaledAmount(self.0.unsigned_abs())
+    }
+
+    pub fn checked_add(self, other: Self) -> Option<Self> {
+        self.0.checked_add(other.0).map(Self)
+    }
+
+    pub fn checked_sub(self, other: Self) -> Option<Self> {
+        self.0.checked_sub(other.0).map(Self)
+    }
+}
+
+impl From<u64> for ScaledAmount {
+    fn from(v: u64) -> Self {
+        Self(v)
+    }
+}
+
+impl From<i64> for ScaledAmountSigned {
+    fn from(v: i64) -> Self {
+        Self(v)
+    }
+}
+
+impl Deref for ScaledAmount {
+    type Target = u64;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Deref for ScaledAmountSigned {
+    type Target = i64;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl fmt::Display for ScaledAmount {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl fmt::Display for ScaledAmountSigned {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 // ============================================================================
 // Error Types
@@ -59,10 +152,11 @@ pub enum MoneyError {
 }
 
 // ============================================================================
-// Parse: Client → Internal (String/Decimal → u64)
+// Parse: Client → Internal (String/Decimal → ScaledAmount)
 // ============================================================================
 
-/// Convert client string amount to internal u64 representation
+/// Converts a decimal string to internal ScaledAmount using provided decimals.
+/// (Low-level: Preferred usage via SymbolManager::parse_qty)
 ///
 /// # Arguments
 /// * `amount_str` - Client-provided amount string (e.g., "1.5", "100")
@@ -78,15 +172,8 @@ pub enum MoneyError {
 /// * `InvalidFormat` - If string format is invalid
 ///
 /// # Example
-/// ```rust
-/// # use zero_x_infinity::money::parse_amount;
-/// # fn main() -> Result<(), zero_x_infinity::money::MoneyError> {
-/// let internal = parse_amount("1.5", 8)?;
-/// assert_eq!(internal, 150_000_000); // 1.5 BTC = 150M satoshi
-/// # Ok(())
-/// # }
-/// ```
-pub fn parse_amount(amount_str: &str, decimals: u32) -> Result<u64, MoneyError> {
+/// parse_amount("1.5", 8) -> 150_000_000
+pub(crate) fn parse_amount(amount_str: &str, decimals: u32) -> Result<ScaledAmount, MoneyError> {
     let amount_str = amount_str.trim();
     if amount_str.is_empty() {
         return Err(MoneyError::InvalidFormat("empty string".into()));
@@ -168,86 +255,74 @@ pub fn parse_amount(amount_str: &str, decimals: u32) -> Result<u64, MoneyError> 
         return Err(MoneyError::InvalidAmount);
     }
 
-    Ok(amount)
+    Ok(ScaledAmount(amount))
 }
 
-/// Convert Decimal to internal u64 representation
+/// Converts a Decimal to internal ScaledAmount. Checks scale limit.
 ///
 /// This is used at the Gateway API boundary where `rust_decimal::Decimal`
 /// is used for JSON deserialization.
 ///
 /// # Arguments
-/// * `decimal` - Validated Decimal value
+/// * `amount` - Validated Decimal value
 /// * `decimals` - Target decimal places
 ///
 /// # Returns
 /// * Internal u64 scaled value
-pub fn parse_decimal(decimal: Decimal, decimals: u32) -> Result<u64, MoneyError> {
-    if decimal.is_sign_negative() {
+pub(crate) fn parse_decimal(amount: Decimal, decimals: u32) -> Result<ScaledAmount, MoneyError> {
+    if amount.is_sign_negative() || amount.is_zero() {
         return Err(MoneyError::InvalidAmount);
     }
 
-    if decimal.is_zero() {
-        return Err(MoneyError::InvalidAmount);
-    }
-
-    // Check precision
-    if decimal.scale() > decimals {
+    // Force strict precision check
+    if amount.scale() > decimals {
         return Err(MoneyError::PrecisionOverflow {
-            provided: decimal.scale(),
+            provided: amount.scale(),
             max: decimals,
         });
     }
 
     let multiplier = Decimal::from(10u64.pow(decimals));
-    let result = decimal * multiplier;
+    let scaled = (amount * multiplier).to_u64().ok_or(MoneyError::Overflow)?;
 
-    // Should not have fractional part after scaling
-    if !result.fract().is_zero() {
-        return Err(MoneyError::PrecisionOverflow {
-            provided: decimal.scale(),
-            max: decimals,
-        });
-    }
-
-    result.to_u64().ok_or(MoneyError::Overflow)
+    Ok(ScaledAmount(scaled))
 }
 
 // ============================================================================
-// Format: Internal → Client (u64 → String)
+// Format: Internal → Client (ScaledAmount → String)
 // ============================================================================
 
-/// Convert internal u64 to display string
+/// Formats internal ScaledAmount to string with truncation at display_decimals.
 ///
 /// # Arguments
-/// * `value` - Internal u64 scaled value
-/// * `decimals` - Asset's internal decimal places (for division)
+/// * `amount` - Internal u64 scaled value
+/// * `asset_decimals` - Asset's internal decimal places (for division)
 /// * `display_decimals` - Number of decimals to show in output
 ///
 /// # Example
-/// ```rust
-/// # use zero_x_infinity::money::format_amount;
-/// let display = format_amount(150_000_000, 8, 4);
-/// assert_eq!(display, "1.5000");
-/// ```
-pub fn format_amount(value: u64, decimals: u32, display_decimals: u32) -> String {
-    let decimal_value = Decimal::from(value) / Decimal::from(10u64.pow(decimals));
+/// format_amount(150_000_000, 8, 4) -> "1.5000"
+pub(crate) fn format_amount(amount: u64, asset_decimals: u32, display_decimals: u32) -> String {
+    let decimal_value = Decimal::from(amount) / Decimal::from(10u64.pow(asset_decimals));
     format!("{:.prec$}", decimal_value, prec = display_decimals as usize)
 }
 
-/// Convert internal u64 to full precision string (for storage/transfer)
+/// Formats with full precision of the asset.
 ///
 /// This version preserves all decimal places, useful for internal data
 /// exchange where precision loss is unacceptable.
-pub fn format_amount_full(value: u64, decimals: u32) -> String {
-    format_amount(value, decimals, decimals)
+pub(crate) fn format_amount_full(amount: u64, asset_decimals: u32) -> String {
+    format_amount(amount, asset_decimals, asset_decimals)
 }
 
-/// Convert internal i64 to display string (for signed values like balance changes)
-pub fn format_amount_signed(value: i64, decimals: u32, display_decimals: u32) -> String {
-    let abs_value = value.unsigned_abs();
-    let formatted = format_amount(abs_value, decimals, display_decimals);
-    if value < 0 {
+/// Formats internal i64 to string with truncation.
+pub(crate) fn format_amount_signed(
+    amount: i64,
+    asset_decimals: u32,
+    display_decimals: u32,
+) -> String {
+    let abs_value = amount.unsigned_abs();
+    let formatted = format_amount(abs_value, asset_decimals, display_decimals);
+    if amount < 0 {
         format!("-{}", formatted)
     } else {
         formatted
@@ -263,7 +338,7 @@ pub fn format_amount_signed(value: i64, decimals: u32, display_decimals: u32) ->
 /// Automatically looks up the correct decimals from SymbolManager,
 /// preventing parameter errors.
 pub fn format_qty(
-    value: u64,
+    value: ScaledAmount,
     symbol_id: u32,
     symbol_mgr: &SymbolManager,
 ) -> Result<String, MoneyError> {
@@ -276,12 +351,16 @@ pub fn format_qty(
         .get(&symbol.base_asset_id)
         .ok_or(MoneyError::AssetNotFound(symbol.base_asset_id))?;
 
-    Ok(format_amount(value, asset.decimals, asset.display_decimals))
+    Ok(format_amount(
+        *value,
+        asset.decimals,
+        asset.display_decimals,
+    ))
 }
 
 /// Format price for a symbol
 pub fn format_price(
-    value: u64,
+    value: ScaledAmount,
     symbol_id: u32,
     symbol_mgr: &SymbolManager,
 ) -> Result<String, MoneyError> {
@@ -290,7 +369,7 @@ pub fn format_price(
         .ok_or(MoneyError::SymbolNotFound(symbol_id))?;
 
     Ok(format_amount(
-        value,
+        *value,
         symbol.price_decimal,
         symbol.price_display_decimal,
     ))
@@ -301,7 +380,7 @@ pub fn parse_qty(
     amount_str: &str,
     symbol_id: u32,
     symbol_mgr: &SymbolManager,
-) -> Result<u64, MoneyError> {
+) -> Result<ScaledAmount, MoneyError> {
     let symbol = symbol_mgr
         .get_symbol_info_by_id(symbol_id)
         .ok_or(MoneyError::SymbolNotFound(symbol_id))?;
@@ -319,7 +398,7 @@ pub fn parse_price(
     price_str: &str,
     symbol_id: u32,
     symbol_mgr: &SymbolManager,
-) -> Result<u64, MoneyError> {
+) -> Result<ScaledAmount, MoneyError> {
     let symbol = symbol_mgr
         .get_symbol_info_by_id(symbol_id)
         .ok_or(MoneyError::SymbolNotFound(symbol_id))?;
@@ -335,18 +414,105 @@ pub fn parse_price(
 ///
 /// This is useful in the Funding module where we work with AssetInfo
 /// directly rather than through SymbolManager.
-pub fn format_asset_amount(value: i64, decimals: u32, display_decimals: u32) -> String {
-    format_amount_signed(value, decimals, display_decimals)
+pub fn format_asset_amount(
+    value: ScaledAmountSigned,
+    decimals: u32,
+    display_decimals: u32,
+) -> String {
+    format_amount_signed(*value, decimals, display_decimals)
 }
 
 /// Parse amount string using asset decimals
-pub fn parse_asset_amount(amount_str: &str, decimals: u32) -> Result<u64, MoneyError> {
+pub fn parse_asset_amount(amount_str: &str, decimals: u32) -> Result<ScaledAmount, MoneyError> {
     parse_amount(amount_str, decimals)
 }
 
 /// Format asset amount using AssetInfo
-pub fn format_with_asset_info(value: i64, asset: &AssetInfo) -> String {
-    format_amount_signed(value, asset.decimals, asset.display_decimals)
+pub fn format_with_asset_info(value: ScaledAmountSigned, asset: &AssetInfo) -> String {
+    format_amount_signed(*value, asset.decimals, asset.display_decimals)
+}
+
+// ============================================================================
+// Layer 3: MoneyFormatter - Batch Conversion Entry Point
+// ============================================================================
+
+/// Formatter for batch money conversions
+///
+/// Use this when you need to format multiple prices/quantities for the same symbol.
+/// This avoids repeated lookups and ensures consistent formatting.
+pub struct MoneyFormatter<'a> {
+    pub(crate) symbol_mgr: &'a SymbolManager,
+    pub(crate) symbol_id: u32,
+    // Cached values for performance
+    pub(crate) price_decimals: u32,
+    pub(crate) price_display_decimals: u32,
+    pub(crate) qty_decimals: u32,
+    pub(crate) qty_display_decimals: u32,
+}
+
+impl<'a> MoneyFormatter<'a> {
+    /// Create a new formatter for a symbol
+    pub fn new(symbol_mgr: &'a SymbolManager, symbol_id: u32) -> Option<Self> {
+        let symbol = symbol_mgr.get_symbol_info_by_id(symbol_id)?;
+        let base_asset = symbol_mgr.assets.get(&symbol.base_asset_id)?;
+
+        Some(Self {
+            symbol_mgr,
+            symbol_id,
+            price_decimals: symbol.price_decimal,
+            price_display_decimals: symbol.price_display_decimal,
+            qty_decimals: base_asset.decimals,
+            qty_display_decimals: base_asset.display_decimals,
+        })
+    }
+
+    /// Format a single price
+    #[inline]
+    pub fn format_price(&self, value: ScaledAmount) -> String {
+        format_amount(*value, self.price_decimals, self.price_display_decimals)
+    }
+
+    /// Format a single quantity
+    #[inline]
+    pub fn format_qty(&self, value: ScaledAmount) -> String {
+        format_amount(*value, self.qty_decimals, self.qty_display_decimals)
+    }
+
+    /// Format depth level [price, qty] as [String; 2]
+    #[inline]
+    pub fn format_depth_level(&self, price: ScaledAmount, qty: ScaledAmount) -> [String; 2] {
+        [self.format_price(price), self.format_qty(qty)]
+    }
+
+    /// Format multiple depth levels
+    pub fn format_depth_levels(&self, levels: &[(ScaledAmount, ScaledAmount)]) -> Vec<[String; 2]> {
+        levels
+            .iter()
+            .map(|(p, q)| self.format_depth_level(*p, *q))
+            .collect()
+    }
+
+    /// Format bids and asks together
+    pub fn format_depth(
+        &self,
+        bids: &[(ScaledAmount, ScaledAmount)],
+        asks: &[(ScaledAmount, ScaledAmount)],
+    ) -> (Vec<[String; 2]>, Vec<[String; 2]>) {
+        (
+            self.format_depth_levels(bids),
+            self.format_depth_levels(asks),
+        )
+    }
+
+    /// Get symbol_id this formatter is configured for
+    pub fn symbol_id(&self) -> u32 {
+        self.symbol_id
+    }
+
+    /// Get reference to underlying SymbolManager
+    pub fn symbol_mgr(&self) -> &'a SymbolManager {
+        self.symbol_mgr
+    }
 }
 
 // ============================================================================
@@ -356,7 +522,9 @@ pub fn format_with_asset_info(value: i64, asset: &AssetInfo) -> String {
 /// Legacy decimal_to_u64 (redirects to scale_up_decimal)
 #[deprecated(note = "Use parse_decimal instead")]
 pub fn decimal_to_u64(decimal: Decimal, decimals: u32) -> Result<u64, &'static str> {
-    parse_decimal(decimal, decimals).map_err(|_| "Conversion failed")
+    parse_decimal(decimal, decimals)
+        .map(|s| *s)
+        .map_err(|_| "Conversion failed")
 }
 
 // ============================================================================
@@ -379,13 +547,13 @@ mod tests {
     #[test]
     fn qa_parse_amount_variations() {
         // Normal cases
-        assert_eq!(parse_amount("1.23", 2).unwrap(), 123);
-        assert_eq!(parse_amount("1.23", 8).unwrap(), 123_000_000);
+        assert_eq!(*parse_amount("1.23", 2).unwrap(), 123);
+        assert_eq!(*parse_amount("1.23", 8).unwrap(), 123_000_000);
 
         // Leading/Trailing zeros
-        assert_eq!(parse_amount("001.23", 2).unwrap(), 123);
-        assert_eq!(parse_amount("1.2300", 8).unwrap(), 123_000_000);
-        assert_eq!(parse_amount("0.0001", 4).unwrap(), 1);
+        assert_eq!(*parse_amount("001.23", 2).unwrap(), 123);
+        assert_eq!(*parse_amount("1.2300", 8).unwrap(), 123_000_000);
+        assert_eq!(*parse_amount("0.0001", 4).unwrap(), 1);
 
         // Zero representations (All rejected as we expect positive non-zero amounts)
         assert!(parse_amount("0", 2).is_err());
@@ -437,7 +605,7 @@ mod tests {
         ));
 
         // No decimals allowed (Scale 0)
-        assert_eq!(parse_amount("100", 0).unwrap(), 100);
+        assert_eq!(*parse_amount("100", 0).unwrap(), 100);
     }
 
     #[test]
@@ -445,7 +613,7 @@ mod tests {
         // Max u64 is 18,446,744,073,709,551,615
         // Scale 8: 184,467,440,737.09551615
         let max_s8 = "184467440737.09551615";
-        assert_eq!(parse_amount(max_s8, 8).unwrap(), u64::MAX);
+        assert_eq!(*parse_amount(max_s8, 8).unwrap(), u64::MAX);
 
         // Overflow
         let too_big = "184467440737.09551616";
@@ -470,7 +638,7 @@ mod tests {
 
         // Normal conversion
         let d = Decimal::from_str("1.23").unwrap();
-        assert_eq!(parse_decimal(d, 8).unwrap(), 123_000_000);
+        assert_eq!(*parse_decimal(d, 8).unwrap(), 123_000_000);
     }
 
     #[test]
@@ -506,7 +674,7 @@ mod tests {
                 }
 
                 if let Ok(internal) = parse_amount(val_str, scale) {
-                    let formatted = format_amount_full(internal, scale);
+                    let formatted = format_amount_full(*internal, scale);
                     let internal_back = parse_amount(&formatted, scale).unwrap();
                     assert_eq!(
                         internal, internal_back,
@@ -523,7 +691,7 @@ mod tests {
         // ETH 18 decimals
         // u64::MAX at scale 18 is ~18.44 ETH
         let limit_eth = "18.446744073709551615";
-        assert_eq!(parse_amount(limit_eth, 18).unwrap(), u64::MAX);
+        assert_eq!(*parse_amount(limit_eth, 18).unwrap(), u64::MAX);
 
         let overflow_eth = "18.446744073709551616";
         assert!(matches!(
@@ -534,6 +702,6 @@ mod tests {
         // Safe ETH amount
         let ten_eth = "10.000000000000000000";
         let internal = parse_amount("10.0", 18).unwrap();
-        assert_eq!(format_amount_full(internal, 18), ten_eth);
+        assert_eq!(format_amount_full(*internal, 18), ten_eth);
     }
 }

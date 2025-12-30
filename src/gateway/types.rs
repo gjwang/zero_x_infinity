@@ -168,12 +168,16 @@ impl ValidatedClientOrder {
 /// Multiplies by 10^decimals and converts to u64
 /// Delegates to crate::money::parse_decimal for unified implementation
 pub fn decimal_to_u64(decimal: Decimal, decimals: u32) -> Result<u64, &'static str> {
-    money::parse_decimal(decimal, decimals).map_err(|e| match e {
-        money::MoneyError::InvalidAmount => "Amount must be positive",
-        money::MoneyError::PrecisionOverflow { .. } => "Unexpected fractional part after scaling",
-        money::MoneyError::Overflow => "Number too large",
-        _ => "Conversion failed",
-    })
+    money::parse_decimal(decimal, decimals)
+        .map(|s| *s) // Deref ScaledAmount to u64
+        .map_err(|e| match e {
+            money::MoneyError::InvalidAmount => "Amount must be positive",
+            money::MoneyError::PrecisionOverflow { .. } => {
+                "Unexpected fractional part after scaling"
+            }
+            money::MoneyError::Overflow => "Number too large",
+            _ => "Conversion failed",
+        })
 }
 
 /// Cancel order request

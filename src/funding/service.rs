@@ -35,7 +35,7 @@ impl TransferService {
 
         // Scale Amount: String -> i64 using unified money module
         let amount_scaled =
-            money::parse_amount(&req.amount, asset.decimals as u32).map_err(|e| match e {
+            *money::parse_amount(&req.amount, asset.decimals as u32).map_err(|e| match e {
                 money::MoneyError::InvalidAmount => TransferError::InvalidAmount,
                 money::MoneyError::PrecisionOverflow { .. } => TransferError::InvalidAmountFormat,
                 _ => TransferError::InvalidAmountFormat,

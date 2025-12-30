@@ -55,9 +55,9 @@ mod integration_tests {
         let req = TransferRequest::new(
             ServiceId::Funding,
             ServiceId::Trading,
-            1001,        // user_id
-            1,           // asset_id (BTC)
-            100_000_000, // 1.0 BTC
+            1001,               // user_id
+            1,                  // asset_id (BTC)
+            100_000_000.into(), // 1.0 BTC
         );
 
         // Create transfer
@@ -85,7 +85,7 @@ mod integration_tests {
             ServiceId::Funding,
             1001,
             1,
-            50_000_000, // 0.5 BTC
+            50_000_000.into(), // 0.5 BTC
         );
 
         let transfer_id = harness.coordinator.create(req).await.unwrap();
@@ -110,8 +110,13 @@ mod integration_tests {
         // Configure funding adapter to fail withdraw
         harness.funding.set_fail_withdraw(true);
 
-        let req =
-            TransferRequest::new(ServiceId::Funding, ServiceId::Trading, 1001, 1, 100_000_000);
+        let req = TransferRequest::new(
+            ServiceId::Funding,
+            ServiceId::Trading,
+            1001,
+            1,
+            100_000_000.into(),
+        );
 
         let transfer_id = harness.coordinator.create(req).await.unwrap();
         let final_state = harness.coordinator.execute(transfer_id).await.unwrap();
@@ -140,7 +145,7 @@ mod integration_tests {
             ServiceId::Trading,
             1001,
             1,
-            100_000_000,
+            100_000_000.into(),
         );
 
         let transfer_id = harness.coordinator.create(req).await.unwrap();
@@ -170,7 +175,7 @@ mod integration_tests {
             ServiceId::Funding,
             1001,
             1,
-            100_000_000,
+            100_000_000.into(),
         );
 
         let transfer_id = harness.coordinator.create(req).await.unwrap();
@@ -203,7 +208,7 @@ mod integration_tests {
             ServiceId::Trading,
             1001,
             1,
-            100_000_000,
+            100_000_000.into(),
             "client-idempotency-key-123".to_string(),
         );
 
@@ -215,7 +220,7 @@ mod integration_tests {
             ServiceId::Trading,
             1001,
             1,
-            100_000_000,
+            100_000_000.into(),
             "client-idempotency-key-123".to_string(),
         );
 
@@ -240,7 +245,7 @@ mod integration_tests {
             ServiceId::Trading,
             1001,
             1,
-            0, // Zero amount!
+            0.into(), // Zero amount!
         );
 
         let result = harness.coordinator.create(req).await;
@@ -259,7 +264,7 @@ mod integration_tests {
             ServiceId::Funding, // Same!
             1001,
             1,
-            100_000_000,
+            100_000_000.into(),
         );
 
         let result = harness.coordinator.create(req).await;
