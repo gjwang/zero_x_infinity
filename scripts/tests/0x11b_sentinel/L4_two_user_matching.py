@@ -604,13 +604,14 @@ class TwoUserOrderMatchingE2E:
                  # Check Order Status to see if it's open
                  order_a = self.wait_for_order_status(self.user_a_api_client, "BTC_USDT", "FILLED", max_retries=2)
                  if not order_a or order_a.get("status") != "FILLED":
-                      print(f"   ⚠️ WARNING: Maker Order not FILLED and Trade missing. (System Bug)")
-                      print(f"   ⚠️ Skipping User A verification to avoid CI failure on Known Issue.")
-                      # trade_verified = False # DISABLED for Known Bug
+                      print(f"   ❌ FAIL: Maker Order not FILLED and Trade missing.")
+                      trade_verified = False  # BUG FIXED: Now properly fail
                  else:
-                      print(f"   ✅ Order is FILLED (Trades missing?). Warning only.")
+                      print(f"   ❌ FAIL: Order is FILLED but Trades not found in API!")
+                      trade_verified = False  # Data persistence issue
         else:
-             print("   ⚠️ User A ID unknown, skipping specific verification")
+             print("   ❌ FAIL: User A ID unknown")
+             trade_verified = False
 
         # Verify User B Order (Taker)
         order_b = self.wait_for_order_status(self.user_b_api_client, "BTC_USDT", "FILLED")
