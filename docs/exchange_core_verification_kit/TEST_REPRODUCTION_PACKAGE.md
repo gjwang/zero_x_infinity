@@ -134,19 +134,32 @@ graph TD
 为了确保 Rust 实现的随机生成逻辑与 Java 版本完全一致，已预先生成了一组"黄金数据"供逐字节核对。
 
 ### 6.1 数据文件
+
 位于 `docs/exchange_core_verification_kit/golden_data/` 目录下：
-1.  **`golden_single_pair_margin.csv`** (1100 records): 期货模式测试样本 (含预填充与基准测试数据)
+
+**核心订单数据**:
+1.  **`golden_single_pair_margin.csv`** (1100 records): 期货模式测试样本
 2.  **`golden_single_pair_exchange.csv`** (1100 records): 现货模式测试样本
+    - **格式**: `phase,command,order_id,symbol,price,size,action,order_type,uid`
+    - *Seed = 1*
 
-**CSV 格式**: `phase,command,order_id,symbol,price,size,action,order_type,uid`
-*注意：Seed 固定为 1。*
+**UID 生成验证数据** (新增):
+3.  **`*_users2currencies.csv`**: 用户-货币映射表
+    - **格式**: `uid,currencies` (currencies 以分号分隔，如 `840;978`)
+    - 用于验证 `UserCurrencyAccountsGenerator` 的输出
+4.  **`*_uids_for_symbol.csv`**: 交易对可用 UID 数组
+    - **格式**: `index,uid`
+    - 用于验证 `createUserListForSymbol()` 的输出顺序
 
-### 6.2 生成工具 (可选)
-如果需要生成更多数据，可以使用已提供的工具类: `docs/exchange_core_verification_kit/tools/RustPortingDataDumper.java`。
-由于环境依赖复杂，建议直接使用已生成的 CSV 文件进行验证。
+### 6.2 UID 不匹配解决方案
 
-### 6.3 验证方法
-Rust 单元测试应加载这些 CSV 文件，并在相同 Seed (1) 下生成命令序列，断言每一步生成的 `CommandType`, `OrderId`, `Price`, `Size` 等字段与 CSV 完全一致。
+如果 Price/Size/Action 验证通过但 UID 不匹配，Rust 实现可以：
+1.  **直接加载 `*_uids_for_symbol.csv`** 作为 UID 数组，跳过 `createUserListForSymbol` 的复现。
+2.  或对比 `*_users2currencies.csv` 排查 BitSet 迭代顺序差异。
+
+### 6.3 生成工具 (可选)
+
+如果需要重新生成，可使用 `docs/exchange_core_verification_kit/tools/RustPortingDataDumper.java`。
 
 ---
 
