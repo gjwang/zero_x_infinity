@@ -247,6 +247,8 @@ start_gateway() {
         log_info "Using pre-built binary: $GATEWAY_BINARY"
         nohup "$GATEWAY_BINARY" --gateway > "$LOG_DIR/gateway_e2e.log" 2>&1 &
     else
+        # Limit pool size to preventing exhausting CI database connections
+        export PG_POOL_SIZE=20
         nohup cargo run -- --gateway > "$LOG_DIR/gateway_e2e.log" 2>&1 &
     fi
     GATEWAY_PID=$!
@@ -259,6 +261,7 @@ start_sentinel() {
     log_step "[4/6] Starting Sentinel Service..."
     
     mkdir -p "$LOG_DIR"
+    export PG_POOL_SIZE=20
     if [ -n "$GATEWAY_BINARY" ]; then
          nohup "$GATEWAY_BINARY" --sentinel > "$LOG_DIR/sentinel_e2e.log" 2>&1 &
     else
