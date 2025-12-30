@@ -231,6 +231,12 @@ start_anvil() {
 }
 
 start_gateway() {
+    # Determine target env
+    TARGET_ENV="dev"
+    if [ -n "$CI" ]; then
+        TARGET_ENV="ci"
+    fi
+
     log_step "[3/6] Starting Gateway HTTP Server..."
     
     # Check if already running
@@ -245,11 +251,10 @@ start_gateway() {
     mkdir -p "$LOG_DIR"
     if [ -n "$GATEWAY_BINARY" ]; then
         log_info "Using pre-built binary: $GATEWAY_BINARY"
-        nohup "$GATEWAY_BINARY" --gateway > "$LOG_DIR/gateway_e2e.log" 2>&1 &
+        nohup "$GATEWAY_BINARY" --gateway --env "$TARGET_ENV" > "$LOG_DIR/gateway_e2e.log" 2>&1 &
     else
-        # Limit pool size to preventing exhausting CI database connections
-        export PG_POOL_SIZE=20
-        nohup cargo run -- --gateway > "$LOG_DIR/gateway_e2e.log" 2>&1 &
+        # Limit handled in config/ci.yaml
+        nohup cargo run -- --gateway --env "$TARGET_ENV" > "$LOG_DIR/gateway_e2e.log" 2>&1 &
     fi
     GATEWAY_PID=$!
     
@@ -258,14 +263,20 @@ start_gateway() {
 }
 
 start_sentinel() {
+    # Determine target env
+    TARGET_ENV="dev"
+    if [ -n "$CI" ]; then
+        TARGET_ENV="ci"
+    fi
+
     log_step "[4/6] Starting Sentinel Service..."
     
     mkdir -p "$LOG_DIR"
-    export PG_POOL_SIZE=20
+    # Note: PG connection limit is handled in config/ci.yaml via ?max_connections=20
     if [ -n "$GATEWAY_BINARY" ]; then
-         nohup "$GATEWAY_BINARY" --sentinel > "$LOG_DIR/sentinel_e2e.log" 2>&1 &
+         nohup "$GATEWAY_BINARY" --sentinel --env "$TARGET_ENV" > "$LOG_DIR/sentinel_e2e.log" 2>&1 &
     else
-         nohup cargo run -- --sentinel > "$LOG_DIR/sentinel_e2e.log" 2>&1 &
+         nohup cargo run -- --sentinel --env "$TARGET_ENV" > "$LOG_DIR/sentinel_e2e.log" 2>&1 &
     fi
     SENTINEL_PID=$!
     
