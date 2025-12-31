@@ -33,6 +33,7 @@ Before making any changes, AI agents MUST read:
 | [ID Specification](./docs/src/0x0A-b-id-specification.md) | Identity addressing rules |
 | [Development Guidelines](./docs/standards/development-guidelines.md) | Coding standards |
 | [Testing Pitfalls](./docs/src/testing-pitfalls.md) | Common traps and best practices |
+| [Money Governance](./docs/standards/money-governance.md) | **CRITICAL**: Balance & Scaling rules |
 
 ---
 

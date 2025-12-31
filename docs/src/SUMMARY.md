@@ -91,6 +91,7 @@
 - [API Conventions](../standards/api-conventions.md)
 - [ID Specification](../standards/id-specification.md)
 - [Naming Convention](../standards/naming-convention.md)
+- [Money Governance Standard | 资金操作治理规范](../standards/money-governance.md)
 - [CI Pitfalls](./standards/ci-pitfalls.md)
 - [Pre-merge Checklist](./standards/pre-merge-checklist.md)
 - [Build Verification Guide](./build-verification-guide.md)
