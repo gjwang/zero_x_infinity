@@ -650,7 +650,7 @@ fi
 | **Phase 1a** | 实现 `StrictDecimal` 类型 (Serde 层格式验证) | ✅ 已完成 |
 | **Phase 1b** | 为核心订单 API 实现 `ValidatedOrder` Extractor | ⏳ 待实现 |
 | **Phase 2a** | 实现 `DisplayAmount` 类型 (Response 输出封装) | ✅ 已完成 |
-| **Phase 2b** | 迁移 Response DTO 使用 `DisplayAmount` | ⏳ 待实现 |
+| **Phase 2b** | 迁移 Response DTO 使用 `DisplayAmount` | ✅ 已完成 |
 | **Phase 3** | 为所有金额相关 API 统一改造 | ⏳ 待实现 |
 | **Phase 4** | 实现 `audit_api_types.sh` 并集成 CI | ✅ 已完成 |
 | **Phase 5** | 扩展审计脚本检查 Response DTO 类型 | ✅ 已完成 |
@@ -723,7 +723,23 @@ cargo test gateway::types  # 28 通过
 ./scripts/audit_api_types.sh  # ✅ PASSED
 
 # 全量测试
-cargo test  # 388+ 通过
+cargo test  # 390+ 通过
+```
+
+#### Phase 2b: BalanceInfo 迁移 (2025-12-31)
+
+迁移 `BalanceInfo` 使用 `DisplayAmount` 类型：
+
+**修改的文件:**
+- `src/funding/service.rs` — `BalanceInfo.available/frozen` 从 `String` 改为 `DisplayAmount`
+- `src/gateway/handlers.rs` — 更新 `BalanceInfo` 构造点使用 `DisplayAmount::new()`
+
+**验证:**
+```bash
+cargo build                    # ✅ PASSED
+cargo test gateway::types      # ✅ 28 passed
+./scripts/audit_api_types.sh   # ✅ 5 rules PASSED
+cargo test                     # ✅ 390+ passed
 ```
 
 ---

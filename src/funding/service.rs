@@ -3,6 +3,7 @@ use super::transfer::Transfer;
 use super::transfer::{TransferRequest, TransferResponse};
 use super::types::AccountType;
 use crate::account::{AssetManager, Database};
+use crate::gateway::types::DisplayAmount;
 use crate::money;
 use sqlx::Row;
 use std::str::FromStr;
@@ -166,8 +167,16 @@ impl TransferService {
                 asset_id: asset_id as u32,
                 asset: asset_name,
                 account_type: account_type_name.to_string(),
-                available: money::format_amount_signed(available, decimals as u32, decimals as u32),
-                frozen: money::format_amount_signed(frozen, decimals as u32, decimals as u32),
+                available: DisplayAmount::new(money::format_amount_signed(
+                    available,
+                    decimals as u32,
+                    decimals as u32,
+                )),
+                frozen: DisplayAmount::new(money::format_amount_signed(
+                    frozen,
+                    decimals as u32,
+                    decimals as u32,
+                )),
             });
         }
 
@@ -176,11 +185,16 @@ impl TransferService {
 }
 
 /// Balance info for API response
+///
+/// Uses DisplayAmount for type-safe monetary output.
+/// Amounts are formatted through controlled conversion layer.
 #[derive(Debug, Clone, serde::Serialize, ToSchema)]
 pub struct BalanceInfo {
     pub asset_id: u32,
     pub asset: String,
     pub account_type: String,
-    pub available: String,
-    pub frozen: String,
+    #[schema(value_type = String)]
+    pub available: DisplayAmount,
+    #[schema(value_type = String)]
+    pub frozen: DisplayAmount,
 }
