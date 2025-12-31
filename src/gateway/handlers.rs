@@ -621,23 +621,12 @@ fn now_ms() -> u64 {
 pub async fn get_order(
     State(state): State<Arc<AppState>>,
     Path(order_id): Path<u64>,
-) -> Result<
-    (
-        StatusCode,
-        Json<ApiResponse<crate::persistence::queries::OrderApiData>>,
-    ),
-    (StatusCode, Json<ApiResponse<()>>),
-> {
+) -> ApiResult<crate::persistence::queries::OrderApiData> {
     // Check if persistence is enabled
-    let db_client = state.db_client.as_ref().ok_or_else(|| {
-        (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ApiResponse::<()>::error(
-                error_codes::SERVICE_UNAVAILABLE,
-                "Persistence not enabled",
-            )),
-        )
-    })?;
+    let db_client = state
+        .db_client
+        .as_ref()
+        .ok_or_else(|| ApiError::service_unavailable("Persistence not enabled"))?;
 
     // Query order from TDengine
     match crate::persistence::queries::query_order(
@@ -648,21 +637,9 @@ pub async fn get_order(
     )
     .await
     {
-        Ok(Some(order)) => Ok((StatusCode::OK, Json(ApiResponse::success(order)))),
-        Ok(None) => Err((
-            StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error(
-                error_codes::ORDER_NOT_FOUND,
-                "Order not found",
-            )),
-        )),
-        Err(e) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error(
-                error_codes::SERVICE_UNAVAILABLE,
-                format!("Query failed: {}", e),
-            )),
-        )),
+        Ok(Some(order)) => ok(order),
+        Ok(None) => ApiError::not_found("Order not found").into_err(),
+        Err(e) => ApiError::db_error(format!("Query failed: {}", e)).into_err(),
     }
 }
 
@@ -686,23 +663,12 @@ pub async fn get_orders(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<crate::api_auth::AuthenticatedUser>,
     Query(params): Query<std::collections::HashMap<String, String>>,
-) -> Result<
-    (
-        StatusCode,
-        Json<ApiResponse<Vec<crate::persistence::queries::OrderApiData>>>,
-    ),
-    (StatusCode, Json<ApiResponse<()>>),
-> {
+) -> ApiResult<Vec<crate::persistence::queries::OrderApiData>> {
     // Check if persistence is enabled
-    let db_client = state.db_client.as_ref().ok_or_else(|| {
-        (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ApiResponse::<()>::error(
-                error_codes::SERVICE_UNAVAILABLE,
-                "Persistence not enabled",
-            )),
-        )
-    })?;
+    let db_client = state
+        .db_client
+        .as_ref()
+        .ok_or_else(|| ApiError::service_unavailable("Persistence not enabled"))?;
 
     // 1. Use user_id from authenticated user
     let user_id = user.user_id as u64;
@@ -722,14 +688,8 @@ pub async fn get_orders(
     )
     .await
     {
-        Ok(orders) => Ok((StatusCode::OK, Json(ApiResponse::success(orders)))),
-        Err(e) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error(
-                error_codes::SERVICE_UNAVAILABLE,
-                format!("Query failed: {}", e),
-            )),
-        )),
+        Ok(orders) => ok(orders),
+        Err(e) => ApiError::db_error(format!("Query failed: {}", e)).into_err(),
     }
 }
 
