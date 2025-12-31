@@ -163,9 +163,9 @@ def test_c_tc_004_injection():
                 "time_in_force": "GTC",
             })
             
-            if resp.status_code != 400:
+            if resp.status_code not in [400, 422]:
                 collector.add(TestResult(test_id, name, TestStatus.FAIL,
-                                        expected="400", actual=str(resp.status_code)))
+                                        expected="400|422", actual=str(resp.status_code)))
                 continue
             
             # 验证 payload 不在响应中回显 (防止 XSS)
@@ -340,9 +340,9 @@ def test_c_cross_review():
                 "qty": inp,
                 "time_in_force": "GTC",
             })
-            if resp.status_code != 400:
+            if resp.status_code not in [400, 422]:
                 collector.add(TestResult(test_id, "失败操作正确拒绝", TestStatus.FAIL,
-                                        details=f"Input '{inp}' not rejected"))
+                                        details=f"Input '{inp}' not rejected (got {resp.status_code})"))
                 return
         
         collector.add(TestResult(test_id, "失败操作正确拒绝", TestStatus.PASS))

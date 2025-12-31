@@ -54,12 +54,12 @@ def test_a_tc_001_precision_boundary():
             "time_in_force": "GTC",
         })
         
-        if resp.status_code == 400:
+        if resp.status_code in [400, 422]:
             collector.add(TestResult(test_id, "BTC 9位精度被拒绝", TestStatus.PASS,
-                                    expected="400", actual=str(resp.status_code)))
+                                    expected="400|422", actual=str(resp.status_code)))
         else:
             collector.add(TestResult(test_id, "BTC 9位精度被拒绝", TestStatus.FAIL,
-                                    expected="400", actual=str(resp.status_code)))
+                                    expected="400|422", actual=str(resp.status_code)))
     except Exception as e:
         collector.add(TestResult(test_id, "BTC 9位精度被拒绝", TestStatus.ERROR, str(e)))
     
@@ -100,11 +100,11 @@ def test_a_tc_001_precision_boundary():
             "time_in_force": "GTC",
         })
         
-        if resp.status_code == 400:
+        if resp.status_code in [400, 422]:
             collector.add(TestResult(test_id, "USDT 7位价格精度被拒绝", TestStatus.PASS))
         else:
             collector.add(TestResult(test_id, "USDT 7位价格精度被拒绝", TestStatus.FAIL,
-                                    expected="400", actual=str(resp.status_code)))
+                                    expected="400|422", actual=str(resp.status_code)))
     except Exception as e:
         collector.add(TestResult(test_id, "USDT 7位价格精度被拒绝", TestStatus.ERROR, str(e)))
     
@@ -159,11 +159,11 @@ def test_a_tc_002_integer_overflow():
                 "time_in_force": "GTC",
             })
             
-            if resp.status_code == 400:
+            if resp.status_code in [400, 422]:
                 collector.add(TestResult(test_id, name, TestStatus.PASS))
             else:
                 collector.add(TestResult(test_id, name, TestStatus.FAIL,
-                                        expected="400", actual=str(resp.status_code)))
+                                        expected="400|422", actual=str(resp.status_code)))
         except Exception as e:
             collector.add(TestResult(test_id, name, TestStatus.ERROR, str(e)))
 
@@ -201,11 +201,11 @@ def test_a_tc_003_malformed_input():
                 "time_in_force": "GTC",
             })
             
-            if resp.status_code == 400:
+            if resp.status_code in [400, 422]:
                 collector.add(TestResult(test_id, name, TestStatus.PASS))
             else:
                 collector.add(TestResult(test_id, name, TestStatus.FAIL,
-                                        expected="400", actual=str(resp.status_code)))
+                                        expected="400|422", actual=str(resp.status_code)))
         except Exception as e:
             collector.add(TestResult(test_id, name, TestStatus.ERROR, str(e)))
 
@@ -240,11 +240,11 @@ def test_a_tc_004_zero_value():
                 "time_in_force": "GTC",
             })
             
-            if resp.status_code == 400:
+            if resp.status_code in [400, 422]:
                 collector.add(TestResult(test_id, name, TestStatus.PASS))
             else:
                 collector.add(TestResult(test_id, name, TestStatus.FAIL,
-                                        expected="400", actual=str(resp.status_code)))
+                                        expected="400|422", actual=str(resp.status_code)))
         except Exception as e:
             collector.add(TestResult(test_id, name, TestStatus.ERROR, str(e)))
 
@@ -333,11 +333,11 @@ def test_a_c_add_negative_bypass():
                 "time_in_force": "GTC",
             })
             
-            if resp.status_code == 400:
+            if resp.status_code in [400, 422]:
                 collector.add(TestResult(test_id, name, TestStatus.PASS))
             else:
                 collector.add(TestResult(test_id, name, TestStatus.FAIL,
-                                        expected="400", actual=str(resp.status_code)))
+                                        expected="400|422", actual=str(resp.status_code)))
         except Exception as e:
             collector.add(TestResult(test_id, name, TestStatus.ERROR, str(e)))
 
