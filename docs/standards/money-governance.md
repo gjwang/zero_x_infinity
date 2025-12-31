@@ -174,28 +174,122 @@ pub struct ScaledAmountSigned(i64);  // 有符号：盈亏、差额
 
 ---
 
-## Part IV: 强制执行机制 (Enforcement Mechanisms)
+## Part IV: 如何在代码层面强制执行？
 
-### 4.1 编译期：类型系统屏障
-- `ScaledAmount` 无法与 `u64` 直接运算。
-- 必须通过 `Deref` (`*amount`) 或 `.to_raw()` 显式"逃逸"。
+> **核心问题**：如何禁止开发者到处私自转换？
 
-### 4.2 代码审查：高可见性信号
-- 任何使用 `.to_raw()` 的地方都应被视为**需要额外审查**的信号。
-- 任何在 `money.rs` 之外出现的 `10u64.pow` 都是**绝对禁止**的。
+### 4.1 第一道防线：类型系统 (编译期)
 
-### 4.3 自动化审计 (CI)
-**审计脚本**: `scripts/audit_money_safety.sh` (待实现)
+**Newtype 封装**：`ScaledAmount(u64)` 的内部字段是 **private** 的。
+
+```rust
+pub struct ScaledAmount(u64);  // u64 不可直接访问
+
+impl ScaledAmount {
+    pub(crate) fn from_raw(v: u64) -> Self { Self(v) }  // 仅 crate 内部可构造
+    pub fn to_raw(self) -> u64 { self.0 }                // 显式"逃逸"
+}
+```
+
+**效果**：
+- ❌ `ScaledAmount::from_raw(100)` — 外部模块无法调用
+- ❌ `amount.0` — 无法直接访问内部字段
+- ❌ `amount + 100u64` — 类型不匹配，编译失败
+- ✅ `*amount > 0` — 通过 `Deref` 允许比较
+
+---
+
+### 4.2 第二道防线：可见性控制 (API 入口收缩)
+
+**层级隔离**：
+
+| 函数 | 可见性 | 谁可以调用 |
+|------|--------|------------|
+| `parse_amount()` | `pub(crate)` | 仅 `money.rs` 和核心模块 |
+| `format_amount()` | `pub(crate)` | 仅 `money.rs` 和核心模块 |
+| `SymbolManager::parse_qty()` | `pub` | **任何模块（唯一合法入口）** |
+| `SymbolManager::format_price()` | `pub` | **任何模块（唯一合法入口）** |
+
+**效果**：
+- Gateway Handler 的代码自动补全中，**只能看到** `SymbolManager` 的方法。
+- 如果开发者想调用底层 `parse_amount()`，会发现它**不在作用域内**。
+
+---
+
+### 4.3 第三道防线：API 层数据类型 (DTO 设计)
+
+**强制规范**：API 请求/响应中的金额字段，**必须使用 `String` 类型**。
+
+```rust
+// ✅ 正确: 使用 String，由 Handler 调用 SymbolManager 转换
+#[derive(Deserialize)]
+pub struct PlaceOrderRequest {
+    pub quantity: String,  // "1.5"
+    pub price: String,     // "50000.00"
+}
+
+// ❌ 错误: 直接使用 u64，暴露内部实现
+#[derive(Deserialize)]
+pub struct PlaceOrderRequest {
+    pub quantity: u64,     // 客户端如何知道要传 150_000_000？
+}
+```
+
+**Serde 不会自动转换**：如果客户端传 `"quantity": 1.5`（JSON number），`String` 类型会反序列化失败，强制客户端传 `"1.5"`（JSON string）。
+
+---
+
+### 4.4 第四道防线：CI 自动化审计
+
+**审计脚本**: `scripts/audit_money_safety.sh`
 
 ```bash
-# 检查非 money.rs 文件中是否存在手动缩放
-grep -rn "10u64.pow" --include="*.rs" --exclude="money.rs" src/
-grep -rn "Decimal::from(10).powi" --include="*.rs" --exclude="money.rs" src/
-```
-**集成**: 将脚本加入 `.github/workflows` 和本地 pre-commit hook。
+#!/bin/bash
+set -e
 
-### 4.4 Agent 记忆 (AGENTS.md)
-**已生效**: `AGENTS.md` 必读列表中包含本规范。所有 AI Agent 在开始工作前必须阅读。
+echo "🔍 Auditing money safety..."
+
+# 1. 检查非 money.rs 中的手动缩放
+if grep -rn "10u64.pow" --include="*.rs" src/ | grep -v "money.rs"; then
+    echo "❌ FAIL: Found 10u64.pow outside money.rs"
+    exit 1
+fi
+
+# 2. 检查 Decimal 手动幂运算
+if grep -rn "Decimal::from(10).powi" --include="*.rs" src/ | grep -v "money.rs"; then
+    echo "❌ FAIL: Found Decimal power operation outside money.rs"
+    exit 1
+fi
+
+# 3. 检查硬编码精度 (可选，需要更精细的规则)
+# grep -rn "decimals.*=.*8" --include="*.rs" src/ | grep -v "symbol_manager.rs"
+
+echo "✅ Money safety audit passed!"
+```
+
+**集成**：
+- `.github/workflows/ci.yml` — 每次 PR 自动运行
+- `.git/hooks/pre-commit` — 本地提交前拦截
+
+---
+
+### 4.5 第五道防线：Code Review 信号
+
+**高危操作清单** (PR 审查时重点关注)：
+
+| 代码模式 | 风险等级 | 处理方式 |
+|----------|----------|----------|
+| `.to_raw()` | ⚠️ 高 | 必须注释说明原因 |
+| `10u64.pow` 在 `money.rs` 外 | 🚫 禁止 | 拒绝合并 |
+| `decimals: u32` 硬编码 | ⚠️ 高 | 应从 `SymbolManager` 获取 |
+| API DTO 中 `u64` 金额字段 | 🚫 禁止 | 必须使用 `String` |
+| `Deref` 后直接算术 (`*a + *b`) | ⚠️ 高 | 应使用 `checked_add` |
+
+---
+
+### 4.6 第六道防线：Agent 记忆 (AGENTS.md)
+
+**已生效**: `AGENTS.md` 必读列表中包含本规范。所有 AI Agent 在开始工作前必须阅读，确保生成的代码符合规范。
 
 ---
 
