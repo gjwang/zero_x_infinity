@@ -1,7 +1,7 @@
 //! Repository layer for user account operations
 
 use super::models::{User, UserStatus};
-use sqlx::{PgPool, Row};
+use sqlx::PgPool;
 
 /// User repository for CRUD operations
 pub struct UserRepository;
@@ -17,14 +17,30 @@ impl UserRepository {
         .fetch_optional(pool)
         .await?;
 
-        Ok(row.map(|r| User {
-            user_id: r.get("user_id"),
-            username: r.get("username"),
-            email: r.get("email"),
-            status: UserStatus::from(r.get::<i16, _>("status")),
-            user_flags: r.get("user_flags"),
-            created_at: r.get("created_at"),
-        }))
+        if let Some(r) = row {
+            use crate::db::SafeRow;
+            Ok(Some(User {
+                user_id: r
+                    .try_get_log("user_id")
+                    .ok_or_else(|| sqlx::Error::ColumnNotFound("user_id".into()))?,
+                username: r
+                    .try_get_log("username")
+                    .ok_or_else(|| sqlx::Error::ColumnNotFound("username".into()))?,
+                email: r.try_get_log("email"),
+                status: UserStatus::from(
+                    r.try_get_log::<i16>("status")
+                        .ok_or_else(|| sqlx::Error::ColumnNotFound("status".into()))?,
+                ),
+                user_flags: r
+                    .try_get_log("user_flags")
+                    .ok_or_else(|| sqlx::Error::ColumnNotFound("user_flags".into()))?,
+                created_at: r
+                    .try_get_log::<chrono::DateTime<chrono::Utc>>("created_at")
+                    .ok_or_else(|| sqlx::Error::ColumnNotFound("created_at".into()))?,
+            }))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Get user by username
@@ -40,14 +56,30 @@ impl UserRepository {
         .fetch_optional(pool)
         .await?;
 
-        Ok(row.map(|r| User {
-            user_id: r.get("user_id"),
-            username: r.get("username"),
-            email: r.get("email"),
-            status: UserStatus::from(r.get::<i16, _>("status")),
-            user_flags: r.get("user_flags"),
-            created_at: r.get("created_at"),
-        }))
+        if let Some(r) = row {
+            use crate::db::SafeRow;
+            Ok(Some(User {
+                user_id: r
+                    .try_get_log("user_id")
+                    .ok_or_else(|| sqlx::Error::ColumnNotFound("user_id".into()))?,
+                username: r
+                    .try_get_log("username")
+                    .ok_or_else(|| sqlx::Error::ColumnNotFound("username".into()))?,
+                email: r.try_get_log("email"),
+                status: UserStatus::from(
+                    r.try_get_log::<i16>("status")
+                        .ok_or_else(|| sqlx::Error::ColumnNotFound("status".into()))?,
+                ),
+                user_flags: r
+                    .try_get_log("user_flags")
+                    .ok_or_else(|| sqlx::Error::ColumnNotFound("user_flags".into()))?,
+                created_at: r
+                    .try_get_log::<chrono::DateTime<chrono::Utc>>("created_at")
+                    .ok_or_else(|| sqlx::Error::ColumnNotFound("created_at".into()))?,
+            }))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Create a new user
@@ -63,7 +95,9 @@ impl UserRepository {
                 .fetch_one(pool)
                 .await?;
 
-        Ok(row.get("user_id"))
+        use crate::db::SafeRow;
+        row.try_get_log("user_id")
+            .ok_or_else(|| sqlx::Error::ColumnNotFound("user_id".into()))
     }
 }
 

@@ -40,7 +40,7 @@ function check_pattern() {
 check_pattern "Hardcoded Precision" "\.unwrap_or\(([2468])\)" "$TARGET_DIRS" || EXIT_CODE=1
 
 # 2. Check for balance/cost defaults in core logic
-SENSITIVE_CORE="src/pipeline_services.rs src/funding/ src/ubscore.rs src/internal_transfer/"
+SENSITIVE_CORE="src/pipeline_services.rs src/funding/ src/ubscore.rs src/internal_transfer/ src/account/ src/api_auth/"
 check_pattern "Silent Financial Defaults" "\.unwrap_or(_default)?\(0?\)" "$SENSITIVE_CORE" || EXIT_CODE=1
 
 # 3. Check for security-critical ID defaults
@@ -48,6 +48,9 @@ check_pattern "Insecure User ID Logic" "claims\.sub\.parse.*\.unwrap_or(_default
 
 # 4. Check for critical metadata defaults in WebSocket broadcast
 check_pattern "Metadata Display Defaults" "\.unwrap_or(_else)?\(.*format!.*SYMBOL.*\)" "src/websocket/" || EXIT_CODE=1
+
+# 5. Check for unsafe DB row mapping (prevents panics on column rename)
+check_pattern "Unsafe DB Row Mapping" "row\.get\(" "src/" || EXIT_CODE=1
 
 if [ $EXIT_CODE -eq 0 ]; then
     echo -e "\n${GREEN}COMPLETE: All Fail-Fast checks passed!${NC}"

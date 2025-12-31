@@ -5,7 +5,6 @@
 
 use super::models::ApiKeyRecord;
 use crate::account::Database;
-use sqlx::Row;
 use std::sync::Arc;
 
 /// API Key repository for database operations.
@@ -38,7 +37,11 @@ impl ApiKeyRepository {
         .fetch_optional(self.db.pool())
         .await?;
 
-        Ok(row.map(|r| Self::row_to_record(&r)))
+        if let Some(r) = row {
+            Ok(Some(Self::row_to_record(&r)?))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Update the last_ts_nonce for an API Key.
@@ -74,7 +77,11 @@ impl ApiKeyRepository {
         .fetch_optional(self.db.pool())
         .await?;
 
-        Ok(row.map(|r| Self::row_to_record(&r)))
+        if let Some(r) = row {
+            Ok(Some(Self::row_to_record(&r)?))
+        } else {
+            Ok(None)
+        }
     }
 
     /// List all API Keys for a user.
@@ -92,21 +99,42 @@ impl ApiKeyRepository {
         .fetch_all(self.db.pool())
         .await?;
 
-        Ok(rows.iter().map(Self::row_to_record).collect())
+        let mut out = Vec::with_capacity(rows.len());
+        for row in rows {
+            out.push(Self::row_to_record(&row)?);
+        }
+        Ok(out)
     }
 
     /// Convert a database row to ApiKeyRecord.
-    fn row_to_record(row: &sqlx::postgres::PgRow) -> ApiKeyRecord {
-        ApiKeyRecord {
-            key_id: row.get("key_id"),
-            user_id: row.get("user_id"),
-            api_key: row.get("api_key"),
-            key_type: row.get("key_type"),
-            key_data: row.get("key_data"),
-            label: row.get("label"),
-            permissions: row.get("permissions"),
-            status: row.get("status"),
-            last_ts_nonce: row.get("last_ts_nonce"),
-        }
+    fn row_to_record(row: &sqlx::postgres::PgRow) -> Result<ApiKeyRecord, sqlx::Error> {
+        use crate::db::SafeRow;
+        Ok(ApiKeyRecord {
+            key_id: row
+                .try_get_log("key_id")
+                .ok_or_else(|| sqlx::Error::ColumnNotFound("key_id".into()))?,
+            user_id: row
+                .try_get_log("user_id")
+                .ok_or_else(|| sqlx::Error::ColumnNotFound("user_id".into()))?,
+            api_key: row
+                .try_get_log("api_key")
+                .ok_or_else(|| sqlx::Error::ColumnNotFound("api_key".into()))?,
+            key_type: row
+                .try_get_log("key_type")
+                .ok_or_else(|| sqlx::Error::ColumnNotFound("key_type".into()))?,
+            key_data: row
+                .try_get_log("key_data")
+                .ok_or_else(|| sqlx::Error::ColumnNotFound("key_data".into()))?,
+            label: row.try_get_log("label"),
+            permissions: row
+                .try_get_log("permissions")
+                .ok_or_else(|| sqlx::Error::ColumnNotFound("permissions".into()))?,
+            status: row
+                .try_get_log("status")
+                .ok_or_else(|| sqlx::Error::ColumnNotFound("status".into()))?,
+            last_ts_nonce: row
+                .try_get_log("last_ts_nonce")
+                .ok_or_else(|| sqlx::Error::ColumnNotFound("last_ts_nonce".into()))?,
+        })
     }
 }

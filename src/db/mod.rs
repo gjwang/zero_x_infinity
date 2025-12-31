@@ -43,10 +43,10 @@ impl Database {
 
         let result: Vec<(u64, u8)> = rows
             .iter()
-            .map(|row| {
-                let user_id: i64 = row.get("user_id");
-                let vip_level: i16 = row.get("vip_level");
-                (user_id as u64, vip_level as u8)
+            .filter_map(|row| {
+                let user_id: i64 = row.try_get_log("user_id")?;
+                let vip_level: i16 = row.try_get_log("vip_level").unwrap_or(0);
+                Some((user_id as u64, vip_level as u8))
             })
             .collect();
 

@@ -3,7 +3,7 @@
 //! PostgreSQL-based persistence for FSM transfer state.
 //! All state updates use atomic CAS (Compare-And-Swap) operations.
 
-use sqlx::{PgPool, Row};
+use sqlx::PgPool;
 use std::time::Duration;
 
 use super::error::TransferError;
@@ -226,21 +226,30 @@ impl TransferDb {
 
     /// Convert database row to TransferRecord
     fn row_to_record(&self, row: &sqlx::postgres::PgRow) -> Result<TransferRecord, TransferError> {
-        let transfer_id_str: String = row.get("transfer_id");
+        use crate::db::SafeRow;
+        let transfer_id_str: String = row
+            .try_get_log("transfer_id")
+            .ok_or_else(|| TransferError::SystemError("Missing transfer_id column".to_string()))?;
         let transfer_id: InternalTransferId = transfer_id_str
             .parse()
             .map_err(|_| TransferError::SystemError("Invalid transfer_id format".to_string()))?;
 
-        let state_id: i16 = row.get("state");
+        let state_id: i16 = row
+            .try_get_log("state")
+            .ok_or_else(|| TransferError::SystemError("Missing state column".to_string()))?;
         let state = TransferState::from_id(state_id)
             .ok_or_else(|| TransferError::SystemError(format!("Invalid state ID: {}", state_id)))?;
 
-        let source_id: i16 = row.get("source_type");
+        let source_id: i16 = row
+            .try_get_log("source_type")
+            .ok_or_else(|| TransferError::SystemError("Missing source_type column".to_string()))?;
         let source = ServiceId::from_id(source_id).ok_or_else(|| {
             TransferError::SystemError(format!("Invalid source_type: {}", source_id))
         })?;
 
-        let transfer_type_id: i16 = row.get("transfer_type");
+        let transfer_type_id: i16 = row.try_get_log("transfer_type").ok_or_else(|| {
+            TransferError::SystemError("Missing transfer_type column".to_string())
+        })?;
         let transfer_type = TransferType::from_id(transfer_type_id).ok_or_else(|| {
             TransferError::SystemError(format!("Invalid transfer_type: {}", transfer_type_id))
         })?;
@@ -251,24 +260,38 @@ impl TransferDb {
             TransferType::SpotToFunding => ServiceId::Funding,
         };
 
-        let amount_i64: i64 = row.get("amount");
+        let amount_i64: i64 = row
+            .try_get_log("amount")
+            .ok_or_else(|| TransferError::SystemError("Missing amount column".to_string()))?;
         let amount_u64 = amount_i64 as u64;
 
-        let created_at: chrono::DateTime<chrono::Utc> = row.get("created_at");
-        let updated_at: chrono::DateTime<chrono::Utc> = row.get("updated_at");
+        let created_at: chrono::DateTime<chrono::Utc> = row
+            .try_get_log("created_at")
+            .ok_or_else(|| TransferError::SystemError("Missing created_at column".to_string()))?;
+        let updated_at: chrono::DateTime<chrono::Utc> = row
+            .try_get_log("updated_at")
+            .ok_or_else(|| TransferError::SystemError("Missing updated_at column".to_string()))?;
 
         Ok(TransferRecord {
             transfer_id,
-            cid: row.get("cid"),
+            cid: row.try_get_log("cid"),
             source,
             target,
             transfer_type,
-            user_id: row.get::<i64, _>("user_id") as u64,
-            asset_id: row.get::<i32, _>("asset_id") as u32,
+            user_id: row
+                .try_get_log::<i64>("user_id")
+                .ok_or_else(|| TransferError::SystemError("Missing user_id column".to_string()))?
+                as u64,
+            asset_id: row
+                .try_get_log::<i32>("asset_id")
+                .ok_or_else(|| TransferError::SystemError("Missing asset_id column".to_string()))?
+                as u32,
             amount: amount_u64.into(),
             state,
-            error: row.get("error_message"),
-            retry_count: row.get("retry_count"),
+            error: row.try_get_log("error_message"),
+            retry_count: row.try_get_log("retry_count").ok_or_else(|| {
+                TransferError::SystemError("Missing retry_count column".to_string())
+            })?,
             created_at: created_at.timestamp_millis(),
             updated_at: updated_at.timestamp_millis(),
         })
@@ -344,7 +367,8 @@ pub async fn check_operation(
     .fetch_optional(pool)
     .await?;
 
-    Ok(row.map(|r| r.get("result")))
+    use crate::db::SafeRow;
+    Ok(row.and_then(|r| r.try_get_log("result")))
 }
 
 #[cfg(test)]

@@ -142,22 +142,28 @@ let fee_scaled = asset.parse_amount_allow_zero(fee)?;
 
 ---
 
-### 2.5 铁律：Fail-Fast 禁止静默默认值 (No Silent Defaults)
+### 2.5 铁律：Fail-Fast 与 运行稳定性 (Fail-Fast vs. Runtime Stability)
 
 > [!CAUTION]
-> **金融系统绝不允许“猜”配置。当精度、比例等关键信息缺失时，必须立即报错 (Fail-Fast)，禁止使用 `.unwrap_or(N)` 或硬编码默认值。**
+> **金融系统绝不允许“猜”配置，但也绝不允许轻易崩溃。** 当精度、比例等关键信息缺失时，必须遵循以下处理策略：
+
+| 阶段 | 严重性 | 处理策略 (Handling Strategy) |
+|------|--------|-----------------------------|
+| **启动阶段 (Startup)** | 致命 | **立即崩溃 (Panic OK)**。载入配置时遇到非法数据（如 CSV 格式错误、symbol 表为空）应立即终止启动，打印清晰错误信息。 |
+| **运行阶段 (Runtime)** | 非致命 | **禁止 Panic**。对于非法数据或不一致记录，必须：打印 Error 日志、拒绝该笔交易、**优雅降级或跳过**（针对列表）。 |
+| **外部输入 (External)** | 正常 | **拒绝请求**。由 API Handler 返回 400 错误，严禁因输入非法导致系统崩溃。 |
 
 **违规示例**：
 ```rust
-// ❌ 严重违规：当资产不存在时，静默使用 6 位精度，导致金额计算完全错误
-let precision = symbol_mgr.get_asset_precision(asset_id).unwrap_or(6); 
+// ❌ 严重违规：运行时因数据库记录不全导致全站 Panic 崩溃
+let precision = symbol_mgr.get_asset_precision(asset_id).expect("Asset missing"); 
 ```
 
 **正确做法**：
 ```rust
-// ✅ 正确：明确处理错误，阻止系统在非法状态下运行
+// ✅ 正确：显式处理，返回错误码，让 Handler 拒绝服务而不是崩溃
 let precision = symbol_mgr.get_asset_precision(asset_id)
-    .ok_or_else(|| format!("Critical precision config missing for asset {}", asset_id))?;
+    .ok_or_else(|| DomainError::ConfigMissing(format!("Precision for {}", asset_id)))?;
 ```
 
 ---
@@ -512,39 +518,28 @@ echo "✅ Money safety audit passed!"
 
 ---
 
-### 4.5.1 🚫 反面教材：硬编码 Fallback 默认值
+### 4.5.1 🚫 禁止静默默认值 vs 🚫 禁止运行时 Panic
 
-> [!CAUTION]
-> **绝不允许未经定义的默认值！** 当精度信息无法获取时，必须 fail-fast 报错，而不是静默使用错误值。
+> [!IMPORTANT]
+> **"宁可报错，不可隐瞒" 不等同于 "动辄崩溃"**。
 
-**错误示例** (历史代码，已修复):
-
+**错误示例 (过激的 Fail-Fast)**:
 ```rust
-// ❌ 极其危险：symbol 未找到时静默使用 100_000_000
-let qty_unit = symbol_info.map(|s| *s.qty_unit()).unwrap_or(100_000_000);
-
-// 问题：
-// 1. 如果 symbol_id 无效，静默计算出完全错误的金额
-// 2. 100_000_000 仅对 BTC (8位精度) 正确，USDT (6位) 会错1000倍
-// 3. 违反"快速失败"原则，导致难以调试的资金问题
+// ❌ 错误：在提现处理中因数据库同步延迟导致全站 Panic 挂起
+let balance = row.try_get_log("balance").expect("DB error"); 
 ```
 
-**正确做法**:
-
+**推荐模式 (健壮的 Fail-Fast)**:
 ```rust
-// ✅ 正确：fail-fast，强制处理错误
-let symbol_info = self.manager.get_symbol_info_by_id(order.symbol_id)
-    .ok_or(RejectReason::SymbolNotFound)?;
-let qty_unit = *symbol_info.qty_unit();
-
-// ✅ 或者在恢复场景中记录错误并跳过
-if symbol_info.is_none() {
-    tracing::error!(symbol_id = order.symbol_id, "Symbol not found during recovery");
-    continue; // 跳过此条目，而非使用错误值
-}
+// ✅ 正确：记录 Error 并向用户返回 500，保障系统其他功能正常
+let balance = row.try_get_log("balance")
+    .ok_or_else(|| InternalError::DatabaseDrift("balance column missing"))?;
 ```
 
-**核心原则**：**静默错误 >> 显式失败**。使用错误的精度值进行计算，可能导致用户损失或系统资金不平衡。
+**总结原则**：
+1. **静态配置** (启动载入) -> `expect` / `panic`
+2. **动态数据** (业务处理) -> `Result` / `Error`
+3. **审计脚本** -> 持续发现 `unwrap_or(0)` 的风险
 
 ---
 

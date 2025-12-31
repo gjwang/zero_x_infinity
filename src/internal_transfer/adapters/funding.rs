@@ -4,7 +4,7 @@
 //! Uses `balances_tb` with `account_type = FUNDING (2)`.
 
 use async_trait::async_trait;
-use sqlx::{PgPool, Row};
+use sqlx::PgPool;
 use tracing::{debug, error, warn};
 
 use super::ServiceAdapter;
@@ -117,10 +117,25 @@ impl ServiceAdapter for FundingAdapter {
             }
         };
 
+        use crate::db::SafeRow;
         let (available, account_status) = match balance_row {
             Ok(Some(row)) => {
-                let available: i64 = row.get("available");
-                let status: i16 = row.get("status");
+                let available: i64 = match row.try_get_log("available") {
+                    Some(v) => v,
+                    None => {
+                        error!(transfer_id = %transfer_id, "Critical: available column missing in balances_tb");
+                        let _ = tx.rollback().await;
+                        return OpResult::Pending;
+                    }
+                };
+                let status: i16 = match row.try_get_log("status") {
+                    Some(v) => v,
+                    None => {
+                        error!(transfer_id = %transfer_id, "Critical: status column missing in balances_tb");
+                        let _ = tx.rollback().await;
+                        return OpResult::Pending;
+                    }
+                };
                 (available, status)
             }
             Ok(None) => {
@@ -361,11 +376,30 @@ impl ServiceAdapter for FundingAdapter {
         .fetch_optional(&self.pool)
         .await;
 
+        use crate::db::SafeRow;
         let (user_id, asset_id, amount) = match transfer_row {
             Ok(Some(row)) => {
-                let user_id: i64 = row.get("user_id");
-                let asset_id: i32 = row.get("asset_id");
-                let amount: i64 = row.get("amount");
+                let user_id: i64 = match row.try_get_log("user_id") {
+                    Some(v) => v,
+                    None => {
+                        error!(transfer_id = %transfer_id, "Critical: user_id missing in fsm_transfers_tb");
+                        return OpResult::Pending;
+                    }
+                };
+                let asset_id: i32 = match row.try_get_log("asset_id") {
+                    Some(v) => v,
+                    None => {
+                        error!(transfer_id = %transfer_id, "Critical: asset_id missing in fsm_transfers_tb");
+                        return OpResult::Pending;
+                    }
+                };
+                let amount: i64 = match row.try_get_log("amount") {
+                    Some(v) => v,
+                    None => {
+                        error!(transfer_id = %transfer_id, "Critical: amount missing in fsm_transfers_tb");
+                        return OpResult::Pending;
+                    }
+                };
                 (user_id, asset_id, amount)
             }
             Ok(None) => {

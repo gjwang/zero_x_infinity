@@ -311,14 +311,26 @@ impl SentinelWorker {
             return Ok(false);
         };
 
-        let user_id: i64 = user_row.get("user_id");
+        use crate::db::SafeRow;
+        let Some(user_id) = user_row.try_get_log::<i64>("user_id") else {
+            warn!("Failed to read user_id for address {}", deposit.to_address);
+            return Ok(false);
+        };
 
         // 2. Insert deposit record (idempotent on tx_hash)
         let chain_slug = chain_id.to_lowercase();
-        let amount_raw: i64 = deposit
-            .raw_amount
-            .parse()
-            .expect("Critical: Failed to parse raw amount from deposit scanner");
+        let amount_raw: i64 = match deposit.raw_amount.parse() {
+            Ok(v) => v,
+            Err(e) => {
+                error!(
+                    tx_hash = %deposit.tx_hash,
+                    error = %e,
+                    raw_amount = %deposit.raw_amount,
+                    "Failed to parse raw amount from deposit scanner - skipping"
+                );
+                return Ok(false);
+            }
+        };
         let result = sqlx::query(
             r#"INSERT INTO deposit_history 
                (tx_hash, user_id, asset, amount, status, chain_slug, block_height, block_hash, tx_index, confirmations)

@@ -35,13 +35,13 @@ pub fn encode(data: &[u8]) -> String {
 
     while num > num::BigUint::ZERO {
         let (quotient, remainder) = num.div_rem(&base);
-        let idx: u32 = remainder.try_into().unwrap_or(0u32);
+        let idx: u32 = remainder.try_into().expect("62 fits in u32");
         result.push(ALPHABET[idx as usize]);
         num = quotient;
     }
 
     result.reverse();
-    String::from_utf8(result).unwrap_or_default()
+    String::from_utf8(result).expect("Base62 alphabet is valid UTF-8")
 }
 
 /// Decode Base62 string to bytes.

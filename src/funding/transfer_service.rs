@@ -148,38 +148,41 @@ impl TransferService {
             rows.len(),
             user_id
         );
-        let mut balances = Vec::new();
-        for row in rows {
-            let asset_id: i32 = row.get("asset_id");
-            let account_type: i16 = row.get("account_type");
-            // READ as i64 (BIGINT)
-            let available: i64 = row.get("available");
-            let frozen: i64 = row.get("frozen");
-            let asset_name: String = row.get("asset_name");
-            let internal_scale: i16 = row.get("internal_scale");
 
-            let account_type_name = match account_type {
-                1 => "spot",
-                2 => "funding",
-                _ => "unknown",
-            };
+        use crate::db::SafeRow;
+        let balances: Vec<BalanceInfo> = rows
+            .into_iter()
+            .filter_map(|row| {
+                let asset_id: i32 = row.try_get_log("asset_id")?;
+                let account_type: i16 = row.try_get_log("account_type")?;
+                let available: i64 = row.try_get_log("available")?;
+                let frozen: i64 = row.try_get_log("frozen")?;
+                let asset_name: String = row.try_get_log("asset_name")?;
+                let internal_scale: i16 = row.try_get_log("internal_scale")?;
 
-            balances.push(BalanceInfo {
-                asset_id: asset_id as u32,
-                asset: asset_name,
-                account_type: account_type_name.to_string(),
-                available: DisplayAmount::new(money::format_amount_signed(
-                    available,
-                    internal_scale as u32,
-                    internal_scale as u32,
-                )),
-                frozen: DisplayAmount::new(money::format_amount_signed(
-                    frozen,
-                    internal_scale as u32,
-                    internal_scale as u32,
-                )),
-            });
-        }
+                let account_type_name = match account_type {
+                    1 => "spot",
+                    2 => "funding",
+                    _ => "unknown",
+                };
+
+                Some(BalanceInfo {
+                    asset_id: asset_id as u32,
+                    asset: asset_name,
+                    account_type: account_type_name.to_string(),
+                    available: DisplayAmount::new(money::format_amount_signed(
+                        available,
+                        internal_scale as u32,
+                        internal_scale as u32,
+                    )),
+                    frozen: DisplayAmount::new(money::format_amount_signed(
+                        frozen,
+                        internal_scale as u32,
+                        internal_scale as u32,
+                    )),
+                })
+            })
+            .collect();
 
         Ok(balances)
     }
