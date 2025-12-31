@@ -17,12 +17,19 @@ pub mod asset_flags {
 }
 
 /// Asset definition (BTC, USDT, etc.)
+///
+/// Field naming follows precision terminology (See money-type-safety.md Section 2.5):
+/// - internal_scale: for internal Decimal↔u64 conversion (10^internal_scale)
+/// - asset_precision: for API input validation and output formatting
 #[derive(Debug, Clone, FromRow)]
 pub struct Asset {
     pub asset_id: i32,
     pub asset: String,
     pub name: String,
-    pub decimals: i16,
+    /// Internal storage scale (e.g., 8 for BTC = 10^8 satoshi)
+    pub internal_scale: i16,
+    /// API precision for input/output (max decimals allowed)
+    pub asset_precision: i16,
     pub status: i16,
     pub asset_flags: i32,
 }
@@ -59,7 +66,7 @@ impl Asset {
         &self,
         d: rust_decimal::Decimal,
     ) -> Result<crate::money::ScaledAmount, crate::money::MoneyError> {
-        crate::money::parse_decimal(d, self.decimals as u32)
+        crate::money::parse_decimal(d, self.internal_scale as u32)
     }
 
     /// Parse amount (allows zero). For fees, discounts, etc.
@@ -68,7 +75,7 @@ impl Asset {
         &self,
         d: rust_decimal::Decimal,
     ) -> Result<crate::money::ScaledAmount, crate::money::MoneyError> {
-        crate::money::parse_decimal_allow_zero(d, self.decimals as u32)
+        crate::money::parse_decimal_allow_zero(d, self.internal_scale as u32)
     }
 
     /// Parse amount from string (rejects zero). For String API inputs.
@@ -77,7 +84,7 @@ impl Asset {
         &self,
         s: &str,
     ) -> Result<crate::money::ScaledAmount, crate::money::MoneyError> {
-        crate::money::parse_amount(s, self.decimals as u32)
+        crate::money::parse_amount(s, self.internal_scale as u32)
     }
 }
 
@@ -91,7 +98,8 @@ mod tests {
             asset_id: 1,
             asset: "BTC".to_string(),
             name: "Bitcoin".to_string(),
-            decimals: 8,
+            internal_scale: 8,
+            asset_precision: 8,
             status: 1,
             asset_flags: asset_flags::CAN_DEPOSIT
                 | asset_flags::CAN_WITHDRAW
@@ -109,7 +117,8 @@ mod tests {
             asset_id: 2,
             asset: "USDT".to_string(),
             name: "Tether".to_string(),
-            decimals: 6,
+            internal_scale: 6,
+            asset_precision: 6,
             status: 1,
             asset_flags: asset_flags::CAN_DEPOSIT | asset_flags::CAN_TRADE, // No withdraw
         };
@@ -125,7 +134,8 @@ mod tests {
             asset_id: 3,
             asset: "DISABLED".to_string(),
             name: "Disabled Asset".to_string(),
-            decimals: 8,
+            internal_scale: 8,
+            asset_precision: 8,
             status: 0,
             asset_flags: 0, // No flags
         };
@@ -141,7 +151,8 @@ mod tests {
             asset_id: 4,
             asset: "ETH".to_string(),
             name: "Ethereum".to_string(),
-            decimals: 18,
+            internal_scale: 18,
+            asset_precision: 18,
             status: 1,
             asset_flags: asset_flags::DEFAULT,
         };
@@ -157,7 +168,8 @@ mod tests {
             asset_id: 5,
             asset: "USDC".to_string(),
             name: "USD Coin".to_string(),
-            decimals: 6,
+            internal_scale: 6,
+            asset_precision: 6,
             status: 1,
             asset_flags: asset_flags::DEFAULT | asset_flags::IS_STABLE_COIN,
         };
@@ -177,7 +189,8 @@ mod tests {
             asset_id: 6,
             asset: "LOCKED".to_string(),
             name: "Locked Asset".to_string(),
-            decimals: 8,
+            internal_scale: 8,
+            asset_precision: 8,
             status: 1,
             asset_flags: asset_flags::CAN_DEPOSIT, // Only deposit
         };
@@ -193,7 +206,8 @@ mod tests {
             asset_id: 7,
             asset: "INTERNAL".to_string(),
             name: "Internal Token".to_string(),
-            decimals: 8,
+            internal_scale: 8,
+            asset_precision: 8,
             status: 1,
             asset_flags: asset_flags::CAN_TRADE, // Only trade
         };

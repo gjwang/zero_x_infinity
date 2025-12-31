@@ -154,7 +154,7 @@ pub async fn get_transfer(
     let decimals = state
         .pg_assets
         .first()
-        .map(|a| a.decimals as u32)
+        .map(|a| a.internal_scale as u32)
         .unwrap_or(8);
 
     // Query transfer status

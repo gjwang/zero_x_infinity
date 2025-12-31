@@ -15,10 +15,12 @@ ON CONFLICT (user_id) DO NOTHING;
 -- ============================================================================
 -- Assets
 -- ============================================================================
-INSERT INTO assets_tb (asset, name, decimals, asset_flags) VALUES
-    ('BTC', 'Bitcoin', 8, 7),
-    ('USDT', 'Tether USD', 6, 15),
-    ('ETH', 'Ethereum', 8, 7)
+-- internal_scale: storage precision (e.g., 8 = 10^8 satoshi)
+-- asset_precision: API display precision (can be <= internal_scale)
+INSERT INTO assets_tb (asset, name, internal_scale, asset_precision, asset_flags) VALUES
+    ('BTC', 'Bitcoin', 8, 6, 7),         -- 8 decimals internal, 6 for display
+    ('USDT', 'Tether USD', 6, 2, 15),    -- 6 decimals internal, 2 for display  
+    ('ETH', 'Ethereum', 8, 6, 7)         -- 8 decimals internal, 6 for display
 ON CONFLICT (asset) DO NOTHING;
 
 -- ============================================================================

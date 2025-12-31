@@ -11,7 +11,7 @@ impl AssetManager {
     /// Load all active assets
     pub async fn load_all(pool: &PgPool) -> Result<Vec<Asset>, sqlx::Error> {
         let rows: Vec<Asset> = sqlx::query_as(
-            r#"SELECT asset_id, asset, name, decimals, status, asset_flags 
+            r#"SELECT asset_id, asset, name, internal_scale, asset_precision, status, asset_flags 
                FROM assets_tb WHERE status = 1"#,
         )
         .fetch_all(pool)
@@ -23,7 +23,7 @@ impl AssetManager {
     /// Get asset by ID
     pub async fn get_by_id(pool: &PgPool, asset_id: i32) -> Result<Option<Asset>, sqlx::Error> {
         let row: Option<Asset> = sqlx::query_as(
-            r#"SELECT asset_id, asset, name, decimals, status, asset_flags 
+            r#"SELECT asset_id, asset, name, internal_scale, asset_precision, status, asset_flags 
                FROM assets_tb WHERE asset_id = $1"#,
         )
         .bind(asset_id)
@@ -43,7 +43,7 @@ impl AssetManager {
             .map_err(|e| sqlx::Error::Protocol(format!("Invalid asset name: {}", e)))?;
 
         let row: Option<Asset> = sqlx::query_as(
-            r#"SELECT asset_id, asset, name, decimals, status, asset_flags 
+            r#"SELECT asset_id, asset, name, internal_scale, asset_precision, status, asset_flags 
                FROM assets_tb WHERE asset = $1"#,
         )
         .bind(asset_name.as_str())

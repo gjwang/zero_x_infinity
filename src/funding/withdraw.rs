@@ -89,7 +89,7 @@ impl WithdrawService {
                 "Withdraw amount scaling failed: {:?} (asset: {}, decimals: {})",
                 e,
                 asset_name,
-                asset.decimals
+                asset.internal_scale
             );
             WithdrawError::Money(e)
         })? as i64;
@@ -100,7 +100,7 @@ impl WithdrawService {
                 "Withdraw fee scaling failed: {:?} (asset: {}, decimals: {})",
                 e,
                 asset_name,
-                asset.decimals
+                asset.internal_scale
             );
             WithdrawError::Money(e)
         })? as i64;
@@ -209,7 +209,7 @@ impl WithdrawService {
         let rows = sqlx::query(
             r#"
             SELECT w.request_id, w.user_id, w.asset, w.amount, w.fee, w.to_address, w.status, w.tx_hash, w.created_at, w.updated_at,
-                   a.decimals
+                   a.internal_scale
             FROM withdraw_history w
             JOIN assets_tb a ON w.asset = a.asset
             WHERE w.user_id = $1

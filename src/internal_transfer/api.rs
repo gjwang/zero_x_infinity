@@ -195,7 +195,7 @@ impl AssetValidationInfo {
     pub fn from_asset(asset: &crate::exchange_info::asset::models::Asset) -> Self {
         Self {
             asset_id: asset.asset_id as u32,
-            decimals: asset.decimals as u32,
+            decimals: asset.internal_scale as u32,
             status: asset.status,
             is_active: asset.is_active(),
             can_internal_transfer: asset.can_internal_transfer(),
