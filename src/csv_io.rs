@@ -245,11 +245,7 @@ pub fn load_orders(
         .get_symbol_info_by_id(active_symbol_id)
         .context("Active symbol not found")?;
     let base_multiplier = *symbol_info.qty_unit(); // 10^base_decimals
-    let quote_multiplier = *crate::money::unit_amount(
-        manager
-            .get_asset_decimal(symbol_info.quote_asset_id)
-            .unwrap_or(6),
-    );
+    let quote_multiplier = *symbol_info.price_unit(); // 10^price_decimals
 
     let mut orders = Vec::new();
 
