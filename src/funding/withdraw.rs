@@ -21,6 +21,8 @@ pub enum WithdrawError {
     InvalidAmount,
     #[error("Chain error: {0}")]
     Chain(String),
+    #[error("Money error: {0}")]
+    Money(#[from] crate::money::MoneyError),
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -82,10 +84,24 @@ impl WithdrawService {
             .ok_or_else(|| WithdrawError::AssetNotFound(asset_name.to_string()))?;
 
         // Scale to i64 using unified money module
-        let amount_scaled = *money::parse_decimal(amount, asset.decimals as u32)
-            .map_err(|_| WithdrawError::InvalidAmount)? as i64;
-        let fee_scaled = *money::parse_decimal(fee, asset.decimals as u32)
-            .map_err(|_| WithdrawError::InvalidAmount)? as i64;
+        let amount_scaled = *money::parse_decimal(amount, asset.decimals as u32).map_err(|e| {
+            tracing::error!(
+                "Withdraw amount scaling failed: {:?} (asset: {}, decimals: {})",
+                e,
+                asset_name,
+                asset.decimals
+            );
+            WithdrawError::Money(e)
+        })? as i64;
+        let fee_scaled = *money::parse_decimal(fee, asset.decimals as u32).map_err(|e| {
+            tracing::error!(
+                "Withdraw fee scaling failed: {:?} (asset: {}, decimals: {})",
+                e,
+                asset_name,
+                asset.decimals
+            );
+            WithdrawError::Money(e)
+        })? as i64;
 
         // 2. Lock & Check Balance
         // We act on Funding Account (type=2)

@@ -1,0 +1,1000 @@
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9004515Z  12/28 10:27:56.920606 00000104 C MND INFO  trans:24, commitAction:1 write to sdb, type:vgroup status:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9004724Z  12/28 10:27:56.920609 00000104 C MND INFO  vgId:1, deleteFp:0x62f260, type:vgroup, row:0x7f474806cc50
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9004956Z  12/28 10:27:56.920611 00000104 C MND INFO  trans:24, commitAction:2 write to sdb, type:vgroup status:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9005134Z  12/28 10:27:56.920614 00000104 C MND INFO  trans:24, all 3 actions execute successfully
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9005322Z  12/28 10:27:56.920616 00000104 C MND INFO  trans:24, stage from commitAction to finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9005613Z  12/28 10:27:56.920618 00000104 C MND INFO  trans:24, continue to execute stage:finished in syncContext, createTime:1766917676801
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9005820Z  12/28 10:27:56.920640 00000104 C MND INFO  vgId:1, deleteFp:0x6177b0, type:trans, row:0x7f474806cc50
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9006120Z  12/28 10:27:56.920643 00000104 C MND INFO  trans:24, perform delete action, row:0x7f474806cc5c stage:finished callfunc:0, stopFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9006383Z  12/28 10:27:56.920647 00000104 C MND INFO  trans:24, execute finished, code:0x0, failedTimes:0 createTime:1766917676801
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9006732Z  12/28 10:27:56.920650 00000104 C MND INFO  vgId:1, trans:24, start to send rsp, stage:finished failedTimes:0 code:0x0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9006903Z  12/28 10:27:56.920670 00000104 C MND INFO  vgId:1, trans:24, start to lock rpc array
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9007168Z  12/28 10:27:56.920674 00000104 C MND INFO  vgId:1, trans:24, client:0 start to send rsp, code:0x0 stage:finished app:(nil)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9007442Z  12/28 10:27:56.920676 00000104 C MND INFO  trans:24, origin msgtype:create-db
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9007704Z  12/28 10:27:56.920689 00000104 C MND INFO  vgId:1, trans:24, client:0 send rsp finished, code:0x0 stage:finished app:(nil)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9007923Z  12/28 10:27:56.920692 00000104 C MND INFO  trans:24, refresh transaction in process write msg finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9008230Z  12/28 10:27:56.920694 00000104 C MND INFO  vgId:1, mnode apply info changed from index:47 term:1 config:-1 to index:48 term:1 config:-1
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9008396Z  12/28 10:27:56.920697 00000104 C MND INFO  vgId:1, trans:24, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9008568Z  12/28 10:27:56.920707 00000104 C MND INFO  trans:24, is proposed and post sem, seq:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9008802Z  12/28 10:27:56.920757 00000103 C MND INFO  trans:24, sync to other mnodes finished, createTime:1766917676801
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9008949Z  12/28 10:27:56.920765 00000103 C MND INFO  trans:24, commit finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9009128Z  12/28 10:27:56.920767 00000103 C MND INFO  trans:24, stage from commit to commitAction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9009431Z  12/28 10:27:56.920769 00000103 C MND INFO  trans:24, continue to execute stage:commitAction in transContext, createTime:1766917676801
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9009610Z  12/28 10:27:56.920772 00000103 C MND INFO  trans:24, all 3 actions execute successfully
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9009785Z  12/28 10:27:56.920784 00000103 C MND INFO  trans:24, stage from commitAction to finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9010077Z  12/28 10:27:56.920787 00000103 C MND INFO  trans:24, continue to execute stage:finished in transContext, createTime:1766917676801
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9010456Z  12/28 10:27:56.920808 00000103 C MND INFO  vgId:1, trans:24, start to send rsp, stage:finished failedTimes:0 code:0x0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9010661Z  12/28 10:27:56.920813 00000103 C MND INFO  vgId:1, trans:24, start to lock rpc array
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9011181Z  12/28 10:27:56.920816 00000103 C MND INFO  vgId:1, trans:24, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9011471Z  12/28 10:27:56.920819 00000103 C MND INFO  vgId:1, deleteFp:0x6177b0, type:trans, row:0x7f4748023500
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9011840Z  12/28 10:27:56.920821 00000103 C MND INFO  trans:24, perform delete action, row:0x7f474802350c stage:finished callfunc:1, stopFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9071193Z  12/28 10:27:56.921551 00000153 WEB INFO  QID:0x2000000000000005 finish request, status_code:200, latency:120.647758ms, client_ip:172.18.0.1, method:POST, uri:%2Frest%2Fsql
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9071504Z  12/28 10:27:56.929302 00000103 C MND INFO  stb:1.trading.orders, start to create
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9071755Z  12/28 10:27:56.929337 00000103 C MND INFO  trans:25, create transaction:create-stb, origin:create-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9071972Z  12/28 10:27:56.929341 00000103 C MND INFO  trans:25, used to create stb:1.trading.orders
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9072148Z  12/28 10:27:56.929349 00000103 C MND INFO  trans:25, trans hash size 0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9072288Z  12/28 10:27:56.929378 00000103 C MND INFO  trans:25, action list:
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9072507Z  12/28 10:27:56.929386 00000103 C MND INFO  trans:25, action:0, redoAction:0 msgType:vnode-create-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9072720Z  12/28 10:27:56.929390 00000103 C MND INFO  trans:25, action:1, redoAction:1 msgType:vnode-create-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9072953Z  12/28 10:27:56.929392 00000103 C MND INFO  trans:25, action:2, commitAction:0 sdbType:idx, sdbStatus:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9073177Z  12/28 10:27:56.929395 00000103 C MND INFO  trans:25, action:3, commitAction:1 sdbType:stb, sdbStatus:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9073389Z  12/28 10:27:56.929397 00000103 C MND INFO  trans:25, action:4, undoAction:0 msgType:vnode-drop-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9073585Z  12/28 10:27:56.929400 00000103 C MND INFO  trans:25, action:5, undoAction:1 msgType:vnode-drop-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9073728Z  12/28 10:27:56.929402 00000103 C MND INFO  trans:25, trans hash size 0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9074156Z  12/28 10:27:56.929404 00000103 C MND INFO  trans:25, prepare transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9074411Z  12/28 10:27:56.929409 00000103 C MND INFO  trans:25, sync to other mnodes, stage:prepare createTime:1766917676929
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9074560Z  12/28 10:27:56.929414 00000103 C MND INFO  trans:25, will be proposed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9074750Z  12/28 10:27:56.929425 00000103 C MND INFO  trans:25, is proposing and wait sem, seq:49
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9075164Z  12/28 10:27:56.929910 00000104 C MND INFO  trans:25, process sync proposal, saved:25 code:0x0, apply index:49 term:1 config:-1 role:leader raw:0x7f474806cafe sec:1766917676 seq:49
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9075310Z  12/28 10:27:56.929926 00000104 C MND INFO  trans:25, trans hash size 0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9075624Z  12/28 10:27:56.929936 00000104 C MND INFO  trans:25, perform insert action, row:0x7f474802350c stage:prepare, callfunc:1, startFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9075805Z  12/28 10:27:56.929940 00000104 C MND INFO  trans:25, stage from prepare to redoAction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9076013Z  12/28 10:27:56.929942 00000104 C MND INFO  trans:25, refresh transaction in process write msg
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9076311Z  12/28 10:27:56.929945 00000104 C MND INFO  trans:25, continue to execute stage:redoAction in syncContext, createTime:1766917676929
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9076782Z  12/28 10:27:56.929950 00000104 C MND INFO  trans:25, action:0 not executed since Wrong transaction execution context. numOfActions:2
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9077375Z  12/28 10:27:56.929954 00000104 C MND INFO  trans:25, cannot continue to execute redo action stage in syncContext, continueExec:1, code:Wrong transaction execution context
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9077610Z  12/28 10:27:56.929957 00000104 C MND INFO  trans:25, refresh transaction in process write msg finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9077930Z  12/28 10:27:56.929960 00000104 C MND INFO  vgId:1, mnode apply info changed from index:48 term:1 config:-1 to index:49 term:1 config:-1
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9078316Z  12/28 10:27:56.929964 00000104 C MND INFO  vgId:1, trans:25, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9078505Z  12/28 10:27:56.929980 00000104 C MND INFO  trans:25, is proposed and post sem, seq:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9078741Z  12/28 10:27:56.929988 00000103 C MND INFO  trans:25, sync to other mnodes finished, createTime:1766917676929
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9078885Z  12/28 10:27:56.930004 00000103 C MND INFO  trans:25, prepare finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9079059Z  12/28 10:27:56.930007 00000103 C MND INFO  trans:25, execute transaction in prepare
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9079359Z  12/28 10:27:56.930010 00000103 C MND INFO  trans:25, continue to execute stage:redoAction in transContext, createTime:1766917676929
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9079676Z  12/28 10:27:56.930022 00000103 C MND INFO  trans:25, redoAction:0 is sent, msgType:vnode-create-stb numOfEps:1 inUse:0 ep:0-localhost:6030
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9079983Z  12/28 10:27:56.930027 00000103 C MND INFO  trans:25, redoAction:1 is sent, msgType:vnode-create-stb numOfEps:1 inUse:0 ep:0-localhost:6030
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9080146Z  12/28 10:27:56.930030 00000103 C MND INFO  trans:25, 0 of 2 actions executed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9080361Z  12/28 10:27:56.930033 00000103 C MND INFO  trans:25, stage keep on redoAction since Action in progress
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9080531Z  12/28 10:27:56.930036 00000103 C MND INFO  vgId:1, trans:25, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9080856Z  12/28 10:27:56.930215 00000308 C MTA INFO  vgId:4, metaHandleSuperTableCreate success, version:1 type:1 uid:41793610582068494 name:orders
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9081176Z  12/28 10:27:56.930223 00000309 C MTA INFO  vgId:3, metaHandleSuperTableCreate success, version:1 type:1 uid:41793610582068494 name:orders
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9081419Z  12/28 10:27:56.930227 00000308 C MTA INFO  vgId:4, super table orders suid:41793610582068494 is created, version:1
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9081650Z  12/28 10:27:56.930227 00000309 C MTA INFO  vgId:3, super table orders suid:41793610582068494 is created, version:1
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9082237Z  12/28 10:27:56.930339 00000103 C MND INFO  trans:25, redoAction:1 response is received, received code:0x0(success), accept:0x80000619(Stable already exists) retry:0x8000061a(Stable not exists)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9082431Z  12/28 10:27:56.930348 00000103 C MND INFO  trans:25, execute transaction in process response
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9082726Z  12/28 10:27:56.930351 00000103 C MND INFO  trans:25, continue to execute stage:redoAction in transContext, createTime:1766917676929
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9082877Z  12/28 10:27:56.930354 00000103 C MND INFO  trans:25, 1 of 2 actions executed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9083092Z  12/28 10:27:56.930358 00000103 C MND INFO  trans:25, stage keep on redoAction since Action in progress
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9083253Z  12/28 10:27:56.930360 00000103 C MND INFO  vgId:1, trans:25, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9083711Z  12/28 10:27:56.930365 00000103 C MND INFO  trans:25, redoAction:0 response is received, received code:0x0(success), accept:0x80000619(Stable already exists) retry:0x8000061a(Stable not exists)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9083909Z  12/28 10:27:56.930368 00000103 C MND INFO  trans:25, execute transaction in process response
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9084239Z  12/28 10:27:56.930370 00000103 C MND INFO  trans:25, continue to execute stage:redoAction in transContext, createTime:1766917676929
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9084424Z  12/28 10:27:56.930373 00000103 C MND INFO  trans:25, all 2 actions execute successfully
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9084593Z  12/28 10:27:56.930375 00000103 C MND INFO  trans:25, stage from redoAction to commit
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9084876Z  12/28 10:27:56.930377 00000103 C MND INFO  trans:25, continue to execute stage:commit in transContext, createTime:1766917676929
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9085020Z  12/28 10:27:56.930380 00000103 C MND INFO  trans:25, commit transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9085255Z  12/28 10:27:56.930387 00000103 C MND INFO  trans:25, sync to other mnodes, stage:commit createTime:1766917676929
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9085477Z  12/28 10:27:56.930391 00000103 C MND INFO  trans:25, will be proposed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9085657Z  12/28 10:27:56.930402 00000103 C MND INFO  trans:25, is proposing and wait sem, seq:50
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9086068Z  12/28 10:27:56.930816 00000104 C MND INFO  trans:25, process sync proposal, saved:25 code:0x0, apply index:50 term:1 config:-1 role:leader raw:0x7f474806cafe sec:1766917676 seq:50
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9086522Z  12/28 10:27:56.930839 00000104 C MND INFO  trans:25, perform update action, old row:0x7f474802350c stage:commit create:1766917676929, new row:0x7f474806e8fc stage:commit create:1766917676929
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9086919Z  12/28 10:27:56.930844 00000104 C MND INFO  trans:25, stage from commit to commitAction since perform update action
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9087129Z  12/28 10:27:56.930847 00000104 C MND INFO  vgId:1, deleteFp:0x6177b0, type:trans, row:0x7f474806e8f0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9087429Z  12/28 10:27:56.930850 00000104 C MND INFO  trans:25, perform delete action, row:0x7f474806e8fc stage:commit callfunc:0, stopFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9087633Z  12/28 10:27:56.930855 00000104 C MND INFO  trans:25, refresh transaction in process write msg
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9087931Z  12/28 10:27:56.930860 00000104 C MND INFO  trans:25, continue to execute stage:commitAction in syncContext, createTime:1766917676929
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9088152Z  12/28 10:27:56.930866 00000104 C MND INFO  trans:25, commitAction:0 write to sdb, type:idx status:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9088362Z  12/28 10:27:56.930872 00000104 C MND INFO  trans:25, commitAction:1 write to sdb, type:stb status:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9088544Z  12/28 10:27:56.930890 00000104 C MND INFO  trans:25, all 2 actions execute successfully
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9088721Z  12/28 10:27:56.930898 00000104 C MND INFO  trans:25, stage from commitAction to finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9089009Z  12/28 10:27:56.930901 00000104 C MND INFO  trans:25, continue to execute stage:finished in syncContext, createTime:1766917676929
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9089217Z  12/28 10:27:56.930922 00000104 C MND INFO  vgId:1, deleteFp:0x6177b0, type:trans, row:0x7f474806ef30
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9089637Z  12/28 10:27:56.930930 00000104 C MND INFO  trans:25, perform delete action, row:0x7f474806ef3c stage:finished callfunc:0, stopFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9089901Z  12/28 10:27:56.930934 00000104 C MND INFO  trans:25, execute finished, code:0x0, failedTimes:0 createTime:1766917676929
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9090144Z  12/28 10:27:56.930937 00000104 C MND INFO  vgId:1, trans:25, start to send rsp, stage:finished failedTimes:0 code:0x0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9090320Z  12/28 10:27:56.930940 00000104 C MND INFO  vgId:1, trans:25, start to lock rpc array
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9090596Z  12/28 10:27:56.930942 00000104 C MND INFO  vgId:1, trans:25, client:0 start to send rsp, code:0x0 stage:finished app:(nil)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9090858Z  12/28 10:27:56.930960 00000104 C MND INFO  vgId:1, trans:25, client:0 send rsp finished, code:0x0 stage:finished app:(nil)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9091081Z  12/28 10:27:56.930968 00000104 C MND INFO  trans:25, refresh transaction in process write msg finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9091392Z  12/28 10:27:56.930971 00000104 C MND INFO  vgId:1, mnode apply info changed from index:49 term:1 config:-1 to index:50 term:1 config:-1
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9091560Z  12/28 10:27:56.930974 00000104 C MND INFO  vgId:1, trans:25, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9091731Z  12/28 10:27:56.930981 00000104 C MND INFO  trans:25, is proposed and post sem, seq:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9091963Z  12/28 10:27:56.930990 00000103 C MND INFO  trans:25, sync to other mnodes finished, createTime:1766917676929
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9092098Z  12/28 10:27:56.930996 00000103 C MND INFO  trans:25, commit finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9092276Z  12/28 10:27:56.930998 00000103 C MND INFO  trans:25, stage from commit to commitAction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9092582Z  12/28 10:27:56.931001 00000103 C MND INFO  trans:25, continue to execute stage:commitAction in transContext, createTime:1766917676929
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9092755Z  12/28 10:27:56.931003 00000103 C MND INFO  trans:25, all 2 actions execute successfully
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9093051Z  12/28 10:27:56.931006 00000103 C MND INFO  trans:25, stage from commitAction to finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9093337Z  12/28 10:27:56.931008 00000103 C MND INFO  trans:25, continue to execute stage:finished in transContext, createTime:1766917676929
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9093581Z  12/28 10:27:56.931010 00000103 C MND INFO  vgId:1, trans:25, start to send rsp, stage:finished failedTimes:0 code:0x0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9093744Z  12/28 10:27:56.931013 00000103 C MND INFO  vgId:1, trans:25, start to lock rpc array
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9093907Z  12/28 10:27:56.931015 00000103 C MND INFO  vgId:1, trans:25, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9094106Z  12/28 10:27:56.931017 00000103 C MND INFO  vgId:1, deleteFp:0x6177b0, type:trans, row:0x7f4748023500
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9094403Z  12/28 10:27:56.931020 00000103 C MND INFO  trans:25, perform delete action, row:0x7f474802350c stage:finished callfunc:1, stopFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9094816Z  12/28 10:27:56.931213 00000153 WEB INFO  QID:0x2000000000000006 finish request, status_code:200, latency:2.370421ms, client_ip:172.18.0.1, method:POST, uri:%2Frest%2Fsql
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9094980Z  12/28 10:27:56.937551 00000103 C MND INFO  stb:1.trading.trades, start to create
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9095198Z  12/28 10:27:56.937579 00000103 C MND INFO  trans:26, create transaction:create-stb, origin:create-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9095377Z  12/28 10:27:56.937582 00000103 C MND INFO  trans:26, used to create stb:1.trading.trades
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9095523Z  12/28 10:27:56.937587 00000103 C MND INFO  trans:26, trans hash size 0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9095651Z  12/28 10:27:56.937608 00000103 C MND INFO  trans:26, action list:
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9095863Z  12/28 10:27:56.937617 00000103 C MND INFO  trans:26, action:0, redoAction:0 msgType:vnode-create-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9096186Z  12/28 10:27:56.937620 00000103 C MND INFO  trans:26, action:1, redoAction:1 msgType:vnode-create-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9096482Z  12/28 10:27:56.937623 00000103 C MND INFO  trans:26, action:2, commitAction:0 sdbType:idx, sdbStatus:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9097217Z  12/28 10:27:56.937626 00000103 C MND INFO  trans:26, action:3, commitAction:1 sdbType:stb, sdbStatus:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9097584Z  12/28 10:27:56.937628 00000103 C MND INFO  trans:26, action:4, undoAction:0 msgType:vnode-drop-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9097801Z  12/28 10:27:56.937631 00000103 C MND INFO  trans:26, action:5, undoAction:1 msgType:vnode-drop-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9097949Z  12/28 10:27:56.937644 00000103 C MND INFO  trans:26, trans hash size 0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9098111Z  12/28 10:27:56.937646 00000103 C MND INFO  trans:26, prepare transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9098352Z  12/28 10:27:56.937651 00000103 C MND INFO  trans:26, sync to other mnodes, stage:prepare createTime:1766917676937
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9098497Z  12/28 10:27:56.937670 00000103 C MND INFO  trans:26, will be proposed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9098679Z  12/28 10:27:56.937681 00000103 C MND INFO  trans:26, is proposing and wait sem, seq:51
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9099097Z  12/28 10:27:56.938168 00000104 C MND INFO  trans:26, process sync proposal, saved:26 code:0x0, apply index:51 term:1 config:-1 role:leader raw:0x7f474807195e sec:1766917676 seq:51
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9099238Z  12/28 10:27:56.938182 00000104 C MND INFO  trans:26, trans hash size 0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9099539Z  12/28 10:27:56.938189 00000104 C MND INFO  trans:26, perform insert action, row:0x7f474802350c stage:prepare, callfunc:1, startFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9099724Z  12/28 10:27:56.938191 00000104 C MND INFO  trans:26, stage from prepare to redoAction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9099923Z  12/28 10:27:56.938193 00000104 C MND INFO  trans:26, refresh transaction in process write msg
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9100224Z  12/28 10:27:56.938194 00000104 C MND INFO  trans:26, continue to execute stage:redoAction in syncContext, createTime:1766917676937
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9100525Z  12/28 10:27:56.938196 00000104 C MND INFO  trans:26, action:0 not executed since Wrong transaction execution context. numOfActions:2
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9101088Z  12/28 10:27:56.938199 00000104 C MND INFO  trans:26, cannot continue to execute redo action stage in syncContext, continueExec:1, code:Wrong transaction execution context
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9101310Z  12/28 10:27:56.938202 00000104 C MND INFO  trans:26, refresh transaction in process write msg finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9101612Z  12/28 10:27:56.938205 00000104 C MND INFO  vgId:1, mnode apply info changed from index:50 term:1 config:-1 to index:51 term:1 config:-1
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9101778Z  12/28 10:27:56.938208 00000104 C MND INFO  vgId:1, trans:26, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9101999Z  12/28 10:27:56.938218 00000103 C MND INFO  trans:26, sync to other mnodes finished, createTime:1766917676937
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9102147Z  12/28 10:27:56.938225 00000103 C MND INFO  trans:26, prepare finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9102324Z  12/28 10:27:56.938228 00000103 C MND INFO  trans:26, execute transaction in prepare
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9102633Z  12/28 10:27:56.938231 00000103 C MND INFO  trans:26, continue to execute stage:redoAction in transContext, createTime:1766917676937
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9102956Z  12/28 10:27:56.938244 00000103 C MND INFO  trans:26, redoAction:0 is sent, msgType:vnode-create-stb numOfEps:1 inUse:0 ep:0-localhost:6030
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9103265Z  12/28 10:27:56.938255 00000103 C MND INFO  trans:26, redoAction:1 is sent, msgType:vnode-create-stb numOfEps:1 inUse:0 ep:0-localhost:6030
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9103427Z  12/28 10:27:56.938257 00000103 C MND INFO  trans:26, 0 of 2 actions executed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9103647Z  12/28 10:27:56.938260 00000103 C MND INFO  trans:26, stage keep on redoAction since Action in progress
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9103816Z  12/28 10:27:56.938262 00000103 C MND INFO  vgId:1, trans:26, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9103998Z  12/28 10:27:56.938276 00000104 C MND INFO  trans:26, is proposed and post sem, seq:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9104326Z  12/28 10:27:56.938394 00000309 C MTA INFO  vgId:3, metaHandleSuperTableCreate success, version:2 type:1 uid:41793748823082902 name:trades
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9104746Z  12/28 10:27:56.938394 00000308 C MTA INFO  vgId:4, metaHandleSuperTableCreate success, version:2 type:1 uid:41793748823082902 name:trades
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9104992Z  12/28 10:27:56.938404 00000309 C MTA INFO  vgId:3, super table trades suid:41793748823082902 is created, version:2
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9105232Z  12/28 10:27:56.938404 00000308 C MTA INFO  vgId:4, super table trades suid:41793748823082902 is created, version:2
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9105708Z  12/28 10:27:56.938529 00000103 C MND INFO  trans:26, redoAction:0 response is received, received code:0x0(success), accept:0x80000619(Stable already exists) retry:0x8000061a(Stable not exists)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9105911Z  12/28 10:27:56.938536 00000103 C MND INFO  trans:26, execute transaction in process response
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9106212Z  12/28 10:27:56.938538 00000103 C MND INFO  trans:26, continue to execute stage:redoAction in transContext, createTime:1766917676937
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9106370Z  12/28 10:27:56.938540 00000103 C MND INFO  trans:26, 1 of 2 actions executed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9106765Z  12/28 10:27:56.938542 00000103 C MND INFO  trans:26, stage keep on redoAction since Action in progress
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9106936Z  12/28 10:27:56.938544 00000103 C MND INFO  vgId:1, trans:26, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9107409Z  12/28 10:27:56.938546 00000103 C MND INFO  trans:26, redoAction:1 response is received, received code:0x0(success), accept:0x80000619(Stable already exists) retry:0x8000061a(Stable not exists)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9107604Z  12/28 10:27:56.938552 00000103 C MND INFO  trans:26, execute transaction in process response
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9107909Z  12/28 10:27:56.938553 00000103 C MND INFO  trans:26, continue to execute stage:redoAction in transContext, createTime:1766917676937
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9108093Z  12/28 10:27:56.938555 00000103 C MND INFO  trans:26, all 2 actions execute successfully
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9108391Z  12/28 10:27:56.938558 00000103 C MND INFO  trans:26, stage from redoAction to commit
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9108680Z  12/28 10:27:56.938561 00000103 C MND INFO  trans:26, continue to execute stage:commit in transContext, createTime:1766917676937
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9108823Z  12/28 10:27:56.938563 00000103 C MND INFO  trans:26, commit transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9109059Z  12/28 10:27:56.938569 00000103 C MND INFO  trans:26, sync to other mnodes, stage:commit createTime:1766917676937
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9109198Z  12/28 10:27:56.938572 00000103 C MND INFO  trans:26, will be proposed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9109378Z  12/28 10:27:56.938581 00000103 C MND INFO  trans:26, is proposing and wait sem, seq:52
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9109787Z  12/28 10:27:56.939026 00000104 C MND INFO  trans:26, process sync proposal, saved:26 code:0x0, apply index:52 term:1 config:-1 role:leader raw:0x7f474807319e sec:1766917676 seq:52
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9110244Z  12/28 10:27:56.939052 00000104 C MND INFO  trans:26, perform update action, old row:0x7f474802350c stage:commit create:1766917676937, new row:0x7f474806f50c stage:commit create:1766917676937
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9110507Z  12/28 10:27:56.939056 00000104 C MND INFO  trans:26, stage from commit to commitAction since perform update action
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9110724Z  12/28 10:27:56.939059 00000104 C MND INFO  vgId:1, deleteFp:0x6177b0, type:trans, row:0x7f474806f500
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9111026Z  12/28 10:27:56.939062 00000104 C MND INFO  trans:26, perform delete action, row:0x7f474806f50c stage:commit callfunc:0, stopFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9111222Z  12/28 10:27:56.939067 00000104 C MND INFO  trans:26, refresh transaction in process write msg
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9111524Z  12/28 10:27:56.939069 00000104 C MND INFO  trans:26, continue to execute stage:commitAction in syncContext, createTime:1766917676937
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9111745Z  12/28 10:27:56.939074 00000104 C MND INFO  trans:26, commitAction:0 write to sdb, type:idx status:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9112066Z  12/28 10:27:56.939080 00000104 C MND INFO  trans:26, commitAction:1 write to sdb, type:stb status:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9112246Z  12/28 10:27:56.939083 00000104 C MND INFO  trans:26, all 2 actions execute successfully
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9112422Z  12/28 10:27:56.939085 00000104 C MND INFO  trans:26, stage from commitAction to finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9112709Z  12/28 10:27:56.939087 00000104 C MND INFO  trans:26, continue to execute stage:finished in syncContext, createTime:1766917676937
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9112911Z  12/28 10:27:56.939114 00000104 C MND INFO  vgId:1, deleteFp:0x6177b0, type:trans, row:0x7f4748076dc0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9113210Z  12/28 10:27:56.939122 00000104 C MND INFO  trans:26, perform delete action, row:0x7f4748076dcc stage:finished callfunc:0, stopFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9113467Z  12/28 10:27:56.939127 00000104 C MND INFO  trans:26, execute finished, code:0x0, failedTimes:0 createTime:1766917676937
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9113718Z  12/28 10:27:56.939128 00000104 C MND INFO  vgId:1, trans:26, start to send rsp, stage:finished failedTimes:0 code:0x0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9113900Z  12/28 10:27:56.939130 00000104 C MND INFO  vgId:1, trans:26, start to lock rpc array
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9114157Z  12/28 10:27:56.939131 00000104 C MND INFO  vgId:1, trans:26, client:0 start to send rsp, code:0x0 stage:finished app:(nil)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9114417Z  12/28 10:27:56.939150 00000104 C MND INFO  vgId:1, trans:26, client:0 send rsp finished, code:0x0 stage:finished app:(nil)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9114635Z  12/28 10:27:56.939156 00000104 C MND INFO  trans:26, refresh transaction in process write msg finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9114944Z  12/28 10:27:56.939158 00000104 C MND INFO  vgId:1, mnode apply info changed from index:51 term:1 config:-1 to index:52 term:1 config:-1
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9115107Z  12/28 10:27:56.939161 00000104 C MND INFO  vgId:1, trans:26, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9115285Z  12/28 10:27:56.939167 00000104 C MND INFO  trans:26, is proposed and post sem, seq:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9115607Z  12/28 10:27:56.939176 00000103 C MND INFO  trans:26, sync to other mnodes finished, createTime:1766917676937
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9115742Z  12/28 10:27:56.939179 00000103 C MND INFO  trans:26, commit finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9115921Z  12/28 10:27:56.939181 00000103 C MND INFO  trans:26, stage from commit to commitAction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9116220Z  12/28 10:27:56.939184 00000103 C MND INFO  trans:26, continue to execute stage:commitAction in transContext, createTime:1766917676937
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9116396Z  12/28 10:27:56.939187 00000103 C MND INFO  trans:26, all 2 actions execute successfully
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9116825Z  12/28 10:27:56.939189 00000103 C MND INFO  trans:26, stage from commitAction to finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9117225Z  12/28 10:27:56.939196 00000103 C MND INFO  trans:26, continue to execute stage:finished in transContext, createTime:1766917676937
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9117480Z  12/28 10:27:56.939198 00000103 C MND INFO  vgId:1, trans:26, start to send rsp, stage:finished failedTimes:0 code:0x0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9117658Z  12/28 10:27:56.939201 00000103 C MND INFO  vgId:1, trans:26, start to lock rpc array
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9117821Z  12/28 10:27:56.939203 00000103 C MND INFO  vgId:1, trans:26, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9118024Z  12/28 10:27:56.939206 00000103 C MND INFO  vgId:1, deleteFp:0x6177b0, type:trans, row:0x7f4748023500
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9118323Z  12/28 10:27:56.939208 00000103 C MND INFO  trans:26, perform delete action, row:0x7f474802350c stage:finished callfunc:1, stopFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9118731Z  12/28 10:27:56.939391 00000153 WEB INFO  QID:0x2000000000000007 finish request, status_code:200, latency:2.123186ms, client_ip:172.18.0.1, method:POST, uri:%2Frest%2Fsql
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9118907Z  12/28 10:27:56.945448 00000103 C MND INFO  stb:1.trading.balances, start to create
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9119121Z  12/28 10:27:56.945476 00000103 C MND INFO  trans:27, create transaction:create-stb, origin:create-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9119452Z  12/28 10:27:56.945479 00000103 C MND INFO  trans:27, used to create stb:1.trading.balances
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9119600Z  12/28 10:27:56.945486 00000103 C MND INFO  trans:27, trans hash size 0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9119727Z  12/28 10:27:56.945506 00000103 C MND INFO  trans:27, action list:
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9119938Z  12/28 10:27:56.945514 00000103 C MND INFO  trans:27, action:0, redoAction:0 msgType:vnode-create-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9120137Z  12/28 10:27:56.945517 00000103 C MND INFO  trans:27, action:1, redoAction:1 msgType:vnode-create-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9120368Z  12/28 10:27:56.945520 00000103 C MND INFO  trans:27, action:2, commitAction:0 sdbType:idx, sdbStatus:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9120584Z  12/28 10:27:56.945523 00000103 C MND INFO  trans:27, action:3, commitAction:1 sdbType:stb, sdbStatus:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9120796Z  12/28 10:27:56.945526 00000103 C MND INFO  trans:27, action:4, undoAction:0 msgType:vnode-drop-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9121002Z  12/28 10:27:56.945528 00000103 C MND INFO  trans:27, action:5, undoAction:1 msgType:vnode-drop-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9121141Z  12/28 10:27:56.945531 00000103 C MND INFO  trans:27, trans hash size 0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9121294Z  12/28 10:27:56.945533 00000103 C MND INFO  trans:27, prepare transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9121533Z  12/28 10:27:56.945537 00000103 C MND INFO  trans:27, sync to other mnodes, stage:prepare createTime:1766917676945
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9121676Z  12/28 10:27:56.945541 00000103 C MND INFO  trans:27, will be proposed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9121851Z  12/28 10:27:56.945551 00000103 C MND INFO  trans:27, is proposing and wait sem, seq:53
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9122265Z  12/28 10:27:56.946201 00000104 C MND INFO  trans:27, process sync proposal, saved:27 code:0x0, apply index:53 term:1 config:-1 role:leader raw:0x7f474807518e sec:1766917676 seq:53
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9122399Z  12/28 10:27:56.946217 00000104 C MND INFO  trans:27, trans hash size 0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9122705Z  12/28 10:27:56.946227 00000104 C MND INFO  trans:27, perform insert action, row:0x7f474802350c stage:prepare, callfunc:1, startFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9122999Z  12/28 10:27:56.946231 00000104 C MND INFO  trans:27, stage from prepare to redoAction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9123192Z  12/28 10:27:56.946233 00000104 C MND INFO  trans:27, refresh transaction in process write msg
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9123488Z  12/28 10:27:56.946236 00000104 C MND INFO  trans:27, continue to execute stage:redoAction in syncContext, createTime:1766917676945
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9123782Z  12/28 10:27:56.946239 00000104 C MND INFO  trans:27, action:0 not executed since Wrong transaction execution context. numOfActions:2
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9124201Z  12/28 10:27:56.946242 00000104 C MND INFO  trans:27, cannot continue to execute redo action stage in syncContext, continueExec:1, code:Wrong transaction execution context
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9124414Z  12/28 10:27:56.946244 00000104 C MND INFO  trans:27, refresh transaction in process write msg finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9124729Z  12/28 10:27:56.946247 00000104 C MND INFO  vgId:1, mnode apply info changed from index:52 term:1 config:-1 to index:53 term:1 config:-1
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9124899Z  12/28 10:27:56.946249 00000104 C MND INFO  vgId:1, trans:27, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9125070Z  12/28 10:27:56.946257 00000104 C MND INFO  trans:27, is proposed and post sem, seq:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9125300Z  12/28 10:27:56.946271 00000103 C MND INFO  trans:27, sync to other mnodes finished, createTime:1766917676945
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9125436Z  12/28 10:27:56.946277 00000103 C MND INFO  trans:27, prepare finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9125611Z  12/28 10:27:56.946281 00000103 C MND INFO  trans:27, execute transaction in prepare
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9125904Z  12/28 10:27:56.946283 00000103 C MND INFO  trans:27, continue to execute stage:redoAction in transContext, createTime:1766917676945
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9126226Z  12/28 10:27:56.946296 00000103 C MND INFO  trans:27, redoAction:0 is sent, msgType:vnode-create-stb numOfEps:1 inUse:0 ep:0-localhost:6030
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9126753Z  12/28 10:27:56.946346 00000103 C MND INFO  trans:27, redoAction:1 is sent, msgType:vnode-create-stb numOfEps:1 inUse:0 ep:0-localhost:6030
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9126909Z  12/28 10:27:56.946362 00000103 C MND INFO  trans:27, 0 of 2 actions executed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9127130Z  12/28 10:27:56.946366 00000103 C MND INFO  trans:27, stage keep on redoAction since Action in progress
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9127292Z  12/28 10:27:56.946369 00000103 C MND INFO  vgId:1, trans:27, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9127625Z  12/28 10:27:56.946429 00000309 C MTA INFO  vgId:3, metaHandleSuperTableCreate success, version:3 type:1 uid:41793881328937193 name:balances
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9127873Z  12/28 10:27:56.946440 00000309 C MTA INFO  vgId:3, super table balances suid:41793881328937193 is created, version:3
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9128201Z  12/28 10:27:56.946472 00000308 C MTA INFO  vgId:4, metaHandleSuperTableCreate success, version:3 type:1 uid:41793881328937193 name:balances
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9128452Z  12/28 10:27:56.946478 00000308 C MTA INFO  vgId:4, super table balances suid:41793881328937193 is created, version:3
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9128924Z  12/28 10:27:56.946519 00000103 C MND INFO  trans:27, redoAction:0 response is received, received code:0x0(success), accept:0x80000619(Stable already exists) retry:0x8000061a(Stable not exists)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9129123Z  12/28 10:27:56.946527 00000103 C MND INFO  trans:27, execute transaction in process response
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9129419Z  12/28 10:27:56.946530 00000103 C MND INFO  trans:27, continue to execute stage:redoAction in transContext, createTime:1766917676945
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9129572Z  12/28 10:27:56.946533 00000103 C MND INFO  trans:27, 1 of 2 actions executed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9129783Z  12/28 10:27:56.946535 00000103 C MND INFO  trans:27, stage keep on redoAction since Action in progress
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9129947Z  12/28 10:27:56.946538 00000103 C MND INFO  vgId:1, trans:27, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9130566Z  12/28 10:27:56.946542 00000103 C MND INFO  trans:27, redoAction:1 response is received, received code:0x0(success), accept:0x80000619(Stable already exists) retry:0x8000061a(Stable not exists)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9130763Z  12/28 10:27:56.946545 00000103 C MND INFO  trans:27, execute transaction in process response
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9131071Z  12/28 10:27:56.946547 00000103 C MND INFO  trans:27, continue to execute stage:redoAction in transContext, createTime:1766917676945
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9131247Z  12/28 10:27:56.946549 00000103 C MND INFO  trans:27, all 2 actions execute successfully
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9131421Z  12/28 10:27:56.946551 00000103 C MND INFO  trans:27, stage from redoAction to commit
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9131706Z  12/28 10:27:56.946554 00000103 C MND INFO  trans:27, continue to execute stage:commit in transContext, createTime:1766917676945
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9131857Z  12/28 10:27:56.946557 00000103 C MND INFO  trans:27, commit transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9132093Z  12/28 10:27:56.946563 00000103 C MND INFO  trans:27, sync to other mnodes, stage:commit createTime:1766917676945
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9132236Z  12/28 10:27:56.946566 00000103 C MND INFO  trans:27, will be proposed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9132417Z  12/28 10:27:56.946575 00000103 C MND INFO  trans:27, is proposing and wait sem, seq:54
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9132824Z  12/28 10:27:56.947010 00000104 C MND INFO  trans:27, process sync proposal, saved:27 code:0x0, apply index:54 term:1 config:-1 role:leader raw:0x7f474807689e sec:1766917676 seq:54
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9133285Z  12/28 10:27:56.947052 00000104 C MND INFO  trans:27, perform update action, old row:0x7f474802350c stage:commit create:1766917676945, new row:0x7f4748077f5c stage:commit create:1766917676945
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9133532Z  12/28 10:27:56.947060 00000104 C MND INFO  trans:27, stage from commit to commitAction since perform update action
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9133753Z  12/28 10:27:56.947063 00000104 C MND INFO  vgId:1, deleteFp:0x6177b0, type:trans, row:0x7f4748077f50
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9134159Z  12/28 10:27:56.947066 00000104 C MND INFO  trans:27, perform delete action, row:0x7f4748077f5c stage:commit callfunc:0, stopFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9134358Z  12/28 10:27:56.947070 00000104 C MND INFO  trans:27, refresh transaction in process write msg
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9134661Z  12/28 10:27:56.947072 00000104 C MND INFO  trans:27, continue to execute stage:commitAction in syncContext, createTime:1766917676945
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9134877Z  12/28 10:27:56.947076 00000104 C MND INFO  trans:27, commitAction:0 write to sdb, type:idx status:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9135092Z  12/28 10:27:56.947081 00000104 C MND INFO  trans:27, commitAction:1 write to sdb, type:stb status:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9135270Z  12/28 10:27:56.947083 00000104 C MND INFO  trans:27, all 2 actions execute successfully
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9135452Z  12/28 10:27:56.947085 00000104 C MND INFO  trans:27, stage from commitAction to finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9135739Z  12/28 10:27:56.947088 00000104 C MND INFO  trans:27, continue to execute stage:finished in syncContext, createTime:1766917676945
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9135953Z  12/28 10:27:56.947111 00000104 C MND INFO  vgId:1, deleteFp:0x6177b0, type:trans, row:0x7f474807a6e0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9136249Z  12/28 10:27:56.947129 00000104 C MND INFO  trans:27, perform delete action, row:0x7f474807a6ec stage:finished callfunc:0, stopFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9136507Z  12/28 10:27:56.947134 00000104 C MND INFO  trans:27, execute finished, code:0x0, failedTimes:0 createTime:1766917676945
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9136863Z  12/28 10:27:56.947137 00000104 C MND INFO  vgId:1, trans:27, start to send rsp, stage:finished failedTimes:0 code:0x0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9137032Z  12/28 10:27:56.947140 00000104 C MND INFO  vgId:1, trans:27, start to lock rpc array
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9137295Z  12/28 10:27:56.947142 00000104 C MND INFO  vgId:1, trans:27, client:0 start to send rsp, code:0x0 stage:finished app:(nil)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9137547Z  12/28 10:27:56.947160 00000104 C MND INFO  vgId:1, trans:27, client:0 send rsp finished, code:0x0 stage:finished app:(nil)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9137884Z  12/28 10:27:56.947163 00000104 C MND INFO  trans:27, refresh transaction in process write msg finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9138190Z  12/28 10:27:56.947165 00000104 C MND INFO  vgId:1, mnode apply info changed from index:53 term:1 config:-1 to index:54 term:1 config:-1
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9138347Z  12/28 10:27:56.947168 00000104 C MND INFO  vgId:1, trans:27, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9138524Z  12/28 10:27:56.947177 00000104 C MND INFO  trans:27, is proposed and post sem, seq:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9138746Z  12/28 10:27:56.947194 00000103 C MND INFO  trans:27, sync to other mnodes finished, createTime:1766917676945
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9138885Z  12/28 10:27:56.947200 00000103 C MND INFO  trans:27, commit finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9139057Z  12/28 10:27:56.947203 00000103 C MND INFO  trans:27, stage from commit to commitAction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9139362Z  12/28 10:27:56.947205 00000103 C MND INFO  trans:27, continue to execute stage:commitAction in transContext, createTime:1766917676945
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9139548Z  12/28 10:27:56.947208 00000103 C MND INFO  trans:27, all 2 actions execute successfully
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9139723Z  12/28 10:27:56.947210 00000103 C MND INFO  trans:27, stage from commitAction to finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9140010Z  12/28 10:27:56.947212 00000103 C MND INFO  trans:27, continue to execute stage:finished in transContext, createTime:1766917676945
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9140252Z  12/28 10:27:56.947215 00000103 C MND INFO  vgId:1, trans:27, start to send rsp, stage:finished failedTimes:0 code:0x0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9140420Z  12/28 10:27:56.947217 00000103 C MND INFO  vgId:1, trans:27, start to lock rpc array
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9140586Z  12/28 10:27:56.947219 00000103 C MND INFO  vgId:1, trans:27, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9140791Z  12/28 10:27:56.947222 00000103 C MND INFO  vgId:1, deleteFp:0x6177b0, type:trans, row:0x7f4748023500
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9141093Z  12/28 10:27:56.947224 00000103 C MND INFO  trans:27, perform delete action, row:0x7f474802350c stage:finished callfunc:1, stopFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9141611Z  12/28 10:27:56.947381 00000153 WEB INFO  QID:0x2000000000000008 finish request, status_code:200, latency:2.186607ms, client_ip:172.18.0.1, method:POST, uri:%2Frest%2Fsql
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9141775Z  12/28 10:27:56.953149 00000103 C MND INFO  stb:1.trading.klines, start to create
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9141988Z  12/28 10:27:56.953175 00000103 C MND INFO  trans:28, create transaction:create-stb, origin:create-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9142170Z  12/28 10:27:56.953179 00000103 C MND INFO  trans:28, used to create stb:1.trading.klines
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9142307Z  12/28 10:27:56.953186 00000103 C MND INFO  trans:28, trans hash size 0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9142441Z  12/28 10:27:56.953205 00000103 C MND INFO  trans:28, action list:
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9142653Z  12/28 10:27:56.953208 00000103 C MND INFO  trans:28, action:0, redoAction:0 msgType:vnode-create-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9142871Z  12/28 10:27:56.953211 00000103 C MND INFO  trans:28, action:1, redoAction:1 msgType:vnode-create-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9143097Z  12/28 10:27:56.953214 00000103 C MND INFO  trans:28, action:2, commitAction:0 sdbType:idx, sdbStatus:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9143314Z  12/28 10:27:56.953216 00000103 C MND INFO  trans:28, action:3, commitAction:1 sdbType:stb, sdbStatus:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9143524Z  12/28 10:27:56.953219 00000103 C MND INFO  trans:28, action:4, undoAction:0 msgType:vnode-drop-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9143722Z  12/28 10:27:56.953221 00000103 C MND INFO  trans:28, action:5, undoAction:1 msgType:vnode-drop-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9143862Z  12/28 10:27:56.953223 00000103 C MND INFO  trans:28, trans hash size 0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9144011Z  12/28 10:27:56.953226 00000103 C MND INFO  trans:28, prepare transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9144254Z  12/28 10:27:56.953230 00000103 C MND INFO  trans:28, sync to other mnodes, stage:prepare createTime:1766917676953
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9144475Z  12/28 10:27:56.953233 00000103 C MND INFO  trans:28, will be proposed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9144657Z  12/28 10:27:56.953242 00000103 C MND INFO  trans:28, is proposing and wait sem, seq:55
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9145068Z  12/28 10:27:56.953878 00000104 C MND INFO  trans:28, process sync proposal, saved:28 code:0x0, apply index:55 term:1 config:-1 role:leader raw:0x7f474807a34e sec:1766917676 seq:55
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9145203Z  12/28 10:27:56.953892 00000104 C MND INFO  trans:28, trans hash size 0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9145508Z  12/28 10:27:56.953909 00000104 C MND INFO  trans:28, perform insert action, row:0x7f474802350c stage:prepare, callfunc:1, startFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9145681Z  12/28 10:27:56.953913 00000104 C MND INFO  trans:28, stage from prepare to redoAction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9145877Z  12/28 10:27:56.953916 00000104 C MND INFO  trans:28, refresh transaction in process write msg
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9146167Z  12/28 10:27:56.953919 00000104 C MND INFO  trans:28, continue to execute stage:redoAction in syncContext, createTime:1766917676953
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9146472Z  12/28 10:27:56.953923 00000104 C MND INFO  trans:28, action:0 not executed since Wrong transaction execution context. numOfActions:2
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9146984Z  12/28 10:27:56.953926 00000104 C MND INFO  trans:28, cannot continue to execute redo action stage in syncContext, continueExec:1, code:Wrong transaction execution context
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9147201Z  12/28 10:27:56.953929 00000104 C MND INFO  trans:28, refresh transaction in process write msg finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9147505Z  12/28 10:27:56.953931 00000104 C MND INFO  vgId:1, mnode apply info changed from index:54 term:1 config:-1 to index:55 term:1 config:-1
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9147663Z  12/28 10:27:56.953934 00000104 C MND INFO  vgId:1, trans:28, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9147840Z  12/28 10:27:56.953941 00000104 C MND INFO  trans:28, is proposed and post sem, seq:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9148065Z  12/28 10:27:56.953958 00000103 C MND INFO  trans:28, sync to other mnodes finished, createTime:1766917676953
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9148348Z  12/28 10:27:56.953962 00000103 C MND INFO  trans:28, prepare finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9148523Z  12/28 10:27:56.953965 00000103 C MND INFO  trans:28, execute transaction in prepare
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9148813Z  12/28 10:27:56.953967 00000103 C MND INFO  trans:28, continue to execute stage:redoAction in transContext, createTime:1766917676953
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9149132Z  12/28 10:27:56.953978 00000103 C MND INFO  trans:28, redoAction:0 is sent, msgType:vnode-create-stb numOfEps:1 inUse:0 ep:0-localhost:6030
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9149437Z  12/28 10:27:56.954011 00000103 C MND INFO  trans:28, redoAction:1 is sent, msgType:vnode-create-stb numOfEps:1 inUse:0 ep:0-localhost:6030
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9149594Z  12/28 10:27:56.954014 00000103 C MND INFO  trans:28, 0 of 2 actions executed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9149806Z  12/28 10:27:56.954017 00000103 C MND INFO  trans:28, stage keep on redoAction since Action in progress
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9149974Z  12/28 10:27:56.954019 00000103 C MND INFO  vgId:1, trans:28, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9150305Z  12/28 10:27:56.954117 00000308 C MTA INFO  vgId:4, metaHandleSuperTableCreate success, version:4 type:1 uid:41794010523157661 name:klines
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9150620Z  12/28 10:27:56.954123 00000309 C MTA INFO  vgId:3, metaHandleSuperTableCreate success, version:4 type:1 uid:41794010523157661 name:klines
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9150862Z  12/28 10:27:56.954128 00000308 C MTA INFO  vgId:4, super table klines suid:41794010523157661 is created, version:4
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9151092Z  12/28 10:27:56.954129 00000309 C MTA INFO  vgId:3, super table klines suid:41794010523157661 is created, version:4
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9151565Z  12/28 10:27:56.954248 00000103 C MND INFO  trans:28, redoAction:0 response is received, received code:0x0(success), accept:0x80000619(Stable already exists) retry:0x8000061a(Stable not exists)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9151760Z  12/28 10:27:56.954256 00000103 C MND INFO  trans:28, execute transaction in process response
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9152170Z  12/28 10:27:56.954258 00000103 C MND INFO  trans:28, continue to execute stage:redoAction in transContext, createTime:1766917676953
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9152326Z  12/28 10:27:56.954260 00000103 C MND INFO  trans:28, 1 of 2 actions executed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9152545Z  12/28 10:27:56.954262 00000103 C MND INFO  trans:28, stage keep on redoAction since Action in progress
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9152708Z  12/28 10:27:56.954264 00000103 C MND INFO  vgId:1, trans:28, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9153483Z  12/28 10:27:56.954268 00000103 C MND INFO  trans:28, redoAction:1 response is received, received code:0x0(success), accept:0x80000619(Stable already exists) retry:0x8000061a(Stable not exists)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9153764Z  12/28 10:27:56.954271 00000103 C MND INFO  trans:28, execute transaction in process response
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9154065Z  12/28 10:27:56.954274 00000103 C MND INFO  trans:28, continue to execute stage:redoAction in transContext, createTime:1766917676953
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9154260Z  12/28 10:27:56.954277 00000103 C MND INFO  trans:28, all 2 actions execute successfully
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9154438Z  12/28 10:27:56.954279 00000103 C MND INFO  trans:28, stage from redoAction to commit
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9154720Z  12/28 10:27:56.954281 00000103 C MND INFO  trans:28, continue to execute stage:commit in transContext, createTime:1766917676953
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9154873Z  12/28 10:27:56.954284 00000103 C MND INFO  trans:28, commit transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9155106Z  12/28 10:27:56.954297 00000103 C MND INFO  trans:28, sync to other mnodes, stage:commit createTime:1766917676953
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9155253Z  12/28 10:27:56.954307 00000103 C MND INFO  trans:28, will be proposed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9155431Z  12/28 10:27:56.954314 00000103 C MND INFO  trans:28, is proposing and wait sem, seq:56
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9155847Z  12/28 10:27:56.954715 00000104 C MND INFO  trans:28, process sync proposal, saved:28 code:0x0, apply index:56 term:1 config:-1 role:leader raw:0x7f474807bb8e sec:1766917676 seq:56
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9156411Z  12/28 10:27:56.954748 00000104 C MND INFO  trans:28, perform update action, old row:0x7f474802350c stage:commit create:1766917676953, new row:0x7f4748076d9c stage:commit create:1766917676953
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9156959Z  12/28 10:27:56.954757 00000104 C MND INFO  trans:28, stage from commit to commitAction since perform update action
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9157192Z  12/28 10:27:56.954760 00000104 C MND INFO  vgId:1, deleteFp:0x6177b0, type:trans, row:0x7f4748076d90
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9157489Z  12/28 10:27:56.954763 00000104 C MND INFO  trans:28, perform delete action, row:0x7f4748076d9c stage:commit callfunc:0, stopFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9157694Z  12/28 10:27:56.954767 00000104 C MND INFO  trans:28, refresh transaction in process write msg
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9157994Z  12/28 10:27:56.954769 00000104 C MND INFO  trans:28, continue to execute stage:commitAction in syncContext, createTime:1766917676953
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9158231Z  12/28 10:27:56.954774 00000104 C MND INFO  trans:28, commitAction:0 write to sdb, type:idx status:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9158451Z  12/28 10:27:56.954779 00000104 C MND INFO  trans:28, commitAction:1 write to sdb, type:stb status:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9158628Z  12/28 10:27:56.954781 00000104 C MND INFO  trans:28, all 2 actions execute successfully
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9158811Z  12/28 10:27:56.954783 00000104 C MND INFO  trans:28, stage from commitAction to finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9159096Z  12/28 10:27:56.954785 00000104 C MND INFO  trans:28, continue to execute stage:finished in syncContext, createTime:1766917676953
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9159304Z  12/28 10:27:56.954802 00000104 C MND INFO  vgId:1, deleteFp:0x6177b0, type:trans, row:0x7f4748077790
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9159595Z  12/28 10:27:56.954808 00000104 C MND INFO  trans:28, perform delete action, row:0x7f474807779c stage:finished callfunc:0, stopFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9160003Z  12/28 10:27:56.954810 00000104 C MND INFO  trans:28, execute finished, code:0x0, failedTimes:0 createTime:1766917676953
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9160252Z  12/28 10:27:56.954812 00000104 C MND INFO  vgId:1, trans:28, start to send rsp, stage:finished failedTimes:0 code:0x0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9160426Z  12/28 10:27:56.954814 00000104 C MND INFO  vgId:1, trans:28, start to lock rpc array
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9160688Z  12/28 10:27:56.954815 00000104 C MND INFO  vgId:1, trans:28, client:0 start to send rsp, code:0x0 stage:finished app:(nil)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9160948Z  12/28 10:27:56.954829 00000104 C MND INFO  vgId:1, trans:28, client:0 send rsp finished, code:0x0 stage:finished app:(nil)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9161170Z  12/28 10:27:56.954833 00000104 C MND INFO  trans:28, refresh transaction in process write msg finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9161472Z  12/28 10:27:56.954836 00000104 C MND INFO  vgId:1, mnode apply info changed from index:55 term:1 config:-1 to index:56 term:1 config:-1
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9161641Z  12/28 10:27:56.954839 00000104 C MND INFO  vgId:1, trans:28, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9161824Z  12/28 10:27:56.954845 00000104 C MND INFO  trans:28, is proposed and post sem, seq:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9162055Z  12/28 10:27:56.954855 00000103 C MND INFO  trans:28, sync to other mnodes finished, createTime:1766917676953
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9162195Z  12/28 10:27:56.954858 00000103 C MND INFO  trans:28, commit finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9162369Z  12/28 10:27:56.954860 00000103 C MND INFO  trans:28, stage from commit to commitAction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9162674Z  12/28 10:27:56.954862 00000103 C MND INFO  trans:28, continue to execute stage:commitAction in transContext, createTime:1766917676953
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9162848Z  12/28 10:27:56.954865 00000103 C MND INFO  trans:28, all 2 actions execute successfully
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9163030Z  12/28 10:27:56.954867 00000103 C MND INFO  trans:28, stage from commitAction to finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9163316Z  12/28 10:27:56.954870 00000103 C MND INFO  trans:28, continue to execute stage:finished in transContext, createTime:1766917676953
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9163678Z  12/28 10:27:56.954872 00000103 C MND INFO  vgId:1, trans:28, start to send rsp, stage:finished failedTimes:0 code:0x0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9163849Z  12/28 10:27:56.954875 00000103 C MND INFO  vgId:1, trans:28, start to lock rpc array
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9164007Z  12/28 10:27:56.954877 00000103 C MND INFO  vgId:1, trans:28, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9164216Z  12/28 10:27:56.954879 00000103 C MND INFO  vgId:1, deleteFp:0x6177b0, type:trans, row:0x7f4748023500
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9164509Z  12/28 10:27:56.954882 00000103 C MND INFO  trans:28, perform delete action, row:0x7f474802350c stage:finished callfunc:1, stopFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9164921Z  12/28 10:27:56.955066 00000153 WEB INFO  QID:0x2000000000000009 finish request, status_code:200, latency:2.136549ms, client_ip:172.18.0.1, method:POST, uri:%2Frest%2Fsql
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9165096Z  12/28 10:27:56.961166 00000103 C MND INFO  stb:1.trading.order_events, start to create
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9165321Z  12/28 10:27:56.961192 00000103 C MND INFO  trans:29, create transaction:create-stb, origin:create-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9165523Z  12/28 10:27:56.961195 00000103 C MND INFO  trans:29, used to create stb:1.trading.order_events
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9165664Z  12/28 10:27:56.961202 00000103 C MND INFO  trans:29, trans hash size 0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9165797Z  12/28 10:27:56.961224 00000103 C MND INFO  trans:29, action list:
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9166004Z  12/28 10:27:56.961232 00000103 C MND INFO  trans:29, action:0, redoAction:0 msgType:vnode-create-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9166212Z  12/28 10:27:56.961235 00000103 C MND INFO  trans:29, action:1, redoAction:1 msgType:vnode-create-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9166434Z  12/28 10:27:56.961238 00000103 C MND INFO  trans:29, action:2, commitAction:0 sdbType:idx, sdbStatus:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9166772Z  12/28 10:27:56.961241 00000103 C MND INFO  trans:29, action:3, commitAction:1 sdbType:stb, sdbStatus:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9167095Z  12/28 10:27:56.961244 00000103 C MND INFO  trans:29, action:4, undoAction:0 msgType:vnode-drop-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9167298Z  12/28 10:27:56.961246 00000103 C MND INFO  trans:29, action:5, undoAction:1 msgType:vnode-drop-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9167442Z  12/28 10:27:56.961249 00000103 C MND INFO  trans:29, trans hash size 0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9167591Z  12/28 10:27:56.961251 00000103 C MND INFO  trans:29, prepare transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9167842Z  12/28 10:27:56.961256 00000103 C MND INFO  trans:29, sync to other mnodes, stage:prepare createTime:1766917676961
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9167979Z  12/28 10:27:56.961259 00000103 C MND INFO  trans:29, will be proposed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9168157Z  12/28 10:27:56.961268 00000103 C MND INFO  trans:29, is proposing and wait sem, seq:57
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9168567Z  12/28 10:27:56.961714 00000104 C MND INFO  trans:29, process sync proposal, saved:29 code:0x0, apply index:57 term:1 config:-1 role:leader raw:0x7f474807d33e sec:1766917676 seq:57
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9168716Z  12/28 10:27:56.961729 00000104 C MND INFO  trans:29, trans hash size 0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9169019Z  12/28 10:27:56.961738 00000104 C MND INFO  trans:29, perform insert action, row:0x7f474802350c stage:prepare, callfunc:1, startFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9169203Z  12/28 10:27:56.961742 00000104 C MND INFO  trans:29, stage from prepare to redoAction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9169403Z  12/28 10:27:56.961745 00000104 C MND INFO  trans:29, refresh transaction in process write msg
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9169694Z  12/28 10:27:56.961748 00000104 C MND INFO  trans:29, continue to execute stage:redoAction in syncContext, createTime:1766917676961
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9169994Z  12/28 10:27:56.961751 00000104 C MND INFO  trans:29, action:0 not executed since Wrong transaction execution context. numOfActions:2
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9170404Z  12/28 10:27:56.961754 00000104 C MND INFO  trans:29, cannot continue to execute redo action stage in syncContext, continueExec:1, code:Wrong transaction execution context
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9170747Z  12/28 10:27:56.961757 00000104 C MND INFO  trans:29, refresh transaction in process write msg finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9171047Z  12/28 10:27:56.961759 00000104 C MND INFO  vgId:1, mnode apply info changed from index:56 term:1 config:-1 to index:57 term:1 config:-1
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9171215Z  12/28 10:27:56.961762 00000104 C MND INFO  vgId:1, trans:29, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9171391Z  12/28 10:27:56.961768 00000104 C MND INFO  trans:29, is proposed and post sem, seq:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9171616Z  12/28 10:27:56.961782 00000103 C MND INFO  trans:29, sync to other mnodes finished, createTime:1766917676961
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9171757Z  12/28 10:27:56.961786 00000103 C MND INFO  trans:29, prepare finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9171927Z  12/28 10:27:56.961789 00000103 C MND INFO  trans:29, execute transaction in prepare
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9172227Z  12/28 10:27:56.961791 00000103 C MND INFO  trans:29, continue to execute stage:redoAction in transContext, createTime:1766917676961
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9172547Z  12/28 10:27:56.961803 00000103 C MND INFO  trans:29, redoAction:0 is sent, msgType:vnode-create-stb numOfEps:1 inUse:0 ep:0-localhost:6030
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9172860Z  12/28 10:27:56.961812 00000103 C MND INFO  trans:29, redoAction:1 is sent, msgType:vnode-create-stb numOfEps:1 inUse:0 ep:0-localhost:6030
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9173020Z  12/28 10:27:56.961814 00000103 C MND INFO  trans:29, 0 of 2 actions executed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9173233Z  12/28 10:27:56.961817 00000103 C MND INFO  trans:29, stage keep on redoAction since Action in progress
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9173397Z  12/28 10:27:56.961820 00000103 C MND INFO  vgId:1, trans:29, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9173743Z  12/28 10:27:56.961967 00000309 C MTA INFO  vgId:3, metaHandleSuperTableCreate success, version:5 type:1 uid:41794144999286865 name:order_events
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9174004Z  12/28 10:27:56.961976 00000309 C MTA INFO  vgId:3, super table order_events suid:41794144999286865 is created, version:5
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9174420Z  12/28 10:27:56.961996 00000308 C MTA INFO  vgId:4, metaHandleSuperTableCreate success, version:5 type:1 uid:41794144999286865 name:order_events
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9174673Z  12/28 10:27:56.962001 00000308 C MTA INFO  vgId:4, super table order_events suid:41794144999286865 is created, version:5
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9175153Z  12/28 10:27:56.962072 00000103 C MND INFO  trans:29, redoAction:0 response is received, received code:0x0(success), accept:0x80000619(Stable already exists) retry:0x8000061a(Stable not exists)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9175350Z  12/28 10:27:56.962081 00000103 C MND INFO  trans:29, execute transaction in process response
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9175652Z  12/28 10:27:56.962084 00000103 C MND INFO  trans:29, continue to execute stage:redoAction in transContext, createTime:1766917676961
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9175803Z  12/28 10:27:56.962087 00000103 C MND INFO  trans:29, 1 of 2 actions executed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9176023Z  12/28 10:27:56.962091 00000103 C MND INFO  trans:29, stage keep on redoAction since Action in progress
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9176187Z  12/28 10:27:56.962093 00000103 C MND INFO  vgId:1, trans:29, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9176939Z  12/28 10:27:56.962097 00000103 C MND INFO  trans:29, redoAction:1 response is received, received code:0x0(success), accept:0x80000619(Stable already exists) retry:0x8000061a(Stable not exists)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9177141Z  12/28 10:27:56.962100 00000103 C MND INFO  trans:29, execute transaction in process response
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9177434Z  12/28 10:27:56.962102 00000103 C MND INFO  trans:29, continue to execute stage:redoAction in transContext, createTime:1766917676961
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9177615Z  12/28 10:27:56.962105 00000103 C MND INFO  trans:29, all 2 actions execute successfully
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9177785Z  12/28 10:27:56.962108 00000103 C MND INFO  trans:29, stage from redoAction to commit
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9178071Z  12/28 10:27:56.962110 00000103 C MND INFO  trans:29, continue to execute stage:commit in transContext, createTime:1766917676961
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9178331Z  12/28 10:27:56.962112 00000103 C MND INFO  trans:29, commit transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9178568Z  12/28 10:27:56.962118 00000103 C MND INFO  trans:29, sync to other mnodes, stage:commit createTime:1766917676961
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9178708Z  12/28 10:27:56.962121 00000103 C MND INFO  trans:29, will be proposed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9178883Z  12/28 10:27:56.962130 00000103 C MND INFO  trans:29, is proposing and wait sem, seq:58
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9179296Z  12/28 10:27:56.962531 00000104 C MND INFO  trans:29, process sync proposal, saved:29 code:0x0, apply index:58 term:1 config:-1 role:leader raw:0x7f474807eaee sec:1766917676 seq:58
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9179746Z  12/28 10:27:56.962561 00000104 C MND INFO  trans:29, perform update action, old row:0x7f474802350c stage:commit create:1766917676961, new row:0x7f474808025c stage:commit create:1766917676961
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9179998Z  12/28 10:27:56.962566 00000104 C MND INFO  trans:29, stage from commit to commitAction since perform update action
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9180212Z  12/28 10:27:56.962568 00000104 C MND INFO  vgId:1, deleteFp:0x6177b0, type:trans, row:0x7f4748080250
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9180503Z  12/28 10:27:56.962571 00000104 C MND INFO  trans:29, perform delete action, row:0x7f474808025c stage:commit callfunc:0, stopFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9180709Z  12/28 10:27:56.962575 00000104 C MND INFO  trans:29, refresh transaction in process write msg
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9181007Z  12/28 10:27:56.962577 00000104 C MND INFO  trans:29, continue to execute stage:commitAction in syncContext, createTime:1766917676961
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9181230Z  12/28 10:27:56.962581 00000104 C MND INFO  trans:29, commitAction:0 write to sdb, type:idx status:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9181441Z  12/28 10:27:56.962587 00000104 C MND INFO  trans:29, commitAction:1 write to sdb, type:stb status:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9181622Z  12/28 10:27:56.962589 00000104 C MND INFO  trans:29, all 2 actions execute successfully
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9181917Z  12/28 10:27:56.962591 00000104 C MND INFO  trans:29, stage from commitAction to finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9182202Z  12/28 10:27:56.962593 00000104 C MND INFO  trans:29, continue to execute stage:finished in syncContext, createTime:1766917676961
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9182411Z  12/28 10:27:56.962617 00000104 C MND INFO  vgId:1, deleteFp:0x6177b0, type:trans, row:0x7f47480827e0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9182702Z  12/28 10:27:56.962626 00000104 C MND INFO  trans:29, perform delete action, row:0x7f47480827ec stage:finished callfunc:0, stopFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9182964Z  12/28 10:27:56.962631 00000104 C MND INFO  trans:29, execute finished, code:0x0, failedTimes:0 createTime:1766917676961
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9183206Z  12/28 10:27:56.962634 00000104 C MND INFO  vgId:1, trans:29, start to send rsp, stage:finished failedTimes:0 code:0x0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9183378Z  12/28 10:27:56.962636 00000104 C MND INFO  vgId:1, trans:29, start to lock rpc array
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9183639Z  12/28 10:27:56.962638 00000104 C MND INFO  vgId:1, trans:29, client:0 start to send rsp, code:0x0 stage:finished app:(nil)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9183900Z  12/28 10:27:56.962674 00000104 C MND INFO  vgId:1, trans:29, client:0 send rsp finished, code:0x0 stage:finished app:(nil)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9184151Z  12/28 10:27:56.962703 00000104 C MND INFO  trans:29, refresh transaction in process write msg finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9184450Z  12/28 10:27:56.962708 00000104 C MND INFO  vgId:1, mnode apply info changed from index:57 term:1 config:-1 to index:58 term:1 config:-1
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9184615Z  12/28 10:27:56.962710 00000104 C MND INFO  vgId:1, trans:29, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9184788Z  12/28 10:27:56.962716 00000104 C MND INFO  trans:29, is proposed and post sem, seq:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9185017Z  12/28 10:27:56.962745 00000103 C MND INFO  trans:29, sync to other mnodes finished, createTime:1766917676961
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9185152Z  12/28 10:27:56.962761 00000103 C MND INFO  trans:29, commit finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9185447Z  12/28 10:27:56.962776 00000103 C MND INFO  trans:29, stage from commit to commitAction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9185748Z  12/28 10:27:56.962781 00000103 C MND INFO  trans:29, continue to execute stage:commitAction in transContext, createTime:1766917676961
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9185926Z  12/28 10:27:56.962784 00000103 C MND INFO  trans:29, all 2 actions execute successfully
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9186106Z  12/28 10:27:56.962786 00000103 C MND INFO  trans:29, stage from commitAction to finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9186390Z  12/28 10:27:56.962788 00000103 C MND INFO  trans:29, continue to execute stage:finished in transContext, createTime:1766917676961
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9186739Z  12/28 10:27:56.962790 00000103 C MND INFO  vgId:1, trans:29, start to send rsp, stage:finished failedTimes:0 code:0x0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9186906Z  12/28 10:27:56.962793 00000103 C MND INFO  vgId:1, trans:29, start to lock rpc array
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9187070Z  12/28 10:27:56.962795 00000103 C MND INFO  vgId:1, trans:29, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9187280Z  12/28 10:27:56.962797 00000103 C MND INFO  vgId:1, deleteFp:0x6177b0, type:trans, row:0x7f4748023500
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9187575Z  12/28 10:27:56.962800 00000103 C MND INFO  trans:29, perform delete action, row:0x7f474802350c stage:finished callfunc:1, stopFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9187988Z  12/28 10:27:56.962947 00000153 WEB INFO  QID:0x200000000000000a finish request, status_code:200, latency:2.061359ms, client_ip:172.18.0.1, method:POST, uri:%2Frest%2Fsql
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9188367Z  12/28 10:27:57.577316 00000102 C MND INFO  vgId:3, state changed by status msg, old state:leader restored:0 canRead:0 new state:leader restored:1 canRead:1, dnode:1
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9188652Z  12/28 10:27:57.577335 00000102 C MND INFO  db:1.trading, stateTs changed by status msg, old stateTs:0 new stateTs:1766917677577
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9189022Z  12/28 10:27:57.577341 00000102 C MND INFO  vgId:4, state changed by status msg, old state:leader restored:0 canRead:0 new state:leader restored:1 canRead:1, dnode:1
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9189630Z  12/28 10:27:59.860561 00000153 WEB INFO  QID:0x2961364802a00017 finish request, status_code:200, latency:1.018742ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%2Flog%3Freq_id%3D2981724111205564439
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9190102Z  12/28 10:28:00.003041 00000153 WEB INFO  QID:0x2961364802b00018 finish request, status_code:200, latency:1.008803ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%2Flog%3Freq_id%3D2981724111206613016
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9190739Z  12/28 10:28:00.005426 00000153 WEB INFO  QID:0x200000000000000b finish request, status_code:204, latency:1.170278ms, client_ip:::1, method:POST, uri:%2Finfluxdb%2Fv1%2Fwrite%3Fdb%3Dlog%26precision%3Dms%26qid%3D2305843009213694720%26table_name_key%3Dpriv_stn
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9191150Z  12/28 10:28:00.005544 00000193 WEB INFO  QID:0x2000000000000300 finish request, status_code:200, latency:4.03811ms, client_ip:127.0.0.1, method:POST, uri:/adapter_report
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9191339Z  [GIN] 2025/12/28 - 10:28:00 | 200 |    4.095136ms |       127.0.0.1 | POST     "/adapter_report"
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9191528Z  12/28 10:28:00.273931 00000101 C UTL INFO  report client cont with QID:0x100000000007c00
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9191711Z  12/28 10:28:00.275262 00000101 C MND INFO  stb:1.log.taos_sql_req, start to retrieve meta
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9191973Z  12/28 10:28:00.275273 00000101 C MND ERROR stb:1.log.taos_sql_req, failed to retrieve meta since Table does not exist
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9192366Z  12/28 10:28:00.275276 00000101 C MND ERROR msg:0x7f47315ecfe8, failed to process since Table does not exist, app:(nil) type:table-meta, QID:0x0:0x3c99364802c000c3
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9192614Z  12/28 10:28:00.275466 00000247 C QRY ERROR get table taos_sql_req meta with 0 failed cause of Table does not exist
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9192999Z  12/28 10:28:00.275479 00000247 C DND ERROR vgId:2, msg:0x7f477c01c658, failed to fetch since Table does not exist [vnodeProcessFetchMsg], QID:0x0:0x3c99364802c000c4
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9193284Z  12/28 10:28:00.275753 00000101 C MND INFO  stb:1.log.taos_sql_req, start to retrieve meta
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9193536Z  12/28 10:28:00.275762 00000101 C MND ERROR stb:1.log.taos_sql_req, failed to retrieve meta since Table does not exist
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9193910Z  12/28 10:28:00.275764 00000101 C MND ERROR msg:0x7f47315ecfe8, failed to process since Table does not exist, app:(nil) type:table-meta, QID:0x0:0x3c99364802c000c5
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9194159Z  12/28 10:28:00.275963 00000247 C QRY ERROR get table taos_sql_req meta with 0 failed cause of Table does not exist
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9194540Z  12/28 10:28:00.275981 00000247 C DND ERROR vgId:2, msg:0x7f477c01c658, failed to fetch since Table does not exist [vnodeProcessFetchMsg], QID:0x0:0x3c99364802c000c6
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9194707Z  12/28 10:28:00.276243 00000103 C MND INFO  stb:1.log.taos_sql_req, start to create
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9194925Z  12/28 10:28:00.276282 00000103 C MND INFO  trans:30, create transaction:create-stb, origin:create-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9195114Z  12/28 10:28:00.276291 00000103 C MND INFO  trans:30, used to create stb:1.log.taos_sql_req
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9195260Z  12/28 10:28:00.276300 00000103 C MND INFO  trans:30, trans hash size 0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9195385Z  12/28 10:28:00.276321 00000103 C MND INFO  trans:30, action list:
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9195598Z  12/28 10:28:00.276328 00000103 C MND INFO  trans:30, action:0, redoAction:0 msgType:vnode-create-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9195827Z  12/28 10:28:00.276336 00000103 C MND INFO  trans:30, action:1, commitAction:0 sdbType:idx, sdbStatus:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9196045Z  12/28 10:28:00.276339 00000103 C MND INFO  trans:30, action:2, commitAction:1 sdbType:stb, sdbStatus:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9196258Z  12/28 10:28:00.276342 00000103 C MND INFO  trans:30, action:3, undoAction:0 msgType:vnode-drop-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9196395Z  12/28 10:28:00.276345 00000103 C MND INFO  trans:30, trans hash size 0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9196885Z  12/28 10:28:00.276347 00000103 C MND INFO  trans:30, prepare transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9197163Z  12/28 10:28:00.276353 00000103 C MND INFO  trans:30, sync to other mnodes, stage:prepare createTime:1766917680276
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9197313Z  12/28 10:28:00.276357 00000103 C MND INFO  trans:30, will be proposed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9197493Z  12/28 10:28:00.276370 00000103 C MND INFO  trans:30, is proposing and wait sem, seq:59
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9197912Z  12/28 10:28:00.277048 00000104 C MND INFO  trans:30, process sync proposal, saved:30 code:0x0, apply index:59 term:1 config:-1 role:leader raw:0x7f4748080b9e sec:1766917680 seq:59
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9198060Z  12/28 10:28:00.277066 00000104 C MND INFO  trans:30, trans hash size 0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9198367Z  12/28 10:28:00.277076 00000104 C MND INFO  trans:30, perform insert action, row:0x7f474802350c stage:prepare, callfunc:1, startFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9198550Z  12/28 10:28:00.277080 00000104 C MND INFO  trans:30, stage from prepare to redoAction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9198751Z  12/28 10:28:00.277083 00000104 C MND INFO  trans:30, refresh transaction in process write msg
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9199059Z  12/28 10:28:00.277086 00000104 C MND INFO  trans:30, continue to execute stage:redoAction in syncContext, createTime:1766917680276
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9199355Z  12/28 10:28:00.277090 00000104 C MND INFO  trans:30, action:0 not executed since Wrong transaction execution context. numOfActions:1
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9199776Z  12/28 10:28:00.277093 00000104 C MND INFO  trans:30, cannot continue to execute redo action stage in syncContext, continueExec:1, code:Wrong transaction execution context
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9200000Z  12/28 10:28:00.277096 00000104 C MND INFO  trans:30, refresh transaction in process write msg finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9200301Z  12/28 10:28:00.277098 00000104 C MND INFO  vgId:1, mnode apply info changed from index:58 term:1 config:-1 to index:59 term:1 config:-1
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9200468Z  12/28 10:28:00.277101 00000104 C MND INFO  vgId:1, trans:30, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9200777Z  12/28 10:28:00.277109 00000104 C MND INFO  trans:30, is proposed and post sem, seq:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9201014Z  12/28 10:28:00.277122 00000103 C MND INFO  trans:30, sync to other mnodes finished, createTime:1766917680276
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9201151Z  12/28 10:28:00.277125 00000103 C MND INFO  trans:30, prepare finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9201327Z  12/28 10:28:00.277128 00000103 C MND INFO  trans:30, execute transaction in prepare
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9201627Z  12/28 10:28:00.277130 00000103 C MND INFO  trans:30, continue to execute stage:redoAction in transContext, createTime:1766917680276
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9201944Z  12/28 10:28:00.277143 00000103 C MND INFO  trans:30, redoAction:0 is sent, msgType:vnode-create-stb numOfEps:1 inUse:0 ep:0-localhost:6030
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9202101Z  12/28 10:28:00.277151 00000103 C MND INFO  trans:30, 0 of 1 actions executed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9202314Z  12/28 10:28:00.277154 00000103 C MND INFO  trans:30, stage keep on redoAction since Action in progress
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9202487Z  12/28 10:28:00.277157 00000103 C MND INFO  vgId:1, trans:30, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9202835Z  12/28 10:28:00.277291 00000227 C MTA INFO  vgId:2, metaHandleSuperTableCreate success, version:28 type:1 uid:41849763085352258 name:taos_sql_req
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9203094Z  12/28 10:28:00.277300 00000227 C MTA INFO  vgId:2, super table taos_sql_req suid:41849763085352258 is created, version:28
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9203569Z  12/28 10:28:00.277389 00000103 C MND INFO  trans:30, redoAction:0 response is received, received code:0x0(success), accept:0x80000619(Stable already exists) retry:0x8000061a(Stable not exists)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9203765Z  12/28 10:28:00.277400 00000103 C MND INFO  trans:30, execute transaction in process response
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9204065Z  12/28 10:28:00.277401 00000103 C MND INFO  trans:30, continue to execute stage:redoAction in transContext, createTime:1766917680276
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9204349Z  12/28 10:28:00.277403 00000103 C MND INFO  trans:30, all 1 actions execute successfully
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9204528Z  12/28 10:28:00.277405 00000103 C MND INFO  trans:30, stage from redoAction to commit
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9204811Z  12/28 10:28:00.277407 00000103 C MND INFO  trans:30, continue to execute stage:commit in transContext, createTime:1766917680276
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9204963Z  12/28 10:28:00.277408 00000103 C MND INFO  trans:30, commit transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9205200Z  12/28 10:28:00.277412 00000103 C MND INFO  trans:30, sync to other mnodes, stage:commit createTime:1766917680276
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9205333Z  12/28 10:28:00.277419 00000103 C MND INFO  trans:30, will be proposed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9205512Z  12/28 10:28:00.277426 00000103 C MND INFO  trans:30, is proposing and wait sem, seq:60
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9205924Z  12/28 10:28:00.277879 00000104 C MND INFO  trans:30, process sync proposal, saved:30 code:0x0, apply index:60 term:1 config:-1 role:leader raw:0x7f4748081c0e sec:1766917680 seq:60
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9206391Z  12/28 10:28:00.277896 00000104 C MND INFO  trans:30, perform update action, old row:0x7f474802350c stage:commit create:1766917680276, new row:0x7f474807fb2c stage:commit create:1766917680276
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9206942Z  12/28 10:28:00.277898 00000104 C MND INFO  trans:30, stage from commit to commitAction since perform update action
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9207287Z  12/28 10:28:00.277900 00000104 C MND INFO  vgId:1, deleteFp:0x6177b0, type:trans, row:0x7f474807fb20
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9207801Z  12/28 10:28:00.277902 00000104 C MND INFO  trans:30, perform delete action, row:0x7f474807fb2c stage:commit callfunc:0, stopFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9208016Z  12/28 10:28:00.277904 00000104 C MND INFO  trans:30, refresh transaction in process write msg
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9208321Z  12/28 10:28:00.277906 00000104 C MND INFO  trans:30, continue to execute stage:commitAction in syncContext, createTime:1766917680276
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9208540Z  12/28 10:28:00.277909 00000104 C MND INFO  trans:30, commitAction:0 write to sdb, type:idx status:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9208902Z  12/28 10:28:00.277915 00000104 C MND INFO  trans:30, commitAction:1 write to sdb, type:stb status:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9209081Z  12/28 10:28:00.277918 00000104 C MND INFO  trans:30, all 2 actions execute successfully
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9209269Z  12/28 10:28:00.277920 00000104 C MND INFO  trans:30, stage from commitAction to finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9209560Z  12/28 10:28:00.277923 00000104 C MND INFO  trans:30, continue to execute stage:finished in syncContext, createTime:1766917680276
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9209767Z  12/28 10:28:00.277943 00000104 C MND INFO  vgId:1, deleteFp:0x6177b0, type:trans, row:0x7f47480847c0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9210067Z  12/28 10:28:00.277951 00000104 C MND INFO  trans:30, perform delete action, row:0x7f47480847cc stage:finished callfunc:0, stopFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9210326Z  12/28 10:28:00.277955 00000104 C MND INFO  trans:30, execute finished, code:0x0, failedTimes:0 createTime:1766917680276
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9210580Z  12/28 10:28:00.277958 00000104 C MND INFO  vgId:1, trans:30, start to send rsp, stage:finished failedTimes:0 code:0x0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9210748Z  12/28 10:28:00.277961 00000104 C MND INFO  vgId:1, trans:30, start to lock rpc array
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9211010Z  12/28 10:28:00.277963 00000104 C MND INFO  vgId:1, trans:30, client:0 start to send rsp, code:0x0 stage:finished app:(nil)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9211265Z  12/28 10:28:00.277983 00000104 C MND INFO  vgId:1, trans:30, client:0 send rsp finished, code:0x0 stage:finished app:(nil)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9211482Z  12/28 10:28:00.277990 00000104 C MND INFO  trans:30, refresh transaction in process write msg finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9211797Z  12/28 10:28:00.277993 00000104 C MND INFO  vgId:1, mnode apply info changed from index:59 term:1 config:-1 to index:60 term:1 config:-1
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9211961Z  12/28 10:28:00.277996 00000104 C MND INFO  vgId:1, trans:30, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9212259Z  12/28 10:28:00.278002 00000104 C MND INFO  trans:30, is proposed and post sem, seq:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9212490Z  12/28 10:28:00.278012 00000103 C MND INFO  trans:30, sync to other mnodes finished, createTime:1766917680276
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9212633Z  12/28 10:28:00.278015 00000103 C MND INFO  trans:30, commit finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9212808Z  12/28 10:28:00.278017 00000103 C MND INFO  trans:30, stage from commit to commitAction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9213116Z  12/28 10:28:00.278019 00000103 C MND INFO  trans:30, continue to execute stage:commitAction in transContext, createTime:1766917680276
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9213298Z  12/28 10:28:00.278022 00000103 C MND INFO  trans:30, all 2 actions execute successfully
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9213475Z  12/28 10:28:00.278024 00000103 C MND INFO  trans:30, stage from commitAction to finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9213768Z  12/28 10:28:00.278027 00000103 C MND INFO  trans:30, continue to execute stage:finished in transContext, createTime:1766917680276
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9214015Z  12/28 10:28:00.278029 00000103 C MND INFO  vgId:1, trans:30, start to send rsp, stage:finished failedTimes:0 code:0x0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9214187Z  12/28 10:28:00.278031 00000103 C MND INFO  vgId:1, trans:30, start to lock rpc array
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9214345Z  12/28 10:28:00.278034 00000103 C MND INFO  vgId:1, trans:30, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9214553Z  12/28 10:28:00.278037 00000103 C MND INFO  vgId:1, deleteFp:0x6177b0, type:trans, row:0x7f4748023500
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9214851Z  12/28 10:28:00.278039 00000103 C MND INFO  trans:30, perform delete action, row:0x7f474802350c stage:finished callfunc:1, stopFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9215036Z  12/28 10:28:00.278255 00000101 C MND INFO  stb:1.log.taos_sql_req, start to retrieve meta
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9215470Z  12/28 10:28:00.278639 00000227 C MTA INFO  vgId:2, index:29, child table is created, tb:taossql_root_select_success_cluster_41250585672280647 uid:5550183273692397694 suid:41849763085352258
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9215892Z  12/28 10:28:00.278703 00000227 C MTA INFO  vgId:2, index:29, child table is created, tb:taossql_root_insert_success_cluster_41250585672280647 uid:5550183273692397695 suid:41849763085352258
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9216731Z  12/28 10:28:00.278929 00000153 WEB INFO  QID:0x200000000000000c finish request, status_code:204, latency:4.16668ms, client_ip:::1, method:POST, uri:%2Finfluxdb%2Fv1%2Fwrite%3Fdb%3Dlog%26precision%3Dms%26qid%3D72057594037959680%26table_name_key%3Dpriv_stn
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9217150Z  12/28 10:28:00.279091 00000193 WEB INFO  QID:0x100000000007c00 finish request, status_code:200, latency:4.625596ms, client_ip:127.0.0.1, method:POST, uri:/general-metric
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9217337Z  [GIN] 2025/12/28 - 10:28:00 | 200 |    4.682092ms |       127.0.0.1 | POST     "/general-metric"
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9217801Z  12/28 10:28:04.861544 00000153 WEB INFO  QID:0x2961364803e00019 finish request, status_code:200, latency:1.608401ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535961
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9218004Z  12/28 10:28:04.863642 00000101 C MND INFO  stb:1.log.taosd_mnodes_info, start to retrieve meta
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9218205Z  12/28 10:28:04.864018 00000101 C MND INFO  stb:1.log.adapter_requests, start to retrieve meta
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9218410Z  12/28 10:28:04.864897 00000101 C MND INFO  stb:1.log.taosd_dnodes_data_dirs, start to retrieve meta
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9218611Z  12/28 10:28:04.865494 00000101 C MND INFO  stb:1.log.taosd_cluster_basic, start to retrieve meta
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9218814Z  12/28 10:28:04.865996 00000101 C MND INFO  stb:1.log.taos_slow_sql_detail, start to retrieve meta
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9219262Z  12/28 10:28:04.866033 00000153 WEB INFO  QID:0x2961364803e0002a finish request, status_code:200, latency:3.106192ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535978
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9219458Z  12/28 10:28:04.866566 00000101 C MND INFO  stb:1.log.keeper_monitor, start to retrieve meta
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9219902Z  12/28 10:28:04.866586 00000153 WEB INFO  QID:0x2961364803e0001f finish request, status_code:200, latency:2.430999ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535967
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9220466Z  12/28 10:28:04.867069 00000153 WEB INFO  QID:0x2961364803e0001a finish request, status_code:200, latency:4.03272ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535962
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9220907Z  12/28 10:28:04.867110 00000153 WEB INFO  QID:0x2961364803e0001b finish request, status_code:200, latency:3.318947ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535963
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9221353Z  12/28 10:28:04.867350 00000153 WEB INFO  QID:0x2961364803e00026 finish request, status_code:200, latency:4.087641ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535974
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9221799Z  12/28 10:28:04.867558 00000153 WEB INFO  QID:0x2961364803e00021 finish request, status_code:200, latency:4.229027ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535969
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9221999Z  12/28 10:28:04.867891 00000101 C MND INFO  stb:1.log.taosd_dnodes_status, start to retrieve meta
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9222189Z  12/28 10:28:04.867965 00000101 C MND INFO  stb:1.log.adapter_status, start to retrieve meta
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9222395Z  12/28 10:28:04.868322 00000101 C MND INFO  stb:1.log.taosd_dnodes_log_dirs, start to retrieve meta
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9222596Z  12/28 10:28:04.868593 00000101 C MND INFO  stb:1.log.taosd_vgroups_info, start to retrieve meta
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9223043Z  12/28 10:28:04.868776 00000153 WEB INFO  QID:0x2961364803e0001e finish request, status_code:200, latency:4.950945ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535966
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9223224Z  12/28 10:28:04.868812 00000101 C MND INFO  stb:1.log.taos_sql_req, start to retrieve meta
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9223671Z  12/28 10:28:04.869084 00000153 WEB INFO  QID:0x2961364803e0001d finish request, status_code:200, latency:5.216732ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535965
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9224242Z  12/28 10:28:04.869399 00000153 WEB INFO  QID:0x2961364803e00028 finish request, status_code:200, latency:5.893212ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535976
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9224685Z  12/28 10:28:04.869833 00000153 WEB INFO  QID:0x2961364803e00022 finish request, status_code:200, latency:5.984745ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535970
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9225132Z  12/28 10:28:04.869833 00000153 WEB INFO  QID:0x2961364803e00023 finish request, status_code:200, latency:6.183597ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535971
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9225329Z  12/28 10:28:04.870261 00000101 C MND INFO  stb:1.log.taosd_cluster_info, start to retrieve meta
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9225519Z  12/28 10:28:04.870550 00000101 C MND INFO  stb:1.log.taosd_sql_req, start to retrieve meta
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9225716Z  12/28 10:28:04.870732 00000101 C MND INFO  stb:1.log.adapter_conn_pool, start to retrieve meta
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9226165Z  12/28 10:28:04.870962 00000153 WEB INFO  QID:0x2961364803e00027 finish request, status_code:200, latency:7.210306ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535975
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9226356Z  12/28 10:28:04.871098 00000101 C MND INFO  stb:1.log.taosd_vnodes_info, start to retrieve meta
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9226900Z  12/28 10:28:04.871232 00000153 WEB INFO  QID:0x2961364803e00025 finish request, status_code:200, latency:7.805103ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535973
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9227093Z  12/28 10:28:04.871276 00000101 C MND INFO  stb:1.log.taosd_dnodes_info, start to retrieve meta
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9227530Z  12/28 10:28:04.871541 00000153 WEB INFO  QID:0x2961364803e00024 finish request, status_code:200, latency:7.631581ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535972
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9228087Z  12/28 10:28:04.871820 00000153 WEB INFO  QID:0x2961364803e00020 finish request, status_code:200, latency:7.896613ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535968
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9228527Z  12/28 10:28:04.872073 00000153 WEB INFO  QID:0x2961364803e0001c finish request, status_code:200, latency:8.189972ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535964
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9228731Z  12/28 10:28:04.872337 00000101 C MND INFO  stb:1.log.adapter_c_interface, start to retrieve meta
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9229177Z  12/28 10:28:04.873322 00000153 WEB INFO  QID:0x2961364803e00029 finish request, status_code:200, latency:9.561544ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535977
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9229617Z  12/28 10:28:04.877012 00000153 WEB INFO  QID:0x2961364803e0002b finish request, status_code:200, latency:2.71448ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535979
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9230065Z  12/28 10:28:04.879417 00000153 WEB INFO  QID:0x2961364803e0002c finish request, status_code:200, latency:2.055006ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535980
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9230508Z  12/28 10:28:04.881242 00000153 WEB INFO  QID:0x2961364803e0002d finish request, status_code:200, latency:1.537731ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535981
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9230952Z  12/28 10:28:04.882962 00000153 WEB INFO  QID:0x2961364803e0002e finish request, status_code:200, latency:1.458394ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535982
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9231394Z  12/28 10:28:04.884746 00000153 WEB INFO  QID:0x2961364803e0002f finish request, status_code:200, latency:1.493662ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535983
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9231833Z  12/28 10:28:04.886785 00000153 WEB INFO  QID:0x2961364803e00030 finish request, status_code:200, latency:1.795673ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535984
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9232391Z  12/28 10:28:04.888557 00000153 WEB INFO  QID:0x2961364803e00031 finish request, status_code:200, latency:1.504862ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535985
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9232832Z  12/28 10:28:04.892010 00000153 WEB INFO  QID:0x2961364803e00032 finish request, status_code:200, latency:3.155873ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535986
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9233277Z  12/28 10:28:04.894078 00000153 WEB INFO  QID:0x2961364803e00033 finish request, status_code:200, latency:1.816251ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535987
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9233726Z  12/28 10:28:04.895962 00000153 WEB INFO  QID:0x2961364803e00034 finish request, status_code:200, latency:1.635505ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535988
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9234172Z  12/28 10:28:04.897815 00000153 WEB INFO  QID:0x2961364803e00035 finish request, status_code:200, latency:1.586454ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535989
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9234624Z  12/28 10:28:04.900495 00000153 WEB INFO  QID:0x2961364803e00036 finish request, status_code:200, latency:2.367351ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535990
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9235062Z  12/28 10:28:04.902487 00000153 WEB INFO  QID:0x2961364803e00037 finish request, status_code:200, latency:1.643589ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535991
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9235508Z  12/28 10:28:04.904151 00000153 WEB INFO  QID:0x2961364803e00038 finish request, status_code:200, latency:1.497637ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535992
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9235952Z  12/28 10:28:04.905916 00000153 WEB INFO  QID:0x2961364803e00039 finish request, status_code:200, latency:1.480635ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535993
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9236471Z  12/28 10:28:04.908694 00000153 WEB INFO  QID:0x2961364803e0003a finish request, status_code:200, latency:2.448312ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535994
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9237227Z  12/28 10:28:04.929530 00000153 WEB INFO  QID:0x2961364803e0003b finish request, status_code:200, latency:19.350834ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%3Freq_id%3D2981724111226535995
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9237421Z  12/28 10:28:12.618653 00000103 C MND INFO  db:1.trading, start to create, vgroups:2
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9237613Z  12/28 10:28:12.618692 00000103 C MND INFO  db:1.trading, already exist, ignore exist is set
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9237935Z  12/28 10:28:12.625474 00000153 WEB INFO  finish request, status_code:200, latency:10.305912ms, client_ip:172.18.0.1, method:GET, uri:%2Fws
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9238240Z  12/28 10:28:12.625713 00000153 WEB INFO  finish request, status_code:200, latency:8.609602ms, client_ip:172.18.0.1, method:GET, uri:%2Fws
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9238424Z  12/28 10:28:14.789146 00000103 C MND INFO  db:1.trading, start to create, vgroups:2
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9238604Z  12/28 10:28:14.789162 00000103 C MND INFO  db:1.trading, already exist, ignore exist is set
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9239082Z  12/28 10:28:14.861446 00000153 WEB INFO  QID:0x296136480650003c finish request, status_code:200, latency:1.009044ms, client_ip:::1, method:POST, uri:%2Frest%2Fsql%2Flog%3Freq_id%3D2981724111267430460
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9239255Z  12/28 10:28:14.995373 00000103 C MND INFO  stb:1.trading.orders, start to create
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9239464Z  12/28 10:28:14.995390 00000103 C MND INFO  stb:1.trading.orders, already exist, ignore exist is set
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9239989Z  12/28 10:28:15.003296 00000153 WEB INFO  QID:0x296136480660003d finish request, status_code:200, latency:913.315µs, client_ip:::1, method:POST, uri:%2Frest%2Fsql%2Flog%3Freq_id%3D2981724111268479037
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9240663Z  12/28 10:28:15.004718 00000153 WEB INFO  QID:0x2000000000000011 finish request, status_code:204, latency:1.007191ms, client_ip:::1, method:POST, uri:%2Finfluxdb%2Fv1%2Fwrite%3Fdb%3Dlog%26precision%3Dms%26qid%3D2305843009213694976%26table_name_key%3Dpriv_stn
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9241224Z  12/28 10:28:15.004825 00000193 WEB INFO  QID:0x2000000000000400 finish request, status_code:200, latency:3.083046ms, client_ip:127.0.0.1, method:POST, uri:/adapter_report
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9241404Z  [GIN] 2025/12/28 - 10:28:15 | 200 |    3.147717ms |       127.0.0.1 | POST     "/adapter_report"
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9241581Z  12/28 10:28:15.037230 00000103 C MND INFO  stb:1.trading.trades, start to create
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9241796Z  12/28 10:28:15.037246 00000103 C MND INFO  stb:1.trading.trades, already exist, ignore exist is set
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9241971Z  12/28 10:28:15.078203 00000103 C MND INFO  stb:1.trading.balances, start to create
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9242190Z  12/28 10:28:15.078219 00000103 C MND INFO  stb:1.trading.balances, already exist, ignore exist is set
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9242376Z  12/28 10:28:15.119243 00000103 C MND INFO  stb:1.trading.order_events, start to create
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9242607Z  12/28 10:28:15.119261 00000103 C MND INFO  stb:1.trading.order_events, already exist, ignore exist is set
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9242766Z  12/28 10:28:15.160177 00000103 C MND INFO  stb:1.trading.klines, start to create
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9242979Z  12/28 10:28:15.160195 00000103 C MND INFO  stb:1.trading.klines, already exist, ignore exist is set
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9243169Z  12/28 10:28:15.201244 00000103 C MND INFO  stb:1.trading.balance_events, start to create
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9243382Z  12/28 10:28:15.201303 00000103 C MND INFO  trans:31, create transaction:create-stb, origin:create-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9243583Z  12/28 10:28:15.201309 00000103 C MND INFO  trans:31, used to create stb:1.trading.balance_events
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9243726Z  12/28 10:28:15.201320 00000103 C MND INFO  trans:31, trans hash size 0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9243978Z  12/28 10:28:15.201351 00000103 C MND INFO  trans:31, action list:
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9244192Z  12/28 10:28:15.201362 00000103 C MND INFO  trans:31, action:0, redoAction:0 msgType:vnode-create-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9244407Z  12/28 10:28:15.201366 00000103 C MND INFO  trans:31, action:1, redoAction:1 msgType:vnode-create-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9244632Z  12/28 10:28:15.201370 00000103 C MND INFO  trans:31, action:2, commitAction:0 sdbType:idx, sdbStatus:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9244854Z  12/28 10:28:15.201381 00000103 C MND INFO  trans:31, action:3, commitAction:1 sdbType:stb, sdbStatus:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9245068Z  12/28 10:28:15.201384 00000103 C MND INFO  trans:31, action:4, undoAction:0 msgType:vnode-drop-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9245264Z  12/28 10:28:15.201388 00000103 C MND INFO  trans:31, action:5, undoAction:1 msgType:vnode-drop-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9245408Z  12/28 10:28:15.201392 00000103 C MND INFO  trans:31, trans hash size 0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9245563Z  12/28 10:28:15.201395 00000103 C MND INFO  trans:31, prepare transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9245813Z  12/28 10:28:15.201402 00000103 C MND INFO  trans:31, sync to other mnodes, stage:prepare createTime:1766917695201
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9245953Z  12/28 10:28:15.201406 00000103 C MND INFO  trans:31, will be proposed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9246137Z  12/28 10:28:15.201423 00000103 C MND INFO  trans:31, is proposing and wait sem, seq:61
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9246688Z  12/28 10:28:15.202153 00000104 C MND INFO  trans:31, process sync proposal, saved:31 code:0x0, apply index:61 term:1 config:-1 role:leader raw:0x7f4748084c1e sec:1766917695 seq:61
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9246837Z  12/28 10:28:15.202170 00000104 C MND INFO  trans:31, trans hash size 0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9247150Z  12/28 10:28:15.202180 00000104 C MND INFO  trans:31, perform insert action, row:0x7f474800526c stage:prepare, callfunc:1, startFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9247333Z  12/28 10:28:15.202182 00000104 C MND INFO  trans:31, stage from prepare to redoAction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9247537Z  12/28 10:28:15.202184 00000104 C MND INFO  trans:31, refresh transaction in process write msg
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9247987Z  12/28 10:28:15.202186 00000104 C MND INFO  trans:31, continue to execute stage:redoAction in syncContext, createTime:1766917695201
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9248290Z  12/28 10:28:15.202189 00000104 C MND INFO  trans:31, action:0 not executed since Wrong transaction execution context. numOfActions:2
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9248701Z  12/28 10:28:15.202193 00000104 C MND INFO  trans:31, cannot continue to execute redo action stage in syncContext, continueExec:1, code:Wrong transaction execution context
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9248926Z  12/28 10:28:15.202196 00000104 C MND INFO  trans:31, refresh transaction in process write msg finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9249236Z  12/28 10:28:15.202199 00000104 C MND INFO  vgId:1, mnode apply info changed from index:60 term:1 config:-1 to index:61 term:1 config:-1
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9249394Z  12/28 10:28:15.202202 00000104 C MND INFO  vgId:1, trans:31, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9249580Z  12/28 10:28:15.202207 00000104 C MND INFO  trans:31, is proposed and post sem, seq:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9249805Z  12/28 10:28:15.202230 00000103 C MND INFO  trans:31, sync to other mnodes finished, createTime:1766917695201
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9249951Z  12/28 10:28:15.202243 00000103 C MND INFO  trans:31, prepare finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9250122Z  12/28 10:28:15.202247 00000103 C MND INFO  trans:31, execute transaction in prepare
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9250426Z  12/28 10:28:15.202250 00000103 C MND INFO  trans:31, continue to execute stage:redoAction in transContext, createTime:1766917695201
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9250747Z  12/28 10:28:15.202268 00000103 C MND INFO  trans:31, redoAction:0 is sent, msgType:vnode-create-stb numOfEps:1 inUse:0 ep:0-localhost:6030
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9251060Z  12/28 10:28:15.202275 00000103 C MND INFO  trans:31, redoAction:1 is sent, msgType:vnode-create-stb numOfEps:1 inUse:0 ep:0-localhost:6030
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9251331Z  12/28 10:28:15.202277 00000103 C MND INFO  trans:31, 0 of 2 actions executed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9251553Z  12/28 10:28:15.202280 00000103 C MND INFO  trans:31, stage keep on redoAction since Action in progress
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9251723Z  12/28 10:28:15.202283 00000103 C MND INFO  vgId:1, trans:31, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9252087Z  12/28 10:28:15.202464 00000308 C MTA INFO  vgId:4, metaHandleSuperTableCreate success, version:11 type:1 uid:42100163351834637 name:balance_events
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9252440Z  12/28 10:28:15.202464 00000309 C MTA INFO  vgId:3, metaHandleSuperTableCreate success, version:11 type:1 uid:42100163351834637 name:balance_events
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9252717Z  12/28 10:28:15.202475 00000308 C MTA INFO  vgId:4, super table balance_events suid:42100163351834637 is created, version:11
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9252980Z  12/28 10:28:15.202475 00000309 C MTA INFO  vgId:3, super table balance_events suid:42100163351834637 is created, version:11
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9253462Z  12/28 10:28:15.202578 00000103 C MND INFO  trans:31, redoAction:1 response is received, received code:0x0(success), accept:0x80000619(Stable already exists) retry:0x8000061a(Stable not exists)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9253662Z  12/28 10:28:15.202595 00000103 C MND INFO  trans:31, execute transaction in process response
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9253960Z  12/28 10:28:15.202599 00000103 C MND INFO  trans:31, continue to execute stage:redoAction in transContext, createTime:1766917695201
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9254191Z  12/28 10:28:15.202602 00000103 C MND INFO  trans:31, 1 of 2 actions executed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9254578Z  12/28 10:28:15.202612 00000103 C MND INFO  trans:31, stage keep on redoAction since Action in progress
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9254864Z  12/28 10:28:15.202615 00000103 C MND INFO  vgId:1, trans:31, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9255342Z  12/28 10:28:15.202630 00000103 C MND INFO  trans:31, redoAction:0 response is received, received code:0x0(success), accept:0x80000619(Stable already exists) retry:0x8000061a(Stable not exists)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9255650Z  12/28 10:28:15.202632 00000103 C MND INFO  trans:31, execute transaction in process response
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9255943Z  12/28 10:28:15.202635 00000103 C MND INFO  trans:31, continue to execute stage:redoAction in transContext, createTime:1766917695201
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9256126Z  12/28 10:28:15.202637 00000103 C MND INFO  trans:31, all 2 actions execute successfully
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9256296Z  12/28 10:28:15.202640 00000103 C MND INFO  trans:31, stage from redoAction to commit
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9256734Z  12/28 10:28:15.202642 00000103 C MND INFO  trans:31, continue to execute stage:commit in transContext, createTime:1766917695201
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9256894Z  12/28 10:28:15.202644 00000103 C MND INFO  trans:31, commit transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9257127Z  12/28 10:28:15.202649 00000103 C MND INFO  trans:31, sync to other mnodes, stage:commit createTime:1766917695201
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9257270Z  12/28 10:28:15.202674 00000103 C MND INFO  trans:31, will be proposed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9257454Z  12/28 10:28:15.202684 00000103 C MND INFO  trans:31, is proposing and wait sem, seq:62
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9257867Z  12/28 10:28:15.203149 00000104 C MND INFO  trans:31, process sync proposal, saved:31 code:0x0, apply index:62 term:1 config:-1 role:leader raw:0x7f474808659e sec:1766917695 seq:62
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9258322Z  12/28 10:28:15.203201 00000104 C MND INFO  trans:31, perform update action, old row:0x7f474800526c stage:commit create:1766917695201, new row:0x7f4748087edc stage:commit create:1766917695201
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9258575Z  12/28 10:28:15.203208 00000104 C MND INFO  trans:31, stage from commit to commitAction since perform update action
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9258789Z  12/28 10:28:15.203211 00000104 C MND INFO  vgId:1, deleteFp:0x6177b0, type:trans, row:0x7f4748087ed0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9259082Z  12/28 10:28:15.203214 00000104 C MND INFO  trans:31, perform delete action, row:0x7f4748087edc stage:commit callfunc:0, stopFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9259406Z  12/28 10:28:15.203219 00000104 C MND INFO  trans:31, refresh transaction in process write msg
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9259708Z  12/28 10:28:15.203222 00000104 C MND INFO  trans:31, continue to execute stage:commitAction in syncContext, createTime:1766917695201
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9259931Z  12/28 10:28:15.203227 00000104 C MND INFO  trans:31, commitAction:0 write to sdb, type:idx status:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9260143Z  12/28 10:28:15.203240 00000104 C MND INFO  trans:31, commitAction:1 write to sdb, type:stb status:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9260325Z  12/28 10:28:15.203242 00000104 C MND INFO  trans:31, all 2 actions execute successfully
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9260507Z  12/28 10:28:15.203245 00000104 C MND INFO  trans:31, stage from commitAction to finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9260799Z  12/28 10:28:15.203247 00000104 C MND INFO  trans:31, continue to execute stage:finished in syncContext, createTime:1766917695201
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9261008Z  12/28 10:28:15.203269 00000104 C MND INFO  vgId:1, deleteFp:0x6177b0, type:trans, row:0x7f474808a480
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9261309Z  12/28 10:28:15.203273 00000104 C MND INFO  trans:31, perform delete action, row:0x7f474808a48c stage:finished callfunc:0, stopFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9261573Z  12/28 10:28:15.203277 00000104 C MND INFO  trans:31, execute finished, code:0x0, failedTimes:0 createTime:1766917695201
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9261818Z  12/28 10:28:15.203280 00000104 C MND INFO  vgId:1, trans:31, start to send rsp, stage:finished failedTimes:0 code:0x0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9261993Z  12/28 10:28:15.203283 00000104 C MND INFO  vgId:1, trans:31, start to lock rpc array
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9262252Z  12/28 10:28:15.203285 00000104 C MND INFO  vgId:1, trans:31, client:0 start to send rsp, code:0x0 stage:finished app:(nil)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9262513Z  12/28 10:28:15.203301 00000104 C MND INFO  vgId:1, trans:31, client:0 send rsp finished, code:0x0 stage:finished app:(nil)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9262731Z  12/28 10:28:15.203307 00000104 C MND INFO  trans:31, refresh transaction in process write msg finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9263143Z  12/28 10:28:15.203310 00000104 C MND INFO  vgId:1, mnode apply info changed from index:61 term:1 config:-1 to index:62 term:1 config:-1
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9263309Z  12/28 10:28:15.203313 00000104 C MND INFO  vgId:1, trans:31, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9263482Z  12/28 10:28:15.203322 00000104 C MND INFO  trans:31, is proposed and post sem, seq:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9263713Z  12/28 10:28:15.203338 00000103 C MND INFO  trans:31, sync to other mnodes finished, createTime:1766917695201
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9263849Z  12/28 10:28:15.203346 00000103 C MND INFO  trans:31, commit finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9264029Z  12/28 10:28:15.203355 00000103 C MND INFO  trans:31, stage from commit to commitAction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9264339Z  12/28 10:28:15.203358 00000103 C MND INFO  trans:31, continue to execute stage:commitAction in transContext, createTime:1766917695201
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9264509Z  12/28 10:28:15.203361 00000103 C MND INFO  trans:31, all 2 actions execute successfully
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9264699Z  12/28 10:28:15.203363 00000103 C MND INFO  trans:31, stage from commitAction to finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9264986Z  12/28 10:28:15.203366 00000103 C MND INFO  trans:31, continue to execute stage:finished in transContext, createTime:1766917695201
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9265237Z  12/28 10:28:15.203368 00000103 C MND INFO  vgId:1, trans:31, start to send rsp, stage:finished failedTimes:0 code:0x0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9265405Z  12/28 10:28:15.203371 00000103 C MND INFO  vgId:1, trans:31, start to lock rpc array
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9265569Z  12/28 10:28:15.203373 00000103 C MND INFO  vgId:1, trans:31, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9265774Z  12/28 10:28:15.203388 00000103 C MND INFO  vgId:1, deleteFp:0x6177b0, type:trans, row:0x7f4748005260
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9266066Z  12/28 10:28:15.203391 00000103 C MND INFO  trans:31, perform delete action, row:0x7f474800526c stage:finished callfunc:1, stopFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9266389Z  12/28 10:28:15.245234 00000318 C QRY ERROR get table klines_1m meta with 0 failed cause of Table does not exist
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9266655Z  12/28 10:28:15.245259 00000318 C QRY WARN  vnodeGetBatchMeta failed, msgType:523
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9266870Z  12/28 10:28:15.245867 00000103 C MND INFO  stream:1.kline_1m_stream, start to create stream, sql:
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9266983Z              create stream if not exists kline_1m_stream
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9267168Z              into klines_1m subtable(concat('kl_1m_', cast(symbol_id as varchar(10))))
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9267241Z              as select
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9267325Z                  _wstart as ts,
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9267414Z                  first(price) as open,
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9267501Z                  max(price) as high,
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9267586Z                  min(price) as low,
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9267667Z                  last(price) as close,
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9267749Z                  sum(qty) as volume,
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9267908Z                  sum(cast(price as double) * cast(qty as double)) as quote_volume,
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9268001Z                  count(*) as trade_count
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9268075Z              from trades
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9268162Z              partition by symbol_id
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9268237Z              interval(1m)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9268313Z              
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9268472Z  12/28 10:28:15.245881 00000103 C MND INFO  stream:1.kline_1m_stream to create
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9268667Z  12/28 10:28:15.249217 00000103 C MND INFO  s-task:0x42671098 add into task buffer, total:1
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9268828Z  12/28 10:28:15.249228 00000103 C MND INFO  vgId:3 added into nodeList, total:1
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9269012Z  12/28 10:28:15.249232 00000103 C MND INFO  s-task:0x42671099 add into task buffer, total:2
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9269168Z  12/28 10:28:15.249235 00000103 C MND INFO  vgId:4 added into nodeList, total:2
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9269343Z  12/28 10:28:15.249238 00000103 C MND INFO  s-task:0x4267109a add into task buffer, total:3
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9269639Z  12/28 10:28:15.249241 00000103 C MND INFO  s-task:0x4267109b add into task buffer, total:4
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9269815Z  12/28 10:28:15.249244 00000103 C MND INFO  s-task:0x4267109c add into task buffer, total:5
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9270057Z  12/28 10:28:15.249251 00000103 C MND INFO  trans:32, create transaction:stream-create, origin:stream-create
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9270357Z  12/28 10:28:15.249254 00000103 C MND INFO  stream:0x95928e3c54acc0 start to build trans create stream tasks on dnodes, transId:32
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9270504Z  12/28 10:28:15.249257 00000103 C MND INFO  trans:32, trans hash size 0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9270635Z  12/28 10:28:15.249279 00000103 C MND INFO  trans:32, trans hash size 0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9270778Z  12/28 10:28:15.249489 00000103 C MND INFO  trans:32, action list:
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9270993Z  12/28 10:28:15.249500 00000103 C MND INFO  trans:32, action:0, redoAction:0 msgType:vnode-create-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9271202Z  12/28 10:28:15.249504 00000103 C MND INFO  trans:32, action:1, redoAction:1 msgType:vnode-create-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9271423Z  12/28 10:28:15.249507 00000103 C MND INFO  trans:32, action:2, redoAction:2 msgType:stream-task-deploy
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9271631Z  12/28 10:28:15.249509 00000103 C MND INFO  trans:32, action:3, redoAction:3 msgType:stream-task-deploy
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9271841Z  12/28 10:28:15.249511 00000103 C MND INFO  trans:32, action:4, redoAction:4 msgType:stream-task-deploy
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9272045Z  12/28 10:28:15.249514 00000103 C MND INFO  trans:32, action:5, redoAction:5 msgType:stream-task-deploy
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9272254Z  12/28 10:28:15.249516 00000103 C MND INFO  trans:32, action:6, redoAction:6 msgType:stream-task-deploy
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9272479Z  12/28 10:28:15.249519 00000103 C MND INFO  trans:32, action:7, commitAction:0 sdbType:stb, sdbStatus:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9272708Z  12/28 10:28:15.249522 00000103 C MND INFO  trans:32, action:8, commitAction:1 sdbType:stream, sdbStatus:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9273027Z  12/28 10:28:15.249525 00000103 C MND INFO  trans:32, action:9, undoAction:0 msgType:vnode-drop-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9273232Z  12/28 10:28:15.249536 00000103 C MND INFO  trans:32, action:10, undoAction:1 msgType:vnode-drop-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9273369Z  12/28 10:28:15.249538 00000103 C MND INFO  trans:32, trans hash size 0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9273515Z  12/28 10:28:15.249541 00000103 C MND INFO  trans:32, prepare transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9273757Z  12/28 10:28:15.249596 00000103 C MND INFO  trans:32, sync to other mnodes, stage:prepare createTime:1766917695249
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9273895Z  12/28 10:28:15.249743 00000103 C MND INFO  trans:32, will be proposed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9274075Z  12/28 10:28:15.249897 00000103 C MND INFO  trans:32, is proposing and wait sem, seq:63
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9274490Z  12/28 10:28:15.251030 00000104 C MND INFO  trans:32, process sync proposal, saved:32 code:0x0, apply index:63 term:1 config:-1 role:leader raw:0x7f47480bce5e sec:1766917695 seq:63
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9274629Z  12/28 10:28:15.251169 00000104 C MND INFO  trans:32, trans hash size 0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9274938Z  12/28 10:28:15.251200 00000104 C MND INFO  trans:32, perform insert action, row:0x7f47480240ac stage:prepare, callfunc:1, startFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9275116Z  12/28 10:28:15.251205 00000104 C MND INFO  trans:32, stage from prepare to redoAction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9275311Z  12/28 10:28:15.251208 00000104 C MND INFO  trans:32, refresh transaction in process write msg
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9275603Z  12/28 10:28:15.251211 00000104 C MND INFO  trans:32, continue to execute stage:redoAction in syncContext, createTime:1766917695249
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9275901Z  12/28 10:28:15.251217 00000104 C MND INFO  trans:32, action:0 not executed since Wrong transaction execution context. numOfActions:7
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9276318Z  12/28 10:28:15.251220 00000104 C MND INFO  trans:32, cannot continue to execute redo action stage in syncContext, continueExec:1, code:Wrong transaction execution context
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9276704Z  12/28 10:28:15.251223 00000104 C MND INFO  trans:32, refresh transaction in process write msg finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9277011Z  12/28 10:28:15.251226 00000104 C MND INFO  vgId:1, mnode apply info changed from index:62 term:1 config:-1 to index:63 term:1 config:-1
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9277170Z  12/28 10:28:15.251229 00000104 C MND INFO  vgId:1, trans:32, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9277347Z  12/28 10:28:15.251238 00000104 C MND INFO  trans:32, is proposed and post sem, seq:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9277569Z  12/28 10:28:15.251248 00000103 C MND INFO  trans:32, sync to other mnodes finished, createTime:1766917695249
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9277710Z  12/28 10:28:15.251251 00000103 C MND INFO  trans:32, prepare finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9277886Z  12/28 10:28:15.251254 00000103 C MND INFO  trans:32, execute transaction in prepare
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9278177Z  12/28 10:28:15.251256 00000103 C MND INFO  trans:32, continue to execute stage:redoAction in transContext, createTime:1766917695249
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9278505Z  12/28 10:28:15.251272 00000103 C MND INFO  trans:32, redoAction:0 is sent, msgType:vnode-create-stb numOfEps:1 inUse:0 ep:0-localhost:6030
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9278813Z  12/28 10:28:15.251277 00000103 C MND INFO  trans:32, redoAction:1 is sent, msgType:vnode-create-stb numOfEps:1 inUse:0 ep:0-localhost:6030
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9279136Z  12/28 10:28:15.251294 00000103 C MND INFO  trans:32, redoAction:2 is sent, msgType:stream-task-deploy numOfEps:1 inUse:0 ep:0-localhost:6030
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9279448Z  12/28 10:28:15.251303 00000103 C MND INFO  trans:32, redoAction:3 is sent, msgType:stream-task-deploy numOfEps:1 inUse:0 ep:0-localhost:6030
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9279767Z  12/28 10:28:15.251309 00000103 C MND INFO  trans:32, redoAction:4 is sent, msgType:stream-task-deploy numOfEps:1 inUse:0 ep:0-localhost:6030
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9280082Z  12/28 10:28:15.251314 00000103 C MND INFO  trans:32, redoAction:5 is sent, msgType:stream-task-deploy numOfEps:1 inUse:0 ep:0-localhost:6030
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9280506Z  12/28 10:28:15.251320 00000103 C MND INFO  trans:32, redoAction:6 is sent, msgType:stream-task-deploy numOfEps:1 inUse:0 ep:0-localhost:6030
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9280663Z  12/28 10:28:15.251323 00000103 C MND INFO  trans:32, 0 of 7 actions executed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9280874Z  12/28 10:28:15.251326 00000103 C MND INFO  trans:32, stage keep on redoAction since Action in progress
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9281040Z  12/28 10:28:15.251329 00000103 C MND INFO  vgId:1, trans:32, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9281375Z  12/28 10:28:15.251454 00000309 C MTA INFO  vgId:3, metaHandleSuperTableCreate success, version:12 type:1 uid:42100911199923062 name:klines_1m
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9281710Z  12/28 10:28:15.251465 00000308 C MTA INFO  vgId:4, metaHandleSuperTableCreate success, version:12 type:1 uid:42100911199923062 name:klines_1m
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9281967Z  12/28 10:28:15.251473 00000308 C MTA INFO  vgId:4, super table klines_1m suid:42100911199923062 is created, version:12
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9282218Z  12/28 10:28:15.251473 00000309 C MTA INFO  vgId:3, super table klines_1m suid:42100911199923062 is created, version:12
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9282697Z  12/28 10:28:15.251625 00000103 C MND INFO  trans:32, redoAction:1 response is received, received code:0x0(success), accept:0x80000619(Stable already exists) retry:0x8000061a(Stable not exists)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9283463Z  12/28 10:28:15.251628 00000308 C TQ  INFO  vgId:4 build stream task, s-task:0x95928e3c54acc0-0x42671099, 0x7f4744014580 checkpointId:0 checkpointVer:12 nextProcessVer:13 child id:1, level:3, cur-status:uninit next-status:ready taskType:0, related helper-task:0x0 delaySched:0 ms, inputVer:13
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9283668Z  12/28 10:28:15.251636 00000103 C MND INFO  trans:32, execute transaction in process response
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9283971Z  12/28 10:28:15.251639 00000103 C MND INFO  trans:32, continue to execute stage:redoAction in transContext, createTime:1766917695249
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9284159Z  12/28 10:28:15.251642 00000103 C MND INFO  trans:32, 1 of 7 actions executed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9284489Z  12/28 10:28:15.251645 00000103 C MND INFO  trans:32, stage keep on redoAction since Action in progress
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9284648Z  12/28 10:28:15.251648 00000103 C MND INFO  vgId:1, trans:32, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9285419Z  12/28 10:28:15.251648 00000309 C TQ  INFO  vgId:3 build stream task, s-task:0x95928e3c54acc0-0x42671098, 0x7f47380b0e60 checkpointId:0 checkpointVer:12 nextProcessVer:13 child id:0, level:3, cur-status:uninit next-status:ready taskType:0, related helper-task:0x0 delaySched:0 ms, inputVer:13
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9285887Z  12/28 10:28:15.251672 00000103 C MND INFO  trans:32, redoAction:0 response is received, received code:0x0(success), accept:0x80000619(Stable already exists) retry:0x8000061a(Stable not exists)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9286087Z  12/28 10:28:15.251676 00000103 C MND INFO  trans:32, execute transaction in process response
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9286390Z  12/28 10:28:15.251678 00000103 C MND INFO  trans:32, continue to execute stage:redoAction in transContext, createTime:1766917695249
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9286673Z  12/28 10:28:15.251680 00000103 C MND INFO  trans:32, 2 of 7 actions executed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9286895Z  12/28 10:28:15.251683 00000103 C MND INFO  trans:32, stage keep on redoAction since Action in progress
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9287052Z  12/28 10:28:15.251685 00000103 C MND INFO  vgId:1, trans:32, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9287277Z  12/28 10:28:15.252650 00000249 C STM INFO  vgId:3 start task:0x42671098 by checking it's downstream status
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9287492Z  12/28 10:28:15.252727 00000248 C STM INFO  vgId:4 start task:0x42671099 by checking it's downstream status
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9287932Z  12/28 10:28:15.252737 00000103 C MND INFO  trans:32, redoAction:3 response is received, received code:0x0(success), accept:0x80000503(Vnode is closed or removed) retry:0x0(success)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9288240Z  12/28 10:28:15.252741 00000103 C MND INFO  trans:32, execute transaction in process response
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9288538Z  12/28 10:28:15.252743 00000103 C MND INFO  trans:32, continue to execute stage:redoAction in transContext, createTime:1766917695249
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9288689Z  12/28 10:28:15.252746 00000103 C MND INFO  trans:32, 3 of 7 actions executed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9288898Z  12/28 10:28:15.252749 00000103 C MND INFO  trans:32, stage keep on redoAction since Action in progress
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9289057Z  12/28 10:28:15.252751 00000103 C MND INFO  vgId:1, trans:32, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9289482Z  12/28 10:28:15.252755 00000103 C MND INFO  trans:32, redoAction:2 response is received, received code:0x0(success), accept:0x80000503(Vnode is closed or removed) retry:0x0(success)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9290249Z  12/28 10:28:15.252754 00000308 C TQ  INFO  vgId:4 build stream task, s-task:0x95928e3c54acc0-0x4267109b, 0x7f47440d8d80 checkpointId:0 checkpointVer:13 nextProcessVer:14 child id:1, level:1, cur-status:uninit next-status:ready taskType:0, related helper-task:0x0 delaySched:0 ms, inputVer:14
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9290448Z  12/28 10:28:15.252758 00000103 C MND INFO  trans:32, execute transaction in process response
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9290737Z  12/28 10:28:15.252760 00000103 C MND INFO  trans:32, continue to execute stage:redoAction in transContext, createTime:1766917695249
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9290885Z  12/28 10:28:15.252763 00000103 C MND INFO  trans:32, 4 of 7 actions executed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9291091Z  12/28 10:28:15.252766 00000103 C MND INFO  trans:32, stage keep on redoAction since Action in progress
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9291252Z  12/28 10:28:15.252768 00000103 C MND INFO  vgId:1, trans:32, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9292011Z  12/28 10:28:15.252781 00000309 C TQ  INFO  vgId:3 build stream task, s-task:0x95928e3c54acc0-0x4267109a, 0x7f47380a2b20 checkpointId:0 checkpointVer:13 nextProcessVer:14 child id:0, level:1, cur-status:uninit next-status:ready taskType:0, related helper-task:0x0 delaySched:0 ms, inputVer:14
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9292343Z  12/28 10:28:15.254087 00000248 C STM INFO  vgId:3 start task:0x4267109a by checking it's downstream status
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9292777Z  12/28 10:28:15.254172 00000103 C MND INFO  trans:32, redoAction:4 response is received, received code:0x0(success), accept:0x80000503(Vnode is closed or removed) retry:0x0(success)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9292964Z  12/28 10:28:15.254179 00000103 C MND INFO  trans:32, execute transaction in process response
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9293257Z  12/28 10:28:15.254181 00000103 C MND INFO  trans:32, continue to execute stage:redoAction in transContext, createTime:1766917695249
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9293401Z  12/28 10:28:15.254185 00000103 C MND INFO  trans:32, 5 of 7 actions executed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9293613Z  12/28 10:28:15.254188 00000103 C MND INFO  trans:32, stage keep on redoAction since Action in progress
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9293773Z  12/28 10:28:15.254191 00000103 C MND INFO  vgId:1, trans:32, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9293998Z  12/28 10:28:15.254193 00000249 C STM INFO  vgId:4 start task:0x4267109b by checking it's downstream status
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9294430Z  12/28 10:28:15.254321 00000103 C MND INFO  trans:32, redoAction:5 response is received, received code:0x0(success), accept:0x80000503(Vnode is closed or removed) retry:0x0(success)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9294617Z  12/28 10:28:15.254334 00000103 C MND INFO  trans:32, execute transaction in process response
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9294910Z  12/28 10:28:15.254337 00000103 C MND INFO  trans:32, continue to execute stage:redoAction in transContext, createTime:1766917695249
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9295056Z  12/28 10:28:15.254340 00000103 C MND INFO  trans:32, 6 of 7 actions executed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9295268Z  12/28 10:28:15.254343 00000103 C MND INFO  trans:32, stage keep on redoAction since Action in progress
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9295431Z  12/28 10:28:15.254345 00000103 C MND INFO  vgId:1, trans:32, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9296133Z  12/28 10:28:15.254428 00000248 C STM INFO  0x95928e3c54acc0-0x4267109a no valid checkpoint ever generated, no need to copy checkpoint data, clean defaultPath:/var/lib/taos/vnode/vnode3/tq/stream/0x95928e3c54acc0-0x4267109a/state
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9296830Z  12/28 10:28:15.254464 00000249 C STM INFO  0x95928e3c54acc0-0x4267109b no valid checkpoint ever generated, no need to copy checkpoint data, clean defaultPath:/var/lib/taos/vnode/vnode4/tq/stream/0x95928e3c54acc0-0x4267109b/state
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9297239Z  12/28 10:28:15.254579 00000248 C STM INFO  0x95928e3c54acc0-0x4267109a clear dir:/var/lib/taos/vnode/vnode3/tq/stream/0x95928e3c54acc0-0x4267109a/state, succ
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9297648Z  12/28 10:28:15.254589 00000249 C STM INFO  0x95928e3c54acc0-0x4267109b clear dir:/var/lib/taos/vnode/vnode4/tq/stream/0x95928e3c54acc0-0x4267109b/state, succ
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9297877Z  12/28 10:28:15.254717 00000249 C STM INFO  0x95928e3c54acc0-0x4267109b newly create db in state-backend
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9298097Z  12/28 10:28:15.254719 00000248 C STM INFO  0x95928e3c54acc0-0x4267109a newly create db in state-backend
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9298627Z  12/28 10:28:15.270022 00000249 C STM WARN  failed to open file to load extra info, file:/var/lib/taos/vnode/vnode4/tq/stream/0x95928e3c54acc0-0x4267109b/state/info, reason:No such file or directory
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9298996Z  12/28 10:28:15.270040 00000249 C STM INFO  s-task:0x95928e3c54acc0-0x4267109b open state 0x7f47315ea9c0 on backend (nil) 0x95928e3c54acc0-1114050715 succ
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9299517Z  12/28 10:28:15.270107 00000248 C STM WARN  failed to open file to load extra info, file:/var/lib/taos/vnode/vnode3/tq/stream/0x95928e3c54acc0-0x4267109a/state/info, reason:No such file or directory
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9299877Z  12/28 10:28:15.270154 00000248 C STM INFO  s-task:0x95928e3c54acc0-0x4267109a open state 0x7f46d4001b90 on backend (nil) 0x95928e3c54acc0-1114050714 succ
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9300021Z  12/28 10:28:15.270785 00000249 C QRY INFO  open state 0x7f4731648d10
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9300321Z  12/28 10:28:15.270799 00000249 C QRY INFO  copy state 0x7f47315ea9c0 to 0x7f4731648d10
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9300454Z  12/28 10:28:15.270847 00000248 C QRY INFO  open state 0x7f46d415ab50
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9300624Z  12/28 10:28:15.270859 00000248 C QRY INFO  copy state 0x7f46d4001b90 to 0x7f46d415ab50
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9301400Z  12/28 10:28:15.274864 00000309 C TQ  INFO  vgId:3 build stream task, s-task:0x95928e3c54acc0-0x4267109c, 0x7f47380a3890 checkpointId:0 checkpointVer:14 nextProcessVer:15 child id:0, level:2, cur-status:uninit next-status:ready taskType:0, related helper-task:0x0 delaySched:0 ms, inputVer:15
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9301631Z  12/28 10:28:15.275961 00000249 C STM INFO  vgId:3 start task:0x4267109c by checking it's downstream status
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9302065Z  12/28 10:28:15.276070 00000103 C MND INFO  trans:32, redoAction:6 response is received, received code:0x0(success), accept:0x80000503(Vnode is closed or removed) retry:0x0(success)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9302266Z  12/28 10:28:15.276087 00000103 C MND INFO  trans:32, execute transaction in process response
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9302568Z  12/28 10:28:15.276112 00000103 C MND INFO  trans:32, continue to execute stage:redoAction in transContext, createTime:1766917695249
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9302745Z  12/28 10:28:15.276117 00000103 C MND INFO  trans:32, all 7 actions execute successfully
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9302921Z  12/28 10:28:15.276122 00000103 C MND INFO  trans:32, stage from redoAction to commit
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9303203Z  12/28 10:28:15.276124 00000103 C MND INFO  trans:32, continue to execute stage:commit in transContext, createTime:1766917695249
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9303354Z  12/28 10:28:15.276127 00000103 C MND INFO  trans:32, commit transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9303588Z  12/28 10:28:15.276159 00000103 C MND INFO  trans:32, sync to other mnodes, stage:commit createTime:1766917695249
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9304190Z  12/28 10:28:15.276215 00000249 C STM INFO  0x95928e3c54acc0-0x4267109c no valid checkpoint ever generated, no need to copy checkpoint data, clean defaultPath:/var/lib/taos/vnode/vnode3/tq/stream/0x95928e3c54acc0-0x4267109c/state
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9304477Z  12/28 10:28:15.276219 00000103 C MND INFO  trans:32, will be proposed
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9304649Z  12/28 10:28:15.276259 00000103 C MND INFO  trans:32, is proposing and wait sem, seq:64
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9305050Z  12/28 10:28:15.276348 00000249 C STM INFO  0x95928e3c54acc0-0x4267109c clear dir:/var/lib/taos/vnode/vnode3/tq/stream/0x95928e3c54acc0-0x4267109c/state, succ
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9305269Z  12/28 10:28:15.276445 00000249 C STM INFO  0x95928e3c54acc0-0x4267109c newly create db in state-backend
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9305677Z  12/28 10:28:15.277765 00000104 C MND INFO  trans:32, process sync proposal, saved:32 code:0x0, apply index:64 term:1 config:-1 role:leader raw:0x7f47480bce5e sec:1766917695 seq:64
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9306136Z  12/28 10:28:15.277958 00000104 C MND INFO  trans:32, perform update action, old row:0x7f47480240ac stage:commit create:1766917695249, new row:0x7f474802466c stage:commit create:1766917695249
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9306398Z  12/28 10:28:15.277973 00000104 C MND INFO  trans:32, stage from commit to commitAction since perform update action
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9306703Z  12/28 10:28:15.277976 00000104 C MND INFO  vgId:1, deleteFp:0x6177b0, type:trans, row:0x7f4748024660
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9306999Z  12/28 10:28:15.277979 00000104 C MND INFO  trans:32, perform delete action, row:0x7f474802466c stage:commit callfunc:0, stopFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9307200Z  12/28 10:28:15.277984 00000104 C MND INFO  trans:32, refresh transaction in process write msg
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9307500Z  12/28 10:28:15.277986 00000104 C MND INFO  trans:32, continue to execute stage:commitAction in syncContext, createTime:1766917695249
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9307719Z  12/28 10:28:15.277994 00000104 C MND INFO  trans:32, commitAction:0 write to sdb, type:stb status:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9307948Z  12/28 10:28:15.278095 00000104 C MND INFO  trans:32, commitAction:1 write to sdb, type:stream status:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9308239Z  12/28 10:28:15.278107 00000104 C MND INFO  trans:32, all 2 actions execute successfully
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9308422Z  12/28 10:28:15.278109 00000104 C MND INFO  trans:32, stage from commitAction to finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9308706Z  12/28 10:28:15.278111 00000104 C MND INFO  trans:32, continue to execute stage:finished in syncContext, createTime:1766917695249
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9308914Z  12/28 10:28:15.278365 00000104 C MND INFO  vgId:1, deleteFp:0x6177b0, type:trans, row:0x7f4748158190
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9309208Z  12/28 10:28:15.278373 00000104 C MND INFO  trans:32, perform delete action, row:0x7f474815819c stage:finished callfunc:0, stopFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9309471Z  12/28 10:28:15.278377 00000104 C MND INFO  trans:32, execute finished, code:0x0, failedTimes:0 createTime:1766917695249
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9309718Z  12/28 10:28:15.278379 00000104 C MND INFO  vgId:1, trans:32, start to send rsp, stage:finished failedTimes:0 code:0x0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9309907Z  12/28 10:28:15.278381 00000104 C MND INFO  vgId:1, trans:32, start to lock rpc array
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9310177Z  12/28 10:28:15.278383 00000104 C MND INFO  vgId:1, trans:32, client:0 start to send rsp, code:0x0 stage:finished app:(nil)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9310432Z  12/28 10:28:15.278390 00000104 C MND INFO  vgId:1, trans:32, client:0 send rsp finished, code:0x0 stage:finished app:(nil)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9310653Z  12/28 10:28:15.278393 00000104 C MND INFO  trans:32, refresh transaction in process write msg finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9310957Z  12/28 10:28:15.278396 00000104 C MND INFO  vgId:1, mnode apply info changed from index:63 term:1 config:-1 to index:64 term:1 config:-1
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9311132Z  12/28 10:28:15.278399 00000104 C MND INFO  vgId:1, trans:32, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9311304Z  12/28 10:28:15.278406 00000104 C MND INFO  trans:32, is proposed and post sem, seq:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9311533Z  12/28 10:28:15.278417 00000103 C MND INFO  trans:32, sync to other mnodes finished, createTime:1766917695249
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9311783Z  12/28 10:28:15.278448 00000103 C MND INFO  trans:32, commit finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9311954Z  12/28 10:28:15.278474 00000103 C MND INFO  trans:32, stage from commit to commitAction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9312258Z  12/28 10:28:15.278479 00000103 C MND INFO  trans:32, continue to execute stage:commitAction in transContext, createTime:1766917695249
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9312430Z  12/28 10:28:15.278482 00000103 C MND INFO  trans:32, all 2 actions execute successfully
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9312613Z  12/28 10:28:15.278484 00000103 C MND INFO  trans:32, stage from commitAction to finished
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9312896Z  12/28 10:28:15.278486 00000103 C MND INFO  trans:32, continue to execute stage:finished in transContext, createTime:1766917695249
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9313144Z  12/28 10:28:15.278488 00000103 C MND INFO  vgId:1, trans:32, start to send rsp, stage:finished failedTimes:0 code:0x0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9313315Z  12/28 10:28:15.278491 00000103 C MND INFO  vgId:1, trans:32, start to lock rpc array
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9313476Z  12/28 10:28:15.278494 00000103 C MND INFO  vgId:1, trans:32, release transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9313693Z  12/28 10:28:15.278495 00000103 C MND INFO  vgId:1, deleteFp:0x6177b0, type:trans, row:0x7f47480240a0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9313987Z  12/28 10:28:15.278497 00000103 C MND INFO  trans:32, perform delete action, row:0x7f47480240ac stage:finished callfunc:1, stopFunc:0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9314524Z  12/28 10:28:15.287335 00000249 C STM WARN  failed to open file to load extra info, file:/var/lib/taos/vnode/vnode3/tq/stream/0x95928e3c54acc0-0x4267109c/state/info, reason:No such file or directory
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9314891Z  12/28 10:28:15.287353 00000249 C STM INFO  s-task:0x95928e3c54acc0-0x4267109c open state 0x7f47316f4890 on backend (nil) 0x95928e3c54acc0-1114050716 succ
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9315029Z  12/28 10:28:15.287733 00000249 C QRY INFO  open state 0x7f4731632a70
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9315203Z  12/28 10:28:15.287741 00000249 C QRY INFO  copy state 0x7f47316f4890 to 0x7f4731632a70
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9315521Z  12/28 10:28:15.320236 00000318 C QRY ERROR get table klines_5m meta with 0 failed cause of Table does not exist
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9315695Z  12/28 10:28:15.320251 00000318 C QRY WARN  vnodeGetBatchMeta failed, msgType:523
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9315902Z  12/28 10:28:15.320850 00000103 C MND INFO  stream:1.kline_5m_stream, start to create stream, sql:
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9316020Z              create stream if not exists kline_5m_stream
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9316197Z              into klines_5m subtable(concat('kl_5m_', cast(symbol_id as varchar(10))))
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9316276Z              as select
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9316354Z                  _wstart as ts,
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9316451Z                  first(price) as open,
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9316533Z                  max(price) as high,
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9316716Z                  min(price) as low,
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9316806Z                  last(price) as close,
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9316888Z                  sum(qty) as volume,
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9317047Z                  sum(cast(price as double) * cast(qty as double)) as quote_volume,
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9317131Z                  count(*) as trade_count
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9317210Z              from trades
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9317293Z              partition by symbol_id
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9317375Z              interval(5m)
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9317443Z              
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9317607Z  12/28 10:28:15.320863 00000103 C MND INFO  stream:1.kline_5m_stream to create
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9317795Z  12/28 10:28:15.323642 00000103 C MND INFO  s-task:0x42675aae add into task buffer, total:6
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9317979Z  12/28 10:28:15.323667 00000103 C MND INFO  s-task:0x42675aaf add into task buffer, total:7
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9318151Z  12/28 10:28:15.323670 00000103 C MND INFO  s-task:0x42675ab0 add into task buffer, total:8
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9318330Z  12/28 10:28:15.323674 00000103 C MND INFO  s-task:0x42675bb1 add into task buffer, total:9
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9318640Z  12/28 10:28:15.323676 00000103 C MND INFO  s-task:0x42675bb2 add into task buffer, total:10
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9318876Z  12/28 10:28:15.323683 00000103 C MND INFO  trans:33, create transaction:stream-create, origin:stream-create
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9319181Z  12/28 10:28:15.323686 00000103 C MND INFO  stream:0x9593b321a6e9b0 start to build trans create stream tasks on dnodes, transId:33
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9319325Z  12/28 10:28:15.323689 00000103 C MND INFO  trans:33, trans hash size 0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9319464Z  12/28 10:28:15.323712 00000103 C MND INFO  trans:33, trans hash size 0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9319593Z  12/28 10:28:15.323805 00000103 C MND INFO  trans:33, action list:
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9319812Z  12/28 10:28:15.323813 00000103 C MND INFO  trans:33, action:0, redoAction:0 msgType:vnode-create-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9320017Z  12/28 10:28:15.323815 00000103 C MND INFO  trans:33, action:1, redoAction:1 msgType:vnode-create-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9320242Z  12/28 10:28:15.323817 00000103 C MND INFO  trans:33, action:2, redoAction:2 msgType:stream-task-deploy
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9320457Z  12/28 10:28:15.323819 00000103 C MND INFO  trans:33, action:3, redoAction:3 msgType:stream-task-deploy
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9320661Z  12/28 10:28:15.323820 00000103 C MND INFO  trans:33, action:4, redoAction:4 msgType:stream-task-deploy
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9320874Z  12/28 10:28:15.323821 00000103 C MND INFO  trans:33, action:5, redoAction:5 msgType:stream-task-deploy
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9321078Z  12/28 10:28:15.323828 00000103 C MND INFO  trans:33, action:6, redoAction:6 msgType:stream-task-deploy
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9321305Z  12/28 10:28:15.323830 00000103 C MND INFO  trans:33, action:7, commitAction:0 sdbType:stb, sdbStatus:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9321533Z  12/28 10:28:15.323832 00000103 C MND INFO  trans:33, action:8, commitAction:1 sdbType:stream, sdbStatus:ready
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9321744Z  12/28 10:28:15.323834 00000103 C MND INFO  trans:33, action:9, undoAction:0 msgType:vnode-drop-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9322066Z  12/28 10:28:15.323835 00000103 C MND INFO  trans:33, action:10, undoAction:1 msgType:vnode-drop-stb
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9322201Z  12/28 10:28:15.323837 00000103 C MND INFO  trans:33, trans hash size 0
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9322353Z  12/28 10:28:15.323840 00000103 C MND INFO  trans:33, prepare transaction
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9322589Z  12/28 10:28:15.323864 00000103 C MND INFO  trans:33, sync to other mnodes, stage:prepare createTime:1766917695323
+Gateway E2E	Stop containers	2025-12-28T10:28:22.9322734Z  12/28 10:28:15.323894 00000103 C MND INFO  trans:33, will be proposed

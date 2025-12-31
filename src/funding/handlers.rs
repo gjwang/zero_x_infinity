@@ -208,6 +208,14 @@ pub async fn apply_withdraw(
     let user_id = claims.sub.parse::<i64>().unwrap_or_default();
     let service = WithdrawService::new(db.clone());
 
+    tracing::info!(
+        "Apply widthdraw: user_id={}, asset={}, amount={}, address={}",
+        user_id,
+        req.asset,
+        req.amount,
+        req.address
+    );
+
     let amount = Decimal::from_str(&req.amount).map_err(|_| {
         (
             StatusCode::BAD_REQUEST,
@@ -252,6 +260,7 @@ pub async fn apply_withdraw(
                 }
                 super::withdraw::WithdrawError::InvalidAddress
                 | super::withdraw::WithdrawError::InvalidAmount
+                | super::withdraw::WithdrawError::Money(_)
                 | super::withdraw::WithdrawError::AssetNotFound(_) => {
                     (StatusCode::BAD_REQUEST, error_codes::INVALID_PARAMETER)
                 }

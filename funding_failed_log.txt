@@ -1,0 +1,500 @@
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	﻿2025-12-28T10:27:11.3151890Z Current runner version: '2.330.0'
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:11.3176878Z ##[group]Runner Image Provisioner
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:11.3177638Z Hosted Compute Agent
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:11.3178114Z Version: 20251211.462
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:11.3178699Z Commit: 6cbad8c2bb55d58165063d031ccabf57e2d2db61
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:11.3179318Z Build Date: 2025-12-11T16:28:49Z
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:11.3179883Z Worker ID: {eb052485-1b5e-4f27-a650-b24b72d4610a}
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:11.3180520Z ##[endgroup]
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:11.3180991Z ##[group]Operating System
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:11.3181465Z Ubuntu
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:11.3181903Z 24.04.3
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:11.3182283Z LTS
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:11.3182686Z ##[endgroup]
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:11.3183657Z ##[group]Runner Image
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:11.3184175Z Image: ubuntu-24.04
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:11.3184642Z Version: 20251215.174.1
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:11.3185549Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20251215.174/images/ubuntu/Ubuntu2404-Readme.md
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:11.3187017Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20251215.174
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:11.3187868Z ##[endgroup]
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:11.3188815Z ##[group]GITHUB_TOKEN Permissions
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:11.3191087Z Contents: read
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:11.3191556Z Metadata: read
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:11.3191996Z Packages: read
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:11.3192400Z ##[endgroup]
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:11.3195366Z Secret source: Actions
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:11.3196188Z Prepare workflow directory
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:11.3775019Z Prepare all required actions
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:11.3832314Z Getting action download info
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:11.7458965Z Download action repository 'actions/checkout@v4' (SHA:34e114876b0b11c390a56381ad16ebd13914f8d5)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:11.8450974Z Download action repository 'astral-sh/setup-uv@v5' (SHA:d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:12.3674834Z Download action repository 'actions/download-artifact@v4' (SHA:d3f86a106a0bac45b974a628896c90dbdf5c8093)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:12.7699213Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:12.9760592Z Complete job name: Funding & Trading E2E (0x11/0x12)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:13.0415012Z ##[group]Checking docker version
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:13.0428954Z ##[command]/usr/bin/docker version --format '{{.Server.APIVersion}}'
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:13.1130932Z '1.48'
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:13.1143207Z Docker daemon API version: '1.48'
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:13.1145141Z ##[command]/usr/bin/docker version --format '{{.Client.APIVersion}}'
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:13.1312566Z '1.48'
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:13.1322254Z Docker client API version: '1.48'
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:13.1328840Z ##[endgroup]
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:13.1332419Z ##[group]Clean up resources from previous jobs
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:13.1338634Z ##[command]/usr/bin/docker ps --all --quiet --no-trunc --filter "label=b88edd"
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:13.1480047Z ##[command]/usr/bin/docker network prune --force --filter "label=b88edd"
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:13.1614746Z ##[endgroup]
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:13.1615587Z ##[group]Create local container network
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:13.1627338Z ##[command]/usr/bin/docker network create --label b88edd github_network_915397f209f54ea2bef104fa71313631
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:13.2080658Z 3e29594b62ca32dfc56f34a711add0b6bbefc3f13ba756ebd76d6796487f9803
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:13.2096307Z ##[endgroup]
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:13.2123304Z ##[group]Starting tdengine service container
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:13.2144304Z ##[command]/usr/bin/docker pull tdengine/tdengine:latest
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:13.6727139Z latest: Pulling from tdengine/tdengine
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:13.7952722Z 9b857f539cb1: Pulling fs layer
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:13.7954276Z 4f4fb700ef54: Pulling fs layer
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:13.7955377Z 63b2d086ee81: Pulling fs layer
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:13.7956319Z 535376b75c84: Pulling fs layer
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:13.7957176Z eb2f8229d375: Pulling fs layer
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:13.7958049Z 80d0b114afb2: Pulling fs layer
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:13.7958933Z e00cad55f74c: Pulling fs layer
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:13.7959770Z 80d0b114afb2: Waiting
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:13.7960500Z 535376b75c84: Waiting
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:13.9100473Z eb2f8229d375: Waiting
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:13.9102171Z e00cad55f74c: Waiting
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:13.9103695Z 4f4fb700ef54: Verifying Checksum
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:13.9104864Z 4f4fb700ef54: Download complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:14.0551989Z 535376b75c84: Verifying Checksum
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:14.0554512Z 535376b75c84: Download complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:14.0995687Z 9b857f539cb1: Download complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:14.1596801Z eb2f8229d375: Verifying Checksum
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:14.1613040Z eb2f8229d375: Download complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:14.2822947Z e00cad55f74c: Verifying Checksum
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:14.2829048Z e00cad55f74c: Download complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:14.7526709Z 63b2d086ee81: Verifying Checksum
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:14.7528493Z 63b2d086ee81: Download complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:15.1434293Z 80d0b114afb2: Verifying Checksum
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:15.1434725Z 80d0b114afb2: Download complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:15.1957962Z 9b857f539cb1: Pull complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:16.4942439Z 4f4fb700ef54: Pull complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:17.2442522Z 63b2d086ee81: Pull complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:17.2526061Z 535376b75c84: Pull complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:17.2606953Z eb2f8229d375: Pull complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:22.4959776Z 80d0b114afb2: Pull complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:22.5073373Z e00cad55f74c: Pull complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:22.5111811Z Digest: sha256:79d32ce8a42f64c7dbfc33946a36b3e176ea23c0cd695a1bc9e8aa889ca03b88
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:22.5123175Z Status: Downloaded newer image for tdengine/tdengine:latest
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:22.5133764Z docker.io/tdengine/tdengine:latest
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:22.5162668Z ##[command]/usr/bin/docker create --name c51a8ce3a8ce4353a2dad27299441dc2_tdenginetdenginelatest_1dddde --label b88edd --network github_network_915397f209f54ea2bef104fa71313631 --network-alias tdengine -p 6030:6030 -p 6041:6041  -e GITHUB_ACTIONS=true -e CI=true tdengine/tdengine:latest
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:22.5437024Z 91652ad24a0dc1b7dc9168cd16f6d2064a4e8aceefeb48e09ef3c61039cbde8b
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:22.5456527Z ##[command]/usr/bin/docker start 91652ad24a0dc1b7dc9168cd16f6d2064a4e8aceefeb48e09ef3c61039cbde8b
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:22.7949963Z 91652ad24a0dc1b7dc9168cd16f6d2064a4e8aceefeb48e09ef3c61039cbde8b
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:22.7977523Z ##[command]/usr/bin/docker ps --all --filter id=91652ad24a0dc1b7dc9168cd16f6d2064a4e8aceefeb48e09ef3c61039cbde8b --filter status=running --no-trunc --format "{{.ID}} {{.Status}}"
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:22.8098064Z 91652ad24a0dc1b7dc9168cd16f6d2064a4e8aceefeb48e09ef3c61039cbde8b Up Less than a second
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:22.8114848Z ##[command]/usr/bin/docker port 91652ad24a0dc1b7dc9168cd16f6d2064a4e8aceefeb48e09ef3c61039cbde8b
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:22.8236397Z 6030/tcp -> 0.0.0.0:6030
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:22.8236933Z 6030/tcp -> [::]:6030
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:22.8237208Z 6041/tcp -> 0.0.0.0:6041
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:22.8237483Z 6041/tcp -> [::]:6041
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:22.8292703Z ##[endgroup]
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:22.8294433Z ##[group]Starting postgres service container
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:22.8295616Z ##[command]/usr/bin/docker pull postgres:18
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.2283727Z 18: Pulling from library/postgres
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.3526991Z 1733a4cd5954: Pulling fs layer
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.3527996Z bab3dfaacd57: Pulling fs layer
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.3528327Z 6dd6fcdc9495: Pulling fs layer
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.3528718Z b004922a6f45: Pulling fs layer
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.3529042Z 72fdf866b594: Pulling fs layer
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.3529357Z c3ff19dd627c: Pulling fs layer
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.3529679Z 854c622dacff: Pulling fs layer
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.3529996Z f106a4619ad3: Pulling fs layer
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.3530312Z c063aa26ba0a: Pulling fs layer
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.3530631Z 1a285618a7ed: Pulling fs layer
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.3530947Z 807997f7ba63: Pulling fs layer
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.3531251Z db5e628b821e: Pulling fs layer
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.3531547Z 1dc30afa2762: Pulling fs layer
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.3531849Z b004922a6f45: Waiting
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.3532107Z 72fdf866b594: Waiting
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.3532361Z f106a4619ad3: Waiting
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.3532609Z c3ff19dd627c: Waiting
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.3533528Z c063aa26ba0a: Waiting
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.3533800Z db5e628b821e: Waiting
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.3534100Z 1a285618a7ed: Waiting
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.3534371Z 854c622dacff: Waiting
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.3534639Z 807997f7ba63: Waiting
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.3534895Z 1dc30afa2762: Waiting
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.4581967Z bab3dfaacd57: Verifying Checksum
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.4587798Z bab3dfaacd57: Download complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.4714977Z 6dd6fcdc9495: Verifying Checksum
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.4715998Z 6dd6fcdc9495: Download complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.5430634Z 1733a4cd5954: Verifying Checksum
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.5436944Z 1733a4cd5954: Download complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.5676622Z b004922a6f45: Verifying Checksum
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.5677076Z b004922a6f45: Download complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.6132164Z 72fdf866b594: Verifying Checksum
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.6132589Z 72fdf866b594: Download complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.6577272Z c3ff19dd627c: Verifying Checksum
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.6578024Z c3ff19dd627c: Download complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.6780992Z 854c622dacff: Verifying Checksum
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.6783352Z 854c622dacff: Download complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.7163378Z f106a4619ad3: Verifying Checksum
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.7164764Z f106a4619ad3: Download complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.7878978Z 1a285618a7ed: Download complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.8164768Z 807997f7ba63: Verifying Checksum
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.8165606Z 807997f7ba63: Download complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.9396794Z db5e628b821e: Verifying Checksum
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.9397479Z db5e628b821e: Download complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.9671344Z 1dc30afa2762: Verifying Checksum
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:23.9671806Z 1dc30afa2762: Download complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:24.2197088Z c063aa26ba0a: Verifying Checksum
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:24.2197540Z c063aa26ba0a: Download complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:24.3614751Z 1733a4cd5954: Pull complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:24.6555486Z bab3dfaacd57: Pull complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:24.7982788Z 6dd6fcdc9495: Pull complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:24.8302703Z b004922a6f45: Pull complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:25.0730111Z 72fdf866b594: Pull complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:25.1372563Z c3ff19dd627c: Pull complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:25.1440471Z 854c622dacff: Pull complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:25.1545995Z f106a4619ad3: Pull complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:27.7991628Z c063aa26ba0a: Pull complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:27.8598288Z 1a285618a7ed: Pull complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:27.8675101Z 807997f7ba63: Pull complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:27.8761279Z db5e628b821e: Pull complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:27.8852035Z 1dc30afa2762: Pull complete
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:27.8884981Z Digest: sha256:38d5c9d522037d8bf0864c9068e4df2f8a60127c6489ab06f98fdeda535560f9
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:27.8893988Z Status: Downloaded newer image for postgres:18
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:27.8902737Z docker.io/library/postgres:18
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:27.8942245Z ##[command]/usr/bin/docker create --name 5daba46f2f32456e847a74b7fc63f5b5_postgres18_97381c --label b88edd --network github_network_915397f209f54ea2bef104fa71313631 --network-alias postgres -p 5432:5432 --health-cmd "pg_isready -U trading -d exchange_info_db" --health-interval 10s --health-timeout 5s --health-retries 5 -e "POSTGRES_DB=exchange_info_db" -e "POSTGRES_USER=trading" -e "POSTGRES_PASSWORD=trading123" -e GITHUB_ACTIONS=true -e CI=true postgres:18
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:27.9163132Z 8ab59d244ce644ce36959509079303ef8a2e5beeb2ce9ea81213ad1c246dfdb7
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:27.9172293Z ##[command]/usr/bin/docker start 8ab59d244ce644ce36959509079303ef8a2e5beeb2ce9ea81213ad1c246dfdb7
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:28.0397337Z 8ab59d244ce644ce36959509079303ef8a2e5beeb2ce9ea81213ad1c246dfdb7
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:28.0408665Z ##[command]/usr/bin/docker ps --all --filter id=8ab59d244ce644ce36959509079303ef8a2e5beeb2ce9ea81213ad1c246dfdb7 --filter status=running --no-trunc --format "{{.ID}} {{.Status}}"
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:28.0536957Z 8ab59d244ce644ce36959509079303ef8a2e5beeb2ce9ea81213ad1c246dfdb7 Up Less than a second (health: starting)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:28.0549173Z ##[command]/usr/bin/docker port 8ab59d244ce644ce36959509079303ef8a2e5beeb2ce9ea81213ad1c246dfdb7
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:28.0688085Z 5432/tcp -> 0.0.0.0:5432
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:28.0688452Z 5432/tcp -> [::]:5432
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:28.0698135Z ##[endgroup]
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:28.0710002Z ##[group]Waiting for all services to be ready
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:28.0724829Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" 91652ad24a0dc1b7dc9168cd16f6d2064a4e8aceefeb48e09ef3c61039cbde8b
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:28.0880632Z tdengine service is healthy.
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:28.0881863Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" 8ab59d244ce644ce36959509079303ef8a2e5beeb2ce9ea81213ad1c246dfdb7
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:28.1046812Z starting
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:28.1064697Z postgres service is starting, waiting 2 seconds before checking again.
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:30.1065811Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" 8ab59d244ce644ce36959509079303ef8a2e5beeb2ce9ea81213ad1c246dfdb7
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:30.1191011Z starting
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:30.1203844Z postgres service is starting, waiting 4 seconds before checking again.
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:34.2678939Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" 8ab59d244ce644ce36959509079303ef8a2e5beeb2ce9ea81213ad1c246dfdb7
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:34.2810034Z starting
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:34.2819181Z postgres service is starting, waiting 7 seconds before checking again.
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:41.9755201Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" 8ab59d244ce644ce36959509079303ef8a2e5beeb2ce9ea81213ad1c246dfdb7
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:41.9881097Z healthy
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:41.9890879Z postgres service is healthy.
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:41.9891497Z ##[endgroup]
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.0136325Z ##[group]Run actions/checkout@v4
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.0136889Z with:
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.0137092Z   repository: gjwang/zero_x_infinity
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.0137584Z   token: ***
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.0137793Z   ssh-strict: true
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.0137969Z   ssh-user: git
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.0138173Z   persist-credentials: true
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.0138372Z   clean: true
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.0138547Z   sparse-checkout-cone-mode: true
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.0138763Z   fetch-depth: 1
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.0138926Z   fetch-tags: false
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.0139232Z   show-progress: true
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.0139461Z   lfs: false
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.0139724Z   submodules: false
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.0139916Z   set-safe-directory: true
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.0140329Z env:
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.0140480Z   CARGO_TERM_COLOR: always
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.0140670Z   RUST_BACKTRACE: 1
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.0140823Z   CI: true
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.0140973Z   CI_LOG_DIR: logs
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.0141202Z   SQLX_OFFLINE: true
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.0141365Z ##[endgroup]
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1173981Z Syncing repository: gjwang/zero_x_infinity
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1175366Z ##[group]Getting Git version info
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1175774Z Working directory is '/home/runner/work/zero_x_infinity/zero_x_infinity'
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1176344Z [command]/usr/bin/git version
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1242360Z git version 2.52.0
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1267719Z ##[endgroup]
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1291643Z Temporarily overriding HOME='/home/runner/work/_temp/aa11d58e-621b-4c8c-a302-57c57adc1df6' before making global git config changes
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1293306Z Adding repository directory to the temporary git global config as a safe directory
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1299119Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/zero_x_infinity/zero_x_infinity
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1336752Z Deleting the contents of '/home/runner/work/zero_x_infinity/zero_x_infinity'
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1340410Z ##[group]Initializing the repository
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1345278Z [command]/usr/bin/git init /home/runner/work/zero_x_infinity/zero_x_infinity
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1420441Z hint: Using 'master' as the name for the initial branch. This default branch name
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1421703Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1422607Z hint: to use in all of your new repositories, which will suppress this warning,
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1423270Z hint: call:
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1423514Z hint:
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1424056Z hint: 	git config --global init.defaultBranch <name>
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1424566Z hint:
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1425069Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1425964Z hint: 'development'. The just-created branch can be renamed via this command:
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1426589Z hint:
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1426924Z hint: 	git branch -m <name>
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1427294Z hint:
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1427894Z hint: Disable this message with "git config set advice.defaultBranchName false"
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1428949Z Initialized empty Git repository in /home/runner/work/zero_x_infinity/zero_x_infinity/.git/
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1437918Z [command]/usr/bin/git remote add origin https://github.com/gjwang/zero_x_infinity
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1472251Z ##[endgroup]
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1472613Z ##[group]Disabling automatic garbage collection
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1477312Z [command]/usr/bin/git config --local gc.auto 0
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1504229Z ##[endgroup]
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1504552Z ##[group]Setting up auth
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1511531Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1539179Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1828851Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.1854611Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.2028272Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.2060896Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.2240997Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.2272082Z ##[endgroup]
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.2272690Z ##[group]Fetching the repository
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:42.2281688Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +36b8af086436dfb219b29ec96550971c3172a83a:refs/remotes/origin/0x11-deposit-withdraw
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:45.0250615Z From https://github.com/gjwang/zero_x_infinity
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:45.0251554Z  * [new ref]         36b8af086436dfb219b29ec96550971c3172a83a -> origin/0x11-deposit-withdraw
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:45.0279641Z ##[endgroup]
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:45.0280332Z ##[group]Determining the checkout info
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:45.0283160Z ##[endgroup]
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:45.0289082Z [command]/usr/bin/git sparse-checkout disable
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:45.0333082Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:45.0355371Z ##[group]Checking out the ref
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:45.0360196Z [command]/usr/bin/git checkout --progress --force -B 0x11-deposit-withdraw refs/remotes/origin/0x11-deposit-withdraw
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0836192Z Updating files:  60% (359/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0837134Z Updating files:  61% (363/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0839293Z Updating files:  62% (369/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0843081Z Updating files:  63% (375/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0845762Z Updating files:  64% (381/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0849026Z Updating files:  65% (387/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0851872Z Updating files:  66% (393/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0854913Z Updating files:  67% (399/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0857585Z Updating files:  68% (405/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0859849Z Updating files:  69% (411/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0862493Z Updating files:  70% (417/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0865119Z Updating files:  71% (423/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0868666Z Updating files:  72% (429/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0872764Z Updating files:  73% (435/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0875355Z Updating files:  74% (441/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0878107Z Updating files:  75% (447/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0881102Z Updating files:  76% (453/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0885123Z Updating files:  77% (459/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0887080Z Updating files:  78% (465/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0889071Z Updating files:  79% (471/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0891648Z Updating files:  80% (476/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0894743Z Updating files:  81% (482/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0897109Z Updating files:  82% (488/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0899721Z Updating files:  83% (494/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0902316Z Updating files:  84% (500/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0905323Z Updating files:  85% (506/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0907440Z Updating files:  86% (512/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0911668Z Updating files:  87% (518/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0915772Z Updating files:  88% (524/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0918798Z Updating files:  89% (530/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0921293Z Updating files:  90% (536/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0925082Z Updating files:  91% (542/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0930553Z Updating files:  92% (548/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0934206Z Updating files:  93% (554/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0938108Z Updating files:  94% (560/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0942133Z Updating files:  95% (566/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0946131Z Updating files:  96% (572/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0948813Z Updating files:  97% (578/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0952300Z Updating files:  98% (584/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0957984Z Updating files:  99% (590/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0958327Z Updating files: 100% (595/595)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0958567Z Updating files: 100% (595/595), done.
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0973057Z Switched to a new branch '0x11-deposit-withdraw'
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0975141Z branch '0x11-deposit-withdraw' set up to track 'origin/0x11-deposit-withdraw'.
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.0996538Z ##[endgroup]
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.1033634Z [command]/usr/bin/git log -1 --format=%H
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.1054651Z 36b8af086436dfb219b29ec96550971c3172a83a
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.1225043Z ##[group]Run astral-sh/setup-uv@v5
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.1225265Z with:
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.1225423Z   version: 0.5.11
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.1225587Z   enable-cache: true
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.1225917Z   github-token: ***
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.1226160Z   cache-dependency-glob: **/uv.lock
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	**/requirements*.txt
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.1226428Z   prune-cache: true
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.1226626Z   ignore-nothing-to-cache: false
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.1226842Z   ignore-empty-workdir: false
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.1227044Z env:
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.1227197Z   CARGO_TERM_COLOR: always
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.1227386Z   RUST_BACKTRACE: 1
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.1227538Z   CI: true
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.1227708Z   CI_LOG_DIR: logs
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.1227873Z   SQLX_OFFLINE: true
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.1228037Z ##[endgroup]
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.3469317Z Downloading uv from "https://github.com/astral-sh/uv/releases/download/0.5.11/uv-x86_64-unknown-linux-gnu.tar.gz" ...
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.6339893Z [command]/usr/bin/tar xz --warning=no-unknown-keyword --overwrite -C /home/runner/work/_temp/cc0444c1-8d78-43ac-beed-a0208892a7ea -f /home/runner/work/_temp/3f14b7bc-322c-4032-8643-4decca3bd1a2
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.9227665Z Added /home/runner/.local/bin to the path
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.9230099Z Added /opt/hostedtoolcache/uv/0.5.11/x86_64 to the path
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.9248775Z Set UV_CACHE_DIR to /home/runner/work/_temp/setup-uv-cache
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.9249183Z Successfully installed uv version 0.5.11
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.9249611Z Searching files using cache dependency glob: **/uv.lock,**/requirements*.txt
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.9403150Z /home/runner/work/zero_x_infinity/zero_x_infinity/admin/requirements.txt
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.9861873Z /home/runner/work/zero_x_infinity/zero_x_infinity/uv.lock
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:46.9873907Z Found 2 files to hash.
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:47.1682530Z Trying to restore uv cache from GitHub Actions cache with key: setup-uv-1-x86_64-unknown-linux-gnu-unknown-e5b6372e657874f1acbfd2b1185a38682e01ec01d09a234f23de99dfbb382bb7
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:47.2484119Z Cache hit for: setup-uv-1-x86_64-unknown-linux-gnu-unknown-e5b6372e657874f1acbfd2b1185a38682e01ec01d09a234f23de99dfbb382bb7
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:47.3710126Z Received 1807 of 1807 (100.0%), 0.1 MBs/sec
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:47.3710689Z Cache Size: ~0 MB (1807 B)
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:47.3735831Z [command]/usr/bin/tar -xf /home/runner/work/_temp/8592054b-fda9-4773-910f-7dad8c4d1a57/cache.tzst -P -C /home/runner/work/zero_x_infinity/zero_x_infinity --use-compress-program unzstd
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:47.3798702Z Cache restored successfully
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:47.3806195Z uv cache restored from GitHub Actions cache with key: setup-uv-1-x86_64-unknown-linux-gnu-unknown-e5b6372e657874f1acbfd2b1185a38682e01ec01d09a234f23de99dfbb382bb7
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:47.3902604Z ##[group]Run uv sync
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:47.3903094Z [36;1muv sync[0m
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:47.3928152Z shell: /usr/bin/bash -e {0}
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:47.3928388Z env:
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:47.3928562Z   CARGO_TERM_COLOR: always
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:47.3928769Z   RUST_BACKTRACE: 1
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:47.3928944Z   CI: true
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:47.3929100Z   CI_LOG_DIR: logs
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:47.3929263Z   SQLX_OFFLINE: true
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:47.3929492Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:47.3929749Z ##[endgroup]
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:48.4871962Z Using CPython 3.11.11
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:48.4872274Z Creating virtual environment at: .venv
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:48.4910609Z Resolved 41 packages in 0.66ms
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.7913634Z Prepared 39 packages in 1.29s
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8189809Z Installed 39 packages in 27ms
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8190360Z  + aiohappyeyeballs==2.6.1
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8190705Z  + aiohttp==3.13.2
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8191037Z  + aiosignal==1.4.0
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8191465Z  + attrs==25.4.0
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8191776Z  + certifi==2025.11.12
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8192074Z  + cffi==2.0.0
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8192394Z  + charset-normalizer==3.4.4
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8192754Z  + frozenlist==1.8.0
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8193295Z  + greenlet==3.3.0
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8193528Z  + idna==3.11
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8193699Z  + iniconfig==2.3.0
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8193869Z  + multidict==6.7.0
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8199563Z  + numpy==2.4.0
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8200490Z  + packaging==25.0
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8200848Z  + pandas==2.3.3
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8201159Z  + playwright==1.57.0
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8201470Z  + pluggy==1.6.0
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8201762Z  + propcache==0.4.1
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8202071Z  + psycopg2-binary==2.9.11
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8202318Z  + pycparser==2.23
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8202489Z  + pyee==13.0.0
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8202651Z  + pygments==2.19.2
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8202963Z  + pynacl==1.6.1
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8203156Z  + pytest==9.0.2
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8203357Z  + pytest-base-url==2.1.0
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8203569Z  + pytest-playwright==0.7.2
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8203795Z  + python-dateutil==2.9.0.post0
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8204037Z  + python-slugify==8.0.4
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8204314Z  + pytz==2025.2
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8204556Z  + requests==2.32.5
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8204812Z  + six==1.17.0
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8205070Z  + taos-ws-py==0.6.3
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8205359Z  + text-unidecode==1.3
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8205661Z  + typing-extensions==4.15.0
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8205963Z  + tzdata==2025.3
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8206221Z  + urllib3==2.6.2
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8206500Z  + websocket-client==1.9.0
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8206804Z  + websockets==15.0.1
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8207082Z  + yarl==1.22.0
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8329030Z ##[group]Run ./scripts/db/init.sh pg
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8329519Z [36;1m./scripts/db/init.sh pg[0m
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8354608Z shell: /usr/bin/bash -e {0}
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8354830Z env:
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8355140Z   CARGO_TERM_COLOR: always
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8355344Z   RUST_BACKTRACE: 1
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8355515Z   CI: true
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8355674Z   CI_LOG_DIR: logs
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8355847Z   SQLX_OFFLINE: true
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8356067Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8356325Z ##[endgroup]
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8481049Z ========================================
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8481520Z  Database Configuration
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8481830Z ========================================
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8482196Z   Runtime Environment: CI
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8482720Z   Config File: /home/runner/work/zero_x_infinity/zero_x_infinity/config/ci.yaml
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8483323Z 
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8483450Z   PostgreSQL:
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8483814Z     Host:     localhost
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8484113Z     Port:     5432
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8484398Z     User:     trading
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8486372Z     Password: tra***
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8486620Z     Database: exchange_info_db
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8486859Z 
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8486968Z   TDengine:
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8487243Z     Host:     localhost
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8487546Z     REST Port: 6041
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8487812Z     User:     root
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8491577Z     Password: tao***
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8491909Z     Database: trading
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8492204Z ========================================
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8492410Z 
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8492947Z [0;32m[INFO][0m === Initializing PostgreSQL ===
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.8493447Z [0;32m[INFO][0m Waiting for PostgreSQL...
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.9305670Z [0;32m[INFO][0m PostgreSQL is ready
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.9306335Z [0;32m[INFO][0m Running migrations...
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.9318757Z [0;32m[INFO][0m   Applying 001_init_schema.sql...
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:49.9787112Z [0;32m[INFO][0m   Applying 002_create_api_keys.sql...
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.0196199Z [0;32m[INFO][0m   Applying 003_internal_transfer.sql...
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.0657845Z [0;32m[INFO][0m   Applying 004_fsm_transfers.sql...
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.1095268Z [0;32m[INFO][0m   Applying 005_account_status.sql...
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.1469636Z [0;32m[INFO][0m   Applying 006_consolidate_transfer_id.sql...
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.1923861Z [0;32m[INFO][0m   Applying 007_trade_fee.sql...
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.2320120Z [0;32m[INFO][0m   Applying 008_admin_audit_log.sql...
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.2713676Z [0;32m[INFO][0m   Applying 009_users_auth.sql...
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.3081249Z [0;32m[INFO][0m   Applying 010_deposit_withdraw.sql...
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.3477381Z [0;32m[INFO][0m Seeding data...
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.3874588Z INSERT 0 1
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.3875313Z INSERT 0 3
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.3875586Z INSERT 0 1
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.3875856Z INSERT 0 1
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.3876125Z INSERT 0 1
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.3876367Z INSERT 0 1
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.3876632Z INSERT 0 1
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.3876884Z INSERT 0 1
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.3877144Z INSERT 0 1
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.3877400Z INSERT 0 1
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.3877957Z [0;32m[INFO][0m Fixing sequences...
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4232047Z [0;32m[INFO][0m Verifying tables...
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4599780Z [0;32m[INFO][0m   Found 13 tables
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4600381Z [0;32m[INFO][0m ✅ PostgreSQL initialized
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4600650Z 
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4600766Z ======================================
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4601061Z  ✅ All databases initialized
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4601271Z ======================================
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4637336Z ##[group]Run ./scripts/db/init.sh td && sleep 5
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4637896Z [36;1m./scripts/db/init.sh td && sleep 5[0m
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4666406Z shell: /usr/bin/bash -e {0}
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4666744Z env:
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4667008Z   CARGO_TERM_COLOR: always
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4667320Z   RUST_BACKTRACE: 1
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4667591Z   CI: true
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4667874Z   CI_LOG_DIR: logs
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4668167Z   SQLX_OFFLINE: true
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4668516Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4669213Z ##[endgroup]
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4809791Z ========================================
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4810427Z  Database Configuration
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4810849Z ========================================
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4811332Z   Runtime Environment: CI
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4811952Z   Config File: /home/runner/work/zero_x_infinity/zero_x_infinity/config/ci.yaml
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4812501Z 
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4812999Z   PostgreSQL:
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4813637Z     Host:     localhost
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4814174Z     Port:     5432
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4814486Z     User:     trading
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4814994Z     Password: tra***
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4815381Z     Database: exchange_info_db
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4815648Z 
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4815758Z   TDengine:
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4816036Z     Host:     localhost
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4816352Z     REST Port: 6041
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4816679Z     User:     root
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4820960Z     Password: tao***
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4821432Z     Database: trading
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4821836Z ========================================
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4822178Z 
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4822781Z [0;32m[INFO][0m === Initializing TDengine ===
+Funding & Trading E2E (0x11/0x12)	UNKNOWN STEP	2025-12-28T10:27:50.4823481Z [0;32m[INFO][0m Waiting for TDengine...
