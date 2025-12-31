@@ -263,6 +263,23 @@ impl InternalOrder {
             Side::Sell => Ok(self.qty),
         }
     }
+
+    /// Calculate order cost using SymbolInfo (intent-based API)
+    ///
+    /// This is the preferred API for non-ME callers. It encapsulates
+    /// qty_unit lookup from SymbolInfo, hiding scaling details.
+    ///
+    /// # Example
+    /// ```ignore
+    /// let cost = order.calculate_cost_with_symbol(&symbol_info)?;
+    /// ```
+    #[inline]
+    pub fn calculate_cost_with_symbol(
+        &self,
+        symbol_info: &crate::symbol_manager::SymbolInfo,
+    ) -> Result<u64, CostError> {
+        self.calculate_cost(*symbol_info.qty_unit())
+    }
 }
 
 // ============================================================

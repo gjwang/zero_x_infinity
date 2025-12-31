@@ -260,7 +260,7 @@ impl UBSCore {
         // 3. Calculate cost and check balance (read-only!)
         let lock_asset = self.lock_asset_for_order(order);
         let lock_amount = order
-            .calculate_cost(*symbol_info.qty_unit())
+            .calculate_cost_with_symbol(symbol_info)
             .map_err(|_| RejectReason::InvalidQuantity)?; // CostError::Overflow → InvalidQuantity
 
         // Check balance is sufficient (no mutation)
@@ -292,11 +292,10 @@ impl UBSCore {
                 return; // Skip locking rather than use wrong value
             }
         };
-        let qty_unit = *symbol_info.qty_unit();
 
         // Safe to unwrap: pre_check already validated this won't overflow
         let lock_amount = order
-            .calculate_cost(qty_unit)
+            .calculate_cost_with_symbol(symbol_info)
             .expect("pre_check should have caught overflow");
 
         if let Some(account) = self.accounts.get_mut(&order.user_id)
@@ -324,12 +323,11 @@ impl UBSCore {
         self.pre_check(&order)?;
 
         let lock_asset = self.lock_asset_for_order(&order);
-        let qty_unit = self
+        let lock_amount = self
             .manager
             .get_symbol_info_by_id(order.symbol_id)
-            .map(|s| *s.qty_unit())
-            .unwrap_or(1);
-        let lock_amount = order.calculate_cost(qty_unit).unwrap_or(0);
+            .and_then(|s| order.calculate_cost_with_symbol(s).ok())
+            .unwrap_or(0);
 
         // 2. Persist to WAL FIRST
         let seq_id = if let Some(ref mut wal) = self.wal_v2 {
