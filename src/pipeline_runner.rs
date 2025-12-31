@@ -251,7 +251,7 @@ pub fn run_pipeline_single_thread(
                                     // Use remaining_qty for unlock amount
                                     let mut tmp = cancelled_order.clone();
                                     tmp.qty = rem;
-                                    let unlock_amount = tmp.calculate_cost(qty_unit).unwrap_or(0);
+                                    let unlock_amount = tmp.calculate_cost(qty_unit).unwrap_or(0); // FIXME: FORBIDDEN - cost calculation must not default to 0
 
                                     let cancel_req = BalanceUpdateRequest::Cancel {
                                         order_id,

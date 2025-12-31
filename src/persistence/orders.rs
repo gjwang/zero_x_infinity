@@ -16,7 +16,7 @@ pub async fn insert_order(taos: &Taos, order: &InternalOrder, symbol_id: u32) ->
         .map_err(|e| anyhow::anyhow!("{}: {}", "Failed to create orders subtable", e))?;
 
     // Get cid or use empty string
-    let cid = order.cid.as_deref().unwrap_or("");
+    let cid = order.cid.as_deref().unwrap_or(""); // SAFE_DEFAULT: optional client order ID
 
     // Insert order
     let sql = format!(
@@ -74,7 +74,7 @@ pub async fn batch_insert_me_results(
     for r in results {
         // Taker order update
         let o = &r.order;
-        let cid = o.cid.as_deref().unwrap_or("");
+        let cid = o.cid.as_deref().unwrap_or(""); // SAFE_DEFAULT: optional client order ID
         write!(
             orders_sql,
             "trading.orders_{} VALUES({}, {}, {}, {}, {}, {}, {}, {}, {}, '{}') ",
@@ -95,7 +95,7 @@ pub async fn batch_insert_me_results(
 
         // Maker order updates
         for m in r.maker_updates.iter() {
-            let m_cid = m.cid.as_deref().unwrap_or("");
+            let m_cid = m.cid.as_deref().unwrap_or(""); // SAFE_DEFAULT: optional client order ID
             write!(
                 orders_sql,
                 "trading.orders_{} VALUES({}, {}, {}, {}, {}, {}, {}, {}, {}, '{}') ",
@@ -251,7 +251,7 @@ pub async fn update_order_status(
         .await
         .map_err(|e| anyhow::anyhow!("Failed to create orders subtable: {}", e))?;
 
-    let cid_str = cid.unwrap_or("");
+    let cid_str = cid.unwrap_or(""); // SAFE_DEFAULT: optional client order ID
     let sql = format!(
         "INSERT INTO {} (ts, order_id, user_id, filled_qty, status, cid) VALUES (NOW, {}, {}, {}, {}, '{}')",
         table_name, order_id, user_id, filled_qty, status as u8, cid_str

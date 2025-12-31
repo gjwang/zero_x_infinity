@@ -163,7 +163,7 @@ pub async fn get_deposit_address(
 
     // Select Chain Adapter based on Asset/Network
     // MVP: ETH=MockEvm, BTC=MockBtc. Default to ETH for others.
-    let network_raw = req.network.as_deref().unwrap_or("ETH");
+    let network_raw = req.network.as_deref().unwrap_or("ETH"); // FIXME: network should be required, not default to ETH
     let network_upper = network_raw.to_uppercase();
     // Normalize to lowercase for DB (chain_slug uses lowercase: "eth", "btc")
     let chain_slug = network_raw.to_lowercase();
@@ -242,6 +242,7 @@ pub async fn apply_withdraw(
         )
     })?;
     let fee = Decimal::from_str(req.fee.as_deref().unwrap_or("0")).map_err(|_| {
+        // FIXME: fee should read from config, not default 0
         (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::<()>::error(

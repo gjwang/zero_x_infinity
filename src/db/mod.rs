@@ -43,7 +43,7 @@ impl Database {
             .iter()
             .filter_map(|row| {
                 let user_id: i64 = row.try_get_log("user_id")?;
-                let vip_level: i16 = row.try_get_log("vip_level").unwrap_or(0);
+                let vip_level: i16 = row.try_get_log("vip_level").unwrap_or(0); // SAFE_DEFAULT: non-VIP users have level 0
                 Some((user_id as u64, vip_level as u8))
             })
             .collect();

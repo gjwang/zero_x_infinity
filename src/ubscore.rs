@@ -501,7 +501,7 @@ impl UBSCore {
             .manager
             .get_symbol_info_by_id(event.symbol_id)
             .map(|s| (s.base_maker_fee, s.base_taker_fee))
-            .unwrap_or((0, 0));
+            .unwrap_or((0, 0)); // FIXME: fee rate should read from config, not default 0
 
         // Determine who is maker/taker
         // In TradeEvent: taker_order_id tells us which order is the taker
