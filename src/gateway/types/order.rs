@@ -17,7 +17,6 @@ use axum::{
 };
 
 use crate::models::{InternalOrder, OrderStatus, OrderType, Side, TimeInForce};
-use crate::money;
 use crate::symbol_manager::SymbolManager;
 
 use super::money::StrictDecimal;
@@ -156,15 +155,22 @@ pub fn validate_client_order(
 impl ValidatedClientOrder {
     /// Convert to InternalOrder
     ///
-    /// This is where Decimal -> u64 conversion happens
+    /// Uses SymbolManager intent-based API for Decimal → u64 conversion.
+    /// This ensures compliance with money-type-safety.md Section 2.4.
     pub fn into_internal_order(
         self,
         order_id: u64,
         user_id: u64,
         ingested_at_ns: u64,
+        symbol_mgr: &SymbolManager,
     ) -> Result<InternalOrder, &'static str> {
-        let price_u64 = decimal_to_u64(self.price, self.price_decimals)?;
-        let qty_u64 = decimal_to_u64(self.qty, self.qty_decimals)?;
+        // Use SymbolManager intent-based API (money-type-safety.md compliance)
+        let price_u64 = if self.price.is_zero() {
+            0 // Market order
+        } else {
+            symbol_mgr.decimal_to_price(self.price, self.symbol_id)?
+        };
+        let qty_u64 = symbol_mgr.decimal_to_qty(self.qty, self.symbol_id)?;
 
         Ok(InternalOrder {
             order_id,
@@ -185,19 +191,9 @@ impl ValidatedClientOrder {
     }
 }
 
-/// Convert Decimal to u64
-pub fn decimal_to_u64(decimal: Decimal, decimals: u32) -> Result<u64, &'static str> {
-    money::parse_decimal(decimal, decimals)
-        .map(|s| *s)
-        .map_err(|e| match e {
-            money::MoneyError::InvalidAmount => "Amount must be positive",
-            money::MoneyError::PrecisionOverflow { .. } => {
-                "Unexpected fractional part after scaling"
-            }
-            money::MoneyError::Overflow => "Number too large",
-            _ => "Conversion failed",
-        })
-}
+// NOTE: decimal_to_u64 has been REMOVED.
+// All conversions must use SymbolManager intent-based API.
+// This enforces money-type-safety.md Section 2.4.
 
 // ============================================================================
 // ValidatedOrderExtractor: Axum Framework Integration

@@ -81,9 +81,9 @@ impl<'a> OrderService<'a> {
         let order_id = (self.next_order_id)();
         let timestamp = now_ns();
 
-        // 3. Convert to InternalOrder
+        // 3. Convert to InternalOrder (uses SymbolManager intent-based API)
         let internal_order = validated
-            .into_internal_order(order_id, user_id, timestamp)
+            .into_internal_order(order_id, user_id, timestamp, self.symbol_mgr)
             .map_err(|e| OrderError::InvalidParameter(e.to_string()))?;
 
         // 4. Push to queue

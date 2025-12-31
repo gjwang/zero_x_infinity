@@ -51,9 +51,9 @@ pub async fn create_order(
     let order_id = state.next_order_id();
     let timestamp = now_ns();
 
-    // 4. Convert to InternalOrder
+    // 4. Convert to InternalOrder (uses SymbolManager intent-based API)
     let internal_order = validated
-        .into_internal_order(order_id, user_id, timestamp)
+        .into_internal_order(order_id, user_id, timestamp, &state.symbol_mgr)
         .map_err(ApiError::bad_request)?;
 
     // 5. Push to queue

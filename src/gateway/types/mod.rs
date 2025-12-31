@@ -25,8 +25,7 @@ pub mod response;
 pub use money::{DisplayAmount, StrictDecimal};
 pub use order::{
     CancelOrderRequest, ClientOrder, MoveOrderRequest, OrderValidationRejection,
-    ReduceOrderRequest, ValidatedClientOrder, ValidatedOrderExtractor, decimal_to_u64,
-    validate_client_order,
+    ReduceOrderRequest, ValidatedClientOrder, ValidatedOrderExtractor, validate_client_order,
 };
 pub use response::{
     AccountResponseData, ApiError, ApiResponse, ApiResult, DepthApiData, OrderResponseData,
