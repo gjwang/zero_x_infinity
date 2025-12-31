@@ -182,6 +182,53 @@ pub struct ScaledAmountSigned(i64);  // 有符号：盈亏、差额
 
 ---
 
+### 3.3 零值处理：默认严格 + 显式入口
+
+**问题**：零值在某些场景是非法的（订单数量），在另一些场景是合法的（手续费）。
+
+**反模式**：到处写 workaround
+```rust
+// ❌ 散落各处，维护噩梦
+let fee = if fee_str == "0" {
+    ScaledAmount::ZERO
+} else {
+    parse_amount(&fee_str, decimals)?
+};
+```
+
+**推荐模式**：显式入口
+
+```rust
+// ===== 默认入口：严格，拒绝零 =====
+/// 用于订单数量、价格等必须非零的场景
+pub fn parse_amount(s: &str, decimals: u32) -> Result<ScaledAmount>
+
+// ===== 显式入口：允许零 =====
+/// 用于手续费等可能为零的场景
+/// 调用者应该知道自己在做什么
+pub fn parse_amount_allow_zero(s: &str, decimals: u32) -> Result<ScaledAmount>
+```
+
+**使用示例**：
+```rust
+// 订单数量：必须非零（使用默认严格版本）
+let qty = symbol_mgr.parse_qty(symbol, &req.quantity)?;
+
+// 提现手续费：可以为零（显式表达意图）
+let fee = symbol_mgr.parse_fee_allow_zero(symbol, &req.fee)?;
+```
+
+**设计原则**：
+
+| 原则 | 说明 |
+|------|------|
+| **坑的成功 (Pit of Success)** | 默认行为是安全的，需要绕过时必须显式声明 |
+| **意图可见** | 代码中看到 `_allow_zero` 就知道这里允许零 |
+| **Code Review 信号** | `_allow_zero` 调用是需要审查的信号 |
+| **解析层不做业务判断** | 是否允许零由调用方通过选择入口决定 |
+
+---
+
 ## Part IV: 如何在代码层面强制执行？
 
 > **核心问题**：如何禁止开发者到处私自转换？
