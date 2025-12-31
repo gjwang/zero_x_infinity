@@ -27,6 +27,15 @@ impl SymbolInfo {
     pub fn qty_unit(&self) -> ScaledAmount {
         crate::money::unit_amount(self.base_decimals)
     }
+
+    /// Get price_unit (price decimals unit) - e.g., 10^2 for 2 decimal places
+    ///
+    /// Returns ScaledAmount for type safety. Use `*price_unit()` when you need u64.
+    /// Delegates to money::unit_amount() as the single source of truth.
+    #[inline]
+    pub fn price_unit(&self) -> ScaledAmount {
+        crate::money::unit_amount(self.price_decimal)
+    }
 }
 
 #[derive(Debug, Clone)]

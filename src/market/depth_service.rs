@@ -3,7 +3,6 @@
 // Consumes DepthSnapshot from ME and serves HTTP queries
 
 use crate::messages::DepthSnapshot;
-use crate::money;
 use crate::pipeline::MultiThreadQueues;
 use crate::symbol_manager::SymbolManager;
 use crate::websocket::{ConnectionManager, messages::WsMessage};
@@ -21,7 +20,7 @@ pub struct DepthService {
     /// Active symbol
     symbol: String,
     /// Formatting info
-    price_decimals: u32,
+    _price_decimals: u32, // Kept for completeness, format uses display_decimals
     qty_decimals: u32,
     price_display_decimals: u32,
     qty_display_decimals: u32,
@@ -52,7 +51,7 @@ impl DepthService {
             queues,
             ws_manager,
             symbol: symbol_info.symbol.clone(),
-            price_decimals: symbol_info.price_decimal,
+            _price_decimals: symbol_info.price_decimal,
             qty_decimals: symbol_info.base_decimals,
             price_display_decimals,
             qty_display_decimals,
@@ -75,15 +74,14 @@ impl DepthService {
 
                 // Broadcast via WebSocket
                 if let Some(ws) = &self.ws_manager {
-                    // Use unified money module for formatting
+                    // Use gateway helpers for unified formatting (money-type-safety)
                     let format_level = |level: &(u64, u64)| -> (String, String) {
                         (
-                            money::format_amount(
+                            crate::gateway::handlers::helpers::format_price_internal(
                                 level.0,
-                                self.price_decimals,
                                 self.price_display_decimals,
                             ),
-                            money::format_amount(
+                            crate::gateway::handlers::helpers::format_qty_internal(
                                 level.1,
                                 self.qty_decimals,
                                 self.qty_display_decimals,
