@@ -49,49 +49,47 @@ impl<'de> Deserialize<'de> for StrictDecimal {
     {
         use serde::de::Error;
 
-        // Support both JSON number and JSON string
-        #[derive(Deserialize)]
-        #[serde(untagged)]
-        enum DecimalOrString {
-            String(String),
-            Number(Decimal),
+        // Only accept JSON strings for strict format control
+        // JSON numbers bypass our format validation, so we reject them
+        let s = String::deserialize(deserializer)?;
+
+        // Strict format validation
+        if s.is_empty() {
+            return Err(D::Error::custom("Amount cannot be empty"));
         }
 
-        let value = DecimalOrString::deserialize(deserializer)?;
-
-        match value {
-            DecimalOrString::String(s) => {
-                // Strict format validation
-                if s.is_empty() {
-                    return Err(D::Error::custom("Amount cannot be empty"));
-                }
-                if s.starts_with('.') {
-                    return Err(D::Error::custom("Invalid format: use 0.5 not .5"));
-                }
-                if s.ends_with('.') {
-                    return Err(D::Error::custom("Invalid format: use 5.0 not 5."));
-                }
-
-                // Parse using Decimal library
-                let d = Decimal::from_str(&s)
-                    .map_err(|e| D::Error::custom(format!("Invalid decimal: {}", e)))?;
-
-                // Reject negative numbers
-                if d.is_sign_negative() {
-                    return Err(D::Error::custom("Amount cannot be negative"));
-                }
-
-                Ok(StrictDecimal(d))
-            }
-            DecimalOrString::Number(d) => {
-                // JSON number - already parsed by Decimal
-                // Still reject negative
-                if d.is_sign_negative() {
-                    return Err(D::Error::custom("Amount cannot be negative"));
-                }
-                Ok(StrictDecimal(d))
-            }
+        // Reject .5 format (must be 0.5)
+        if s.starts_with('.') {
+            return Err(D::Error::custom("Invalid format: use 0.5 not .5"));
         }
+
+        // Reject 5. format (must be 5.0 or 5)
+        if s.ends_with('.') {
+            return Err(D::Error::custom("Invalid format: use 5.0 not 5."));
+        }
+
+        // Reject scientific notation (1.5e8, 1E10, etc.)
+        if s.contains('e') || s.contains('E') {
+            return Err(D::Error::custom(
+                "Invalid format: scientific notation not allowed",
+            ));
+        }
+
+        // Reject + prefix (should be implicit)
+        if s.starts_with('+') {
+            return Err(D::Error::custom("Invalid format: + prefix not allowed"));
+        }
+
+        // Parse using Decimal library
+        let d = Decimal::from_str(&s)
+            .map_err(|e| D::Error::custom(format!("Invalid decimal: {}", e)))?;
+
+        // Reject negative numbers
+        if d.is_sign_negative() {
+            return Err(D::Error::custom("Amount cannot be negative"));
+        }
+
+        Ok(StrictDecimal(d))
     }
 }
 
@@ -619,10 +617,17 @@ mod tests {
     }
 
     #[test]
-    fn test_strict_decimal_valid_number() {
+    fn test_strict_decimal_rejects_json_number() {
+        // JSON numbers are rejected - must use string for format validation
         let json = r#"1.5"#;
-        let d: StrictDecimal = serde_json::from_str(json).unwrap();
-        assert_eq!(*d, Decimal::from_str("1.5").unwrap());
+        let result: Result<StrictDecimal, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("expected a string")
+        );
     }
 
     #[test]
@@ -655,7 +660,8 @@ mod tests {
     }
 
     #[test]
-    fn test_strict_decimal_rejects_negative_number() {
+    fn test_strict_decimal_rejects_negative_json_number() {
+        // JSON numbers (including negative) are rejected - expected a string error
         let json = r#"-1.5"#;
         let result: Result<StrictDecimal, _> = serde_json::from_str(json);
         assert!(result.is_err());
@@ -663,7 +669,20 @@ mod tests {
             result
                 .unwrap_err()
                 .to_string()
-                .contains("cannot be negative")
+                .contains("expected a string")
+        );
+    }
+
+    #[test]
+    fn test_strict_decimal_rejects_scientific_notation() {
+        let json = r#""1.5e8""#;
+        let result: Result<StrictDecimal, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("scientific notation")
         );
     }
 
@@ -727,9 +746,9 @@ mod tests {
     }
 
     #[test]
-    fn test_deserialize_client_order_limit_number() {
-        // Also support JSON numbers (backward compatible)
-        let json = r#"{"symbol":"BTC_USDT","side":"BUY","order_type":"LIMIT","price":85000.00,"qty":0.001}"#;
+    fn test_deserialize_client_order_limit_string() {
+        // StrictDecimal now requires string format for price/qty
+        let json = r#"{"symbol":"BTC_USDT","side":"BUY","order_type":"LIMIT","price":"85000.00","qty":"0.001"}"#;
         let order: ClientOrder = serde_json::from_str(json).unwrap();
         assert_eq!(order.symbol, "BTC_USDT");
         assert!(order.price.is_some());
