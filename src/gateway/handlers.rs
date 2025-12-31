@@ -304,8 +304,8 @@ pub async fn reduce_order(
             )),
         ))?;
 
-    let reduce_qty_u64 =
-        decimal_to_u64(req.reduce_qty, symbol_info.base_decimals).map_err(|e| {
+    let reduce_qty_u64 = decimal_to_u64(req.reduce_qty.inner(), symbol_info.base_decimals)
+        .map_err(|e| {
             (
                 StatusCode::BAD_REQUEST,
                 Json(ApiResponse::<()>::error(error_codes::INVALID_PARAMETER, e)),
@@ -378,12 +378,13 @@ pub async fn move_order(
             )),
         ))?;
 
-    let new_price_u64 = decimal_to_u64(req.new_price, symbol_info.price_decimal).map_err(|e| {
-        (
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<()>::error(error_codes::INVALID_PARAMETER, e)),
-        )
-    })?;
+    let new_price_u64 =
+        decimal_to_u64(req.new_price.inner(), symbol_info.price_decimal).map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<()>::error(error_codes::INVALID_PARAMETER, e)),
+            )
+        })?;
 
     tracing::info!(
         "[TRACE] Move Order {}: Received from User {}",

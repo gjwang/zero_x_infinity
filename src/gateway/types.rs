@@ -6,6 +6,109 @@ use crate::models::{InternalOrder, OrderStatus, OrderType, Side, TimeInForce};
 use crate::money;
 use crate::symbol_manager::SymbolManager;
 
+// ============================================================================
+// StrictDecimal: Format-Validated Decimal at Serde Layer
+// ============================================================================
+
+/// Strict format Decimal - validates format during deserialization
+///
+/// This type provides format validation at the Serde layer:
+/// - Rejects `.5` (must be `0.5`)
+/// - Rejects `5.` (must be `5.0` or `5`)
+/// - Rejects negative numbers
+/// - Rejects empty strings
+///
+/// Business validation (precision, range) happens later in SymbolManager.
+#[derive(Debug, Clone, Copy)]
+pub struct StrictDecimal(Decimal);
+
+impl StrictDecimal {
+    /// Get the inner Decimal value
+    pub fn inner(self) -> Decimal {
+        self.0
+    }
+
+    /// Create from Decimal (for testing)
+    #[cfg(test)]
+    pub fn from_decimal(d: Decimal) -> Self {
+        Self(d)
+    }
+}
+
+impl std::ops::Deref for StrictDecimal {
+    type Target = Decimal;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<'de> Deserialize<'de> for StrictDecimal {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+
+        // Support both JSON number and JSON string
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum DecimalOrString {
+            String(String),
+            Number(Decimal),
+        }
+
+        let value = DecimalOrString::deserialize(deserializer)?;
+
+        match value {
+            DecimalOrString::String(s) => {
+                // Strict format validation
+                if s.is_empty() {
+                    return Err(D::Error::custom("Amount cannot be empty"));
+                }
+                if s.starts_with('.') {
+                    return Err(D::Error::custom("Invalid format: use 0.5 not .5"));
+                }
+                if s.ends_with('.') {
+                    return Err(D::Error::custom("Invalid format: use 5.0 not 5."));
+                }
+
+                // Parse using Decimal library
+                let d = Decimal::from_str(&s)
+                    .map_err(|e| D::Error::custom(format!("Invalid decimal: {}", e)))?;
+
+                // Reject negative numbers
+                if d.is_sign_negative() {
+                    return Err(D::Error::custom("Amount cannot be negative"));
+                }
+
+                Ok(StrictDecimal(d))
+            }
+            DecimalOrString::Number(d) => {
+                // JSON number - already parsed by Decimal
+                // Still reject negative
+                if d.is_sign_negative() {
+                    return Err(D::Error::custom("Amount cannot be negative"));
+                }
+                Ok(StrictDecimal(d))
+            }
+        }
+    }
+}
+
+impl Serialize for StrictDecimal {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        // Serialize as string to preserve precision
+        serializer.serialize_str(&self.0.to_string())
+    }
+}
+
+// ============================================================================
+// Original Types
+// ============================================================================
+
 /// Custom deserializer for non-empty strings
 fn deserialize_non_empty_string<'de, D>(deserializer: D) -> Result<String, D::Error>
 where
@@ -22,6 +125,8 @@ where
 ///
 /// This struct is used for HTTP API deserialization only.
 /// Validation and conversion happen in separate functions.
+///
+/// Note: price and qty now use StrictDecimal which validates format at Serde layer.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ClientOrder {
     /// Client order ID (optional)
@@ -37,16 +142,16 @@ pub struct ClientOrder {
     /// Time in force: "GTC" | "IOC" (optional, defaults to GTC)
     #[serde(default)]
     pub time_in_force: TimeInForce,
-    /// Price (required for LIMIT orders)
-    pub price: Option<Decimal>,
-    /// Quantity (unified field name)
-    pub qty: Decimal,
+    /// Price (required for LIMIT orders) - format validated by StrictDecimal
+    pub price: Option<StrictDecimal>,
+    /// Quantity (unified field name) - format validated by StrictDecimal
+    pub qty: StrictDecimal,
 }
 
 /// Validate and parse ClientOrder to ValidatedClientOrder
 ///
 /// This function performs business validation only.
-/// Type validation is handled by serde during deserialization.
+/// Format validation (negative, .5, 5.) is handled by StrictDecimal during deserialization.
 pub fn validate_client_order(
     req: ClientOrder,
     symbol_mgr: &SymbolManager,
@@ -62,20 +167,19 @@ pub fn validate_client_order(
         .ok_or("Symbol info not found")?;
 
     // 3. Validate price for LIMIT orders
+    // Note: Negative check already done by StrictDecimal
     let price = if req.order_type == OrderType::Limit {
         match req.price {
             Some(p) => {
-                if p.is_zero() {
+                let price_decimal = p.inner();
+                if price_decimal.is_zero() {
                     return Err("Price must be greater than zero");
                 }
-                if p.is_sign_negative() {
-                    return Err("Price cannot be negative");
-                }
                 // Check decimal places
-                if p.scale() > symbol_info.price_decimal {
+                if price_decimal.scale() > symbol_info.price_decimal {
                     return Err("Too many decimal places in price");
                 }
-                p
+                price_decimal
             }
             None => return Err("Price is required for LIMIT orders"),
         }
@@ -84,11 +188,10 @@ pub fn validate_client_order(
     };
 
     // 4. Validate quantity
-    if req.qty.is_zero() {
+    // Note: Negative check already done by StrictDecimal
+    let qty_decimal = req.qty.inner();
+    if qty_decimal.is_zero() {
         return Err("Quantity must be greater than zero");
-    }
-    if req.qty.is_sign_negative() {
-        return Err("Quantity cannot be negative");
     }
 
     let base_asset = symbol_mgr
@@ -97,7 +200,7 @@ pub fn validate_client_order(
         .ok_or("Base asset not found")?;
 
     // Check decimal places
-    if req.qty.scale() > base_asset.decimals {
+    if qty_decimal.scale() > base_asset.decimals {
         return Err("Too many decimal places in quantity");
     }
 
@@ -108,7 +211,7 @@ pub fn validate_client_order(
         order_type: req.order_type,
         time_in_force: req.time_in_force,
         price,
-        qty: req.qty,
+        qty: qty_decimal,
         price_decimals: symbol_info.price_decimal,
         qty_decimals: base_asset.decimals,
     })
@@ -190,16 +293,18 @@ pub struct CancelOrderRequest {
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct ReduceOrderRequest {
     pub order_id: u64,
+    /// Quantity to reduce - format validated by StrictDecimal
     #[schema(value_type = String)]
-    pub reduce_qty: Decimal,
+    pub reduce_qty: StrictDecimal,
 }
 
 /// Move order request
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct MoveOrderRequest {
     pub order_id: u64,
+    /// New price - format validated by StrictDecimal
     #[schema(value_type = String)]
-    pub new_price: Decimal,
+    pub new_price: StrictDecimal,
 }
 
 // ============================================================================
@@ -364,9 +469,81 @@ mod tests {
     use rust_decimal::Decimal;
     use std::str::FromStr;
 
+    // =========================================================================
+    // StrictDecimal Tests
+    // =========================================================================
+
+    #[test]
+    fn test_strict_decimal_valid_string() {
+        let json = r#""1.5""#;
+        let d: StrictDecimal = serde_json::from_str(json).unwrap();
+        assert_eq!(*d, Decimal::from_str("1.5").unwrap());
+    }
+
+    #[test]
+    fn test_strict_decimal_valid_number() {
+        let json = r#"1.5"#;
+        let d: StrictDecimal = serde_json::from_str(json).unwrap();
+        assert_eq!(*d, Decimal::from_str("1.5").unwrap());
+    }
+
+    #[test]
+    fn test_strict_decimal_rejects_dot_prefix() {
+        let json = r#"".5""#;
+        let result: Result<StrictDecimal, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("use 0.5 not .5"));
+    }
+
+    #[test]
+    fn test_strict_decimal_rejects_dot_suffix() {
+        let json = r#""5.""#;
+        let result: Result<StrictDecimal, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("use 5.0 not 5."));
+    }
+
+    #[test]
+    fn test_strict_decimal_rejects_negative_string() {
+        let json = r#""-1.5""#;
+        let result: Result<StrictDecimal, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("cannot be negative")
+        );
+    }
+
+    #[test]
+    fn test_strict_decimal_rejects_negative_number() {
+        let json = r#"-1.5"#;
+        let result: Result<StrictDecimal, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("cannot be negative")
+        );
+    }
+
+    #[test]
+    fn test_strict_decimal_rejects_empty() {
+        let json = r#""""#;
+        let result: Result<StrictDecimal, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("cannot be empty"));
+    }
+
+    // =========================================================================
+    // ClientOrder Deserialization Tests
+    // =========================================================================
+
     #[test]
     fn test_deserialize_client_order_limit() {
-        let json = r#"{"symbol":"BTC_USDT","side":"BUY","order_type":"LIMIT","price":85000.00,"qty":0.001}"#;
+        let json = r#"{"symbol":"BTC_USDT","side":"BUY","order_type":"LIMIT","price":"85000.00","qty":"0.001"}"#;
         let order: ClientOrder = serde_json::from_str(json).unwrap();
         assert_eq!(order.symbol, "BTC_USDT");
         assert_eq!(order.side, Side::Buy);
@@ -375,8 +552,17 @@ mod tests {
     }
 
     #[test]
+    fn test_deserialize_client_order_limit_number() {
+        // Also support JSON numbers (backward compatible)
+        let json = r#"{"symbol":"BTC_USDT","side":"BUY","order_type":"LIMIT","price":85000.00,"qty":0.001}"#;
+        let order: ClientOrder = serde_json::from_str(json).unwrap();
+        assert_eq!(order.symbol, "BTC_USDT");
+        assert!(order.price.is_some());
+    }
+
+    #[test]
     fn test_deserialize_client_order_market() {
-        let json = r#"{"symbol":"BTC_USDT","side":"SELL","order_type":"MARKET","qty":0.002}"#;
+        let json = r#"{"symbol":"BTC_USDT","side":"SELL","order_type":"MARKET","qty":"0.002"}"#;
         let order: ClientOrder = serde_json::from_str(json).unwrap();
         assert_eq!(order.side, Side::Sell);
         assert_eq!(order.order_type, OrderType::Market);
@@ -385,7 +571,8 @@ mod tests {
 
     #[test]
     fn test_deserialize_empty_symbol_fails() {
-        let json = r#"{"symbol":"","side":"BUY","order_type":"LIMIT","price":85000,"qty":0.001}"#;
+        let json =
+            r#"{"symbol":"","side":"BUY","order_type":"LIMIT","price":"85000","qty":"0.001"}"#;
         let result: Result<ClientOrder, _> = serde_json::from_str(json);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("cannot be empty"));
@@ -393,10 +580,42 @@ mod tests {
 
     #[test]
     fn test_deserialize_invalid_side_fails() {
-        let json = r#"{"symbol":"BTC_USDT","side":"INVALID","order_type":"LIMIT","price":85000,"qty":0.001}"#;
+        let json = r#"{"symbol":"BTC_USDT","side":"INVALID","order_type":"LIMIT","price":"85000","qty":"0.001"}"#;
         let result: Result<ClientOrder, _> = serde_json::from_str(json);
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_deserialize_negative_qty_fails() {
+        // Negative qty is rejected at Serde layer by StrictDecimal
+        let json = r#"{"symbol":"BTC_USDT","side":"BUY","order_type":"LIMIT","price":"85000","qty":"-0.001"}"#;
+        let result: Result<ClientOrder, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("cannot be negative")
+        );
+    }
+
+    #[test]
+    fn test_deserialize_negative_price_fails() {
+        // Negative price is rejected at Serde layer by StrictDecimal
+        let json = r#"{"symbol":"BTC_USDT","side":"BUY","order_type":"LIMIT","price":"-100","qty":"0.001"}"#;
+        let result: Result<ClientOrder, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("cannot be negative")
+        );
+    }
+
+    // =========================================================================
+    // validate_client_order Tests
+    // =========================================================================
 
     #[test]
     fn test_validate_limit_order_success() {
@@ -406,8 +625,10 @@ mod tests {
             symbol: "BTC_USDT".to_string(),
             side: Side::Buy,
             order_type: OrderType::Limit,
-            price: Some(Decimal::from_str("85000.50").unwrap()),
-            qty: Decimal::from_str("0.001").unwrap(),
+            price: Some(StrictDecimal::from_decimal(
+                Decimal::from_str("85000.50").unwrap(),
+            )),
+            qty: StrictDecimal::from_decimal(Decimal::from_str("0.001").unwrap()),
             time_in_force: TimeInForce::GTC,
         };
         let result = validate_client_order(order, &symbol_mgr);
@@ -426,7 +647,7 @@ mod tests {
             side: Side::Sell,
             order_type: OrderType::Market,
             price: None,
-            qty: Decimal::from_str("0.002").unwrap(),
+            qty: StrictDecimal::from_decimal(Decimal::from_str("0.002").unwrap()),
             time_in_force: TimeInForce::GTC,
         };
         let result = validate_client_order(order, &symbol_mgr);
@@ -444,7 +665,7 @@ mod tests {
             side: Side::Buy,
             order_type: OrderType::Limit,
             price: None,
-            qty: Decimal::from_str("0.001").unwrap(),
+            qty: StrictDecimal::from_decimal(Decimal::from_str("0.001").unwrap()),
             time_in_force: TimeInForce::GTC,
         };
         let result = validate_client_order(order, &symbol_mgr);
@@ -460,30 +681,13 @@ mod tests {
             symbol: "BTC_USDT".to_string(),
             side: Side::Buy,
             order_type: OrderType::Limit,
-            price: Some(Decimal::ZERO),
-            qty: Decimal::from_str("0.001").unwrap(),
+            price: Some(StrictDecimal::from_decimal(Decimal::ZERO)),
+            qty: StrictDecimal::from_decimal(Decimal::from_str("0.001").unwrap()),
             time_in_force: TimeInForce::GTC,
         };
         let result = validate_client_order(order, &symbol_mgr);
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), "Price must be greater than zero");
-    }
-
-    #[test]
-    fn test_validate_negative_price_fails() {
-        let (symbol_mgr, _) = load_symbol_manager().unwrap();
-        let order = ClientOrder {
-            cid: None,
-            symbol: "BTC_USDT".to_string(),
-            side: Side::Buy,
-            order_type: OrderType::Limit,
-            price: Some(Decimal::from_str("-100").unwrap()),
-            qty: Decimal::from_str("0.001").unwrap(),
-            time_in_force: TimeInForce::GTC,
-        };
-        let result = validate_client_order(order, &symbol_mgr);
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Price cannot be negative");
     }
 
     #[test]
@@ -494,8 +698,10 @@ mod tests {
             symbol: "BTC_USDT".to_string(),
             side: Side::Buy,
             order_type: OrderType::Limit,
-            price: Some(Decimal::from_str("85000").unwrap()),
-            qty: Decimal::ZERO,
+            price: Some(StrictDecimal::from_decimal(
+                Decimal::from_str("85000").unwrap(),
+            )),
+            qty: StrictDecimal::from_decimal(Decimal::ZERO),
             time_in_force: TimeInForce::GTC,
         };
         let result = validate_client_order(order, &symbol_mgr);
@@ -511,8 +717,10 @@ mod tests {
             symbol: "UNKNOWN_SYMBOL".to_string(),
             side: Side::Buy,
             order_type: OrderType::Limit,
-            price: Some(Decimal::from_str("1000").unwrap()),
-            qty: Decimal::from_str("1.0").unwrap(),
+            price: Some(StrictDecimal::from_decimal(
+                Decimal::from_str("1000").unwrap(),
+            )),
+            qty: StrictDecimal::from_decimal(Decimal::from_str("1.0").unwrap()),
             time_in_force: TimeInForce::GTC,
         };
         let result = validate_client_order(order, &symbol_mgr);
@@ -548,16 +756,17 @@ mod tests {
     fn test_ioc_time_in_force_passthrough() {
         let (symbol_mgr, _) = load_symbol_manager().unwrap();
 
-        // Create a client order with IOC time_in_force
-        let order = ClientOrder {
-            cid: Some("ioc-test-001".to_string()),
-            symbol: "BTC_USDT".to_string(),
-            side: Side::Buy,
-            order_type: OrderType::Limit,
-            time_in_force: TimeInForce::IOC, // Explicitly set IOC
-            price: Some(Decimal::from_str("85000.00").unwrap()),
-            qty: Decimal::from_str("0.001").unwrap(),
-        };
+        // Create via JSON (most realistic)
+        let json = r#"{
+            "cid": "ioc-test-001",
+            "symbol": "BTC_USDT",
+            "side": "BUY",
+            "order_type": "LIMIT",
+            "time_in_force": "IOC",
+            "price": "85000.00",
+            "qty": "0.001"
+        }"#;
+        let order: ClientOrder = serde_json::from_str(json).unwrap();
 
         // Validate
         let validated = validate_client_order(order, &symbol_mgr).unwrap();

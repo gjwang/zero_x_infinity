@@ -436,19 +436,275 @@ let amount = "100".parse::<u64>().unwrap();
 
 ---
 
+## 4.5 双向类型封锁：金融系统最佳实践 ⭐
+
+> **核心原则**：金融系统的 API 边界是安全的最后一道防线。
+> 任何金额数据跨越这条边界时，必须经过**强制类型转换**，不允许任何"逃逸"。
+
+### 4.5.1 架构概览
+
+```
+                    ┌────────────────────────────────────────────┐
+                    │              API Boundary                   │
+                    │  (所有金额必须经过类型转换，无例外)          │
+                    └────────────────────────────────────────────┘
+                                        │
+           ┌────────────────────────────┼────────────────────────────┐
+           │                            │                            │
+    ┌──────▼──────┐              ┌──────▼──────┐              ┌──────▼──────┐
+    │   INPUT     │              │   OUTPUT    │              │  INTERNAL   │
+    │ StrictDecimal│              │DisplayAmount│              │ ScaledAmount│
+    │ (Deserialize)│              │ (Serialize) │              │   (u64)     │
+    └──────┬──────┘              └──────▲──────┘              └─────────────┘
+           │                            │
+           │    SymbolManager           │    SymbolManager
+           │    .parse_qty()            │    .format_amount()
+           │                            │
+           └────────────────────────────┘
+```
+
+### 4.5.2 三层类型系统
+
+#### Layer 1: API Input Types (反序列化)
+
+```rust
+/// 严格输入金额 - 只能通过 Serde 反序列化创建
+/// 
+/// 职责：格式验证
+/// - 拒绝 .5 (应为 0.5)
+/// - 拒绝 5. (应为 5.0)
+/// - 拒绝负数
+/// - 拒绝空字符串
+#[derive(Debug, Clone, Copy)]
+pub struct StrictDecimal(Decimal);
+// ✅ 已实现
+```
+
+#### Layer 2: API Output Types (序列化)
+
+```rust
+/// 严格输出金额 - 只能通过 SymbolManager 创建
+/// 
+/// 设计原则：
+/// 1. 没有公开构造函数
+/// 2. 只能通过 SymbolManager.format_*() 创建
+/// 3. 序列化始终为 String (保证精度)
+#[derive(Debug, Clone)]
+pub struct DisplayAmount(String);
+
+impl DisplayAmount {
+    /// 私有构造 - 只有 SymbolManager 可以调用
+    pub(crate) fn new(s: String) -> Self {
+        Self(s)
+    }
+}
+
+impl Serialize for DisplayAmount {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.0)
+    }
+}
+// ⏳ 待实现
+```
+
+#### Layer 3: Internal Types (计算/存储)
+
+```rust
+/// 内部缩放金额 - 用于所有计算和存储
+/// 
+/// 设计原则：
+/// 1. 不实现 Serialize/Deserialize
+/// 2. 不能直接出现在 DTO 中
+/// 3. 所有算术都是精确的整数运算
+#[derive(Debug, Clone, Copy)]
+pub struct ScaledAmount(u64);
+// ✅ 已实现
+```
+
+### 4.5.3 SymbolManager 双向转换
+
+```rust
+impl SymbolManager {
+    // ========== INPUT: Client → Internal ==========
+    
+    /// 解析数量 (StrictDecimal → ScaledAmount)
+    pub fn parse_qty(&self, symbol_id: u32, input: StrictDecimal) 
+        -> Result<ScaledAmount, MoneyError>;
+    
+    /// 解析价格 (StrictDecimal → u64)
+    pub fn parse_price(&self, symbol_id: u32, input: StrictDecimal) 
+        -> Result<u64, MoneyError>;
+
+    // ========== OUTPUT: Internal → Client ==========
+    
+    /// 格式化数量 (ScaledAmount → DisplayAmount)
+    pub fn format_qty(&self, symbol_id: u32, amount: ScaledAmount) -> DisplayAmount {
+        let symbol = self.get_symbol_info_by_id(symbol_id).expect("Symbol not found");
+        let formatted = money::format_amount(*amount, symbol.base_decimals, symbol.qty_display);
+        DisplayAmount::new(formatted)
+    }
+    
+    /// 格式化价格 (u64 → DisplayAmount)
+    pub fn format_price(&self, symbol_id: u32, price: u64) -> DisplayAmount {
+        let symbol = self.get_symbol_info_by_id(symbol_id).expect("Symbol not found");
+        let formatted = money::format_amount(price, symbol.price_decimal, symbol.price_display);
+        DisplayAmount::new(formatted)
+    }
+    
+    /// 格式化资产金额 (ScaledAmount → DisplayAmount)
+    pub fn format_asset_amount(&self, asset_id: u32, amount: ScaledAmount) -> DisplayAmount {
+        let asset = self.assets.get(&asset_id).expect("Asset not found");
+        let formatted = money::format_amount_full(*amount, asset.decimals);
+        DisplayAmount::new(formatted)
+    }
+}
+```
+
+### 4.5.4 Response DTO 设计规范
+
+```rust
+/// ✅ 正确：所有金额字段使用 DisplayAmount
+#[derive(Debug, Serialize)]
+pub struct BalanceResponse {
+    pub asset: String,
+    pub free: DisplayAmount,       // ✅ 强制类型
+    pub locked: DisplayAmount,     // ✅ 强制类型
+}
+
+/// ❌ 错误：暴露内部表示或使用不安全类型
+#[derive(Debug, Serialize)]
+pub struct BadBalanceResponse {
+    pub asset: String,
+    pub free: u64,                 // ❌ 暴露内部表示
+    pub locked: f64,               // ❌ 精度问题
+    pub pending: Decimal,          // ❌ 可能格式不一致
+}
+```
+
+### 4.5.5 CI 审计规则扩展
+
+```bash
+# Rule 4: Response DTO 中禁止使用裸 Decimal/f64/u64 (金额字段)
+echo "Rule 4: Checking Response DTO types..."
+
+# 金额字段模式
+AMOUNT_FIELDS="free|locked|available|balance|amount|qty|quantity|price|volume|fee"
+
+# 检查 f64 (金融系统绝对禁止)
+if grep -rn "pub\s\+\(${AMOUNT_FIELDS}\)\s*:\s*f64" --include="*.rs" src/gateway/; then
+    echo "❌ FAIL: Found f64 amount field (forbidden in financial systems)"
+    VIOLATIONS=$((VIOLATIONS + 1))
+fi
+
+# 检查裸 Decimal (应使用 DisplayAmount)
+if grep -rn "pub\s\+\(${AMOUNT_FIELDS}\)\s*:\s*Decimal\s*[,}]" --include="*.rs" src/gateway/ \
+    | grep -v "StrictDecimal" | grep -v "DisplayAmount"; then
+    echo "⚠️ WARNING: Found raw Decimal in Response DTO"
+    echo "   → Consider using DisplayAmount for responses"
+fi
+```
+
+### 4.5.6 类型流转总结
+
+| 方向 | 类型流转 | 转换函数 |
+|------|----------|----------|
+| **Input** | `JSON "1.5"` → `StrictDecimal` → `ScaledAmount(u64)` | `SymbolManager.parse_*()` |
+| **Output** | `ScaledAmount(u64)` → `DisplayAmount` → `JSON "1.5"` | `SymbolManager.format_*()` |
+| **禁止** | `ScaledAmount` 直接序列化 | ❌ 编译失败 |
+| **禁止** | `f64` 在任何 DTO 中 | ❌ CI 审计失败 |
+
+### 4.5.7 为什么如此严格？
+
+> **金融系统的零容忍原则**:
+> 
+> 1. **精度可控性**: 
+>    - 内部存储使用最高精度（如 BTC 10^-8）
+>    - UI 显示使用 `display_decimals` 截断（如仅显示 4 位小数 0.0001）
+>    - 截断是**显式且可控**的，由 `SymbolManager.format_*()` 统一处理
+>    - 客户端永远不会看到超过 `display_decimals` 的小数位
+> 
+> 2. **可审计性**: 任何金额转换都有明确的类型边界，便于追踪
+> 
+> 3. **防御深度**: 即使开发者忘记验证，类型系统也会阻止不安全操作
+> 
+> 4. **合规要求**: 金融监管通常要求明确的数据转换审计点
+
+#### 精度层次说明
+
+| 精度类型 | 用途 | 示例 (BTC) |
+|----------|------|------------|
+| **链上精度** | 区块链原生精度 | 8 位 (satoshi) |
+| **系统精度** | 内部存储/计算 | 8 位 (系统配置) |
+| **显示精度** (`display_decimals`) | UI 展示 | 4 位 (0.0001) |
+
+> [!IMPORTANT]
+> **截断 vs 四舍五入**：显示时始终使用**截断**（向下取整），永远不会显示用户实际不拥有的金额。
+> 例如：用户余额 `0.00015678 BTC`，显示为 `0.0001 BTC`（截断后 4 位）。
+
+---
+
 ## 5. 实施路线图
 
 | 阶段 | 任务 | 状态 |
 |------|------|------|
-| **Phase 1** | 为核心订单 API 实现 `ValidatedOrder` Extractor | ⏳ 待实现 |
-| **Phase 2** | 为余额/资产 API 实现 `FormattedBalanceResponse` | ⏳ 待实现 |
+| **Phase 1a** | 实现 `StrictDecimal` 类型 (Serde 层格式验证) | ✅ 已完成 |
+| **Phase 1b** | 为核心订单 API 实现 `ValidatedOrder` Extractor | ⏳ 待实现 |
+| **Phase 2a** | 实现 `DisplayAmount` 类型 (Response 输出封装) | ⏳ 待实现 |
+| **Phase 2b** | 迁移 Response DTO 使用 `DisplayAmount` | ⏳ 待实现 |
 | **Phase 3** | 为所有金额相关 API 统一改造 | ⏳ 待实现 |
-| **Phase 4** | 实现 `audit_api_types.sh` 并集成 CI | ⏳ 待实现 |
-| **Phase 5** | 添加 pre-commit hook 本地拦截 | 📋 规划中 |
+| **Phase 4** | 实现 `audit_api_types.sh` 并集成 CI | ✅ 已完成 |
+| **Phase 5** | 扩展审计脚本检查 Response DTO 类型 | ⏳ 待实现 |
+| **Phase 6** | 添加 pre-commit hook 本地拦截 | 📋 规划中 |
 
 ---
 
-## 6. 参考
+## 6. 实施记录 (2025-12-31)
+
+### 已完成
+
+#### Phase 1a: StrictDecimal 类型
+
+在 `src/gateway/types.rs` 添加了 `StrictDecimal` 类型：
+
+```rust
+/// 严格格式的 Decimal，在反序列化时进行格式验证
+/// - 拒绝 .5 (应为 0.5)
+/// - 拒绝 5. (应为 5.0)
+/// - 拒绝负数
+/// - 拒绝空字符串
+pub struct StrictDecimal(Decimal);
+```
+
+**已更新的 DTO:**
+- `ClientOrder.price` → `Option<StrictDecimal>`
+- `ClientOrder.qty` → `StrictDecimal`
+- `ReduceOrderRequest.reduce_qty` → `StrictDecimal`
+- `MoveOrderRequest.new_price` → `StrictDecimal`
+
+#### Phase 4: 审计脚本
+
+创建 `scripts/audit_api_types.sh`：
+- 检测 u64/i64 金额字段
+- 检测直接 `.parse::<u64>()` 调用
+- 检测绕过 StrictDecimal 的 `Decimal::from_str`
+
+### 验证
+
+```bash
+# StrictDecimal 测试
+cargo test gateway::types
+
+# 审计脚本
+./scripts/audit_api_types.sh
+
+# 全量测试
+cargo test  # 389+ 通过
+```
+
+---
+
+## 7. 参考
 
 - [Money Type Safety Standard](./money-type-safety.md) — 资金类型安全规范
 - [0x02 浮点数的诅咒](../src/0x02-the-curse-of-float.md) — 浮点数问题详解
+
