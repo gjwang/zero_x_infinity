@@ -228,6 +228,12 @@ impl WithdrawService {
                 let amount_raw: i64 = row.try_get_log("amount")?;
                 let fee_raw: i64 = row.try_get_log("fee")?;
                 let internal_scale: i16 = row.try_get_log("internal_scale")?;
+                let request_id: String = row.try_get_log("request_id")?;
+                let user_id: i64 = row.try_get_log("user_id")?;
+                let asset: String = row.try_get_log("asset")?;
+                let to_address: String = row.try_get_log("to_address")?;
+                let status: String = row.try_get_log("status")?;
+                let created_at: chrono::NaiveDateTime = row.try_get_log("created_at")?;
 
                 // Use unified money module for formatting
                 let amount_str = money::format_amount_signed(
@@ -242,16 +248,16 @@ impl WithdrawService {
                 );
 
                 Some(WithdrawRecord {
-                    request_id: row.try_get("request_id").unwrap_or_default(),
-                    user_id: row.try_get("user_id").unwrap_or_default(),
-                    asset: row.try_get("asset").unwrap_or_default(),
+                    request_id,
+                    user_id,
+                    asset,
                     amount: amount_str,
                     fee: fee_str,
-                    to_address: row.try_get("to_address").unwrap_or_default(),
-                    status: row.try_get("status").unwrap_or_default(),
+                    to_address,
+                    status,
                     tx_hash: row.try_get("tx_hash").ok(),
-                    created_at: row.try_get("created_at").unwrap_or_default(),
-                    updated_at: row.try_get("updated_at").unwrap_or_default(),
+                    created_at: Some(created_at),
+                    updated_at: row.try_get("updated_at").ok(),
                 })
             })
             .collect();

@@ -191,6 +191,11 @@ impl DepositService {
             .filter_map(|row| {
                 let amount_raw: i64 = row.try_get_log("amount")?;
                 let internal_scale: i16 = row.try_get_log("internal_scale")?;
+                let tx_hash: String = row.try_get_log("tx_hash")?;
+                let user_id: i64 = row.try_get_log("user_id")?;
+                let asset: String = row.try_get_log("asset")?;
+                let status: String = row.try_get_log("status")?;
+                let created_at: chrono::NaiveDateTime = row.try_get_log("created_at")?;
 
                 // Use unified money module for formatting
                 let amount_str = money::format_amount_signed(
@@ -200,12 +205,12 @@ impl DepositService {
                 );
 
                 Some(DepositRecord {
-                    tx_hash: row.try_get("tx_hash").unwrap_or_default(),
-                    user_id: row.try_get("user_id").unwrap_or_default(),
-                    asset: row.try_get("asset").unwrap_or_default(),
+                    tx_hash,
+                    user_id,
+                    asset,
                     amount: amount_str,
-                    status: row.try_get("status").unwrap_or_default(),
-                    created_at: row.try_get("created_at").unwrap_or_default(),
+                    status,
+                    created_at: Some(created_at),
                     block_height: row.try_get("block_height").ok(),
                 })
             })
