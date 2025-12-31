@@ -12,6 +12,12 @@
 
 set -e  # Exit on error
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Source unified database configuration
+source "$PROJECT_ROOT/scripts/lib/db_env.sh"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -133,11 +139,11 @@ test_start "Initialize database to clean state"
 if [ "$CI" = "true" ]; then
     # In CI, database is already initialized by the workflow's "Initialize DB" step
     log_success "Database initialization skipped (CI workflow handles this)"
-elif uv run scripts/db/manage_db.py init >/dev/null 2>&1; then
+elif ./scripts/db/init.sh pg --reset >/dev/null 2>&1; then
     log_success "Database initialized (reset + seed)"
 else
     log_error "Failed to initialize database"
-    log_info "Make sure PostgreSQL is running and manage_db.py exists"
+    log_info "Make sure PostgreSQL is running and init.sh exists"
     exit 1
 fi
 
@@ -157,9 +163,12 @@ if [ "$CI" = "true" ]; then
         exit 1
     fi
 else
-    # Local environment - use docker exec
-    if docker exec postgres psql -U trading -d exchange_info_db -c "SELECT 1" >/dev/null 2>&1; then
-        log_success "PostgreSQL is accessible (via Docker)"
+    # Local environment - try docker exec with common container names or direct psql
+    PG_CONTAINER=$(docker ps --format '{{.Names}}' | grep -iE '^postgres' | head -1)
+    if [ -n "$PG_CONTAINER" ] && docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -c "SELECT 1" >/dev/null 2>&1; then
+        log_success "PostgreSQL is accessible (via Docker: $PG_CONTAINER)"
+    elif pg_check; then
+        log_success "PostgreSQL is accessible (via pg_check)"
     else
         log_error "PostgreSQL is not accessible"
         log_info "Please ensure PostgreSQL Docker container is running:"
@@ -354,7 +363,7 @@ elif docker exec postgres psql -U trading -d exchange_info_db -c "\d assets_tb" 
     # Test lowercase asset rejection (if CHECK constraint exists)
     test_start "Test database constraint: lowercase asset rejected"
     INSERT_RESULT=$(docker exec postgres psql -U trading -d exchange_info_db -c \
-        "INSERT INTO assets_tb (asset, name, decimals, status, asset_flags) VALUES ('btc_test', 'Test', 8, 0, 7)" 2>&1 || true)
+        "INSERT INTO assets_tb (asset, name, internal_scale, asset_precision, status, asset_flags) VALUES ('btc_test', 'Test', 8, 8, 0, 7)" 2>&1 || true)
     if echo "$INSERT_RESULT" | grep -qi "check\|constraint\|uppercase\|violates"; then
         log_success "Lowercase asset correctly rejected by database"
     else
@@ -366,7 +375,7 @@ elif docker exec postgres psql -U trading -d exchange_info_db -c "\d assets_tb" 
     # Test uppercase asset acceptance
     test_start "Test database constraint: uppercase asset accepted"
     if docker exec postgres psql -U trading -d exchange_info_db -c \
-        "INSERT INTO assets_tb (asset, name, decimals, status, asset_flags) VALUES ('TEST_ASSET', 'Test Asset', 8, 1, 7)" >/dev/null 2>&1; then
+        "INSERT INTO assets_tb (asset, name, internal_scale, asset_precision, status, asset_flags) VALUES ('TEST_ASSET', 'Test Asset', 8, 8, 1, 7)" >/dev/null 2>&1; then
         log_success "Uppercase asset correctly accepted by database"
         docker exec postgres psql -U trading -d exchange_info_db -c "DELETE FROM assets_tb WHERE asset = 'TEST_ASSET'" >/dev/null 2>&1 || true
     else
