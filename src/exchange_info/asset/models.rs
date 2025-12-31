@@ -70,6 +70,15 @@ impl Asset {
     ) -> Result<crate::money::ScaledAmount, crate::money::MoneyError> {
         crate::money::parse_decimal_allow_zero(d, self.decimals as u32)
     }
+
+    /// Parse amount from string (rejects zero). For String API inputs.
+    /// Intent-based: caller provides raw String, Asset provides decimals.
+    pub fn parse_amount_from_str(
+        &self,
+        s: &str,
+    ) -> Result<crate::money::ScaledAmount, crate::money::MoneyError> {
+        crate::money::parse_amount(s, self.decimals as u32)
+    }
 }
 
 #[cfg(test)]

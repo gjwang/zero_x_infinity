@@ -272,127 +272,104 @@ impl WsService {
                     // We imported `rust_decimal::Decimal`. Let's use it.
                     // money-type-safety: use SymbolManager's unit methods
                     // CRITICAL: Fail fast if symbol_info is missing, do not use hardcoded defaults
-                    let symbol_info = match symbol_info {
-                        Some(s) => s,
-                        None => {
-                            tracing::error!(
-                                "Missing symbol info for trade broadcast: {}",
-                                symbol_name
-                            );
-                            continue; // Skip public broadcast if metadata is missing
-                        }
-                    };
-
-                    let price_unit = symbol_info.price_unit();
-                    let qty_unit = symbol_info.qty_unit();
-                    let p_dec = Decimal::from(price) / Decimal::from(*price_unit);
-                    let q_dec = Decimal::from(qty) / Decimal::from(*qty_unit);
-                    let quote_val = p_dec * q_dec;
-                    let quote_qty_str = format!(
-                        "{:.prec$}",
-                        quote_val,
-                        prec = quote_display_decimals as usize
-                    );
-
-                    let public_msg = WsMessage::PublicTrade {
-                        symbol: symbol_name.clone(),
-                        price: format_amount(price, price_decimals, price_display_decimals),
-                        qty: format_amount(qty, base_decimals, base_display_decimals),
-                        quote_qty: quote_qty_str,
-                        time: chrono::Utc::now().timestamp_millis(), // Approximate time
-                        is_buyer_maker: if side == Side::Buy {
-                            !is_maker
-                        } else {
-                            is_maker
-                        }, // Logic: if Buy & Maker -> Buyer is Maker. If Buy & Taker -> Buyer is Taker.
-                           // Wait, `side` in PushEvent is "Order Side".
-                           // If I am Buyer and Taker -> `is_buyer_maker` = false.
-                           // If I am Seller and Taker -> `is_buyer_maker` = true (Buyer was Maker).
-                           // Logic:
-                           // if side == Buy (I am Buyer):
-                           //    is_maker=true => Buyer is Maker => is_buyer_maker=true
-                           //    is_maker=false => Buyer is Taker => is_buyer_maker=false
-                           // if side == Sell (I am Seller):
-                           //    is_maker=true => Seller is Maker => Buyer was Taker => is_buyer_maker=false
-                           //    is_maker=false => Seller is Taker => Buyer was Maker => is_buyer_maker=true
-                    };
-
-                    let public_topic = format!("market.trade.{}", symbol_name);
-                    self.manager.broadcast(&public_topic, public_msg);
-
-                    // --- TICKER UPDATE (Mini Ticker) ---
-                    // Update state and broadcast ticker
-                    // Reuse already-computed p_dec/q_dec from above (same scope)
-                    // These were calculated at the start of the !is_maker block
-
-                    let ticker = self
-                        .ticker_states
-                        .entry(symbol_name.clone())
-                        .or_insert_with(|| TickerState {
-                            open: p_dec,
-                            high: p_dec,
-                            low: p_dec,
-                            close: p_dec,
-                            volume: Decimal::new(0, 0),
-                            quote_volume: Decimal::new(0, 0),
-                        });
-
-                    ticker.close = p_dec;
-                    if p_dec > ticker.high {
-                        ticker.high = p_dec;
-                    }
-                    if p_dec < ticker.low {
-                        ticker.low = p_dec;
-                    }
-                    ticker.volume += q_dec;
-                    ticker.quote_volume += p_dec * q_dec;
-
-                    let price_change = ticker.close - ticker.open;
-                    let price_change_percent = if !ticker.open.is_zero() {
-                        (price_change / ticker.open) * Decimal::from(100)
-                    } else {
-                        Decimal::from(0)
-                    };
-
-                    let ticker_msg = WsMessage::Ticker {
-                        symbol: symbol_name.clone(),
-                        price_change: format!(
+                    if let Some(symbol_info) = symbol_info {
+                        let price_unit = symbol_info.price_unit();
+                        let qty_unit = symbol_info.qty_unit();
+                        let p_dec = Decimal::from(price) / Decimal::from(*price_unit);
+                        let q_dec = Decimal::from(qty) / Decimal::from(*qty_unit);
+                        let quote_val = p_dec * q_dec;
+                        let quote_qty_str = format!(
                             "{:.prec$}",
-                            price_change,
-                            prec = price_display_decimals as usize
-                        ),
-                        price_change_percent: format!("{:.2}", price_change_percent),
-                        last_price: format!(
-                            "{:.prec$}",
-                            ticker.close,
-                            prec = price_display_decimals as usize
-                        ),
-                        high_price: format!(
-                            "{:.prec$}",
-                            ticker.high,
-                            prec = price_display_decimals as usize
-                        ),
-                        low_price: format!(
-                            "{:.prec$}",
-                            ticker.low,
-                            prec = price_display_decimals as usize
-                        ),
-                        volume: format!(
-                            "{:.prec$}",
-                            ticker.volume,
-                            prec = base_display_decimals as usize
-                        ),
-                        quote_volume: format!(
-                            "{:.prec$}",
-                            ticker.quote_volume,
+                            quote_val,
                             prec = quote_display_decimals as usize
-                        ),
-                        time: chrono::Utc::now().timestamp_millis() as u64,
-                    };
+                        );
 
-                    self.manager
-                        .broadcast(&format!("market.ticker.{}", symbol_name), ticker_msg);
-                }
+                        let public_msg = WsMessage::PublicTrade {
+                            symbol: symbol_name.clone(),
+                            price: format_amount(price, price_decimals, price_display_decimals),
+                            qty: format_amount(qty, base_decimals, base_display_decimals),
+                            quote_qty: quote_qty_str,
+                            time: chrono::Utc::now().timestamp_millis(),
+                            is_buyer_maker: if side == Side::Buy {
+                                !is_maker
+                            } else {
+                                is_maker
+                            },
+                        };
+
+                        let public_topic = format!("market.trade.{}", symbol_name);
+                        self.manager.broadcast(&public_topic, public_msg);
+
+                        // --- TICKER UPDATE (Mini Ticker) ---
+                        let ticker = self
+                            .ticker_states
+                            .entry(symbol_name.clone())
+                            .or_insert_with(|| TickerState {
+                                open: p_dec,
+                                high: p_dec,
+                                low: p_dec,
+                                close: p_dec,
+                                volume: Decimal::new(0, 0),
+                                quote_volume: Decimal::new(0, 0),
+                            });
+
+                        ticker.close = p_dec;
+                        if p_dec > ticker.high {
+                            ticker.high = p_dec;
+                        }
+                        if p_dec < ticker.low {
+                            ticker.low = p_dec;
+                        }
+                        ticker.volume += q_dec;
+                        ticker.quote_volume += p_dec * q_dec;
+
+                        let price_change = ticker.close - ticker.open;
+                        let price_change_percent = if !ticker.open.is_zero() {
+                            (price_change / ticker.open) * Decimal::from(100)
+                        } else {
+                            Decimal::from(0)
+                        };
+
+                        let ticker_msg = WsMessage::Ticker {
+                            symbol: symbol_name.clone(),
+                            price_change: format!(
+                                "{:.prec$}",
+                                price_change,
+                                prec = price_display_decimals as usize
+                            ),
+                            price_change_percent: format!("{:.2}", price_change_percent),
+                            last_price: format!(
+                                "{:.prec$}",
+                                ticker.close,
+                                prec = price_display_decimals as usize
+                            ),
+                            high_price: format!(
+                                "{:.prec$}",
+                                ticker.high,
+                                prec = price_display_decimals as usize
+                            ),
+                            low_price: format!(
+                                "{:.prec$}",
+                                ticker.low,
+                                prec = price_display_decimals as usize
+                            ),
+                            volume: format!(
+                                "{:.prec$}",
+                                ticker.volume,
+                                prec = base_display_decimals as usize
+                            ),
+                            quote_volume: format!(
+                                "{:.prec$}",
+                                ticker.quote_volume,
+                                prec = quote_display_decimals as usize
+                            ),
+                            time: chrono::Utc::now().timestamp_millis() as u64,
+                        };
+
+                        self.manager
+                            .broadcast(&format!("market.ticker.{}", symbol_name), ticker_msg);
+                    } // end if let Some(symbol_info)
+                } // end if !is_maker
 
                 // NOTE: Trade persistence moved to SettlementService (correct architecture)
             }
