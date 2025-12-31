@@ -174,6 +174,43 @@ fi
 echo ""
 
 # =============================================================================
+# Rule 5: Prefer Intent API for precision access (informational)
+# Direct .decimals/.display_decimals access should use Intent APIs
+# =============================================================================
+
+echo "Rule 5: Checking direct precision field access (informational)..."
+
+# Pattern: .decimals or .display_decimals outside core modules
+# Allowed: symbol_manager.rs, exchange_info/, money.rs (definitions)
+# Informational for now - helps track migration progress
+PRECISION_DIRECT=$(grep -rn "\.decimals\b\|\.display_decimals\|\.price_decimal\b\|\.price_display_decimal" --include="*.rs" src/ \
+    | grep -v "symbol_manager.rs" \
+    | grep -v "exchange_info/" \
+    | grep -v "money.rs" \
+    | grep -v "DEPRECATED" \
+    | grep -v "internal_scale\|asset_precision\|price_scale\|price_precision" \
+    | grep -v "// comment\|/// " \
+    2>/dev/null || true)
+
+if [ -n "$PRECISION_DIRECT" ]; then
+    echo -e "${YELLOW}⚠️  Direct precision field access found (prefer Intent API):${NC}"
+    echo "$PRECISION_DIRECT" | head -15
+    TOTAL=$(echo "$PRECISION_DIRECT" | wc -l | tr -d ' ')
+    if [ "$TOTAL" -gt 15 ]; then
+        echo "... and $((TOTAL - 15)) more"
+    fi
+    echo ""
+    echo "Prefer using Intent APIs:"
+    echo "  asset.asset_precision()  instead of  asset.display_decimals"
+    echo "  asset.internal_scale()   instead of  asset.decimals"
+    echo "  symbol.price_precision() instead of  symbol.price_display_decimal"
+else
+    echo -e "${GREEN}✅ All precision access uses Intent APIs${NC}"
+fi
+
+echo ""
+
+# =============================================================================
 # Summary
 # =============================================================================
 
