@@ -41,6 +41,12 @@ jobs:
       - name: Clippy
         run: cargo clippy -- -D warnings -A clippy::too_many_arguments -A clippy::collapsible_if -A clippy::unwrap_or_default -A clippy::doc_lazy_continuation -A clippy::manual_is_multiple_of -A clippy::implicit_saturating_sub -A clippy::redundant_pattern_matching -A clippy::derivable_impls
 
+      # Money Safety Audit (Phase 0x14-c)
+      - name: Money Safety Audit
+        run: |
+          ./scripts/audit_money_safety.sh
+          ./scripts/audit_api_types.sh
+
       # 2. Heavy Lifting
       - name: Build Release
         run: cargo build --release
