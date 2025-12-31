@@ -108,10 +108,71 @@ if [ -n "$MONEY_CALLS" ]; then
     echo ""
 fi
 
+echo ""
+
+# =============================================================================
+# Rule 3: FORBIDDEN - unwrap_or with hardcoded amount values
+# Section 4.5.1: 绝不允许未经定义的默认值
+# =============================================================================
+
+echo "Rule 3: Checking for hardcoded fallback values..."
+
+# Pattern: .unwrap_or(100_000_000) or similar hardcoded amounts (6+ digits)
+# Only catches money-sized constants, not limit/pagination values
+FALLBACK_VIOLATIONS=$(grep -rn "unwrap_or(100_000_000\|unwrap_or(1_000_000\|unwrap_or(10_000_000" --include="*.rs" src/ \
+    | grep -v "#\[cfg(test)\]" \
+    | grep -v "#\[test\]" \
+    2>/dev/null || true)
+
+if [ -n "$FALLBACK_VIOLATIONS" ]; then
+    echo -e "${RED}❌ FORBIDDEN: Hardcoded fallback values found!${NC}"
+    echo -e "${RED}   See money-type-safety.md Section 4.5.1${NC}"
+    echo ""
+    echo "$FALLBACK_VIOLATIONS"
+    echo ""
+    echo "Fix: Use fail-fast error handling instead of hardcoded defaults."
+    echo "Example:"
+    echo "  let qty_unit = symbol_info.ok_or(Error::SymbolNotFound)?;"
+    echo "  NOT: symbol_info.map(...).unwrap_or(100_000_000)"
+    HAS_VIOLATIONS=true
+else
+    echo -e "${GREEN}✅ No hardcoded fallback values found${NC}"
+fi
+
+echo ""
+
+# =============================================================================
+# Rule 4: WARNING - f64 arithmetic on money amounts
+# =============================================================================
+
+echo "Rule 4: Checking for f64 money arithmetic..."
+
+# Pattern: as f64 / 100_000_000 (or similar divisions with money constants)
+F64_MONEY=$(grep -rn "as f64.*100" --include="*.rs" src/ \
+    | grep -v "#\[cfg(test)\]" \
+    | grep -v "perf.rs" \
+    | grep -v "bench" \
+    2>/dev/null || true)
+
+if [ -n "$F64_MONEY" ]; then
+    echo -e "${YELLOW}⚠️  Potential f64 money arithmetic found:${NC}"
+    echo "$F64_MONEY"
+    echo ""
+    echo "Warning: Using f64 for money calculations can cause precision loss."
+    echo "Fix: Use Decimal arithmetic: Decimal::from(sat) / Decimal::from(100_000_000)"
+fi
+
+echo ""
+
 # =============================================================================
 # Summary
 # =============================================================================
 
 echo "====================="
-echo -e "${GREEN}✅ Money Safety Audit PASSED${NC}"
+if [ "$HAS_VIOLATIONS" = true ]; then
+    echo -e "${RED}❌ Money Safety Audit FAILED${NC}"
+    exit 1
+else
+    echo -e "${GREEN}✅ Money Safety Audit PASSED${NC}"
+fi
 echo ""
