@@ -21,9 +21,9 @@ pub struct AssetApiData {
     /// Asset full name
     #[schema(example = "Bitcoin")]
     pub name: String,
-    /// Decimal precision
+    /// Display precision for API (number of decimal places)
     #[schema(example = 8)]
-    pub decimals: i16,
+    pub precision: i16,
     /// Can deposit
     pub can_deposit: bool,
     /// Can withdraw
@@ -47,10 +47,10 @@ pub struct SymbolApiData {
     /// Quote asset symbol
     #[schema(example = "USDT")]
     pub quote_asset: String,
-    /// Price decimal precision
-    pub price_decimals: i16,
-    /// Quantity decimal precision
-    pub qty_decimals: i16,
+    /// Price precision (number of decimal places for price)
+    pub price_precision: i16,
+    /// Quantity precision (number of decimal places for qty)
+    pub qty_precision: i16,
     /// Is trading enabled
     pub is_tradable: bool,
     /// Is visible in UI
@@ -100,7 +100,7 @@ pub async fn get_assets(
                         asset_id: a.asset_id,
                         asset: a.asset.clone(),
                         name: a.name.clone(),
-                        decimals: a.internal_scale,
+                        precision: a.asset_precision,
                         can_deposit: a.can_deposit(),
                         can_withdraw: a.can_withdraw(),
                         can_trade: a.can_trade(),
@@ -122,7 +122,7 @@ pub async fn get_assets(
             asset_id: a.asset_id,
             asset: a.asset.clone(),
             name: a.name.clone(),
-            decimals: a.internal_scale,
+            precision: a.asset_precision,
             can_deposit: a.can_deposit(),
             can_withdraw: a.can_withdraw(),
             can_trade: a.can_trade(),
@@ -174,8 +174,8 @@ pub async fn get_symbols(
                         symbol: s.symbol.clone(),
                         base_asset,
                         quote_asset,
-                        price_decimals: s.price_precision,
-                        qty_decimals: s.qty_precision,
+                        price_precision: s.price_precision,
+                        qty_precision: s.qty_precision,
                         is_tradable: s.is_tradable(),
                         is_visible: s.is_visible(),
                         base_maker_fee: s.base_maker_fee,
@@ -211,8 +211,8 @@ pub async fn get_symbols(
                 symbol: s.symbol.clone(),
                 base_asset,
                 quote_asset,
-                price_decimals: s.price_precision,
-                qty_decimals: s.qty_precision,
+                price_precision: s.price_precision,
+                qty_precision: s.qty_precision,
                 is_tradable: s.is_tradable(),
                 is_visible: s.is_visible(),
                 base_maker_fee: s.base_maker_fee,
@@ -248,7 +248,7 @@ pub async fn get_exchange_info(
             asset_id: a.asset_id,
             asset: a.asset.clone(),
             name: a.name.clone(),
-            decimals: a.internal_scale,
+            precision: a.asset_precision,
             can_deposit: a.can_deposit(),
             can_withdraw: a.can_withdraw(),
             can_trade: a.can_trade(),
@@ -278,8 +278,8 @@ pub async fn get_exchange_info(
                 symbol: s.symbol.clone(),
                 base_asset,
                 quote_asset,
-                price_decimals: s.price_precision,
-                qty_decimals: s.qty_precision,
+                price_precision: s.price_precision,
+                qty_precision: s.qty_precision,
                 is_tradable: s.is_tradable(),
                 is_visible: s.is_visible(),
                 base_maker_fee: s.base_maker_fee,
