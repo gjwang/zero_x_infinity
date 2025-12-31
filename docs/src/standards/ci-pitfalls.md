@@ -381,3 +381,47 @@ TOTAL_TESTS=$((TOTAL_TESTS + 1))
 ((TOTAL_TESTS++)) || true
 ```
 
+---
+
+## 13. 本地/远程 CI 覆盖差异 (Test Coverage Parity)
+
+### 13.1 Phase 缺失导致的漏测
+
+**问题描述**
+
+本地 `test_ci.sh` 与远程 CI (GitHub Actions) 的测试覆盖范围不一致，导致本地绿灯但远程红灯。
+
+**典型案例 (2024-12-31)**：
+- SQL 变更 `a.decimals` → `a.internal_scale` 在 `deposit.rs` 中遗漏
+- 本地 `test_ci.sh --quick` 通过（只有 Phase 1-7）
+- 远程 CI 失败（包含 Funding & Trading E2E 0x11/0x12）
+
+**原因**：
+`test_ci.sh` 原本只有 Phase 1-7，但远程 CI workflow 单独运行了 Funding & Trading E2E。
+
+**解决方案**
+
+1. **同步覆盖**：将远程 CI 有但本地缺失的测试加入 `test_ci.sh`
+2. **文档记录**：此 pitfall 说明已添加
+
+```bash
+# 2024-12-31 修复：test_ci.sh 新增 Phase 8
+# ========== Phase 8: Funding & Trading E2E (0x11/0x12) ==========
+```
+
+### 13.2 覆盖对照表
+
+| Phase | 测试 | 本地 test_ci.sh | 远程 CI |
+|-------|------|-----------------|---------|
+| 1 | Unit Tests | ✅ | ✅ |
+| 2 | Pipeline | ✅ | ✅ |
+| 3 | Persistence | ✅ | ✅ |
+| 4 | Gateway E2E | ✅ | ✅ |
+| 5 | Account Integration | ✅ | ✅ |
+| 6 | Transfer E2E | ✅ | ✅ |
+| 7 | OpenAPI E2E | ✅ | ✅ |
+| 8 | Funding & Trading E2E | ✅ (新增) | ✅ |
+
+---
+
+*最后更新：2025-12-31*

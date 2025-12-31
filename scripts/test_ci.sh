@@ -564,6 +564,29 @@ main() {
         clean_env
     fi
     
+    # ========== Phase 8: Funding & Trading E2E (0x11/0x12) ==========
+    # NOTE: This phase was missing from local CI but present in remote CI,
+    # causing CI failures to be discovered late. Added 2024-12-31.
+    if should_run_test "funding"; then
+        echo ""
+        echo "═══════════════════════════════════════════════════════════════"
+        echo "Phase 8: Funding & Trading E2E (0x11/0x12)"
+        echo "═══════════════════════════════════════════════════════════════"
+        echo ""
+        
+        clean_env
+        
+        # Check if PostgreSQL is available
+        if command -v psql &>/dev/null && PGPASSWORD="${PG_PASSWORD:-trading123}" psql -h localhost -p "${PG_PORT:-5433}" -U "${PG_USER:-trading}" -d "${PG_DB:-exchange_info_db}" -c "SELECT 1" &>/dev/null; then
+            run_test_with_pattern "Funding_Trading_E2E" "scripts/verify_funding_trading_flow.sh" "ALL SYSTEMS GO\|PASSED" 300
+        else
+            log_test_start "Funding_Trading_E2E"
+            log_skip "(PostgreSQL not available)"
+        fi
+        
+        clean_env
+    fi
+    
     # ========== Summary ==========
     echo ""
     echo "═══════════════════════════════════════════════════════════════"
