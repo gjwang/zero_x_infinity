@@ -8,18 +8,11 @@ use crate::gateway::types::DisplayAmount;
 use crate::money;
 use crate::symbol_manager::SymbolManager;
 
-/// Format internal u64 to display string with specified decimals
-/// Delegates to crate::money for unified implementation
-#[inline]
-fn format_amount(value: u64, decimals: u32, display_decimals: u32) -> String {
-    money::format_amount(value, decimals, display_decimals)
-}
-
 /// Format internal u64 to DisplayAmount for API responses
-/// Type-safe wrapper around format_amount
+/// Type-safe wrapper that delegates to crate::money for unified implementation
 #[inline]
 fn format_display(value: u64, decimals: u32, display_decimals: u32) -> DisplayAmount {
-    DisplayAmount::new(format_amount(value, decimals, display_decimals))
+    DisplayAmount::new(money::format_amount(value, decimals, display_decimals))
 }
 
 /// Order record from TDengine (matches database schema)
@@ -1166,7 +1159,7 @@ mod public_trades_tests {
         assert_eq!(quote_qty_internal, 430000);
 
         let quote_qty_str =
-            format_amount(quote_qty_internal, quote_decimals, quote_display_decimals);
+            money::format_amount(quote_qty_internal, quote_decimals, quote_display_decimals);
         assert_eq!(quote_qty_str, "4300.00");
     }
 
@@ -1187,7 +1180,7 @@ mod public_trades_tests {
         assert_eq!(quote_qty_internal, 35000);
 
         let quote_qty_str =
-            format_amount(quote_qty_internal, quote_decimals, quote_display_decimals);
+            money::format_amount(quote_qty_internal, quote_decimals, quote_display_decimals);
         assert_eq!(quote_qty_str, "350.00");
     }
 

@@ -542,60 +542,6 @@ pub mod error_codes {
     pub const SERVICE_UNAVAILABLE: i32 = 5001;
 }
 
-// Legacy types for backward compatibility (to be removed)
-#[deprecated(note = "Use ApiResponse<OrderResponseData> instead")]
-#[derive(Debug, Serialize)]
-pub struct OrderResponse {
-    pub order_id: u64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cid: Option<String>,
-    pub status: String,
-    pub accepted_at: u64,
-}
-
-#[allow(deprecated)]
-#[deprecated(note = "Use ApiResponse::error() instead")]
-#[derive(Debug, Serialize)]
-pub struct ErrorResponse {
-    pub error: ErrorDetail,
-}
-
-#[deprecated(note = "Use ApiResponse::error() instead")]
-#[derive(Debug, Serialize)]
-pub struct ErrorDetail {
-    pub code: String,
-    pub message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub details: Option<serde_json::Value>,
-}
-
-#[allow(deprecated)]
-impl ErrorResponse {
-    pub fn new(code: impl Into<String>, message: impl Into<String>) -> Self {
-        Self {
-            error: ErrorDetail {
-                code: code.into(),
-                message: message.into(),
-                details: None,
-            },
-        }
-    }
-
-    pub fn with_details(
-        code: impl Into<String>,
-        message: impl Into<String>,
-        details: serde_json::Value,
-    ) -> Self {
-        Self {
-            error: ErrorDetail {
-                code: code.into(),
-                message: message.into(),
-                details: Some(details),
-            },
-        }
-    }
-}
-
 // Unit tests for gateway types and validation
 
 #[cfg(test)]
