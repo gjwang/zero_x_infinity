@@ -1,6 +1,7 @@
 pub mod cache;
 pub mod handlers;
 pub mod openapi;
+pub mod services;
 pub mod state;
 pub mod types;
 
