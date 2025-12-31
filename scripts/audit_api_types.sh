@@ -133,21 +133,38 @@ fi
 echo ""
 
 # =============================================================================
-# Rule 5: Raw Decimal in Response DTOs (informational)
+# Rule 5: Response DTO must use DisplayAmount for money fields (enforced)
 # =============================================================================
 
-echo "Rule 5: Checking for raw Decimal in Response DTOs (informational)..."
+echo "Rule 5: Checking Response DTOs use DisplayAmount for money fields..."
 
-# This is informational for now - strict enforcement in Phase 2b
+# Check for raw String amount fields in Response DTOs (patterns like: pub price: String)
+# These should be DisplayAmount, not String
+# Check in both gateway/types.rs and persistence/queries.rs
+
+# Pattern: pub <name>: String where name contains amount/price/qty/volume/fee/avail/frozen
+RESPONSE_STRING_AMOUNTS=$(grep -rn "pub\s\+\(price\|qty\|filled_qty\|amount\|volume\|quote_volume\|fee\|avail\|frozen\|available\|open\|high\|low\|close\):\s*String" \
+    --include="*.rs" \
+    src/gateway/types.rs \
+    src/persistence/queries.rs \
+    src/funding/service.rs \
+    2>/dev/null | grep -v "#\[cfg(test)\]" | grep -v "// safe:" || true)
+
+if [ -n "$RESPONSE_STRING_AMOUNTS" ]; then
+    echo -e "${RED}❌ FAIL: Found raw String for money fields in Response DTOs${NC}"
+    echo "$RESPONSE_STRING_AMOUNTS"
+    echo "   → Should use DisplayAmount for type-safe output"
+    VIOLATIONS=$((VIOLATIONS + 1))
+else
+    echo -e "${GREEN}✅ No raw String money fields in Response DTOs${NC}"
+fi
+
+# Also check for raw Decimal in internal types (informational only)
 RAW_DECIMAL=$(grep -rn "pub.*:\s*Decimal\s*[,}]" --include="*.rs" src/gateway/types.rs 2>/dev/null | grep -v "StrictDecimal" | grep -v "#\[cfg(test)\]" || true)
 
 if [ -n "$RAW_DECIMAL" ]; then
-    echo -e "${YELLOW}⚠️  INFO: Raw Decimal found in types.rs${NC}"
+    echo -e "${YELLOW}⚠️  INFO: Raw Decimal found (internal use OK)${NC}"
     echo "$RAW_DECIMAL"
-    echo "   → Consider using DisplayAmount for responses (Phase 2b)"
-    # Not a violation, just informational
-else
-    echo -e "${GREEN}✅ No raw Decimal in response types${NC}"
 fi
 
 echo ""
