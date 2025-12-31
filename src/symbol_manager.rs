@@ -20,9 +20,12 @@ pub struct SymbolInfo {
 
 impl SymbolInfo {
     /// Get qty_unit (base asset unit) - e.g., 10^8 for BTC
+    ///
+    /// Returns ScaledAmount for type safety. Use `*qty_unit()` when you need u64.
+    /// Delegates to money::unit_amount() as the single source of truth.
     #[inline]
-    pub fn qty_unit(&self) -> u64 {
-        10u64.pow(self.base_decimals)
+    pub fn qty_unit(&self) -> ScaledAmount {
+        crate::money::unit_amount(self.base_decimals)
     }
 }
 

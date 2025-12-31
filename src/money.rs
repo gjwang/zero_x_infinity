@@ -148,6 +148,31 @@ pub enum MoneyError {
 }
 
 // ============================================================================
+// Core Scaling Factor (Single Source of Truth)
+// ============================================================================
+
+/// Returns the unit amount (1.0) for a given decimal precision as ScaledAmount.
+///
+/// This is the **ONLY** source of scaling factor in the codebase.
+/// All other modules MUST delegate to this function instead of using 10u64.pow directly.
+///
+/// # Arguments
+/// * `decimals` - Number of decimal places (e.g., 8 for BTC, 6 for USDT, 18 for ETH)
+///
+/// # Returns
+/// * ScaledAmount representing 1.0 in the given precision
+///
+/// # Example
+/// ```ignore
+/// unit_amount(8)  -> ScaledAmount(100_000_000)   // 1.0 BTC
+/// unit_amount(6)  -> ScaledAmount(1_000_000)     // 1.0 USDT  
+/// unit_amount(18) -> ScaledAmount(10^18)         // 1.0 ETH (wei)
+/// ```
+pub(crate) fn unit_amount(decimals: u32) -> ScaledAmount {
+    ScaledAmount::from(10u64.pow(decimals))
+}
+
+// ============================================================================
 // Parse: Client → Internal (String/Decimal → ScaledAmount)
 // ============================================================================
 
@@ -565,6 +590,41 @@ pub fn decimal_to_u64(decimal: Decimal, decimals: u32) -> Result<u64, &'static s
 mod tests {
     use super::*;
     use std::str::FromStr;
+
+    // ========================================================================
+    // unit_amount Tests (TDD: Written before implementation)
+    // ========================================================================
+
+    #[test]
+    fn test_unit_amount_btc_8_decimals() {
+        let unit = unit_amount(8);
+        assert_eq!(*unit, 100_000_000);
+    }
+
+    #[test]
+    fn test_unit_amount_usdt_6_decimals() {
+        let unit = unit_amount(6);
+        assert_eq!(*unit, 1_000_000);
+    }
+
+    #[test]
+    fn test_unit_amount_eth_18_decimals() {
+        let unit = unit_amount(18);
+        assert_eq!(*unit, 1_000_000_000_000_000_000);
+    }
+
+    #[test]
+    fn test_unit_amount_zero_decimals() {
+        let unit = unit_amount(0);
+        assert_eq!(*unit, 1);
+    }
+
+    #[test]
+    fn test_unit_amount_returns_scaled_amount_type() {
+        // Verify the return type is ScaledAmount (type safety)
+        let unit: ScaledAmount = unit_amount(8);
+        assert!(!unit.is_zero());
+    }
 
     // ========================================================================
     // parse_amount Tests

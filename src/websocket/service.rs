@@ -270,8 +270,10 @@ impl WsService {
 
                     // Shortcut: Use decimal lib if available or simple float math for display?
                     // We imported `rust_decimal::Decimal`. Let's use it.
-                    let p_dec = Decimal::from(price) / Decimal::from(10u64.pow(price_decimals));
-                    let q_dec = Decimal::from(qty) / Decimal::from(10u64.pow(base_decimals));
+                    let p_dec =
+                        Decimal::from(price) / Decimal::from(*money::unit_amount(price_decimals));
+                    let q_dec =
+                        Decimal::from(qty) / Decimal::from(*money::unit_amount(base_decimals));
                     let quote_val = p_dec * q_dec;
                     let quote_qty_str = format!(
                         "{:.prec$}",
@@ -307,8 +309,10 @@ impl WsService {
 
                     // --- TICKER UPDATE (Mini Ticker) ---
                     // Update state and broadcast ticker
-                    let p_dec = Decimal::from(price) / Decimal::from(10u64.pow(price_decimals));
-                    let q_dec = Decimal::from(qty) / Decimal::from(10u64.pow(base_decimals));
+                    let p_dec =
+                        Decimal::from(price) / Decimal::from(*money::unit_amount(price_decimals));
+                    let q_dec =
+                        Decimal::from(qty) / Decimal::from(*money::unit_amount(base_decimals));
 
                     let ticker = self
                         .ticker_states

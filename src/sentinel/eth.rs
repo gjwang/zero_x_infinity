@@ -582,7 +582,7 @@ impl ChainScanner for EthScanner {
 /// Convert wei (u128 string) to Decimal with 18 decimals
 pub fn wei_to_eth(wei_str: &str) -> Decimal {
     Decimal::from_str(wei_str)
-        .map(|d| d / Decimal::from(10u64.pow(18)))
+        .map(|d| d / Decimal::from(*crate::money::unit_amount(18)))
         .unwrap_or_default()
 }
 
@@ -610,7 +610,7 @@ fn parse_uint256(data: &str) -> String {
 /// Convert raw amount string to Decimal with given decimals
 fn raw_to_decimal(raw: &str, decimals: u8) -> Decimal {
     Decimal::from_str(raw)
-        .map(|d| d / Decimal::from(10u64.pow(decimals as u32)))
+        .map(|d| d / Decimal::from(*crate::money::unit_amount(decimals as u32)))
         .unwrap_or_default()
 }
 

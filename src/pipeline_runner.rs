@@ -76,7 +76,7 @@ pub fn run_pipeline_single_thread(
         .symbol_mgr
         .get_symbol_info_by_id(config.active_symbol_id)
         .expect("Active symbol not found");
-    let qty_unit = symbol_info.qty_unit();
+    let qty_unit = *symbol_info.qty_unit();
     let base_id = symbol_info.base_asset_id;
     let quote_id = symbol_info.quote_asset_id;
     let active_symbol_id = config.active_symbol_id;
@@ -192,7 +192,7 @@ pub fn run_pipeline_single_thread(
                                     0,
                                     base_id,
                                     quote_id,
-                                    qty_unit,
+                                    qty_unit, // Already dereferenced at line 79
                                     ingested_at_ns,
                                     active_symbol_id, // symbol_id for fee lookup
                                 );
@@ -202,7 +202,7 @@ pub fn run_pipeline_single_thread(
                                 {
                                     let diff = valid_order.order.price - trade.price;
                                     let refund = (diff as u128 * trade.qty as u128
-                                        / qty_unit as u128)
+                                        / qty_unit as u128) // qty_unit is u64
                                         as u64;
                                     if refund > 0 {
                                         Some(PriceImprovement {

@@ -126,7 +126,7 @@ pub fn run_pipeline_multi_thread(
         .expect("Active symbol not found");
 
     let market = MarketContext {
-        qty_unit: symbol_info.qty_unit(),
+        qty_unit: *symbol_info.qty_unit(),
         base_id: symbol_info.base_asset_id,
         quote_id: symbol_info.quote_asset_id,
         symbol_id: active_symbol_id,

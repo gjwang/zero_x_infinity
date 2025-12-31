@@ -145,11 +145,11 @@ pub fn load_symbol_manager() -> Result<(SymbolManager, u32)> {
     let quote_decimals = manager
         .get_asset_decimal(symbol_info.quote_asset_id)
         .unwrap_or(6);
-    let qty_scale = 10u64.pow(symbol_info.base_decimals);
+    let qty_scale = *crate::money::unit_amount(symbol_info.base_decimals);
 
     // Reference price: 100,000 (e.g., BTC @ $100k)
     let ref_price_human = 100_000u64;
-    let ref_price_scaled = ref_price_human * 10u64.pow(quote_decimals);
+    let ref_price_scaled = ref_price_human * *crate::money::unit_amount(quote_decimals);
 
     // Max qty (in base units) before overflow: u64::MAX / ref_price_scaled
     let max_qty_units = u64::MAX / ref_price_scaled;
@@ -244,8 +244,8 @@ pub fn load_orders(
     let symbol_info = manager
         .get_symbol_info_by_id(active_symbol_id)
         .context("Active symbol not found")?;
-    let base_multiplier = symbol_info.qty_unit(); // 10^base_decimals
-    let quote_multiplier = 10u64.pow(
+    let base_multiplier = *symbol_info.qty_unit(); // 10^base_decimals
+    let quote_multiplier = *crate::money::unit_amount(
         manager
             .get_asset_decimal(symbol_info.quote_asset_id)
             .unwrap_or(6),

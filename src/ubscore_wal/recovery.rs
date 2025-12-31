@@ -86,7 +86,7 @@ impl UBSCoreRecovery {
                                     let symbol_info =
                                         manager.get_symbol_info_by_id(payload.symbol_id);
                                     let qty_unit =
-                                        symbol_info.map(|s| s.qty_unit()).unwrap_or(100_000_000);
+                                        symbol_info.map(|s| *s.qty_unit()).unwrap_or(100_000_000);
 
                                     // Calculate lock asset and amount
                                     let side = Side::try_from(payload.side).unwrap_or(Side::Buy);
