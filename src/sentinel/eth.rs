@@ -372,10 +372,27 @@ impl EthScanner {
             // Convert raw amount to decimal
             let amount = raw_to_decimal(&amount_raw, decimals);
 
-            let tx_index = u32::from_str_radix(log.transaction_index.trim_start_matches("0x"), 16)
-                .unwrap_or(0);
-            let log_index =
-                u32::from_str_radix(log.log_index.trim_start_matches("0x"), 16).unwrap_or(0);
+            let tx_index =
+                match u32::from_str_radix(log.transaction_index.trim_start_matches("0x"), 16) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        warn!(
+                            "Skipping deposit: failed to parse tx_index '{}': {}",
+                            log.transaction_index, e
+                        );
+                        continue;
+                    }
+                };
+            let log_index = match u32::from_str_radix(log.log_index.trim_start_matches("0x"), 16) {
+                Ok(v) => v,
+                Err(e) => {
+                    warn!(
+                        "Skipping deposit: failed to parse log_index '{}': {}",
+                        log.log_index, e
+                    );
+                    continue;
+                }
+            };
 
             deposits.push(DetectedDeposit {
                 tx_hash: log.transaction_hash.clone(),
@@ -540,6 +557,7 @@ impl ChainScanner for EthScanner {
 
         // Get peer count (may not be available on all nodes)
         let peer_count: Result<String, _> = self.rpc_call("net_peerCount", ()).await;
+        // SAFE_DEFAULT: peer count unavailable = assume 1 (healthy enough)
         let peers = peer_count
             .ok()
             .and_then(|p| u32::from_str_radix(p.trim_start_matches("0x"), 16).ok())
@@ -587,7 +605,10 @@ pub fn wei_to_eth(wei_str: &str) -> Decimal {
     const ETH_DECIMALS: i64 = 18;
     Decimal::from_str(wei_str)
         .map(|d| d / Decimal::TEN.powi(ETH_DECIMALS))
-        .unwrap_or_default()
+        .unwrap_or_else(|e| {
+            tracing::warn!("Failed to parse wei '{}': {}, using 0", wei_str, e);
+            Decimal::ZERO
+        })
 }
 
 /// Extract Ethereum address from 32-byte padded topic (last 20 bytes)
@@ -608,7 +629,10 @@ fn parse_uint256(data: &str) -> String {
     // Parse as u128 (good enough for most ERC20 amounts)
     u128::from_str_radix(data, 16)
         .map(|v| v.to_string())
-        .unwrap_or_else(|_| "0".to_string())
+        .unwrap_or_else(|e| {
+            tracing::warn!("Failed to parse uint256 '{}': {}, using 0", data, e);
+            "0".to_string()
+        })
 }
 
 /// Convert raw amount string to Decimal with given decimals
@@ -616,7 +640,10 @@ fn parse_uint256(data: &str) -> String {
 fn raw_to_decimal(raw: &str, decimals: u8) -> Decimal {
     Decimal::from_str(raw)
         .map(|d| d / Decimal::TEN.powi(decimals as i64))
-        .unwrap_or_default()
+        .unwrap_or_else(|e| {
+            tracing::warn!("Failed to parse raw amount '{}': {}, using 0", raw, e);
+            Decimal::ZERO
+        })
 }
 
 #[cfg(test)]
