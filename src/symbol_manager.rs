@@ -7,7 +7,11 @@ pub struct SymbolInfo {
     pub symbol_id: u32,
     pub base_asset_id: u32,
     pub quote_asset_id: u32,
+    /// Internal price scale (for storage/calculation)
+    /// DEPRECATED: Use price_scale() method instead for internal, price_precision() for API
     pub price_decimal: u32,
+    /// API boundary precision for price (input/output)
+    /// DEPRECATED: Use price_precision() method instead
     pub price_display_decimal: u32,
     /// Base asset decimals (e.g., 8 for BTC = satoshi)
     /// Stored here for fast access without additional lookup
@@ -19,6 +23,28 @@ pub struct SymbolInfo {
 }
 
 impl SymbolInfo {
+    // ========================================================================
+    // Intent-based Precision API (NEW - use these!)
+    // ========================================================================
+
+    /// API boundary precision for price (for input validation + output formatting)
+    /// Use this instead of directly accessing price_display_decimal field.
+    #[inline]
+    pub fn price_precision(&self) -> u32 {
+        self.price_display_decimal
+    }
+
+    /// Internal price scale (for internal calculations)
+    /// Use this instead of directly accessing price_decimal field.
+    #[inline]
+    pub fn price_scale(&self) -> u32 {
+        self.price_decimal
+    }
+
+    // ========================================================================
+    // Legacy Unit APIs (use price_scale()/qty_unit() internally)
+    // ========================================================================
+
     /// Get qty_unit (base asset unit) - e.g., 10^8 for BTC
     ///
     /// Returns ScaledAmount for type safety. Use `*qty_unit()` when you need u64.
@@ -28,13 +54,13 @@ impl SymbolInfo {
         crate::money::unit_amount(self.base_decimals)
     }
 
-    /// Get price_unit (price decimals unit) - e.g., 10^2 for 2 decimal places
+    /// Get price_unit (internal price scale unit) - e.g., 10^2 for 2 decimal places
     ///
     /// Returns ScaledAmount for type safety. Use `*price_unit()` when you need u64.
     /// Delegates to money::unit_amount() as the single source of truth.
     #[inline]
     pub fn price_unit(&self) -> ScaledAmount {
-        crate::money::unit_amount(self.price_decimal)
+        crate::money::unit_amount(self.price_scale())
     }
 
     /// Calculate quote quantity from price and quantity
@@ -80,12 +106,35 @@ impl SymbolInfo {
 #[derive(Debug, Clone)]
 pub struct AssetInfo {
     pub asset_id: u32,
+    /// Internal storage scale (e.g., 8 for BTC = 10^8 satoshi)
+    /// DEPRECATED: Use internal_scale() method instead
     pub decimals: u32,
-    pub display_decimals: u32, // Max allowed decimals for display/input
+    /// API boundary precision for input/output (max decimals allowed)
+    /// DEPRECATED: Use asset_precision() method instead  
+    pub display_decimals: u32,
     pub name: String,
 }
 
 impl AssetInfo {
+    // ========================================================================
+    // Intent-based Precision API (NEW - use these!)
+    // ========================================================================
+
+    /// API boundary precision (for input validation and output formatting)
+    /// This is the max decimals allowed in API requests/responses.
+    /// Use this instead of directly accessing display_decimals field.
+    #[inline]
+    pub fn asset_precision(&self) -> u32 {
+        self.display_decimals
+    }
+
+    /// Internal scale factor (for money calculations only)
+    /// Use this instead of directly accessing decimals field.
+    #[inline]
+    pub fn internal_scale(&self) -> u32 {
+        self.decimals
+    }
+
     // ========================================================================
     // Intent-based API: Decimal → ScaledAmount
     // Encapsulates conversion details; caller only needs to express intent
@@ -96,7 +145,7 @@ impl AssetInfo {
         &self,
         d: rust_decimal::Decimal,
     ) -> Result<ScaledAmount, crate::money::MoneyError> {
-        crate::money::parse_decimal(d, self.decimals)
+        crate::money::parse_decimal(d, self.internal_scale())
     }
 
     /// Parse amount (allows zero). For fees, discounts, etc.
@@ -105,12 +154,12 @@ impl AssetInfo {
         &self,
         d: rust_decimal::Decimal,
     ) -> Result<ScaledAmount, crate::money::MoneyError> {
-        crate::money::parse_decimal_allow_zero(d, self.decimals)
+        crate::money::parse_decimal_allow_zero(d, self.internal_scale())
     }
 
-    /// Format amount for display
+    /// Format amount for display (uses asset_precision for output)
     pub fn format_amount(&self, amount: ScaledAmount) -> String {
-        crate::money::format_amount(*amount, self.decimals, self.display_decimals)
+        crate::money::format_amount(*amount, self.internal_scale(), self.asset_precision())
     }
 }
 
