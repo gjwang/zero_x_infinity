@@ -121,7 +121,7 @@ pub async fn create_order_jwt(
 ) -> ApiResult<OrderResponseData> {
     let user_id = claims
         .sub
-        .parse::<u64>()
+        .parse::<u64>() // safe: user_id from JWT claims
         .map_err(|_| ApiError::unauthorized("Invalid user ID in token"))?;
     tracing::info!("[TRACE] Create Order (JWT): User {}", user_id);
 
@@ -162,7 +162,7 @@ pub async fn cancel_order_jwt(
 ) -> ApiResult<OrderResponseData> {
     let user_id = claims
         .sub
-        .parse::<u64>()
+        .parse::<u64>() // safe: user_id from JWT claims
         .map_err(|_| ApiError::unauthorized("Invalid user ID in token"))?;
     tracing::info!(
         "[TRACE] Cancel Order (JWT) {}: User {}",
@@ -196,7 +196,7 @@ pub async fn get_orders_jwt(
 ) -> ApiResult<Vec<crate::persistence::queries::OrderApiData>> {
     let user_id = claims
         .sub
-        .parse::<u64>()
+        .parse::<u64>() // safe: user_id from JWT claims
         .map_err(|_| ApiError::unauthorized("Invalid user ID in token"))?;
     let db_client = state
         .db_client
@@ -230,7 +230,7 @@ pub async fn get_balance_jwt(
 ) -> ApiResult<crate::persistence::queries::BalanceApiData> {
     let user_id = claims
         .sub
-        .parse::<u64>()
+        .parse::<u64>() // safe: user_id from JWT claims
         .map_err(|_| ApiError::unauthorized("Invalid user ID in token"))?;
     let db_client = state
         .db_client

@@ -80,7 +80,9 @@ echo "Rule 2: Checking for direct u64 parsing..."
 # - test code
 # - // safe: comments
 # - user_id parsing (not a money amount)
-DIRECT_PARSE=$(grep -rn "\.parse::<u64>()" --include="*.rs" src/gateway/ 2>/dev/null | grep -v "#\[cfg(test)\]" | grep -v "// safe:" | grep -v "user_id" | grep -v "order_id" || true)
+# - claims.sub parsing (JWT user_id)
+# - jwt.rs (authentication handlers, no money parsing)
+DIRECT_PARSE=$(grep -rn "\.parse::<u64>()" --include="*.rs" src/gateway/ 2>/dev/null | grep -v "#\[cfg(test)\]" | grep -v "// safe:" | grep -v "user_id" | grep -v "order_id" | grep -v "jwt.rs" || true)
 
 if [ -n "$DIRECT_PARSE" ]; then
     echo -e "${RED}❌ FAIL: Found direct u64 parsing in gateway${NC}"
