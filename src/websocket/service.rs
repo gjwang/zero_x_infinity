@@ -14,12 +14,14 @@ use tokio::time::interval; // Needed for u64 conversion
 use super::connection::ConnectionManager;
 use super::messages::{PushEvent, WsMessage};
 use crate::models::Side;
+use crate::money;
 use crate::symbol_manager::SymbolManager;
 
 /// Format internal u64 to display string with specified decimals
+/// Delegates to crate::money for unified implementation
+#[inline]
 fn format_amount(value: u64, decimals: u32, display_decimals: u32) -> String {
-    let decimal_value = Decimal::from(value) / Decimal::from(10u64.pow(decimals));
-    format!("{:.prec$}", decimal_value, prec = display_decimals as usize)
+    money::format_amount(value, decimals, display_decimals)
 }
 
 #[derive(Debug, Clone)]

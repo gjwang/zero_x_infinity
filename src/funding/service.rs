@@ -3,7 +3,7 @@ use super::transfer::Transfer;
 use super::transfer::{TransferRequest, TransferResponse};
 use super::types::AccountType;
 use crate::account::{AssetManager, Database};
-use rust_decimal::prelude::*;
+use crate::money;
 use sqlx::Row;
 use std::str::FromStr;
 use utoipa::ToSchema;
@@ -33,23 +33,13 @@ impl TransferService {
             .map_err(TransferError::DatabaseError)?
             .ok_or_else(|| TransferError::InvalidAsset(req.asset.clone()))?;
 
-        // Scale Amount: String -> i64
-        // Logic: Parse as Decimal first to handle "1.23", then multiply by 10^decimals, then round/truncate to i64
-        let amount_decimal =
-            Decimal::from_str(&req.amount).map_err(|_| TransferError::InvalidAmountFormat)?;
-
-        if amount_decimal <= Decimal::ZERO {
-            return Err(TransferError::InvalidAmount);
-        }
-
-        let scale_factor = Decimal::from(10u64.pow(asset.decimals as u32));
-        let amount_scaled = (amount_decimal * scale_factor)
-            .to_i64()
-            .ok_or(TransferError::InvalidAmount)?;
-
-        if amount_scaled <= 0 {
-            return Err(TransferError::InvalidAmount);
-        }
+        // Scale Amount: String -> i64 using unified money module
+        let amount_scaled =
+            *money::parse_amount(&req.amount, asset.decimals as u32).map_err(|e| match e {
+                money::MoneyError::InvalidAmount => TransferError::InvalidAmount,
+                money::MoneyError::PrecisionOverflow { .. } => TransferError::InvalidAmountFormat,
+                _ => TransferError::InvalidAmountFormat,
+            })? as i64;
 
         // 2. Transaction
         let mut tx = db.pool().begin().await?;
@@ -176,8 +166,8 @@ impl TransferService {
                 asset_id: asset_id as u32,
                 asset: asset_name,
                 account_type: account_type_name.to_string(),
-                available: unscale_amount(available, decimals as u32),
-                frozen: unscale_amount(frozen, decimals as u32),
+                available: money::format_amount_signed(available, decimals as u32, decimals as u32),
+                frozen: money::format_amount_signed(frozen, decimals as u32, decimals as u32),
             });
         }
 
@@ -193,14 +183,4 @@ pub struct BalanceInfo {
     pub account_type: String,
     pub available: String,
     pub frozen: String,
-}
-
-/// Unscale amount: convert from stored i64 scaled value to human-readable string
-/// e.g., stored=100000000, decimals=8 -> "1.00000000"
-fn unscale_amount(stored: i64, decimals: u32) -> String {
-    let scale_factor = Decimal::from(10u64.pow(decimals));
-    let stored_decimal = Decimal::from(stored);
-    let human_val = stored_decimal / scale_factor;
-    // Format with fixed precision matching the asset decimals
-    format!("{:.prec$}", human_val, prec = decimals as usize)
 }

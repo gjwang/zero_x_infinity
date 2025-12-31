@@ -1,3 +1,4 @@
+use crate::money::{MoneyFormatter, ScaledAmount};
 use rustc_hash::FxHashMap;
 
 #[derive(Debug, Clone)]
@@ -31,6 +32,35 @@ pub struct AssetInfo {
     pub decimals: u32,
     pub display_decimals: u32, // Max allowed decimals for display/input
     pub name: String,
+}
+
+impl AssetInfo {
+    // ========================================================================
+    // Intent-based API: Decimal → ScaledAmount
+    // Encapsulates conversion details; caller only needs to express intent
+    // ========================================================================
+
+    /// Parse amount (rejects zero). For quantities, prices, etc.
+    pub fn parse_amount(
+        &self,
+        d: rust_decimal::Decimal,
+    ) -> Result<ScaledAmount, crate::money::MoneyError> {
+        crate::money::parse_decimal(d, self.decimals)
+    }
+
+    /// Parse amount (allows zero). For fees, discounts, etc.
+    /// Caller explicitly opts into allowing zero.
+    pub fn parse_amount_allow_zero(
+        &self,
+        d: rust_decimal::Decimal,
+    ) -> Result<ScaledAmount, crate::money::MoneyError> {
+        crate::money::parse_decimal_allow_zero(d, self.decimals)
+    }
+
+    /// Format amount for display
+    pub fn format_amount(&self, amount: ScaledAmount) -> String {
+        crate::money::format_amount(*amount, self.decimals, self.display_decimals)
+    }
 }
 
 /// Manages symbol-to-ID and ID-to-symbol mappings
@@ -183,5 +213,42 @@ impl SymbolManager {
     /// Iterate over all symbols
     pub fn iter_symbols(&self) -> impl Iterator<Item = (&u32, &SymbolInfo)> {
         self.symbol_info.iter()
+    }
+
+    // ========================================================================
+    // Layer 2: Money Conversion Methods (Intent-based API)
+    // Delegates to crate::money core functions
+    // ========================================================================
+
+    /// Format quantity for display (internal ScaledAmount → String)
+    ///
+    /// Uses base_asset.decimals and display_decimals from SymbolManager.
+    pub fn format_qty(&self, value: ScaledAmount, symbol_id: u32) -> Option<String> {
+        crate::money::format_qty(value, symbol_id, self).ok()
+    }
+
+    /// Format price for display (internal ScaledAmount → String)
+    ///
+    /// Uses price_decimal and price_display_decimal from SymbolInfo.
+    pub fn format_price(&self, value: ScaledAmount, symbol_id: u32) -> Option<String> {
+        crate::money::format_price(value, symbol_id, self).ok()
+    }
+
+    /// Parse quantity string (client String → internal ScaledAmount)
+    ///
+    /// Validates precision against base_asset.decimals.
+    pub fn parse_qty(&self, amount_str: &str, symbol_id: u32) -> Option<ScaledAmount> {
+        crate::money::parse_qty(amount_str, symbol_id, self).ok()
+    }
+
+    /// Parse price string (client String → internal ScaledAmount)
+    ///
+    /// Validates precision against price_decimal.
+    pub fn parse_price(&self, price_str: &str, symbol_id: u32) -> Option<ScaledAmount> {
+        crate::money::parse_price(price_str, symbol_id, self).ok()
+    }
+
+    pub fn money_formatter(&self, symbol_id: u32) -> Option<MoneyFormatter<'_>> {
+        MoneyFormatter::new(self, symbol_id)
     }
 }

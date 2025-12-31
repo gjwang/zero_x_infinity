@@ -3,11 +3,10 @@
 // Consumes DepthSnapshot from ME and serves HTTP queries
 
 use crate::messages::DepthSnapshot;
+use crate::money;
 use crate::pipeline::MultiThreadQueues;
 use crate::symbol_manager::SymbolManager;
 use crate::websocket::{ConnectionManager, messages::WsMessage};
-use rust_decimal::Decimal;
-use rust_decimal::prelude::FromPrimitive;
 use std::sync::Arc;
 use std::sync::RwLock;
 
@@ -76,16 +75,19 @@ impl DepthService {
 
                 // Broadcast via WebSocket
                 if let Some(ws) = &self.ws_manager {
-                    // Convert raw u64 to formatted strings
-                    let factor_p = Decimal::from(10u64.pow(self.price_decimals));
-                    let factor_q = Decimal::from(10u64.pow(self.qty_decimals));
-
+                    // Use unified money module for formatting
                     let format_level = |level: &(u64, u64)| -> (String, String) {
-                        let p = Decimal::from_u64(level.0).unwrap_or_default() / factor_p;
-                        let q = Decimal::from_u64(level.1).unwrap_or_default() / factor_q;
                         (
-                            format!("{:.prec$}", p, prec = self.price_display_decimals as usize),
-                            format!("{:.prec$}", q, prec = self.qty_display_decimals as usize),
+                            money::format_amount(
+                                level.0,
+                                self.price_decimals,
+                                self.price_display_decimals,
+                            ),
+                            money::format_amount(
+                                level.1,
+                                self.qty_decimals,
+                                self.qty_display_decimals,
+                            ),
                         )
                     };
 
@@ -165,10 +167,11 @@ mod tests {
         queues.depth_event_queue.push(test_snapshot).unwrap();
 
         // Manually update (simulating what run() does)
-        if let Some(snap) = queues.depth_event_queue.pop() {
-            if let Ok(mut current) = service.current_snapshot.write() {
-                *current = snap;
-            }
+        if let (Some(snap), Ok(mut current)) = (
+            queues.depth_event_queue.pop(),
+            service.current_snapshot.write(),
+        ) {
+            *current = snap;
         }
 
         // Now should have data

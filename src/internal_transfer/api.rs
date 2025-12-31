@@ -8,7 +8,10 @@ use serde::{Deserialize, Serialize};
 
 use super::coordinator::TransferCoordinator;
 use super::error::TransferError;
-use super::types::{InternalTransferId, ServiceId, TransferRequest as CoreTransferRequest};
+use super::types::{
+    InternalTransferId, ScaledAmount, ServiceId, TransferRequest as CoreTransferRequest,
+};
+use crate::money;
 
 // ============================================================================
 // API Request/Response Types
@@ -115,62 +118,24 @@ fn parse_account_type(s: &str) -> Result<ServiceId, TransferError> {
     }
 }
 
-/// Parse amount from string to u64 with decimals
-fn parse_amount(s: &str, decimals: u32) -> Result<u64, TransferError> {
-    // Remove any whitespace
-    let s = s.trim();
-
-    if s.is_empty() {
-        return Err(TransferError::InvalidAmount);
-    }
-
-    // Parse as decimal
-    let parts: Vec<&str> = s.split('.').collect();
-
-    let (whole, frac) = match parts.len() {
-        1 => (parts[0], ""),
-        2 => (parts[0], parts[1]),
-        _ => return Err(TransferError::InvalidAmount),
-    };
-
-    // Parse whole part
-    let whole_num: u64 = whole.parse().map_err(|_| TransferError::InvalidAmount)?;
-
-    // **PRECISION VALIDATION**: Check if fractional part exceeds asset decimals
-    // QA TC-P0-04: Reject amounts with excessive precision instead of truncating
-    if frac.len() > decimals as usize {
-        return Err(TransferError::PrecisionOverflow {
-            provided: frac.len() as u32,
-            max: decimals,
-        });
-    }
-
-    // Parse fractional part (pad to decimals)
-    let frac_str = format!("{:0<width$}", frac, width = decimals as usize);
-    let frac_num: u64 = frac_str[..decimals as usize]
-        .parse()
-        .map_err(|_| TransferError::InvalidAmount)?;
-
-    // Combine
-    let multiplier = 10u64.pow(decimals);
-    let amount = whole_num
-        .checked_mul(multiplier)
-        .and_then(|v| v.checked_add(frac_num))
-        .ok_or(TransferError::InvalidAmount)?;
-
-    if amount == 0 {
-        return Err(TransferError::InvalidAmount);
-    }
-
-    Ok(amount)
+/// Parse amount from string to ScaledAmount with decimals
+/// Delegates to crate::money::parse_amount for unified implementation
+fn parse_amount(s: &str, decimals: u32) -> Result<ScaledAmount, TransferError> {
+    money::parse_amount(s, decimals).map_err(|e| match e {
+        money::MoneyError::InvalidAmount => TransferError::InvalidAmount,
+        money::MoneyError::PrecisionOverflow { provided, max } => {
+            TransferError::PrecisionOverflow { provided, max }
+        }
+        money::MoneyError::Overflow => TransferError::AmountTooLarge,
+        money::MoneyError::InvalidFormat(_) => TransferError::InvalidAmount,
+        _ => TransferError::InvalidAmount,
+    })
 }
 
-/// Format amount from u64 to string with decimals
-fn format_amount(amount: u64, decimals: u32) -> String {
-    let divisor = 10u64.pow(decimals);
-    let whole = amount / divisor;
-    let frac = amount % divisor;
-    format!("{}.{:0>width$}", whole, frac, width = decimals as usize)
+/// Format amount from ScaledAmount to string with decimals
+/// Delegates to crate::money::format_amount_full for unified implementation
+fn format_amount(amount: ScaledAmount, decimals: u32) -> String {
+    money::format_amount_full(*amount, decimals)
 }
 
 /// Map TransferError to (StatusCode, error_code, message)
@@ -220,9 +185,9 @@ pub struct AssetValidationInfo {
     pub is_active: bool,
     pub can_internal_transfer: bool,
     /// Minimum transfer amount (scaled) - 0 means no limit
-    pub min_transfer_amount: u64,
+    pub min_transfer_amount: ScaledAmount,
     /// Maximum transfer amount (scaled) - 0 means no limit
-    pub max_transfer_amount: u64,
+    pub max_transfer_amount: ScaledAmount,
 }
 
 impl AssetValidationInfo {
@@ -235,8 +200,8 @@ impl AssetValidationInfo {
             is_active: asset.is_active(),
             can_internal_transfer: asset.can_internal_transfer(),
             // Default limits - can be extended via database in future
-            min_transfer_amount: 1,            // At least 1 satoshi
-            max_transfer_amount: u64::MAX / 2, // Leave room for arithmetic
+            min_transfer_amount: 1.into(), // At least 1 satoshi
+            max_transfer_amount: (u64::MAX / 2).into(), // Leave room for arithmetic
         }
     }
 }
@@ -337,7 +302,7 @@ pub async fn create_transfer_fsm(
     }
 
     // 5c. Overflow safety check (ensure we have room for arithmetic)
-    if amount > u64::MAX / 2 {
+    if *amount > u64::MAX / 2 {
         return Err((
             StatusCode::BAD_REQUEST,
             ApiResponse::error(error_codes::INVALID_AMOUNT, "Amount would cause overflow"),
@@ -433,14 +398,14 @@ mod tests {
     #[test]
     fn test_parse_amount() {
         // Normal cases
-        assert_eq!(parse_amount("1.0", 8).unwrap(), 100_000_000);
-        assert_eq!(parse_amount("0.5", 8).unwrap(), 50_000_000);
-        assert_eq!(parse_amount("100", 8).unwrap(), 10_000_000_000);
-        assert_eq!(parse_amount("0.00000001", 8).unwrap(), 1);
+        assert_eq!(*parse_amount("1.0", 8).unwrap(), 100_000_000);
+        assert_eq!(*parse_amount("0.5", 8).unwrap(), 50_000_000);
+        assert_eq!(*parse_amount("100", 8).unwrap(), 10_000_000_000);
+        assert_eq!(*parse_amount("0.00000001", 8).unwrap(), 1);
 
         // Edge cases
-        assert_eq!(parse_amount("1", 8).unwrap(), 100_000_000);
-        assert_eq!(parse_amount("0.1", 8).unwrap(), 10_000_000);
+        assert_eq!(*parse_amount("1", 8).unwrap(), 100_000_000);
+        assert_eq!(*parse_amount("0.1", 8).unwrap(), 10_000_000);
 
         // Invalid cases
         assert!(parse_amount("0", 8).is_err());
@@ -451,10 +416,10 @@ mod tests {
 
     #[test]
     fn test_format_amount() {
-        assert_eq!(format_amount(100_000_000, 8), "1.00000000");
-        assert_eq!(format_amount(50_000_000, 8), "0.50000000");
-        assert_eq!(format_amount(1, 8), "0.00000001");
-        assert_eq!(format_amount(0, 8), "0.00000000");
+        assert_eq!(format_amount(100_000_000.into(), 8), "1.00000000");
+        assert_eq!(format_amount(50_000_000.into(), 8), "0.50000000");
+        assert_eq!(format_amount(1.into(), 8), "0.00000001");
+        assert_eq!(format_amount(0.into(), 8), "0.00000000");
     }
 
     #[test]
@@ -465,13 +430,13 @@ mod tests {
             status: 1,
             is_active: true,
             can_internal_transfer: true,
-            min_transfer_amount: 1,
-            max_transfer_amount: u64::MAX / 2,
+            min_transfer_amount: 1.into(),
+            max_transfer_amount: (u64::MAX / 2).into(),
         };
 
         assert!(info.is_active);
         assert!(info.can_internal_transfer);
-        assert_eq!(info.min_transfer_amount, 1);
+        assert_eq!(*info.min_transfer_amount, 1);
     }
 
     #[test]
@@ -482,8 +447,8 @@ mod tests {
             status: 0, // Inactive
             is_active: false,
             can_internal_transfer: true,
-            min_transfer_amount: 1,
-            max_transfer_amount: u64::MAX / 2,
+            min_transfer_amount: 1.into(),
+            max_transfer_amount: (u64::MAX / 2).into(),
         };
 
         assert!(!info.is_active);
@@ -497,8 +462,8 @@ mod tests {
             status: 1,
             is_active: true,
             can_internal_transfer: false, // Transfer not allowed
-            min_transfer_amount: 1,
-            max_transfer_amount: u64::MAX / 2,
+            min_transfer_amount: 1.into(),
+            max_transfer_amount: (u64::MAX / 2).into(),
         };
 
         assert!(!info.can_internal_transfer);
@@ -540,7 +505,7 @@ mod tests {
         // Exact precision should be OK
         let result = parse_amount("1.12345678", 8); // Exactly 8 decimals
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), 112_345_678);
+        assert_eq!(*result.unwrap(), 112_345_678);
     }
 
     /// ATK-006: Integer overflow attack
@@ -606,14 +571,14 @@ mod tests {
             status: 1,
             is_active: true,
             can_internal_transfer: true,
-            min_transfer_amount: 1000,          // Minimum
-            max_transfer_amount: 1_000_000_000, // Maximum
+            min_transfer_amount: 1000.into(),          // Minimum
+            max_transfer_amount: 1_000_000_000.into(), // Maximum
         };
 
         // Below minimum
-        assert!(100 < info.min_transfer_amount);
+        assert!(100 < *info.min_transfer_amount);
 
         // Above maximum
-        assert!(10_000_000_000 > info.max_transfer_amount);
+        assert!(10_000_000_000 > *info.max_transfer_amount);
     }
 }

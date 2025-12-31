@@ -1095,7 +1095,7 @@ mod tests {
 
         // Setup accounts - buyer needs quote for lock, base for receive
         // seller needs base for lock, quote for receive
-        ubs.deposit(1, 2, 1_000_000_0000).unwrap(); // Buyer: 1M USDT (quote - for lock)
+        ubs.deposit(1, 2, 10_000_000_000).unwrap(); // Buyer: 1M USDT (quote - for lock)
         ubs.deposit(1, 1, 0).unwrap(); // Buyer: init BTC balance (for receive)
         ubs.deposit(2, 1, 100_0000_0000).unwrap(); // Seller: 100 BTC (base - for lock)
         ubs.deposit(2, 2, 0).unwrap(); // Seller: init USDT balance (for receive)
@@ -1106,7 +1106,7 @@ mod tests {
             .unwrap()
             .get_balance_mut(2)
             .unwrap()
-            .lock(850_000_0000)
+            .lock(8_500_000_000)
             .unwrap(); // 8500 USDT frozen
 
         // Seller locks base for sell order
@@ -1174,9 +1174,9 @@ mod tests {
 
         // Setup accounts with known balances
         ubs.deposit(1, 1, 10_0000_0000).unwrap(); // Buyer: 10 BTC
-        ubs.deposit(1, 2, 100_000_0000).unwrap(); // Buyer: 100000 USDT
+        ubs.deposit(1, 2, 1_000_000_000).unwrap(); // Buyer: 100000 USDT
         ubs.deposit(2, 1, 10_0000_0000).unwrap(); // Seller: 10 BTC
-        ubs.deposit(2, 2, 100_000_0000).unwrap(); // Seller: 100000 USDT
+        ubs.deposit(2, 2, 1_000_000_000).unwrap(); // Seller: 100000 USDT
 
         // Lock funds for orders
         ubs.accounts_mut()
@@ -1201,8 +1201,8 @@ mod tests {
             seller_order_id: 201,
             buyer_user_id: 1,
             seller_user_id: 2,
-            price: 85000_00, // 85000.00 scaled
-            qty: 1000_0000,  // 0.1 BTC
+            price: 8_500_000, // 85000.00 scaled
+            qty: 1000_0000,   // 0.1 BTC
         };
 
         let trade_event = TradeEvent::new(

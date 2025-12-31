@@ -72,6 +72,9 @@ pub mod internal_transfer;
 // Trade Fee System (Phase 0x0C)
 pub mod fee;
 
+// Money Conversion (unified scale up/down)
+pub mod money;
+
 // Config Hot-Reload (Phase 0x0C)
 pub mod config_watcher;
 

@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use crate::models::{InternalOrder, OrderStatus, OrderType, Side, TimeInForce};
+use crate::money;
 use crate::symbol_manager::SymbolManager;
 
 /// Custom deserializer for non-empty strings
@@ -165,16 +166,18 @@ impl ValidatedClientOrder {
 /// Convert Decimal to u64
 ///
 /// Multiplies by 10^decimals and converts to u64
+/// Delegates to crate::money::parse_decimal for unified implementation
 pub fn decimal_to_u64(decimal: Decimal, decimals: u32) -> Result<u64, &'static str> {
-    let multiplier = Decimal::from(10u64.pow(decimals));
-    let result = decimal * multiplier;
-
-    // Should not have fractional part after multiplication
-    if !result.fract().is_zero() {
-        return Err("Unexpected fractional part after scaling");
-    }
-
-    result.to_u64().ok_or("Number too large")
+    money::parse_decimal(decimal, decimals)
+        .map(|s| *s) // Deref ScaledAmount to u64
+        .map_err(|e| match e {
+            money::MoneyError::InvalidAmount => "Amount must be positive",
+            money::MoneyError::PrecisionOverflow { .. } => {
+                "Unexpected fractional part after scaling"
+            }
+            money::MoneyError::Overflow => "Number too large",
+            _ => "Conversion failed",
+        })
 }
 
 /// Cancel order request

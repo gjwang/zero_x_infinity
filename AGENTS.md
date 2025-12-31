@@ -33,6 +33,7 @@ Before making any changes, AI agents MUST read:
 | [ID Specification](./docs/src/0x0A-b-id-specification.md) | Identity addressing rules |
 | [Development Guidelines](./docs/standards/development-guidelines.md) | Coding standards |
 | [Testing Pitfalls](./docs/src/testing-pitfalls.md) | Common traps and best practices |
+| [Money Type Safety](./docs/standards/money-type-safety.md) | **CRITICAL**: Balance & Scaling rules |
 
 ---
 
@@ -253,6 +254,7 @@ graph TD
 - ❌ Commit without running `cargo fmt` and `cargo clippy`
 - ❌ Hardcode ports or credentials (use environment variables)
 - ❌ **Switch Roles AUTONOMOUSLY**: You are FORBIDDEN from switching roles (e.g., Architect -> Developer) without explicit user approval. Architect stops at Handover.
+- ❌ **Manual Money Scaling**: You are FORBIDDEN from performing manual scaling (e.g., `amount * 10^8`) outside of `src/money.rs`. ALWAYS use `SymbolManager` intent-based methods or the `ScaledAmount` type. No exceptions.
 
 ### MUST DO
 

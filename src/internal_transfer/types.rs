@@ -5,6 +5,8 @@
 use std::fmt;
 use std::str::FromStr;
 
+pub use crate::money::ScaledAmount;
+
 use super::state::TransferState;
 
 /// Request ID type - ULID-based unique identifier
@@ -173,14 +175,20 @@ pub struct TransferRequest {
     /// Asset ID
     pub asset_id: u32,
     /// Amount in scaled units (e.g., satoshis for BTC)
-    pub amount: u64,
+    pub amount: ScaledAmount,
     /// Client-provided idempotency key (optional)
     pub cid: Option<String>,
 }
 
 impl TransferRequest {
     /// Create a new transfer request
-    pub fn new(from: ServiceId, to: ServiceId, user_id: u64, asset_id: u32, amount: u64) -> Self {
+    pub fn new(
+        from: ServiceId,
+        to: ServiceId,
+        user_id: u64,
+        asset_id: u32,
+        amount: ScaledAmount,
+    ) -> Self {
         Self {
             from,
             to,
@@ -197,7 +205,7 @@ impl TransferRequest {
         to: ServiceId,
         user_id: u64,
         asset_id: u32,
-        amount: u64,
+        amount: ScaledAmount,
         cid: String,
     ) -> Self {
         Self {
@@ -234,7 +242,7 @@ pub struct TransferRecord {
     /// Asset ID
     pub asset_id: u32,
     /// Amount in scaled units
-    pub amount: u64,
+    pub amount: ScaledAmount,
     /// Current FSM state
     pub state: TransferState,
     /// Last error message (for debugging)
@@ -255,7 +263,7 @@ impl TransferRecord {
         target: ServiceId,
         user_id: u64,
         asset_id: u32,
-        amount: u64,
+        amount: ScaledAmount,
         cid: Option<String>,
     ) -> Self {
         let transfer_type =
@@ -342,7 +350,13 @@ mod tests {
 
     #[test]
     fn test_transfer_request() {
-        let req = TransferRequest::new(ServiceId::Funding, ServiceId::Trading, 1001, 1, 1000000);
+        let req = TransferRequest::new(
+            ServiceId::Funding,
+            ServiceId::Trading,
+            1001,
+            1,
+            1000000.into(),
+        );
         assert_eq!(req.transfer_type(), Some(TransferType::FundingToSpot));
         assert!(req.cid.is_none());
 
@@ -351,7 +365,7 @@ mod tests {
             ServiceId::Funding,
             1001,
             1,
-            500000,
+            500000.into(),
             "client-123".to_string(),
         );
         assert_eq!(
@@ -370,7 +384,7 @@ mod tests {
             ServiceId::Trading,
             1001,
             1,
-            1000000,
+            1000000.into(),
             None,
         );
 

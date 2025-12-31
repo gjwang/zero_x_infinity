@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 use utoipa::ToSchema;
 
+use crate::money;
 use crate::pipeline::OrderAction;
 
 use super::state::AppState;
@@ -105,23 +106,15 @@ impl<'a> DepthFormatter<'a> {
 // ============================================================================
 
 /// Format price with display decimals (internal use only)
+/// Uses crate::money for unified Decimal-based implementation
 fn format_price_internal(value: u64, display_decimals: u32) -> String {
-    let divisor = 10u64.pow(display_decimals);
-    format!(
-        "{:.prec$}",
-        value as f64 / divisor as f64,
-        prec = display_decimals as usize
-    )
+    money::format_amount(value, display_decimals, display_decimals)
 }
 
 /// Format quantity with display decimals (internal use only)
+/// Uses crate::money for unified Decimal-based implementation
 fn format_qty_internal(value: u64, decimals: u32, display_decimals: u32) -> String {
-    let divisor = 10u64.pow(decimals);
-    format!(
-        "{:.prec$}",
-        value as f64 / divisor as f64,
-        prec = display_decimals as usize
-    )
+    money::format_amount(value, decimals, display_decimals)
 }
 
 /// Create order endpoint
@@ -1322,7 +1315,7 @@ mod tests {
         // BTC: decimals=8, display_decimals=6
         assert_eq!(format_qty_internal(100000000, 8, 6), "1.000000");
         assert_eq!(format_qty_internal(50000000, 8, 6), "0.500000");
-        assert_eq!(format_qty_internal(123456789, 8, 6), "1.234568"); // rounding
+        assert_eq!(format_qty_internal(123456789, 8, 6), "1.234567"); // Decimal truncation (not f64 rounding)
 
         // ETH: decimals=8, display_decimals=4
         assert_eq!(format_qty_internal(100000000, 8, 4), "1.0000");
@@ -1344,31 +1337,32 @@ mod tests {
 
         // Large value
         assert_eq!(format_qty_internal(1000000000000, 8, 6), "10000.000000");
-        assert_eq!(format_qty_internal(u64::MAX, 8, 6), "184467440737.095520"); // u64::MAX / 10^8 (float precision)
+        assert_eq!(format_qty_internal(u64::MAX, 8, 6), "184467440737.095516"); // Decimal precision (not f64)
     }
 
     #[test]
     fn test_format_qty_precision_edge_cases() {
-        // display_decimals < decimals (common case)
-        assert_eq!(format_qty_internal(123456789, 8, 6), "1.234568");
-        assert_eq!(format_qty_internal(123456789, 8, 4), "1.2346");
+        // display_decimals < decimals - now uses Decimal truncation (not f64 rounding)
+        assert_eq!(format_qty_internal(123456789, 8, 6), "1.234567");
+        assert_eq!(format_qty_internal(123456789, 8, 4), "1.2345");
         assert_eq!(format_qty_internal(123456789, 8, 2), "1.23");
 
         // display_decimals == decimals
         assert_eq!(format_qty_internal(123456789, 8, 8), "1.23456789");
 
-        // display_decimals > decimals (uncommon, but should handle correctly)
+        // display_decimals > decimals (pads with zeros)
         assert_eq!(format_qty_internal(12345, 4, 6), "1.234500");
         assert_eq!(format_qty_internal(12345, 4, 8), "1.23450000");
     }
 
     #[test]
-    fn test_format_qty_rounding() {
-        // Test rounding
-        assert_eq!(format_qty_internal(123456789, 8, 6), "1.234568"); // .789 -> .68
-        assert_eq!(format_qty_internal(123454999, 8, 6), "1.234550"); // .4999 -> .50
-        assert_eq!(format_qty_internal(123455000, 8, 6), "1.234550"); // .5000 -> .50
-        assert_eq!(format_qty_internal(123455001, 8, 6), "1.234550"); // .5001 -> .50
+    fn test_format_qty_truncation() {
+        // Decimal truncation behavior (not f64 rounding)
+        // 1.23456789 displayed with 6 decimals = 1.234567 (truncated)
+        assert_eq!(format_qty_internal(123456789, 8, 6), "1.234567");
+        assert_eq!(format_qty_internal(123454999, 8, 6), "1.234549");
+        assert_eq!(format_qty_internal(123455000, 8, 6), "1.234550");
+        assert_eq!(format_qty_internal(123455001, 8, 6), "1.234550");
     }
 
     #[test]
@@ -1392,8 +1386,8 @@ mod tests {
         // 0.1 BTC = 10000000 (decimals=8)
         assert_eq!(format_qty_internal(10000000, 8, 6), "0.100000");
 
-        // 0.00123456 BTC
-        assert_eq!(format_qty_internal(123456, 8, 6), "0.001235");
+        // 0.00123456 BTC with truncation
+        assert_eq!(format_qty_internal(123456, 8, 6), "0.001234");
 
         // ETH trading scenario
         // 1.5 ETH = 150000000 (decimals=8)

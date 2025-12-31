@@ -1,5 +1,6 @@
 use super::chain_adapter::ChainClient;
 use crate::account::{AssetManager, Database};
+use crate::money;
 use rust_decimal::prelude::*;
 use sqlx::Row;
 use std::sync::Arc;
@@ -20,6 +21,8 @@ pub enum WithdrawError {
     InvalidAmount,
     #[error("Chain error: {0}")]
     Chain(String),
+    #[error("Money error: {0}")]
+    Money(#[from] crate::money::MoneyError),
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -80,18 +83,27 @@ impl WithdrawService {
             .map_err(WithdrawError::Database)?
             .ok_or_else(|| WithdrawError::AssetNotFound(asset_name.to_string()))?;
 
-        // Scale to i64
-        let scale_factor = Decimal::from(10u64.pow(asset.decimals as u32));
-        let amount_scaled = (amount * scale_factor)
-            .to_i64()
-            .ok_or(WithdrawError::InvalidAmount)?;
-        let fee_scaled = (fee * scale_factor)
-            .to_i64()
-            .ok_or(WithdrawError::InvalidAmount)?;
+        // Scale to i64 using intent-based asset API
+        let amount_scaled = *asset.parse_amount(amount).map_err(|e| {
+            tracing::error!(
+                "Withdraw amount scaling failed: {:?} (asset: {}, decimals: {})",
+                e,
+                asset_name,
+                asset.decimals
+            );
+            WithdrawError::Money(e)
+        })? as i64;
 
-        if amount_scaled <= 0 {
-            return Err(WithdrawError::InvalidAmount);
-        }
+        // Fee can be zero (e.g., promotional zero-fee withdrawals)
+        let fee_scaled = *asset.parse_amount_allow_zero(fee).map_err(|e| {
+            tracing::error!(
+                "Withdraw fee scaling failed: {:?} (asset: {}, decimals: {})",
+                e,
+                asset_name,
+                asset.decimals
+            );
+            WithdrawError::Money(e)
+        })? as i64;
 
         // 2. Lock & Check Balance
         // We act on Funding Account (type=2)
@@ -215,14 +227,10 @@ impl WithdrawService {
             let fee_raw: i64 = row.get("fee");
             let decimals: i16 = row.get("decimals");
 
-            // Scaling logic
-            let scale_factor = Decimal::from(10u64.pow(decimals as u32));
-
-            let amount_decimal = Decimal::from(amount_raw) / scale_factor;
-            let amount_str = format!("{:.prec$}", amount_decimal, prec = decimals as usize);
-
-            let fee_decimal = Decimal::from(fee_raw) / scale_factor;
-            let fee_str = format!("{:.prec$}", fee_decimal, prec = decimals as usize);
+            // Use unified money module for formatting
+            let amount_str =
+                money::format_amount_signed(amount_raw, decimals as u32, decimals as u32);
+            let fee_str = money::format_amount_signed(fee_raw, decimals as u32, decimals as u32);
 
             records.push(WithdrawRecord {
                 request_id: row.get("request_id"),

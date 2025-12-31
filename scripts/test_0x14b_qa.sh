@@ -20,6 +20,7 @@ source "${SCRIPT_DIR}/lib/test_helpers.sh"
 
 # Setup Environment
 detect_ci_env
+ensure_log_dir "${LOG_DIR}"
 
 # Define Log File
 GATEWAY_LOG="${LOG_DIR}/gateway_0x14b_qa.log"

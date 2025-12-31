@@ -18,7 +18,6 @@ struct App {
     logs: Vec<String>,
     orderbook_bids: Vec<(f64, f64)>,
     orderbook_asks: Vec<(f64, f64)>,
-    start_time: Instant,
     total_orders: u64,
 }
 
@@ -29,7 +28,6 @@ impl App {
             logs: vec![],
             orderbook_bids: (0..15).map(|i| (95000.0 - i as f64 * 5.0, 1.0)).collect(),
             orderbook_asks: (0..15).map(|i| (95005.0 + i as f64 * 5.0, 1.0)).collect(),
-            start_time: Instant::now(),
             total_orders: 0,
         }
     }
@@ -89,11 +87,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .checked_sub(last_tick.elapsed())
             .unwrap_or_else(|| Duration::from_secs(0));
 
-        if crossterm::event::poll(timeout)? {
-            if let event::Event::Key(key) = event::read()? {
-                if key.kind == KeyEventKind::Press && key.code == KeyCode::Char('q') {
-                    break;
-                }
+        #[allow(clippy::collapsible_if)]
+        if let (Ok(true), Ok(event::Event::Key(key))) =
+            (crossterm::event::poll(timeout), event::read())
+        {
+            if key.kind == KeyEventKind::Press && key.code == KeyCode::Char('q') {
+                break;
             }
         }
 

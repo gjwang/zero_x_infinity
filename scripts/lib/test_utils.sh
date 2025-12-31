@@ -89,8 +89,12 @@ wait_for_postgres() {
     local max_retries=30
     local count=0
     
-    log_info "Waiting for PostgreSQL..."
-    until pg_isready -h localhost >/dev/null 2>&1 || [ $count -eq $max_retries ]; do
+    # Ensure PG_USER is set (fallback to 'trading' which is the project default)
+    local user="${PG_USER:-trading}"
+    
+    local db="${PG_DB:-exchange_info_db}"
+    log_info "Waiting for PostgreSQL (user: $user, db: $db)..."
+    until pg_isready -h localhost -U "$user" -d "$db" >/dev/null 2>&1 || [ $count -eq $max_retries ]; do
         echo -n "."
         sleep 1
         count=$((count+1))

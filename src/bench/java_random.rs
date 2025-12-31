@@ -156,8 +156,8 @@ mod tests {
         let val0 = rng.next_int(100);
         let val1 = rng.next_int(100);
 
-        assert!(val0 >= 0 && val0 < 100);
-        assert!(val1 >= 0 && val1 < 100);
+        assert!((0..100).contains(&val0));
+        assert!((0..100).contains(&val1));
     }
 
     /// Test large seed boundary.
@@ -167,7 +167,7 @@ mod tests {
 
         // Should not panic
         let val = rng.next_int(1000);
-        assert!(val >= 0 && val < 1000);
+        assert!((0..1000).contains(&val));
     }
 
     /// Test next_double range.
@@ -177,7 +177,10 @@ mod tests {
 
         for _ in 0..100 {
             let d = rng.next_double();
-            assert!(d >= 0.0 && d < 1.0, "next_double should be in [0.0, 1.0)");
+            assert!(
+                (0.0..1.0).contains(&d),
+                "next_double should be in [0.0, 1.0)"
+            );
         }
     }
 
@@ -223,7 +226,7 @@ mod tests {
         // Powers of 2 should take the fast path
         for _ in 0..100 {
             let val = rng.next_int(64);
-            assert!(val >= 0 && val < 64);
+            assert!((0..64).contains(&val));
         }
     }
 
