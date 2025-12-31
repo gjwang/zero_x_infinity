@@ -484,10 +484,10 @@ pub async fn query_public_trades(
             let price_u64 = row.price as u64;
             let qty_u64 = row.qty as u64;
 
-            // quote_qty = (price * qty) / 10^base_decimals
+            // quote_qty = (price * qty) / qty_unit
             // This gives us the quote amount in internal units (×10^quote_decimals)
-            let quote_qty_internal =
-                (price_u64 * qty_u64) / *crate::money::unit_amount(base_decimals);
+            // money-type-safety: use SymbolInfo.qty_unit() instead of direct money:: call
+            let quote_qty_internal = (price_u64 * qty_u64) / *symbol_info.qty_unit();
 
             // Parse timestamp to milliseconds
             let time_ms = chrono::DateTime::parse_from_rfc3339(&row.ts)

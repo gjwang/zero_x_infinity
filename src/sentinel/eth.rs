@@ -11,6 +11,7 @@ use super::scanner::{ChainScanner, DetectedDeposit, NodeHealth, ScannedBlock};
 use crate::exchange_info::ChainManager;
 use async_trait::async_trait;
 use rust_decimal::Decimal;
+use rust_decimal::prelude::MathematicalOps;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -580,9 +581,11 @@ impl ChainScanner for EthScanner {
 }
 
 /// Convert wei (u128 string) to Decimal with 18 decimals
+/// ETH has fixed 18 decimals, so we use Decimal::TEN.powi directly
 pub fn wei_to_eth(wei_str: &str) -> Decimal {
+    const ETH_DECIMALS: i64 = 18;
     Decimal::from_str(wei_str)
-        .map(|d| d / Decimal::from(*crate::money::unit_amount(18)))
+        .map(|d| d / Decimal::TEN.powi(ETH_DECIMALS))
         .unwrap_or_default()
 }
 
@@ -608,9 +611,10 @@ fn parse_uint256(data: &str) -> String {
 }
 
 /// Convert raw amount string to Decimal with given decimals
+/// Uses Decimal::TEN.powi for precision-safe division
 fn raw_to_decimal(raw: &str, decimals: u8) -> Decimal {
     Decimal::from_str(raw)
-        .map(|d| d / Decimal::from(*crate::money::unit_amount(decimals as u32)))
+        .map(|d| d / Decimal::TEN.powi(decimals as i64))
         .unwrap_or_default()
 }
 
