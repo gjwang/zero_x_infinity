@@ -852,7 +852,12 @@ mod tests {
     }
 
     fn test_ubscore_config() -> UBSCoreConfig {
-        UBSCoreConfig::new(format!("target/test_ubscore_{}", std::process::id()))
+        // Use both process ID and thread ID to ensure unique directories in parallel tests
+        UBSCoreConfig::new(format!(
+            "target/test_ubscore_{}_{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ))
     }
 
     #[test]
