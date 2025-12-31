@@ -198,5 +198,5 @@ pub struct PlaceOrderRequest {
 
 ## 5. 参考
 
-- [Money Governance Standard](./money-governance.md) — 资金操作治理规范
+- [Money Type Safety Standard](./money-type-safety.md) — 资金类型安全规范
 - [0x02 浮点数的诅咒](../src/0x02-the-curse-of-float.md) — 浮点数问题详解

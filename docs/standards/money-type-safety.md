@@ -1,4 +1,4 @@
-# Money Governance Standard | 资金操作治理规范
+# Money Type Safety Standard | 资金类型安全规范
 
 > **Version**: 1.3 | **Last Updated**: 2025-12-31
 >
