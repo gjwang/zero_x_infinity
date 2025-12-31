@@ -211,6 +211,140 @@ def test_a_tc_003_malformed_input():
 
 
 # =============================================================================
+# A-TC-008: JSON 数字格式拒绝 (Breaking Change 验证)
+# =============================================================================
+
+def test_a_tc_008_json_number_format():
+    """A-TC-008: 验证 JSON 数字格式被拒绝 (必须使用字符串)
+    
+    Breaking Change: price/qty 必须是字符串
+    // ❌ 旧格式 (不再支持): {"price": 85000, "qty": 0.001}
+    // ✅ 新格式 (必须使用): {"price": "85000", "qty": "0.001"}
+    """
+    
+    print("\n📦 A-TC-008: JSON 数字格式拒绝测试")
+    print("-" * 60)
+    
+    import json
+    import requests
+    from lib.api_auth import get_test_client
+    
+    # 获取认证客户端以复用签名逻辑
+    client = get_test_client(GATEWAY_URL, USER_TAKER)
+    url = f"{GATEWAY_URL}/api/v1/private/order"
+    path = "/api/v1/private/order"
+    
+    def post_raw_json(raw_json: str) -> requests.Response:
+        """发送带认证的原始 JSON 请求"""
+        auth = client._sign_request("POST", path, "")
+        return requests.post(
+            url,
+            data=raw_json,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": auth
+            },
+            timeout=5
+        )
+    
+    # A-TC-008-01: qty 使用 JSON 数字
+    test_id = "A-TC-008-01"
+    try:
+        payload = json.dumps({
+            "symbol": SYMBOL,
+            "side": "BUY",
+            "order_type": "LIMIT",
+            "price": "85000.00",
+            "qty": 0.001,  # JSON 数字，非字符串
+            "time_in_force": "GTC",
+        })
+        
+        resp = post_raw_json(payload)
+        
+        if resp.status_code in [400, 422]:
+            collector.add(TestResult(test_id, "qty JSON数字被拒绝", TestStatus.PASS,
+                                    details="expected a string"))
+        else:
+            collector.add(TestResult(test_id, "qty JSON数字被拒绝", TestStatus.FAIL,
+                                    expected="400|422", actual=str(resp.status_code)))
+    except Exception as e:
+        collector.add(TestResult(test_id, "qty JSON数字被拒绝", TestStatus.ERROR, str(e)))
+    
+    # A-TC-008-02: price 使用 JSON 数字
+    test_id = "A-TC-008-02"
+    try:
+        payload = json.dumps({
+            "symbol": SYMBOL,
+            "side": "BUY",
+            "order_type": "LIMIT",
+            "price": 85000,  # JSON 数字，非字符串
+            "qty": "0.001",
+            "time_in_force": "GTC",
+        })
+        
+        resp = post_raw_json(payload)
+        
+        if resp.status_code in [400, 422]:
+            collector.add(TestResult(test_id, "price JSON数字被拒绝", TestStatus.PASS,
+                                    details="expected a string"))
+        else:
+            collector.add(TestResult(test_id, "price JSON数字被拒绝", TestStatus.FAIL,
+                                    expected="400|422", actual=str(resp.status_code)))
+    except Exception as e:
+        collector.add(TestResult(test_id, "price JSON数字被拒绝", TestStatus.ERROR, str(e)))
+    
+    # A-TC-008-03: 两者都使用 JSON 数字
+    test_id = "A-TC-008-03"
+    try:
+        payload = json.dumps({
+            "symbol": SYMBOL,
+            "side": "BUY",
+            "order_type": "LIMIT",
+            "price": 85000,   # JSON 数字
+            "qty": 0.001,     # JSON 数字
+            "time_in_force": "GTC",
+        })
+        
+        resp = post_raw_json(payload)
+        
+        if resp.status_code in [400, 422]:
+            collector.add(TestResult(test_id, "price+qty JSON数字被拒绝", TestStatus.PASS))
+        else:
+            collector.add(TestResult(test_id, "price+qty JSON数字被拒绝", TestStatus.FAIL,
+                                    expected="400|422", actual=str(resp.status_code)))
+    except Exception as e:
+        collector.add(TestResult(test_id, "price+qty JSON数字被拒绝", TestStatus.ERROR, str(e)))
+    
+    # A-TC-008-04: 字符串格式正常接受
+    test_id = "A-TC-008-04"
+    try:
+        payload = json.dumps({
+            "symbol": SYMBOL,
+            "side": "BUY",
+            "order_type": "LIMIT",
+            "price": "85000.00",  # 字符串 ✅
+            "qty": "0.001",       # 字符串 ✅
+            "time_in_force": "GTC",
+        })
+        
+        resp = post_raw_json(payload)
+        
+        if resp.status_code in [200, 202]:
+            collector.add(TestResult(test_id, "字符串格式接受", TestStatus.PASS))
+        else:
+            # 可能因为余额不足等原因失败，但不应是格式错误
+            data = resp.json() if resp.status_code in [400, 422] else {}
+            if "string" in str(data).lower():
+                collector.add(TestResult(test_id, "字符串格式接受", TestStatus.FAIL,
+                                        details="String format incorrectly rejected"))
+            else:
+                collector.add(TestResult(test_id, "字符串格式接受", TestStatus.PASS,
+                                        details=f"Rejected for other reason: {resp.status_code}"))
+    except Exception as e:
+        collector.add(TestResult(test_id, "字符串格式接受", TestStatus.ERROR, str(e)))
+
+
+# =============================================================================
 # A-TC-004: 零值边界攻击 (Zero Value)
 # =============================================================================
 
@@ -360,6 +494,7 @@ def run_all_agent_a_tests():
     test_a_tc_001_precision_boundary()
     test_a_tc_002_integer_overflow()
     test_a_tc_003_malformed_input()
+    test_a_tc_008_json_number_format()  # Breaking change: JSON number → string
     test_a_tc_004_zero_value()
     test_a_tc_005_cross_asset_precision()
     test_a_tc_006_display_precision()
