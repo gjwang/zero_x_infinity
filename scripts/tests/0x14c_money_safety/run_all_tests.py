@@ -28,6 +28,8 @@ TEST_MODULES = [
     ("🔥 Agent A - Edge Cases (P0)", "test_agent_a_edge_cases.py"),
     ("🛡️ Agent B - Core Flow (P1)", "test_agent_b_core_flow.py"),
     ("🔐 Agent C - Security (P0)", "test_agent_c_security.py"),
+    ("🎯 Agent D - Advanced Precision (P0)", "test_advanced_precision.py"),
+    ("🔬 Agent E - Precision Compliance (P0)", "test_precision_compliance.py"),
 ]
 
 
