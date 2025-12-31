@@ -742,6 +742,37 @@ cargo test gateway::types      # ✅ 28 passed
 cargo test                     # ✅ 390+ passed
 ```
 
+#### Phase 2c: Precision Intent API (2025-12-31)
+
+**问题**: `decimals` vs `display_decimals` 命名导致 Dev/QA 混淆。
+
+**解决**: 引入 Intent API 区分内部缩放与 API 精度：
+
+| 旧术语 | 新 Intent API | 用途 |
+|--------|---------------|------|
+| `decimals` | `internal_scale()` | 内部存储缩放 |
+| `display_decimals` | `asset_precision()` | API 验证+格式化 |
+| `price_decimal` | `price_scale()` | 价格内部缩放 |
+| `price_display_decimal` | `price_precision()` | 价格 API 验证+格式化 |
+
+**迁移的模块:**
+- `gateway/types/order.rs` — 输入验证使用 `price_precision()` / `asset_precision()`
+- `gateway/handlers/helpers.rs` — 格式化使用 Intent API
+- `websocket/ws_broadcast_service.rs` — WebSocket 输出
+- `market/depth_service.rs` — 深度服务
+- `persistence/queries.rs` — 数据库查询格式化
+- `money.rs` — 核心 money 模块
+
+**Commits:**
+- `d7ec0d7` — add Intent APIs with backward compatibility
+- `55c6347` — migrate callsites to Intent APIs
+
+**验证:**
+```bash
+cargo check                       # ✅ PASSED
+./scripts/audit_money_safety.sh   # ✅ PASSED
+```
+
 ---
 
 ## 7. 参考

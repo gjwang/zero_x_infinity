@@ -1,6 +1,6 @@
 # Money Type Safety Standard | 资金类型安全规范
 
-> **Version**: 1.3 | **Last Updated**: 2025-12-31
+> **Version**: 1.4 | **Last Updated**: 2025-12-31
 >
 > 本文件定义了本项目处理资金（余额、订单金额、成交价格）的**治理方案**。
 > 重点是：**如何在代码层面禁止不符合规范的操作**。
@@ -170,6 +170,83 @@ let fee_scaled = asset.parse_amount_allow_zero(fee)?;
 | **封装性** | 调用者不需要知道 `decimals`、`display_decimals` 等内部参数 |
 | **一致性** | 所有业务代码使用相同的 API 模式 |
 | **可审计性** | 直接 `money::` 调用是需要审查的红旗 |
+
+---
+
+### 2.5 精度术语规范：区分内部缩放与 API 精度 (Precision Terminology)
+
+> [!IMPORTANT]
+> **这是一个关键设计矫正**：原有的 `decimals` 和 `display_decimals` 命名导致了 Dev/QA 团队的混淆。
+
+**问题背景**：
+
+| 旧术语 | 语义混淆 | 误用场景 |
+|--------|----------|----------|
+| `decimals` | "精度" - 容易被当作 API 验证精度 | 开发者用 `decimals` 验证 API 输入 |
+| `display_decimals` | "显示精度" - 暗示仅用于输出 | 实际上也应用于输入验证 |
+
+**设计矫正**：引入明确的术语分离
+
+| 层级 | 旧术语 | 新 Intent API | 语义 |
+|------|--------|---------------|------|
+| **Asset** | `decimals` | `internal_scale()` | 内部存储缩放因子（如 BTC: 10^8） |
+| **Asset** | `display_decimals` | `asset_precision()` | API 边界精度（输入验证 + 输出格式化） |
+| **Symbol** | `price_decimal` | `price_scale()` | 内部价格缩放因子 |
+| **Symbol** | `price_display_decimal` | `price_precision()` | API 边界价格精度 |
+
+**代码规范**：
+
+```rust
+// ✅ 正确：使用 Intent API
+if qty_decimal.scale() > base_asset.asset_precision() {
+    return Err("Too many decimal places in quantity");
+}
+let formatted = money::format_amount(value, asset.internal_scale(), asset.asset_precision());
+
+// ❌ 错误：直接访问字段
+if qty_decimal.scale() > base_asset.decimals {  // 应该用 asset_precision()!
+    return Err("Too many decimal places in quantity");
+}
+```
+
+**实现细节**：
+
+```rust
+impl AssetInfo {
+    /// API 边界精度（输入验证 + 输出格式化）
+    pub fn asset_precision(&self) -> u32 {
+        self.display_decimals  // 内部仍用旧字段，但 API 隐藏细节
+    }
+    
+    /// 内部缩放因子（仅限 money.rs）
+    pub fn internal_scale(&self) -> u32 {
+        self.decimals
+    }
+}
+
+impl SymbolInfo {
+    /// 价格 API 精度
+    pub fn price_precision(&self) -> u32 {
+        self.price_display_decimal
+    }
+    
+    /// 价格内部缩放
+    pub fn price_scale(&self) -> u32 {
+        self.price_decimal
+    }
+}
+```
+
+**核心原则**：
+
+| 场景 | 应使用 | 说明 |
+|------|--------|------|
+| 验证 API 输入精度 | `asset_precision()` / `price_precision()` | 客户端允许的最大精度 |
+| 格式化 API 输出 | `asset_precision()` / `price_precision()` | 返回给客户端的精度 |
+| 内部 Decimal↔u64 转换 | `internal_scale()` / `price_scale()` | 仅限 money.rs 使用 |
+
+> [!TIP]
+> **向后兼容**：旧字段 `decimals`、`display_decimals` 保留但标注 `DEPRECATED`，逐步迁移后移除。
 
 ---
 
