@@ -270,7 +270,7 @@ impl WsService {
                     // We imported `rust_decimal::Decimal`. Let's use it.
                     // money-type-safety: use SymbolInfo's intent-based display APIs
                     // CRITICAL: Fail fast if symbol_info is missing, do not use hardcoded defaults
-                    if let Some(symbol_info) = symbol_info {
+                    {
                         // Intent-based APIs: hide price_unit/qty_unit details
                         let p_dec = symbol_info.price_as_decimal(price);
                         let q_dec = symbol_info.qty_as_decimal(qty);
@@ -365,7 +365,7 @@ impl WsService {
 
                         self.manager
                             .broadcast(&format!("market.ticker.{}", symbol_name), ticker_msg);
-                    } // end if let Some(symbol_info)
+                    }
                 } // end if !is_maker
 
                 // NOTE: Trade persistence moved to SettlementService (correct architecture)

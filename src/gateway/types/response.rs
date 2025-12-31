@@ -121,6 +121,11 @@ impl ApiError {
         Self::new(StatusCode::NOT_FOUND, error_codes::ORDER_NOT_FOUND, msg)
     }
 
+    /// 401 Unauthorized with AUTH_FAILED code
+    pub fn unauthorized(msg: impl Into<String>) -> Self {
+        Self::new(StatusCode::UNAUTHORIZED, error_codes::AUTH_FAILED, msg)
+    }
+
     /// 500 Internal Server Error
     pub fn internal(msg: impl Into<String>) -> Self {
         Self::new(

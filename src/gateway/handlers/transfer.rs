@@ -155,7 +155,7 @@ pub async fn get_transfer(
         .pg_assets
         .first()
         .map(|a| a.internal_scale as u32)
-        .ok_or_else(|| ApiError::internal_error("No assets configured for scaling"))?;
+        .ok_or_else(|| ApiError::internal("No assets configured for scaling"))?;
 
     // Query transfer status
     match crate::internal_transfer::get_transfer_status(coordinator, req_id, decimals).await {
