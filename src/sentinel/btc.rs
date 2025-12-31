@@ -10,7 +10,6 @@ use async_trait::async_trait;
 use bitcoincore_rpc::{Auth, Client, RpcApi};
 use rust_decimal::Decimal;
 use std::collections::HashSet;
-use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
@@ -133,11 +132,10 @@ impl BtcScanner {
                 if let Some(address) = self.extract_address(&output.script_pubkey) {
                     // Check if this address is being watched
                     if self.is_watched(&address) {
-                        let amount_btc = Decimal::from_str(&format!(
-                            "{:.8}",
-                            output.value.to_sat() as f64 / 100_000_000.0
-                        ))
-                        .unwrap_or_default();
+                        // Use Decimal arithmetic instead of f64 (money-type-safety.md)
+                        let sat_amount = Decimal::from(output.value.to_sat());
+                        let btc_divisor = Decimal::from(100_000_000u64); // 10^8 for BTC
+                        let amount_btc = sat_amount / btc_divisor;
 
                         deposits.push(DetectedDeposit {
                             tx_hash: tx_hash.clone(),
