@@ -299,7 +299,7 @@ echo "✅ Money safety audit passed!"
 |------|------|------|
 | **Phase 0** | Newtype 定义, API 收缩, 文档治理 | ✅ 已完成 |
 | **Phase 1** | `audit_money_safety.sh` 集成 CI | ⏳ 待实现 |
-| **Phase 1.5** | [API Type Enforcement](./api-type-enforcement.md)：Extractor + IntoResponse 强制转换 | ⏳ 待实现 |
+| **Phase 1.5** | [API Money Enforcement](./api-money-enforcement.md)：Extractor + IntoResponse 强制转换 | ⏳ 待实现 |
 | **Phase 2** | 存量代码全面扫描与迁移 | ⏳ 待执行 |
 | **Phase 3** | `u64` → `u128` 升级 (支持 18 位高精度资产) | 📋 规划中 |
 

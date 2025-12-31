@@ -92,7 +92,7 @@
 - [ID Specification](../standards/id-specification.md)
 - [Naming Convention](../standards/naming-convention.md)
 - [Money Type Safety | 资金类型安全规范](../standards/money-type-safety.md)
-  - [API Type Enforcement | API层强制执行](../standards/api-type-enforcement.md)
+  - [API Money Enforcement | API层资金强制规范](../standards/api-money-enforcement.md)
 - [CI Pitfalls](./standards/ci-pitfalls.md)
 - [Pre-merge Checklist](./standards/pre-merge-checklist.md)
 - [Build Verification Guide](./build-verification-guide.md)

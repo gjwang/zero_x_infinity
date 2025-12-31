@@ -1,4 +1,4 @@
-# API Type Enforcement | API 层类型强制执行方案
+# API Money Enforcement | API 层资金类型强制规范
 
 > **目标**：确保所有 API Handler 都通过统一的转换层处理金额数据，禁止各处私自转换。
 >
