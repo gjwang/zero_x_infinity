@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use taos::*;
 use utoipa::ToSchema;
 
+use crate::gateway::types::DisplayAmount;
 use crate::money;
 use crate::symbol_manager::SymbolManager;
 
@@ -12,6 +13,13 @@ use crate::symbol_manager::SymbolManager;
 #[inline]
 fn format_amount(value: u64, decimals: u32, display_decimals: u32) -> String {
     money::format_amount(value, decimals, display_decimals)
+}
+
+/// Format internal u64 to DisplayAmount for API responses
+/// Type-safe wrapper around format_amount
+#[inline]
+fn format_display(value: u64, decimals: u32, display_decimals: u32) -> DisplayAmount {
+    DisplayAmount::new(format_amount(value, decimals, display_decimals))
 }
 
 /// Order record from TDengine (matches database schema)
@@ -37,9 +45,9 @@ pub struct OrderApiData {
     pub symbol: String, // Symbol name (not ID)
     pub side: String,
     pub order_type: String,
-    pub price: String,      // Formatted with price_display_decimal
-    pub qty: String,        // Formatted with base_asset.display_decimals
-    pub filled_qty: String, // Formatted with base_asset.display_decimals
+    pub price: DisplayAmount,      // Formatted with price_display_decimal
+    pub qty: DisplayAmount,        // Formatted with base_asset.display_decimals
+    pub filled_qty: DisplayAmount, // Formatted with base_asset.display_decimals
     pub status: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cid: Option<String>,
@@ -89,10 +97,10 @@ pub struct TradeApiData {
     pub user_id: u64,
     pub symbol: String, // Symbol name (not ID)
     pub side: String,
-    pub price: String,     // Formatted with price_display_decimal
-    pub qty: String,       // Formatted with base_asset.display_decimals
-    pub fee: String,       // Formatted with fee_asset decimals
-    pub fee_asset: String, // Asset in which fee was paid (BUY→base, SELL→quote)
+    pub price: DisplayAmount, // Formatted with price_display_decimal
+    pub qty: DisplayAmount,   // Formatted with base_asset.display_decimals
+    pub fee: DisplayAmount,   // Formatted with fee_asset decimals
+    pub fee_asset: String,    // Asset in which fee was paid (BUY→base, SELL→quote)
     pub role: String,
     pub created_at: String,
 }
@@ -103,13 +111,16 @@ pub struct TradeApiData {
 /// sensitive information like user_id or order_id.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct PublicTradeApiData {
-    pub id: i64,              // Trade ID
-    pub price: String,        // Formatted with price_display_decimal
-    pub qty: String,          // Formatted with base_asset.display_decimals
-    pub quote_qty: String,    // price * qty (formatted with quote_asset.display_decimals)
-    pub time: i64,            // Unix milliseconds
+    pub id: i64, // Trade ID
+    #[schema(value_type = String)]
+    pub price: DisplayAmount, // Formatted with price_display_decimal
+    #[schema(value_type = String)]
+    pub qty: DisplayAmount, // Formatted with base_asset.display_decimals
+    #[schema(value_type = String)]
+    pub quote_qty: DisplayAmount, // price * qty (formatted with quote_asset.display_decimals)
+    pub time: i64, // Unix milliseconds
     pub is_buyer_maker: bool, // true if buyer is maker (sell order matched)
-    pub is_best_match: bool,  // Always true for our matching engine
+    pub is_best_match: bool, // Always true for our matching engine
 }
 
 /// Balance record from TDengine
@@ -126,9 +137,9 @@ struct BalanceRow {
 #[derive(Debug, Serialize)]
 pub struct BalanceApiData {
     pub user_id: u64,
-    pub asset: String,  // Asset name (not ID)
-    pub avail: String,  // Formatted with asset.display_decimals
-    pub frozen: String, // Formatted with asset.display_decimals
+    pub asset: String,         // Asset name (not ID)
+    pub avail: DisplayAmount,  // Formatted with asset.display_decimals
+    pub frozen: DisplayAmount, // Formatted with asset.display_decimals
     pub lock_version: u64,
     pub settle_version: u64,
     pub updated_at: String,
@@ -180,13 +191,13 @@ pub async fn query_order(
                 "MARKET"
             }
             .to_string(),
-            price: format_amount(
+            price: format_display(
                 row.price as u64,
                 symbol_info.price_decimal,
                 symbol_info.price_display_decimal,
             ),
-            qty: format_amount(row.qty as u64, base_decimals, base_display_decimals),
-            filled_qty: format_amount(row.filled_qty as u64, base_decimals, base_display_decimals),
+            qty: format_display(row.qty as u64, base_decimals, base_display_decimals),
+            filled_qty: format_display(row.filled_qty as u64, base_decimals, base_display_decimals),
             status: match row.status {
                 0 => "NEW",
                 1 => "PARTIALLY_FILLED",
@@ -254,13 +265,13 @@ pub async fn query_orders(
                 "MARKET"
             }
             .to_string(),
-            price: format_amount(
+            price: format_display(
                 row.price as u64,
                 symbol_info.price_decimal,
                 symbol_info.price_display_decimal,
             ),
-            qty: format_amount(row.qty as u64, base_decimals, base_display_decimals),
-            filled_qty: format_amount(row.filled_qty as u64, base_decimals, base_display_decimals),
+            qty: format_display(row.qty as u64, base_decimals, base_display_decimals),
+            filled_qty: format_display(row.filled_qty as u64, base_decimals, base_display_decimals),
             status: match row.status {
                 0 => "NEW",
                 1 => "PARTIALLY_FILLED",
@@ -394,13 +405,13 @@ pub async fn query_trades(
                 user_id: row.user_id as u64,
                 symbol: symbol_info.symbol.clone(),
                 side: if is_buy { "BUY" } else { "SELL" }.to_string(),
-                price: format_amount(
+                price: format_display(
                     row.price as u64,
                     symbol_info.price_decimal,
                     symbol_info.price_display_decimal,
                 ),
-                qty: format_amount(row.qty as u64, base_decimals, base_display_decimals),
-                fee: format_amount(fee as u64, fee_decimals, fee_display_decimals),
+                qty: format_display(row.qty as u64, base_decimals, base_display_decimals),
+                fee: format_display(fee as u64, fee_decimals, fee_display_decimals),
                 fee_asset,
                 role: if row.role == 1 { "TAKER" } else { "MAKER" }.to_string(),
                 created_at: row.ts,
@@ -492,13 +503,13 @@ pub async fn query_public_trades(
 
             PublicTradeApiData {
                 id: row.trade_id,
-                price: format_amount(
+                price: format_display(
                     price_u64,
                     symbol_info.price_decimal,
                     symbol_info.price_display_decimal,
                 ),
-                qty: format_amount(qty_u64, base_decimals, base_display_decimals),
-                quote_qty: format_amount(
+                qty: format_display(qty_u64, base_decimals, base_display_decimals),
+                quote_qty: format_display(
                     quote_qty_internal,
                     quote_decimals,
                     quote_display_decimals,
@@ -544,8 +555,8 @@ pub async fn query_balance(
     Ok(rows.into_iter().next().map(|row| BalanceApiData {
         user_id,
         asset: asset_name,
-        avail: format_amount(row.avail as u64, asset_decimals, asset_display_decimals),
-        frozen: format_amount(row.frozen as u64, asset_decimals, asset_display_decimals),
+        avail: format_display(row.avail as u64, asset_decimals, asset_display_decimals),
+        frozen: format_display(row.frozen as u64, asset_decimals, asset_display_decimals),
         lock_version: row.lock_version as u64,
         settle_version: row.settle_version as u64,
         updated_at: row.ts,
@@ -620,8 +631,8 @@ pub async fn query_all_balances(
         balances.push(BalanceApiData {
             user_id,
             asset: asset_name,
-            avail: format_amount(row.avail as u64, asset_decimals, asset_display_decimals),
-            frozen: format_amount(row.frozen as u64, asset_decimals, asset_display_decimals),
+            avail: format_display(row.avail as u64, asset_decimals, asset_display_decimals),
+            frozen: format_display(row.frozen as u64, asset_decimals, asset_display_decimals),
             lock_version: row.lock_version as u64,
             settle_version: row.settle_version as u64,
             updated_at: row.ts.to_rfc3339(),
@@ -690,8 +701,8 @@ pub async fn query_all_balances_with_pg(
         balances.push(BalanceApiData {
             user_id,
             asset: asset_name,
-            avail: format_amount(row.avail as u64, decimals, decimals),
-            frozen: format_amount(row.frozen as u64, decimals, decimals),
+            avail: format_display(row.avail as u64, decimals, decimals),
+            frozen: format_display(row.frozen as u64, decimals, decimals),
             lock_version: row.lock_version as u64,
             settle_version: row.settle_version as u64,
             updated_at: row.ts.to_rfc3339(),
@@ -732,12 +743,12 @@ pub struct KLineApiData {
     pub interval: String,
     pub open_time: i64,  // Unix milliseconds
     pub close_time: i64, // Unix milliseconds (open_time + interval - 1)
-    pub open: String,
-    pub high: String,
-    pub low: String,
-    pub close: String,
-    pub volume: String,
-    pub quote_volume: String,
+    pub open: DisplayAmount,
+    pub high: DisplayAmount,
+    pub low: DisplayAmount,
+    pub close: DisplayAmount,
+    pub volume: DisplayAmount,
+    pub quote_volume: DisplayAmount,
     pub trade_count: u32,
 }
 
@@ -803,38 +814,38 @@ pub async fn query_klines(
             interval: interval.to_string(),
             open_time: row.ts.timestamp_millis(),
             close_time: row.ts.timestamp_millis() + interval_to_ms(interval) - 1,
-            open: format_amount(
+            open: format_display(
                 row.open as u64,
                 symbol_info.price_decimal,
                 symbol_info.price_display_decimal,
             ),
-            high: format_amount(
+            high: format_display(
                 row.high as u64,
                 symbol_info.price_decimal,
                 symbol_info.price_display_decimal,
             ),
-            low: format_amount(
+            low: format_display(
                 row.low as u64,
                 symbol_info.price_decimal,
                 symbol_info.price_display_decimal,
             ),
-            close: format_amount(
+            close: format_display(
                 row.close as u64,
                 symbol_info.price_decimal,
                 symbol_info.price_display_decimal,
             ),
-            volume: format_amount(row.volume as u64, base_decimals, base_display_decimals),
+            volume: format_display(row.volume as u64, base_decimals, base_display_decimals),
             // quote_volume = SUM(price * qty) where:
             // - price is in internal units (×10^price_decimal)
             // - qty is in internal units (×10^base_decimals)
             // To get quote_amount: price * qty / 10^base_decimals
             // Result is already in quote asset internal units (×10^quote_decimals)
             // So divide by 10^(base_decimals + quote_decimals) to get display value
-            quote_volume: format!(
+            quote_volume: DisplayAmount::new(format!(
                 "{:.prec$}",
                 row.quote_volume / 10f64.powi(base_decimals as i32 + quote_decimals as i32),
                 prec = quote_display_decimals as usize
-            ),
+            )),
             trade_count: row.trade_count as u32,
         })
         .collect())
@@ -979,13 +990,13 @@ pub async fn query_user_trades(
                 user_id: row.user_id as u64,
                 symbol: symbol_info.symbol.clone(),
                 side: if is_buy { "BUY" } else { "SELL" }.to_string(),
-                price: format_amount(
+                price: format_display(
                     row.price as u64,
                     symbol_info.price_decimal,
                     symbol_info.price_display_decimal,
                 ),
-                qty: format_amount(row.qty as u64, base_decimals, base_display_decimals),
-                fee: format_amount(real_fee, fee_decimals, fee_display_decimals),
+                qty: format_display(row.qty as u64, base_decimals, base_display_decimals),
+                fee: format_display(real_fee, fee_decimals, fee_display_decimals),
                 fee_asset,
                 role: if row.role == 1 { "TAKER" } else { "MAKER" }.to_string(),
                 created_at: row.ts,
@@ -1073,12 +1084,12 @@ mod kline_tests {
             interval: "1m".to_string(),
             open_time: 1766144460000,
             close_time: 1766144519999,
-            open: "37000.00".to_string(),
-            high: "37500.00".to_string(),
-            low: "36800.00".to_string(),
-            close: "37200.00".to_string(),
-            volume: "0.400000".to_string(),
-            quote_volume: "14800.00".to_string(),
+            open: DisplayAmount::new("37000.00".to_string()),
+            high: DisplayAmount::new("37500.00".to_string()),
+            low: DisplayAmount::new("36800.00".to_string()),
+            close: DisplayAmount::new("37200.00".to_string()),
+            volume: DisplayAmount::new("0.400000".to_string()),
+            quote_volume: DisplayAmount::new("14800.00".to_string()),
             trade_count: 8,
         };
 
@@ -1102,9 +1113,9 @@ mod public_trades_tests {
         // Verify that PublicTradeApiData does NOT have user_id or order_id fields
         let trade = PublicTradeApiData {
             id: 12345,
-            price: "43000.00".to_string(),
-            qty: "0.1000".to_string(),
-            quote_qty: "4300.00".to_string(),
+            price: DisplayAmount::new("43000.00".to_string()),
+            qty: DisplayAmount::new("0.1000".to_string()),
+            quote_qty: DisplayAmount::new("4300.00".to_string()),
             time: 1703660555000,
             is_buyer_maker: true,
             is_best_match: true,
@@ -1203,9 +1214,9 @@ mod public_trades_tests {
         // Verify all numeric fields are Strings, not numbers
         let trade = PublicTradeApiData {
             id: 99999,
-            price: "50000.50".to_string(),
-            qty: "1.234567".to_string(),
-            quote_qty: "61728.62".to_string(),
+            price: DisplayAmount::new("50000.50".to_string()),
+            qty: DisplayAmount::new("1.234567".to_string()),
+            quote_qty: DisplayAmount::new("61728.62".to_string()),
             time: 1700000000000,
             is_buyer_maker: false,
             is_best_match: true,

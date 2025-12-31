@@ -651,7 +651,7 @@ fi
 | **Phase 1b** | 为核心订单 API 实现 `ValidatedOrder` Extractor | ⏳ 待实现 |
 | **Phase 2a** | 实现 `DisplayAmount` 类型 (Response 输出封装) | ✅ 已完成 |
 | **Phase 2b** | 迁移 Response DTO 使用 `DisplayAmount` | ✅ 已完成 |
-| **Phase 3** | 为所有金额相关 API 统一改造 | ⏳ 待实现 |
+| **Phase 3** | 为所有金额相关 API 统一改造 | ✅ 已完成 |
 | **Phase 4** | 实现 `audit_api_types.sh` 并集成 CI | ✅ 已完成 |
 | **Phase 5** | 扩展审计脚本检查 Response DTO 类型 | ✅ 已完成 |
 | **Phase 6** | CI 集成审计脚本 | ✅ 已完成 |

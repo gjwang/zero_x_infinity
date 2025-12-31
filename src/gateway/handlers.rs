@@ -13,7 +13,7 @@ use crate::pipeline::OrderAction;
 
 use super::state::AppState;
 use super::types::{
-    AccountResponseData, ApiResponse, CancelOrderRequest, ClientOrder, DepthApiData, DisplayAmount,
+    AccountResponseData, ApiResponse, CancelOrderRequest, ClientOrder, DepthApiData,
     MoveOrderRequest, OrderResponseData, ReduceOrderRequest, decimal_to_u64, error_codes,
 };
 
@@ -1140,8 +1140,8 @@ pub async fn get_account(
                         asset_id: 0, // Not strictly required for the response type
                         asset: sb.asset,
                         account_type: "spot".to_string(),
-                        available: DisplayAmount::new(sb.avail),
-                        frozen: DisplayAmount::new(sb.frozen),
+                        available: sb.avail,
+                        frozen: sb.frozen,
                     });
                 }
             }
@@ -1871,8 +1871,8 @@ pub async fn get_account_jwt(
                         asset_id: 0,
                         asset: sb.asset,
                         account_type: "spot".to_string(),
-                        available: DisplayAmount::new(sb.avail),
-                        frozen: DisplayAmount::new(sb.frozen),
+                        available: sb.avail,
+                        frozen: sb.frozen,
                     });
                 }
             }
