@@ -225,12 +225,16 @@ impl WithdrawService {
         for row in rows {
             let amount_raw: i64 = row.get("amount");
             let fee_raw: i64 = row.get("fee");
-            let decimals: i16 = row.get("decimals");
+            let internal_scale: i16 = row.get("internal_scale");
 
             // Use unified money module for formatting
-            let amount_str =
-                money::format_amount_signed(amount_raw, decimals as u32, decimals as u32);
-            let fee_str = money::format_amount_signed(fee_raw, decimals as u32, decimals as u32);
+            let amount_str = money::format_amount_signed(
+                amount_raw,
+                internal_scale as u32,
+                internal_scale as u32,
+            );
+            let fee_str =
+                money::format_amount_signed(fee_raw, internal_scale as u32, internal_scale as u32);
 
             records.push(WithdrawRecord {
                 request_id: row.get("request_id"),
