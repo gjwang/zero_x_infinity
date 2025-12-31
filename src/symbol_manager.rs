@@ -34,6 +34,35 @@ pub struct AssetInfo {
     pub name: String,
 }
 
+impl AssetInfo {
+    // ========================================================================
+    // Intent-based API: Decimal → ScaledAmount
+    // Encapsulates conversion details; caller only needs to express intent
+    // ========================================================================
+
+    /// Parse amount (rejects zero). For quantities, prices, etc.
+    pub fn parse_amount(
+        &self,
+        d: rust_decimal::Decimal,
+    ) -> Result<ScaledAmount, crate::money::MoneyError> {
+        crate::money::parse_decimal(d, self.decimals)
+    }
+
+    /// Parse amount (allows zero). For fees, discounts, etc.
+    /// Caller explicitly opts into allowing zero.
+    pub fn parse_amount_allow_zero(
+        &self,
+        d: rust_decimal::Decimal,
+    ) -> Result<ScaledAmount, crate::money::MoneyError> {
+        crate::money::parse_decimal_allow_zero(d, self.decimals)
+    }
+
+    /// Format amount for display
+    pub fn format_amount(&self, amount: ScaledAmount) -> String {
+        crate::money::format_amount(*amount, self.decimals, self.display_decimals)
+    }
+}
+
 /// Manages symbol-to-ID and ID-to-symbol mappings
 #[derive(Debug, Clone)]
 pub struct SymbolManager {

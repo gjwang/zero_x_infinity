@@ -48,6 +48,28 @@ impl Asset {
     pub fn is_active(&self) -> bool {
         self.status == 1
     }
+
+    // ========================================================================
+    // Intent-based API: Decimal → ScaledAmount
+    // Encapsulates conversion details; caller only needs to express intent
+    // ========================================================================
+
+    /// Parse amount (rejects zero). For quantities, prices, deposits, etc.
+    pub fn parse_amount(
+        &self,
+        d: rust_decimal::Decimal,
+    ) -> Result<crate::money::ScaledAmount, crate::money::MoneyError> {
+        crate::money::parse_decimal(d, self.decimals as u32)
+    }
+
+    /// Parse amount (allows zero). For fees, discounts, etc.
+    /// Caller explicitly opts into allowing zero.
+    pub fn parse_amount_allow_zero(
+        &self,
+        d: rust_decimal::Decimal,
+    ) -> Result<crate::money::ScaledAmount, crate::money::MoneyError> {
+        crate::money::parse_decimal_allow_zero(d, self.decimals as u32)
+    }
 }
 
 #[cfg(test)]

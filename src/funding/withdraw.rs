@@ -83,8 +83,8 @@ impl WithdrawService {
             .map_err(WithdrawError::Database)?
             .ok_or_else(|| WithdrawError::AssetNotFound(asset_name.to_string()))?;
 
-        // Scale to i64 using unified money module
-        let amount_scaled = *money::parse_decimal(amount, asset.decimals as u32).map_err(|e| {
+        // Scale to i64 using intent-based asset API
+        let amount_scaled = *asset.parse_amount(amount).map_err(|e| {
             tracing::error!(
                 "Withdraw amount scaling failed: {:?} (asset: {}, decimals: {})",
                 e,
@@ -95,17 +95,15 @@ impl WithdrawService {
         })? as i64;
 
         // Fee can be zero (e.g., promotional zero-fee withdrawals)
-        // Use parse_decimal_allow_zero to explicitly allow this
-        let fee_scaled =
-            *money::parse_decimal_allow_zero(fee, asset.decimals as u32).map_err(|e| {
-                tracing::error!(
-                    "Withdraw fee scaling failed: {:?} (asset: {}, decimals: {})",
-                    e,
-                    asset_name,
-                    asset.decimals
-                );
-                WithdrawError::Money(e)
-            })? as i64;
+        let fee_scaled = *asset.parse_amount_allow_zero(fee).map_err(|e| {
+            tracing::error!(
+                "Withdraw fee scaling failed: {:?} (asset: {}, decimals: {})",
+                e,
+                asset_name,
+                asset.decimals
+            );
+            WithdrawError::Money(e)
+        })? as i64;
 
         // 2. Lock & Check Balance
         // We act on Funding Account (type=2)
