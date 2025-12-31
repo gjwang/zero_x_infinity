@@ -1,9 +1,11 @@
 //! API Response types and error codes
 //!
 //! - `ApiResponse<T>`: Unified response wrapper
+//! - `ApiResult<T>`: Type alias for handler return types
+//! - `ApiError`: Unified error type with IntoResponse
 //! - `error_codes`: Standard error code constants
-//! - Various response DTOs
 
+use axum::{Json, http::StatusCode, response::IntoResponse};
 use serde::Serialize;
 use utoipa::ToSchema;
 
@@ -47,6 +49,110 @@ impl<T> ApiResponse<T> {
             msg: msg.into(),
             data: None,
         }
+    }
+}
+
+// ============================================================================
+// ApiResult: DRY Type Alias for Handlers
+// ============================================================================
+
+/// Type alias for handler return types - reduces boilerplate
+///
+/// Before:
+/// ```ignore
+/// Result<(StatusCode, Json<ApiResponse<T>>), (StatusCode, Json<ApiResponse<()>>)>
+/// ```
+///
+/// After:
+/// ```ignore
+/// ApiResult<T>
+/// ```
+pub type ApiResult<T> =
+    Result<(StatusCode, Json<ApiResponse<T>>), (StatusCode, Json<ApiResponse<()>>)>;
+
+/// Helper to create success response (200 OK)
+#[inline]
+pub fn ok<T: Serialize>(data: T) -> ApiResult<T> {
+    Ok((StatusCode::OK, Json(ApiResponse::success(data))))
+}
+
+/// Helper to create accepted response (202 ACCEPTED)
+#[inline]
+pub fn accepted<T: Serialize>(data: T) -> ApiResult<T> {
+    Ok((StatusCode::ACCEPTED, Json(ApiResponse::success(data))))
+}
+
+// ============================================================================
+// ApiError: Unified Error Type
+// ============================================================================
+
+/// Unified API error type with automatic IntoResponse
+///
+/// Usage:
+/// ```ignore
+/// fn my_handler() -> Result<ApiResult<Data>, ApiError> {
+///     Err(ApiError::bad_request("Invalid input"))?;
+/// }
+/// ```
+#[derive(Debug)]
+pub struct ApiError {
+    pub status: StatusCode,
+    pub code: i32,
+    pub message: String,
+}
+
+impl ApiError {
+    /// Create a new ApiError
+    pub fn new(status: StatusCode, code: i32, message: impl Into<String>) -> Self {
+        Self {
+            status,
+            code,
+            message: message.into(),
+        }
+    }
+
+    /// 400 Bad Request with INVALID_PARAMETER code
+    pub fn bad_request(msg: impl Into<String>) -> Self {
+        Self::new(StatusCode::BAD_REQUEST, error_codes::INVALID_PARAMETER, msg)
+    }
+
+    /// 404 Not Found with ORDER_NOT_FOUND code
+    pub fn not_found(msg: impl Into<String>) -> Self {
+        Self::new(StatusCode::NOT_FOUND, error_codes::ORDER_NOT_FOUND, msg)
+    }
+
+    /// 500 Internal Server Error
+    pub fn internal(msg: impl Into<String>) -> Self {
+        Self::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            error_codes::INTERNAL_ERROR,
+            msg,
+        )
+    }
+
+    /// Convert to handler error tuple
+    pub fn into_err<T>(self) -> ApiResult<T> {
+        Err((
+            self.status,
+            Json(ApiResponse::<()>::error(self.code, self.message)),
+        ))
+    }
+}
+
+impl IntoResponse for ApiError {
+    fn into_response(self) -> axum::response::Response {
+        let body = Json(ApiResponse::<()>::error(self.code, self.message));
+        (self.status, body).into_response()
+    }
+}
+
+/// Enable ? operator for ApiError in handler functions
+impl From<ApiError> for (StatusCode, Json<ApiResponse<()>>) {
+    fn from(err: ApiError) -> Self {
+        (
+            err.status,
+            Json(ApiResponse::<()>::error(err.code, err.message)),
+        )
     }
 }
 

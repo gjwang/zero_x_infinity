@@ -29,5 +29,6 @@ pub use order::{
     validate_client_order,
 };
 pub use response::{
-    AccountResponseData, ApiResponse, DepthApiData, OrderResponseData, error_codes,
+    AccountResponseData, ApiError, ApiResponse, ApiResult, DepthApiData, OrderResponseData,
+    accepted, error_codes, ok,
 };

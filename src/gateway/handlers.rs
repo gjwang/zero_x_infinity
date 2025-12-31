@@ -13,8 +13,9 @@ use crate::pipeline::OrderAction;
 
 use super::state::AppState;
 use super::types::{
-    AccountResponseData, ApiResponse, CancelOrderRequest, ClientOrder, DepthApiData,
-    MoveOrderRequest, OrderResponseData, ReduceOrderRequest, decimal_to_u64, error_codes,
+    AccountResponseData, ApiError, ApiResponse, ApiResult, CancelOrderRequest, ClientOrder,
+    DepthApiData, MoveOrderRequest, OrderResponseData, ReduceOrderRequest, accepted,
+    decimal_to_u64, error_codes,
 };
 
 use crate::symbol_manager::SymbolManager;
@@ -137,21 +138,15 @@ pub async fn create_order(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<crate::api_auth::AuthenticatedUser>,
     Json(req): Json<ClientOrder>,
-) -> Result<(StatusCode, Json<ApiResponse<OrderResponseData>>), (StatusCode, Json<ApiResponse<()>>)>
-{
+) -> ApiResult<OrderResponseData> {
     // 1. Extract user_id from authenticated user
     let user_id = user.user_id as u64;
     tracing::info!("[TRACE] Create Order: Received from User {}", user_id);
     tracing::info!("[TRACE] Request Details: {:?}", req);
 
     // 2. Validate and parse ClientOrder
-    let validated =
-        super::types::validate_client_order(req.clone(), &state.symbol_mgr).map_err(|e| {
-            (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<()>::error(error_codes::INVALID_PARAMETER, e)),
-            )
-        })?;
+    let validated = super::types::validate_client_order(req.clone(), &state.symbol_mgr)
+        .map_err(ApiError::bad_request)?;
 
     // 3. Generate order_id and timestamp
     let order_id = state.next_order_id();
@@ -160,12 +155,7 @@ pub async fn create_order(
     // 4. Convert to InternalOrder
     let internal_order = validated
         .into_internal_order(order_id, user_id, timestamp)
-        .map_err(|e| {
-            (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<()>::error(error_codes::INVALID_PARAMETER, e)),
-            )
-        })?;
+        .map_err(ApiError::bad_request)?;
 
     // 5. Push to queue
     tracing::info!(
@@ -178,13 +168,12 @@ pub async fn create_order(
         timestamp,
     ));
     if state.order_queue.push(action).is_err() {
-        return Err((
+        return ApiError::new(
             StatusCode::SERVICE_UNAVAILABLE,
-            Json(ApiResponse::<()>::error(
-                error_codes::SERVICE_UNAVAILABLE,
-                "Order queue is full, please try again later",
-            )),
-        ));
+            error_codes::SERVICE_UNAVAILABLE,
+            "Order queue is full, please try again later",
+        )
+        .into_err();
     }
     tracing::info!(
         "[TRACE] Create Order {}: ✅ Pushed to Ingestion Queue",
@@ -192,15 +181,12 @@ pub async fn create_order(
     );
 
     // 6. Return response
-    Ok((
-        StatusCode::ACCEPTED,
-        Json(ApiResponse::success(OrderResponseData {
-            order_id,
-            cid: req.cid,
-            order_status: "ACCEPTED".to_string(),
-            accepted_at: now_ms(),
-        })),
-    ))
+    accepted(OrderResponseData {
+        order_id,
+        cid: req.cid,
+        order_status: "ACCEPTED".to_string(),
+        accepted_at: now_ms(),
+    })
 }
 
 /// Cancel order endpoint
