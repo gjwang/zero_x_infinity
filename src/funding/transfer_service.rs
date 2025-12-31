@@ -58,10 +58,10 @@ impl TransferService {
         .fetch_optional(&mut *tx)
         .await?;
 
-        let available: i64 = from_balance_row
-            .as_ref()
-            .map(|r| r.get("available"))
-            .unwrap_or(0);
+        let available: i64 = match &from_balance_row {
+            Some(r) => r.get("available"),
+            None => 0,
+        };
 
         if available < amount_scaled {
             return Err(TransferError::InsufficientBalance);

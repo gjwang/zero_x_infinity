@@ -41,10 +41,10 @@ impl DepthService {
         let price_display_decimals = symbol_info.price_precision();
         let qty_display_decimals = symbol_mgr
             .get_asset_precision(symbol_info.base_asset_id)
-            .unwrap_or(6);
+            .expect("Base asset precision missing in SymbolManager");
         let quote_display_decimals = symbol_mgr
             .get_asset_precision(symbol_info.quote_asset_id)
-            .unwrap_or(2);
+            .expect("Quote asset precision missing in SymbolManager");
 
         Self {
             current_snapshot: Arc::new(RwLock::new(DepthSnapshot::empty())),

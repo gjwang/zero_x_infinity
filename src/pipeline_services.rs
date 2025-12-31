@@ -795,8 +795,9 @@ impl MatchingService {
                         // Calculate unlock amount
                         let mut temp_order = result.order.clone();
                         temp_order.qty = remaining_qty;
-                        let unlock_amount =
-                            temp_order.calculate_cost(self.market.qty_unit).unwrap_or(0);
+                        let unlock_amount = temp_order
+                            .calculate_cost(self.market.qty_unit)
+                            .expect("Critical: IOC unlock cost calculation failed");
                         let lock_asset_id = match result.order.side {
                             Side::Buy => self.market.quote_id,
                             Side::Sell => self.market.base_id,
@@ -899,8 +900,9 @@ impl MatchingService {
                         // Calculate unlock amount
                         let mut temp_order = cancelled_order.clone();
                         temp_order.qty = remaining_qty;
-                        let unlock_amount =
-                            temp_order.calculate_cost(self.market.qty_unit).unwrap_or(0);
+                        let unlock_amount = temp_order
+                            .calculate_cost(self.market.qty_unit)
+                            .expect("Critical: Cancel unlock cost calculation failed");
                         let lock_asset_id = match cancelled_order.side {
                             Side::Buy => self.market.quote_id,
                             Side::Sell => self.market.base_id,
@@ -986,7 +988,9 @@ impl MatchingService {
 
                         let mut temp_order = order.clone();
                         temp_order.qty = actual_reduce;
-                        let amount = temp_order.calculate_cost(self.market.qty_unit).unwrap_or(0);
+                        let amount = temp_order
+                            .calculate_cost(self.market.qty_unit)
+                            .expect("Critical: Reduce unlock cost calculation failed");
 
                         (asset_id, amount)
                     } else {
@@ -1300,11 +1304,10 @@ impl SettlementService {
 
     /// Synchronize trades with Matching Service (Phase 0x0D - ISSUE-003c)
     pub fn synchronize(&mut self, matching: &MatchingService) -> std::io::Result<()> {
-        let last_trade_id = self
-            .persistence_config
-            .as_ref()
-            .map(|c| c.last_trade_id)
-            .unwrap_or(0);
+        let last_trade_id = match &self.persistence_config {
+            Some(c) => c.last_trade_id,
+            None => 0, // Start from genesis if no persistence config
+        };
         tracing::info!(last_trade_id, "Settlement Synchronization starting");
 
         let mut replayed_trades = Vec::new();

@@ -90,9 +90,15 @@ pub fn load_symbol_manager() -> Result<(SymbolManager, u32)> {
             let price_scale: u32 = parts[4]
                 .parse()
                 .with_context(|| format!("Invalid price_scale at line {}", line_num + 2))?;
-            let price_precision: u32 = parts[5].parse().unwrap_or(2);
-            let base_maker_fee: u64 = parts[6].parse().unwrap_or(0);
-            let base_taker_fee: u64 = parts[7].parse().unwrap_or(0);
+            let price_precision: u32 = parts[5]
+                .parse()
+                .with_context(|| format!("Invalid price_precision at line {}", line_num + 2))?;
+            let base_maker_fee: u64 = parts[6]
+                .parse()
+                .with_context(|| format!("Invalid base_maker_fee at line {}", line_num + 2))?;
+            let base_taker_fee: u64 = parts[7]
+                .parse()
+                .with_context(|| format!("Invalid base_taker_fee at line {}", line_num + 2))?;
 
             manager
                 .insert_symbol_with_fees(
@@ -147,7 +153,7 @@ pub fn load_symbol_manager() -> Result<(SymbolManager, u32)> {
     // Calculate and display max tradeable value (overflow safety check)
     let quote_decimals = manager
         .get_asset_internal_scale(symbol_info.quote_asset_id)
-        .unwrap_or(6);
+        .expect("Critical: Quote asset internal scale missing in debug print");
     let qty_scale = *crate::money::unit_amount(symbol_info.base_internal_scale);
 
     // Reference price: 100,000 (e.g., BTC @ $100k)

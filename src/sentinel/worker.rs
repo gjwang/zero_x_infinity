@@ -95,7 +95,9 @@ impl SentinelWorker {
                     .monitor
                     .update_confirmations(
                         &chain_id,
-                        scanner_guard.get_latest_height().await.unwrap_or(0),
+                        scanner_guard.get_latest_height().await.expect(
+                            "Critical: Failed to get latest height for confirmation monitor",
+                        ),
                         scanner_guard.required_confirmations(),
                         scanner_guard.as_ref(),
                     )
@@ -178,7 +180,7 @@ impl SentinelWorker {
             return Ok(0);
         }
 
-        // 2. Get cursor from DB
+        // 2. Get cursor from DB (default to 0 if no cursor exists)
         let cursor = self.get_cursor(chain_id).await?;
         let start_height = cursor.as_ref().map(|c| (c.height + 1) as u64).unwrap_or(0);
         let latest = scanner.get_latest_height().await?;
@@ -199,7 +201,7 @@ impl SentinelWorker {
                 && !scanner
                     .verify_block_hash(c.height as u64, &c.hash)
                     .await
-                    .unwrap_or(false)
+                    .expect("Critical: Block hash verification failed during scan")
             {
                 warn!("{} re-org detected at height {}", chain_id, height);
                 // TODO: Handle re-org (rollback cursor)
@@ -313,7 +315,10 @@ impl SentinelWorker {
 
         // 2. Insert deposit record (idempotent on tx_hash)
         let chain_slug = chain_id.to_lowercase();
-        let amount_raw: i64 = deposit.raw_amount.parse().unwrap_or(0);
+        let amount_raw: i64 = deposit
+            .raw_amount
+            .parse()
+            .expect("Critical: Failed to parse raw amount from deposit scanner");
         let result = sqlx::query(
             r#"INSERT INTO deposit_history 
                (tx_hash, user_id, asset, amount, status, chain_slug, block_height, block_hash, tx_index, confirmations)

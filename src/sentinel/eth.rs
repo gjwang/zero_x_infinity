@@ -285,13 +285,13 @@ impl EthScanner {
                 && self.is_watched(to_addr)
             {
                 // Parse value from hex (wei)
-                let value_wei =
-                    u128::from_str_radix(tx.value.trim_start_matches("0x"), 16).unwrap_or(0);
+                let value_wei = u128::from_str_radix(tx.value.trim_start_matches("0x"), 16)
+                    .expect("Critical: Failed to parse transaction value from ETH RPC");
 
                 if value_wei > 0 {
                     let tx_index =
                         u32::from_str_radix(tx.transaction_index.trim_start_matches("0x"), 16)
-                            .unwrap_or(0);
+                            .expect("Critical: Failed to parse transaction index from ETH RPC");
 
                     deposits.push(DetectedDeposit {
                         tx_hash: tx.hash.clone(),
@@ -316,10 +316,10 @@ impl EthScanner {
         deposits.extend(erc20_deposits);
 
         // Parse block metadata
-        let block_number =
-            u64::from_str_radix(block.number.trim_start_matches("0x"), 16).unwrap_or(height);
-        let timestamp =
-            i64::from_str_radix(block.timestamp.trim_start_matches("0x"), 16).unwrap_or(0);
+        let block_number = u64::from_str_radix(block.number.trim_start_matches("0x"), 16)
+            .expect("Critical: Failed to parse block number from ETH RPC");
+        let timestamp = i64::from_str_radix(block.timestamp.trim_start_matches("0x"), 16)
+            .expect("Critical: Failed to parse block timestamp from ETH RPC");
 
         Ok(ScannedBlock {
             height: block_number,
@@ -527,15 +527,16 @@ impl ChainScanner for EthScanner {
 
         // Get latest block
         let block_number: String = self.rpc_call("eth_blockNumber", ()).await?;
-        let height = u64::from_str_radix(block_number.trim_start_matches("0x"), 16).unwrap_or(0);
+        let height = u64::from_str_radix(block_number.trim_start_matches("0x"), 16)
+            .expect("Critical: Failed to parse eth_blockNumber result");
 
         // Get block timestamp
         let height_hex = format!("0x{:x}", height);
         let block: EthBlock = self
             .rpc_call("eth_getBlockByNumber", (height_hex, false))
             .await?;
-        let block_time =
-            i64::from_str_radix(block.timestamp.trim_start_matches("0x"), 16).unwrap_or(0);
+        let block_time = i64::from_str_radix(block.timestamp.trim_start_matches("0x"), 16)
+            .expect("Critical: Failed to parse block.timestamp from ETH RPC");
 
         // Get peer count (may not be available on all nodes)
         let peer_count: Result<String, _> = self.rpc_call("net_peerCount", ()).await;

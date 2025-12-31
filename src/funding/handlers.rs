@@ -150,7 +150,15 @@ pub async fn get_deposit_address(
         )),
     ))?;
 
-    let user_id = claims.sub.parse::<i64>().unwrap_or_default();
+    let user_id = claims.sub.parse::<i64>().map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<()>::error(
+                error_codes::INVALID_PARAMETER,
+                "Invalid user identity in token",
+            )),
+        )
+    })?;
     let service = DepositService::new(db.clone());
 
     // Select Chain Adapter based on Asset/Network
@@ -205,7 +213,15 @@ pub async fn apply_withdraw(
         )),
     ))?;
 
-    let user_id = claims.sub.parse::<i64>().unwrap_or_default();
+    let user_id = claims.sub.parse::<i64>().map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<()>::error(
+                error_codes::INVALID_PARAMETER,
+                "Invalid user identity in token",
+            )),
+        )
+    })?;
     let service = WithdrawService::new(db.clone());
 
     tracing::info!(
@@ -291,7 +307,15 @@ pub async fn get_deposit_history(
         )),
     ))?;
 
-    let user_id = claims.sub.parse::<i64>().unwrap_or_default();
+    let user_id = claims.sub.parse::<i64>().map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<()>::error(
+                error_codes::INVALID_PARAMETER,
+                "Invalid user identity in token",
+            )),
+        )
+    })?;
     let service = DepositService::new(db.clone());
 
     match service.get_history(user_id).await {
@@ -323,7 +347,15 @@ pub async fn get_withdraw_history(
         )),
     ))?;
 
-    let user_id = claims.sub.parse::<i64>().unwrap_or_default();
+    let user_id = claims.sub.parse::<i64>().map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<()>::error(
+                error_codes::INVALID_PARAMETER,
+                "Invalid user identity in token",
+            )),
+        )
+    })?;
     let service = WithdrawService::new(db.clone());
 
     match service.get_history(user_id).await {

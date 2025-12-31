@@ -329,7 +329,11 @@ impl ServiceAdapter for TradingAdapter {
         let user_id = record.0 as u64;
         let asset_id = record.1 as u32;
         use rust_decimal::prelude::ToPrimitive;
-        let amount = record.2.trunc().to_i64().unwrap_or(0) as u64;
+        let amount = record
+            .2
+            .trunc()
+            .to_i64()
+            .expect("Critical: Rollback amount too large or invalid") as u64;
 
         // Send Deposit to restore the funds
         if let Some(channel) = &self.channel {

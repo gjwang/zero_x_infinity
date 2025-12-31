@@ -148,7 +148,15 @@ pub async fn create_api_key(
     (StatusCode, Json<ApiResponse<CreateApiKeyResponse>>),
     (StatusCode, Json<ApiResponse<()>>),
 > {
-    let user_id = claims.sub.parse::<i64>().unwrap_or_default();
+    let user_id = claims.sub.parse::<i64>().map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<()>::error(
+                error_codes::INVALID_PARAMETER,
+                "Invalid user identity in token",
+            )),
+        )
+    })?;
 
     let user_auth = state.user_auth.as_ref().ok_or((
         StatusCode::SERVICE_UNAVAILABLE,
@@ -201,7 +209,15 @@ pub async fn list_api_keys(
     ),
     (StatusCode, Json<ApiResponse<()>>),
 > {
-    let user_id = claims.sub.parse::<i64>().unwrap_or_default();
+    let user_id = claims.sub.parse::<i64>().map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<()>::error(
+                error_codes::INVALID_PARAMETER,
+                "Invalid user identity in token",
+            )),
+        )
+    })?;
 
     let user_auth = state.user_auth.as_ref().ok_or((
         StatusCode::SERVICE_UNAVAILABLE,
@@ -247,7 +263,15 @@ pub async fn delete_api_key(
     axum::Extension(claims): axum::Extension<super::auth_service::Claims>,
     axum::extract::Path(api_key): axum::extract::Path<String>,
 ) -> Result<(StatusCode, Json<ApiResponse<()>>), (StatusCode, Json<ApiResponse<()>>)> {
-    let user_id = claims.sub.parse::<i64>().unwrap_or_default();
+    let user_id = claims.sub.parse::<i64>().map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<()>::error(
+                error_codes::INVALID_PARAMETER,
+                "Invalid user identity in token",
+            )),
+        )
+    })?;
 
     let user_auth = state.user_auth.as_ref().ok_or((
         StatusCode::SERVICE_UNAVAILABLE,

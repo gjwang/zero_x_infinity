@@ -140,7 +140,46 @@ let amount_scaled = asset.parse_amount(amount)?;
 let fee_scaled = asset.parse_amount_allow_zero(fee)?;
 ```
 
-**设计架构**：
+---
+
+### 2.5 铁律：Fail-Fast 禁止静默默认值 (No Silent Defaults)
+
+> [!CAUTION]
+> **金融系统绝不允许“猜”配置。当精度、比例等关键信息缺失时，必须立即报错 (Fail-Fast)，禁止使用 `.unwrap_or(N)` 或硬编码默认值。**
+
+**违规示例**：
+```rust
+// ❌ 严重违规：当资产不存在时，静默使用 6 位精度，导致金额计算完全错误
+let precision = symbol_mgr.get_asset_precision(asset_id).unwrap_or(6); 
+```
+
+**正确做法**：
+```rust
+// ✅ 正确：明确处理错误，阻止系统在非法状态下运行
+let precision = symbol_mgr.get_asset_precision(asset_id)
+    .ok_or_else(|| format!("Critical precision config missing for asset {}", asset_id))?;
+```
+
+---
+
+### 2.6 审计仪式：Fail-Fast 静态检查 (Audit Ritual)
+
+所有涉及到资产、精度、用户身份的代码，必须通过自动化审计脚本扫描：
+
+```bash
+./scripts/audit_silent_defaults.sh
+```
+
+**检查项包括：**
+- **禁止硬编码精度默认值**：如 `.unwrap_or(8)`。
+- **禁止核心逻辑静默清零**：如 `calculate_cost().unwrap_or(0)`。
+- **禁止身份解析跳过错误**：如 `user_id.parse().unwrap_or_default()`。
+
+CI 会强制执行此检查。
+
+---
+
+### 2.6 设计架构：
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐

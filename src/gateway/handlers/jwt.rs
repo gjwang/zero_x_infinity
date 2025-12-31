@@ -23,7 +23,10 @@ pub async fn get_account_jwt(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<crate::user_auth::auth_service::Claims>,
 ) -> ApiResult<AccountResponseData> {
-    let user_id = claims.sub.parse::<i64>().unwrap_or_default();
+    let user_id = claims
+        .sub
+        .parse::<i64>()
+        .map_err(|_| ApiError::unauthorized("Invalid user ID in token"))?;
     tracing::info!("DEBUG: get_account_jwt called for user_id: {}", user_id);
 
     // 1. Get Funding balances from Postgres
@@ -83,7 +86,10 @@ pub async fn create_transfer_jwt(
     Extension(claims): Extension<crate::user_auth::auth_service::Claims>,
     Json(req): Json<crate::funding::transfer::TransferRequest>,
 ) -> ApiResult<crate::funding::transfer::TransferResponse> {
-    let user_id = claims.sub.parse::<i64>().unwrap_or_default();
+    let user_id = claims
+        .sub
+        .parse::<i64>()
+        .map_err(|_| ApiError::unauthorized("Invalid user ID in token"))?;
     tracing::info!("[TRACE] Transfer Request (JWT): User {}", user_id);
 
     if let Some(ref coordinator) = state.transfer_coordinator {
@@ -113,7 +119,10 @@ pub async fn create_order_jwt(
     Extension(claims): Extension<crate::user_auth::auth_service::Claims>,
     Json(req): Json<ClientOrder>,
 ) -> ApiResult<OrderResponseData> {
-    let user_id = claims.sub.parse::<u64>().unwrap_or_default();
+    let user_id = claims
+        .sub
+        .parse::<u64>()
+        .map_err(|_| ApiError::unauthorized("Invalid user ID in token"))?;
     tracing::info!("[TRACE] Create Order (JWT): User {}", user_id);
 
     let validated = super::super::types::validate_client_order(req.clone(), &state.symbol_mgr)
@@ -151,7 +160,10 @@ pub async fn cancel_order_jwt(
     Extension(claims): Extension<crate::user_auth::auth_service::Claims>,
     Json(req): Json<CancelOrderRequest>,
 ) -> ApiResult<OrderResponseData> {
-    let user_id = claims.sub.parse::<u64>().unwrap_or_default();
+    let user_id = claims
+        .sub
+        .parse::<u64>()
+        .map_err(|_| ApiError::unauthorized("Invalid user ID in token"))?;
     tracing::info!(
         "[TRACE] Cancel Order (JWT) {}: User {}",
         req.order_id,
@@ -182,7 +194,10 @@ pub async fn get_orders_jwt(
     Extension(claims): Extension<crate::user_auth::auth_service::Claims>,
     Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> ApiResult<Vec<crate::persistence::queries::OrderApiData>> {
-    let user_id = claims.sub.parse::<u64>().unwrap_or_default();
+    let user_id = claims
+        .sub
+        .parse::<u64>()
+        .map_err(|_| ApiError::unauthorized("Invalid user ID in token"))?;
     let db_client = state
         .db_client
         .as_ref()
@@ -213,7 +228,10 @@ pub async fn get_balance_jwt(
     Extension(claims): Extension<crate::user_auth::auth_service::Claims>,
     Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> ApiResult<crate::persistence::queries::BalanceApiData> {
-    let user_id = claims.sub.parse::<u64>().unwrap_or_default();
+    let user_id = claims
+        .sub
+        .parse::<u64>()
+        .map_err(|_| ApiError::unauthorized("Invalid user ID in token"))?;
     let db_client = state
         .db_client
         .as_ref()

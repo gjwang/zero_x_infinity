@@ -121,24 +121,25 @@ impl WsService {
                 avg_price,
             } => {
                 // Resolve symbol info for name and decimals
-                let symbol_info = self.symbol_mgr.get_symbol_info_by_id(symbol_id);
-                let symbol_name = symbol_info
-                    .map(|s| s.symbol.clone())
-                    .unwrap_or_else(|| format!("SYMBOL_{}", symbol_id));
+                let symbol_info = self
+                    .symbol_mgr
+                    .get_symbol_info_by_id(symbol_id)
+                    .expect("Critical: Symbol info missing for order broadcast");
+                let symbol_name = symbol_info.symbol.clone();
 
                 // Get base asset decimals for qty formatting
-                let (base_internal_scale, base_display_decimals) = symbol_info
-                    .and_then(|s| {
-                        let dec = self.symbol_mgr.get_asset_internal_scale(s.base_asset_id)?;
-                        let disp = self.symbol_mgr.get_asset_precision(s.base_asset_id)?;
-                        Some((dec, disp))
-                    })
-                    .unwrap_or((8, 6));
+                let base_internal_scale = self
+                    .symbol_mgr
+                    .get_asset_internal_scale(symbol_info.base_asset_id)
+                    .expect("Critical: Base asset internal scale missing");
+                let base_display_decimals = self
+                    .symbol_mgr
+                    .get_asset_precision(symbol_info.base_asset_id)
+                    .expect("Critical: Base asset precision missing");
 
                 // Get price decimals
-                let (price_decimals, price_display_decimals) = symbol_info
-                    .map(|s| (s.price_scale(), s.price_precision()))
-                    .unwrap_or((2, 2));
+                let price_decimals = symbol_info.price_scale();
+                let price_display_decimals = symbol_info.price_precision();
 
                 let message = WsMessage::OrderUpdate {
                     order_id,
@@ -167,38 +168,40 @@ impl WsService {
                 is_maker,
             } => {
                 // Resolve symbol info for name and decimals
-                let symbol_info = self.symbol_mgr.get_symbol_info_by_id(symbol_id);
-                let symbol_name = symbol_info
-                    .map(|s| s.symbol.clone())
-                    .unwrap_or_else(|| format!("SYMBOL_{}", symbol_id));
+                // Resolve symbol info for name and decimals
+                let symbol_info = self
+                    .symbol_mgr
+                    .get_symbol_info_by_id(symbol_id)
+                    .expect("Critical: Symbol info missing for trade broadcast");
+                let symbol_name = symbol_info.symbol.clone();
 
                 // Get base asset decimals for qty formatting
-                let (base_internal_scale, base_display_decimals) = symbol_info
-                    .and_then(|s| {
-                        let dec = self.symbol_mgr.get_asset_internal_scale(s.base_asset_id)?;
-                        let disp = self.symbol_mgr.get_asset_precision(s.base_asset_id)?;
-                        Some((dec, disp))
-                    })
-                    .unwrap_or((8, 6));
+                let base_internal_scale = self
+                    .symbol_mgr
+                    .get_asset_internal_scale(symbol_info.base_asset_id)
+                    .expect("Critical: Base asset internal scale missing");
+                let base_display_decimals = self
+                    .symbol_mgr
+                    .get_asset_precision(symbol_info.base_asset_id)
+                    .expect("Critical: Base asset precision missing");
 
                 // Get price decimals
-                let (price_decimals, price_display_decimals) = symbol_info
-                    .map(|s| (s.price_scale(), s.price_precision()))
-                    .unwrap_or((2, 2));
+                let price_decimals = symbol_info.price_scale();
+                let price_display_decimals = symbol_info.price_precision();
 
                 // Get fee asset info for formatting
                 let fee_asset_name = self
                     .symbol_mgr
                     .get_asset_name(fee_asset_id)
-                    .unwrap_or_else(|| format!("ASSET_{}", fee_asset_id));
-                let (fee_decimals, fee_display_decimals) = self
+                    .expect("Critical: Fee asset name missing");
+                let fee_decimals = self
                     .symbol_mgr
                     .get_asset_internal_scale(fee_asset_id)
-                    .and_then(|dec| {
-                        let disp = self.symbol_mgr.get_asset_precision(fee_asset_id)?;
-                        Some((dec, disp))
-                    })
-                    .unwrap_or((8, 6));
+                    .expect("Critical: Fee asset internal scale missing");
+                let fee_display_decimals = self
+                    .symbol_mgr
+                    .get_asset_precision(fee_asset_id)
+                    .expect("Critical: Fee asset precision missing");
 
                 let message = WsMessage::Trade {
                     trade_id,
@@ -244,13 +247,10 @@ impl WsService {
                     // Let's reuse format_amount.
 
                     // We need quote_decimals.
-                    let (_quote_decimals, quote_display_decimals) = symbol_info
-                        .and_then(|s| {
-                            let dec = self.symbol_mgr.get_asset_internal_scale(s.quote_asset_id)?;
-                            let disp = self.symbol_mgr.get_asset_precision(s.quote_asset_id)?;
-                            Some((dec, disp))
-                        })
-                        .unwrap_or((6, 2));
+                    let quote_display_decimals = self
+                        .symbol_mgr
+                        .get_asset_precision(symbol_info.quote_asset_id)
+                        .expect("Critical: Quote asset precision missing for public broadcast");
 
                     // Calculate quote_qty value: price * qty / 10^base_internal_scale?
                     // price (scaled by price_dec) * qty (scaled by base_dec)
@@ -380,16 +380,16 @@ impl WsService {
                 let asset_name = self
                     .symbol_mgr
                     .get_asset_name(asset_id)
-                    .unwrap_or_else(|| format!("ASSET_{}", asset_id));
+                    .expect("Critical: Asset name missing for balance update");
 
-                let (asset_decimals, asset_display_decimals) = self
+                let asset_decimals = self
                     .symbol_mgr
                     .get_asset_internal_scale(asset_id)
-                    .and_then(|dec| {
-                        let disp = self.symbol_mgr.get_asset_precision(asset_id)?;
-                        Some((dec, disp))
-                    })
-                    .unwrap_or((6, 4));
+                    .expect("Critical: Asset internal scale missing for balance update");
+                let asset_display_decimals = self
+                    .symbol_mgr
+                    .get_asset_precision(asset_id)
+                    .expect("Critical: Asset precision missing for balance update");
 
                 let message = WsMessage::BalanceUpdate {
                     asset: asset_name,

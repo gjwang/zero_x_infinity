@@ -403,6 +403,12 @@ main() {
     # Check dependencies
     check_dependencies || exit 2
     
+    # ========== Phase 0: Fail-Fast Audit (Ironclad Rule) ==========
+    echo "═══════════════════════════════════════════════════════════════"
+    echo "Phase 0: Fail-Fast Audit (Ironclad Rule)"
+    echo "═══════════════════════════════════════════════════════════════"
+    
+    run_test_with_pattern "FailFast_Audit" "scripts/audit_silent_defaults.sh" "COMPLETE: All Fail-Fast checks passed!" 30 || exit 1
 
     # ========== Phase 1: Unit Tests ==========
     if [ "$RUN_UNIT" = "true" ]; then

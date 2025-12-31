@@ -115,7 +115,10 @@ impl WithdrawService {
         .await?;
 
         // Read as i64
-        let available: i64 = balance_row.as_ref().map(|r| r.available).unwrap_or(0);
+        let available: i64 = match &balance_row {
+            Some(r) => r.available,
+            None => 0,
+        };
 
         if available < amount_scaled {
             return Err(WithdrawError::InsufficientFunds);

@@ -323,11 +323,13 @@ impl UBSCore {
         self.pre_check(&order)?;
 
         let lock_asset = self.lock_asset_for_order(&order);
-        let lock_amount = self
+        let symbol_info = self
             .manager
             .get_symbol_info_by_id(order.symbol_id)
-            .and_then(|s| order.calculate_cost_with_symbol(s).ok())
-            .unwrap_or(0);
+            .ok_or(RejectReason::SymbolNotFound)?;
+        let lock_amount = order
+            .calculate_cost_with_symbol(symbol_info)
+            .map_err(|_| RejectReason::InvalidPrice)?;
 
         // 2. Persist to WAL FIRST
         let seq_id = if let Some(ref mut wal) = self.wal_v2 {
@@ -518,16 +520,14 @@ impl UBSCore {
 
         // Get VIP discount percentages (100 = no discount, 50 = 50% off)
         // VIP discount table: level 0=100%, 1=90%, 2=80%, ..., 5=50%
-        let buyer_vip = self
-            .accounts
-            .get(&trade.buyer_user_id)
-            .map(|a| a.vip_level())
-            .unwrap_or(0);
-        let seller_vip = self
-            .accounts
-            .get(&trade.seller_user_id)
-            .map(|a| a.vip_level())
-            .unwrap_or(0);
+        let buyer_vip = match self.accounts.get(&trade.buyer_user_id) {
+            Some(a) => a.vip_level(),
+            None => 0,
+        };
+        let seller_vip = match self.accounts.get(&trade.seller_user_id) {
+            Some(a) => a.vip_level(),
+            None => 0,
+        };
 
         // Simple VIP discount: 100 - (vip_level * 10), capped at 50%
         let buyer_discount = (100u8).saturating_sub(buyer_vip.min(5) * 10);
@@ -763,7 +763,7 @@ impl UBSCore {
             balance.frozen(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
+                .expect("Critical: System clock before 1970")
                 .as_nanos() as u64,
         );
 
@@ -802,7 +802,7 @@ impl UBSCore {
             balance.frozen(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
+                .expect("Critical: System clock before 1970")
                 .as_nanos() as u64,
         );
 
