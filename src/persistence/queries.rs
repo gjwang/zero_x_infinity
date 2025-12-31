@@ -166,11 +166,11 @@ pub async fn query_order(
     Ok(rows.into_iter().next().map(|row| {
         // Get symbol info for formatting
         let symbol_info = symbol_mgr.get_symbol_info_by_id(symbol_id).unwrap();
-        let base_decimals = symbol_mgr
-            .get_asset_decimal(symbol_info.base_asset_id)
+        let base_internal_scale = symbol_mgr
+            .get_asset_internal_scale(symbol_info.base_asset_id)
             .unwrap();
         let base_display_decimals = symbol_mgr
-            .get_asset_display_decimals(symbol_info.base_asset_id)
+            .get_asset_precision(symbol_info.base_asset_id)
             .unwrap();
 
         OrderApiData {
@@ -189,8 +189,12 @@ pub async fn query_order(
                 symbol_info.price_scale(),
                 symbol_info.price_precision(),
             ),
-            qty: format_display(row.qty as u64, base_decimals, base_display_decimals),
-            filled_qty: format_display(row.filled_qty as u64, base_decimals, base_display_decimals),
+            qty: format_display(row.qty as u64, base_internal_scale, base_display_decimals),
+            filled_qty: format_display(
+                row.filled_qty as u64,
+                base_internal_scale,
+                base_display_decimals,
+            ),
             status: match row.status {
                 0 => "NEW",
                 1 => "PARTIALLY_FILLED",
@@ -238,11 +242,11 @@ pub async fn query_orders(
 
     // Get symbol info for formatting
     let symbol_info = symbol_mgr.get_symbol_info_by_id(symbol_id).unwrap();
-    let base_decimals = symbol_mgr
-        .get_asset_decimal(symbol_info.base_asset_id)
+    let base_internal_scale = symbol_mgr
+        .get_asset_internal_scale(symbol_info.base_asset_id)
         .unwrap();
     let base_display_decimals = symbol_mgr
-        .get_asset_display_decimals(symbol_info.base_asset_id)
+        .get_asset_precision(symbol_info.base_asset_id)
         .unwrap();
 
     Ok(rows
@@ -263,8 +267,12 @@ pub async fn query_orders(
                 symbol_info.price_scale(),
                 symbol_info.price_precision(),
             ),
-            qty: format_display(row.qty as u64, base_decimals, base_display_decimals),
-            filled_qty: format_display(row.filled_qty as u64, base_decimals, base_display_decimals),
+            qty: format_display(row.qty as u64, base_internal_scale, base_display_decimals),
+            filled_qty: format_display(
+                row.filled_qty as u64,
+                base_internal_scale,
+                base_display_decimals,
+            ),
             status: match row.status {
                 0 => "NEW",
                 1 => "PARTIALLY_FILLED",
@@ -349,17 +357,17 @@ pub async fn query_trades(
 
     // Get symbol info for formatting
     let symbol_info = symbol_mgr.get_symbol_info_by_id(symbol_id).unwrap();
-    let base_decimals = symbol_mgr
-        .get_asset_decimal(symbol_info.base_asset_id)
+    let base_internal_scale = symbol_mgr
+        .get_asset_internal_scale(symbol_info.base_asset_id)
         .unwrap();
     let base_display_decimals = symbol_mgr
-        .get_asset_display_decimals(symbol_info.base_asset_id)
+        .get_asset_precision(symbol_info.base_asset_id)
         .unwrap();
     let quote_decimals = symbol_mgr
-        .get_asset_decimal(symbol_info.quote_asset_id)
+        .get_asset_internal_scale(symbol_info.quote_asset_id)
         .unwrap();
     let quote_display_decimals = symbol_mgr
-        .get_asset_display_decimals(symbol_info.quote_asset_id)
+        .get_asset_precision(symbol_info.quote_asset_id)
         .unwrap();
 
     // Get asset names for fee_asset field
@@ -378,7 +386,7 @@ pub async fn query_trades(
             let (fee_asset, fee_decimals, fee_display_decimals) = if is_buy {
                 (
                     base_asset_name.clone(),
-                    base_decimals,
+                    base_internal_scale,
                     base_display_decimals,
                 )
             } else {
@@ -403,7 +411,7 @@ pub async fn query_trades(
                     symbol_info.price_scale(),
                     symbol_info.price_precision(),
                 ),
-                qty: format_display(row.qty as u64, base_decimals, base_display_decimals),
+                qty: format_display(row.qty as u64, base_internal_scale, base_display_decimals),
                 fee: format_display(fee as u64, fee_decimals, fee_display_decimals),
                 fee_asset,
                 role: if row.role == 1 { "TAKER" } else { "MAKER" }.to_string(),
@@ -460,17 +468,17 @@ pub async fn query_public_trades(
 
     // Get symbol info for formatting
     let symbol_info = symbol_mgr.get_symbol_info_by_id(symbol_id).unwrap();
-    let base_decimals = symbol_mgr
-        .get_asset_decimal(symbol_info.base_asset_id)
+    let base_internal_scale = symbol_mgr
+        .get_asset_internal_scale(symbol_info.base_asset_id)
         .unwrap();
     let base_display_decimals = symbol_mgr
-        .get_asset_display_decimals(symbol_info.base_asset_id)
+        .get_asset_precision(symbol_info.base_asset_id)
         .unwrap();
     let quote_decimals = symbol_mgr
-        .get_asset_decimal(symbol_info.quote_asset_id)
+        .get_asset_internal_scale(symbol_info.quote_asset_id)
         .unwrap();
     let quote_display_decimals = symbol_mgr
-        .get_asset_display_decimals(symbol_info.quote_asset_id)
+        .get_asset_precision(symbol_info.quote_asset_id)
         .unwrap();
 
     Ok(rows
@@ -479,7 +487,7 @@ pub async fn query_public_trades(
             let is_buy = row.side == 0;
 
             // Calculate quote_qty = price * qty
-            // price is in price_decimal units, qty is in base_decimals units
+            // price is in price_decimal units, qty is in base_internal_scale units
             // Result should be in quote_decimals units
             let price_u64 = row.price as u64;
             let qty_u64 = row.qty as u64;
@@ -501,7 +509,7 @@ pub async fn query_public_trades(
                     symbol_info.price_scale(),
                     symbol_info.price_precision(),
                 ),
-                qty: format_display(qty_u64, base_decimals, base_display_decimals),
+                qty: format_display(qty_u64, base_internal_scale, base_display_decimals),
                 quote_qty: format_display(
                     quote_qty_internal,
                     quote_decimals,
@@ -542,8 +550,8 @@ pub async fn query_balance(
 
     // Get asset info for formatting
     let asset_name = symbol_mgr.get_asset_name(asset_id).unwrap();
-    let asset_decimals = symbol_mgr.get_asset_decimal(asset_id).unwrap();
-    let asset_display_decimals = symbol_mgr.get_asset_display_decimals(asset_id).unwrap();
+    let asset_decimals = symbol_mgr.get_asset_internal_scale(asset_id).unwrap();
+    let asset_display_decimals = symbol_mgr.get_asset_precision(asset_id).unwrap();
 
     Ok(rows.into_iter().next().map(|row| BalanceApiData {
         user_id,
@@ -597,7 +605,7 @@ pub async fn query_all_balances(
             }
         };
 
-        let asset_decimals = match symbol_mgr.get_asset_decimal(row.asset_id) {
+        let asset_decimals = match symbol_mgr.get_asset_internal_scale(row.asset_id) {
             Some(d) => d,
             None => {
                 tracing::error!(
@@ -609,7 +617,7 @@ pub async fn query_all_balances(
         };
 
         let asset_display_decimals = symbol_mgr
-            .get_asset_display_decimals(row.asset_id)
+            .get_asset_precision(row.asset_id)
             .unwrap_or(asset_decimals);
 
         tracing::debug!(
@@ -787,17 +795,17 @@ pub async fn query_klines(
 
     // Get symbol info for formatting
     let symbol_info = symbol_mgr.get_symbol_info_by_id(symbol_id).unwrap();
-    let base_decimals = symbol_mgr
-        .get_asset_decimal(symbol_info.base_asset_id)
+    let base_internal_scale = symbol_mgr
+        .get_asset_internal_scale(symbol_info.base_asset_id)
         .unwrap();
     let base_display_decimals = symbol_mgr
-        .get_asset_display_decimals(symbol_info.base_asset_id)
+        .get_asset_precision(symbol_info.base_asset_id)
         .unwrap();
     let quote_decimals = symbol_mgr
-        .get_asset_decimal(symbol_info.quote_asset_id)
+        .get_asset_internal_scale(symbol_info.quote_asset_id)
         .unwrap();
     let quote_display_decimals = symbol_mgr
-        .get_asset_display_decimals(symbol_info.quote_asset_id)
+        .get_asset_precision(symbol_info.quote_asset_id)
         .unwrap();
 
     Ok(rows
@@ -827,16 +835,20 @@ pub async fn query_klines(
                 symbol_info.price_scale(),
                 symbol_info.price_precision(),
             ),
-            volume: format_display(row.volume as u64, base_decimals, base_display_decimals),
+            volume: format_display(
+                row.volume as u64,
+                base_internal_scale,
+                base_display_decimals,
+            ),
             // quote_volume = SUM(price * qty) where:
             // - price is in internal units (×10^price_decimal)
-            // - qty is in internal units (×10^base_decimals)
-            // To get quote_amount: price * qty / 10^base_decimals
+            // - qty is in internal units (×10^base_internal_scale)
+            // To get quote_amount: price * qty / 10^base_internal_scale
             // Result is already in quote asset internal units (×10^quote_decimals)
-            // So divide by 10^(base_decimals + quote_decimals) to get display value
+            // So divide by 10^(base_internal_scale + quote_decimals) to get display value
             quote_volume: DisplayAmount::new(format!(
                 "{:.prec$}",
-                row.quote_volume / 10f64.powi(base_decimals as i32 + quote_decimals as i32),
+                row.quote_volume / 10f64.powi(base_internal_scale as i32 + quote_decimals as i32),
                 prec = quote_display_decimals as usize
             )),
             trade_count: row.trade_count as u32,
@@ -934,17 +946,17 @@ pub async fn query_user_trades(
 
     // Get symbol info for formatting
     let symbol_info = symbol_mgr.get_symbol_info_by_id(symbol_id).unwrap();
-    let base_decimals = symbol_mgr
-        .get_asset_decimal(symbol_info.base_asset_id)
+    let base_internal_scale = symbol_mgr
+        .get_asset_internal_scale(symbol_info.base_asset_id)
         .unwrap();
     let base_display_decimals = symbol_mgr
-        .get_asset_display_decimals(symbol_info.base_asset_id)
+        .get_asset_precision(symbol_info.base_asset_id)
         .unwrap();
     let quote_decimals = symbol_mgr
-        .get_asset_decimal(symbol_info.quote_asset_id)
+        .get_asset_internal_scale(symbol_info.quote_asset_id)
         .unwrap();
     let quote_display_decimals = symbol_mgr
-        .get_asset_display_decimals(symbol_info.quote_asset_id)
+        .get_asset_precision(symbol_info.quote_asset_id)
         .unwrap();
 
     // Get asset names for fee_asset field
@@ -963,7 +975,7 @@ pub async fn query_user_trades(
             let (fee_asset, fee_decimals, fee_display_decimals) = if is_buy {
                 (
                     base_asset_name.clone(),
-                    base_decimals,
+                    base_internal_scale,
                     base_display_decimals,
                 )
             } else {
@@ -988,7 +1000,7 @@ pub async fn query_user_trades(
                     symbol_info.price_scale(),
                     symbol_info.price_precision(),
                 ),
-                qty: format_display(row.qty as u64, base_decimals, base_display_decimals),
+                qty: format_display(row.qty as u64, base_internal_scale, base_display_decimals),
                 fee: format_display(real_fee, fee_decimals, fee_display_decimals),
                 fee_asset,
                 role: if row.role == 1 { "TAKER" } else { "MAKER" }.to_string(),
@@ -1030,20 +1042,20 @@ mod kline_tests {
     fn test_quote_volume_calculation() {
         // BTC_USDT example:
         // - price_decimal = 2 (price = 37000.00 -> internal 3700000)
-        // - base_decimals = 8 (qty = 0.4 -> internal 40000000)
+        // - base_internal_scale = 8 (qty = 0.4 -> internal 40000000)
         // - quote_decimals = 2
         // - quote_volume = price * qty = 3700000 * 40000000 = 1.48e14
         // - divide by 10^(8+2) = 10^10
         // - result = 14800.00 USDT
 
         let raw_quote_volume: f64 = 3700000.0 * 40000000.0; // 1.48e14
-        let base_decimals: u32 = 8;
+        let base_internal_scale: u32 = 8;
         let quote_decimals: u32 = 2;
         let quote_display_decimals: u32 = 2;
 
         let result = format!(
             "{:.prec$}",
-            raw_quote_volume / 10f64.powi(base_decimals as i32 + quote_decimals as i32),
+            raw_quote_volume / 10f64.powi(base_internal_scale as i32 + quote_decimals as i32),
             prec = quote_display_decimals as usize
         );
 
@@ -1059,12 +1071,12 @@ mod kline_tests {
         // - divide by 10^10 = 350.00
 
         let raw_quote_volume: f64 = 3500000.0 * 1000000.0;
-        let base_decimals: u32 = 8;
+        let base_internal_scale: u32 = 8;
         let quote_decimals: u32 = 2;
 
         let result = format!(
             "{:.2}",
-            raw_quote_volume / 10f64.powi(base_decimals as i32 + quote_decimals as i32)
+            raw_quote_volume / 10f64.powi(base_internal_scale as i32 + quote_decimals as i32)
         );
 
         assert_eq!(result, "350.00");
@@ -1141,21 +1153,21 @@ mod public_trades_tests {
     fn test_quote_qty_calculation_btc_usdt() {
         // BTC_USDT example:
         // - price_decimal = 2 (price = 43000.00 -> internal 4300000)
-        // - base_decimals = 8 (qty = 0.1 -> internal 10000000)
+        // - base_internal_scale = 8 (qty = 0.1 -> internal 10000000)
         // - quote_decimals = 2
-        // - quote_qty = (price * qty) / 10^base_decimals
+        // - quote_qty = (price * qty) / 10^base_internal_scale
         //             = (4300000 * 10000000) / 10^8
         //             = 43000000000000 / 100000000
         //             = 430000 (internal units, quote_decimals=2)
         // - display: 430000 / 10^2 = 4300.00 USDT
 
         let price: u64 = 4300000; // 43000.00 (price_decimal=2)
-        let qty: u64 = 10000000; // 0.1 BTC (base_decimals=8)
-        let base_decimals: u32 = 8;
+        let qty: u64 = 10000000; // 0.1 BTC (base_internal_scale=8)
+        let base_internal_scale: u32 = 8;
         let quote_decimals: u32 = 2;
         let quote_display_decimals: u32 = 2;
 
-        let quote_qty_internal = (price * qty) / 10u64.pow(base_decimals);
+        let quote_qty_internal = (price * qty) / 10u64.pow(base_internal_scale);
         assert_eq!(quote_qty_internal, 430000);
 
         let quote_qty_str =
@@ -1172,11 +1184,11 @@ mod public_trades_tests {
 
         let price: u64 = 3500000;
         let qty: u64 = 1000000;
-        let base_decimals: u32 = 8;
+        let base_internal_scale: u32 = 8;
         let quote_decimals: u32 = 2;
         let quote_display_decimals: u32 = 2;
 
-        let quote_qty_internal = (price * qty) / 10u64.pow(base_decimals);
+        let quote_qty_internal = (price * qty) / 10u64.pow(base_internal_scale);
         assert_eq!(quote_qty_internal, 35000);
 
         let quote_qty_str =

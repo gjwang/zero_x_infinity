@@ -127,12 +127,10 @@ impl WsService {
                     .unwrap_or_else(|| format!("SYMBOL_{}", symbol_id));
 
                 // Get base asset decimals for qty formatting
-                let (base_decimals, base_display_decimals) = symbol_info
+                let (base_internal_scale, base_display_decimals) = symbol_info
                     .and_then(|s| {
-                        let dec = self.symbol_mgr.get_asset_decimal(s.base_asset_id)?;
-                        let disp = self
-                            .symbol_mgr
-                            .get_asset_display_decimals(s.base_asset_id)?;
+                        let dec = self.symbol_mgr.get_asset_internal_scale(s.base_asset_id)?;
+                        let disp = self.symbol_mgr.get_asset_precision(s.base_asset_id)?;
                         Some((dec, disp))
                     })
                     .unwrap_or((8, 6));
@@ -146,7 +144,11 @@ impl WsService {
                     order_id,
                     symbol: symbol_name,
                     status: format!("{:?}", status),
-                    filled_qty: format_amount(filled_qty, base_decimals, base_display_decimals),
+                    filled_qty: format_amount(
+                        filled_qty,
+                        base_internal_scale,
+                        base_display_decimals,
+                    ),
                     avg_price: avg_price
                         .map(|p| format_amount(p, price_decimals, price_display_decimals)),
                 };
@@ -171,12 +173,10 @@ impl WsService {
                     .unwrap_or_else(|| format!("SYMBOL_{}", symbol_id));
 
                 // Get base asset decimals for qty formatting
-                let (base_decimals, base_display_decimals) = symbol_info
+                let (base_internal_scale, base_display_decimals) = symbol_info
                     .and_then(|s| {
-                        let dec = self.symbol_mgr.get_asset_decimal(s.base_asset_id)?;
-                        let disp = self
-                            .symbol_mgr
-                            .get_asset_display_decimals(s.base_asset_id)?;
+                        let dec = self.symbol_mgr.get_asset_internal_scale(s.base_asset_id)?;
+                        let disp = self.symbol_mgr.get_asset_precision(s.base_asset_id)?;
                         Some((dec, disp))
                     })
                     .unwrap_or((8, 6));
@@ -193,9 +193,9 @@ impl WsService {
                     .unwrap_or_else(|| format!("ASSET_{}", fee_asset_id));
                 let (fee_decimals, fee_display_decimals) = self
                     .symbol_mgr
-                    .get_asset_decimal(fee_asset_id)
+                    .get_asset_internal_scale(fee_asset_id)
                     .and_then(|dec| {
-                        let disp = self.symbol_mgr.get_asset_display_decimals(fee_asset_id)?;
+                        let disp = self.symbol_mgr.get_asset_precision(fee_asset_id)?;
                         Some((dec, disp))
                     })
                     .unwrap_or((8, 6));
@@ -206,7 +206,7 @@ impl WsService {
                     symbol: symbol_name.clone(),
                     side: format!("{:?}", side),
                     price: format_amount(price, price_decimals, price_display_decimals),
-                    qty: format_amount(qty, base_decimals, base_display_decimals),
+                    qty: format_amount(qty, base_internal_scale, base_display_decimals),
                     fee: format_amount(fee, fee_decimals, fee_display_decimals),
                     fee_asset: fee_asset_name,
                     role: if is_maker { "MAKER" } else { "TAKER" }.to_string(),
@@ -246,15 +246,13 @@ impl WsService {
                     // We need quote_decimals.
                     let (_quote_decimals, quote_display_decimals) = symbol_info
                         .and_then(|s| {
-                            let dec = self.symbol_mgr.get_asset_decimal(s.quote_asset_id)?;
-                            let disp = self
-                                .symbol_mgr
-                                .get_asset_display_decimals(s.quote_asset_id)?;
+                            let dec = self.symbol_mgr.get_asset_internal_scale(s.quote_asset_id)?;
+                            let disp = self.symbol_mgr.get_asset_precision(s.quote_asset_id)?;
                             Some((dec, disp))
                         })
                         .unwrap_or((6, 2));
 
-                    // Calculate quote_qty value: price * qty / 10^base_decimals?
+                    // Calculate quote_qty value: price * qty / 10^base_internal_scale?
                     // price (scaled by price_dec) * qty (scaled by base_dec)
                     // Result should be scaled by quote_dec?
                     // This is tricky without big math lib.
@@ -286,7 +284,7 @@ impl WsService {
                         let public_msg = WsMessage::PublicTrade {
                             symbol: symbol_name.clone(),
                             price: format_amount(price, price_decimals, price_display_decimals),
-                            qty: format_amount(qty, base_decimals, base_display_decimals),
+                            qty: format_amount(qty, base_internal_scale, base_display_decimals),
                             quote_qty: quote_qty_str,
                             time: chrono::Utc::now().timestamp_millis(),
                             is_buyer_maker: if side == Side::Buy {
@@ -386,9 +384,9 @@ impl WsService {
 
                 let (asset_decimals, asset_display_decimals) = self
                     .symbol_mgr
-                    .get_asset_decimal(asset_id)
+                    .get_asset_internal_scale(asset_id)
                     .and_then(|dec| {
-                        let disp = self.symbol_mgr.get_asset_display_decimals(asset_id)?;
+                        let disp = self.symbol_mgr.get_asset_precision(asset_id)?;
                         Some((dec, disp))
                     })
                     .unwrap_or((6, 4));

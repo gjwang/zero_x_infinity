@@ -54,13 +54,13 @@ pub fn load_symbol_manager() -> Result<(SymbolManager, u32)> {
                 .parse()
                 .with_context(|| format!("Invalid asset_id at line {}", line_num + 2))?;
             let name = parts[1];
-            let decimals: u32 = parts[2]
+            let internal_scale: u32 = parts[2]
                 .parse()
-                .with_context(|| format!("Invalid decimals at line {}", line_num + 2))?;
-            let display_decimals: u32 = parts[3]
+                .with_context(|| format!("Invalid internal_scale at line {}", line_num + 2))?;
+            let asset_precision: u32 = parts[3]
                 .parse()
-                .with_context(|| format!("Invalid display_decimals at line {}", line_num + 2))?;
-            manager.add_asset(asset_id, decimals, display_decimals, name);
+                .with_context(|| format!("Invalid asset_precision at line {}", line_num + 2))?;
+            manager.add_asset(asset_id, internal_scale, asset_precision, name);
             asset_count += 1;
         }
     }
@@ -87,10 +87,10 @@ pub fn load_symbol_manager() -> Result<(SymbolManager, u32)> {
             let quote_asset_id: u32 = parts[3]
                 .parse()
                 .with_context(|| format!("Invalid quote_asset_id at line {}", line_num + 2))?;
-            let price_decimal: u32 = parts[4]
+            let price_scale: u32 = parts[4]
                 .parse()
-                .with_context(|| format!("Invalid price_decimal at line {}", line_num + 2))?;
-            let price_display_decimal: u32 = parts[5].parse().unwrap_or(2);
+                .with_context(|| format!("Invalid price_scale at line {}", line_num + 2))?;
+            let price_precision: u32 = parts[5].parse().unwrap_or(2);
             let base_maker_fee: u64 = parts[6].parse().unwrap_or(0);
             let base_taker_fee: u64 = parts[7].parse().unwrap_or(0);
 
@@ -100,8 +100,8 @@ pub fn load_symbol_manager() -> Result<(SymbolManager, u32)> {
                     symbol_id,
                     base_asset_id,
                     quote_asset_id,
-                    price_decimal,
-                    price_display_decimal,
+                    price_scale,
+                    price_precision,
                     base_maker_fee,
                     base_taker_fee,
                 )
@@ -139,13 +139,16 @@ pub fn load_symbol_manager() -> Result<(SymbolManager, u32)> {
             .get_asset_name(symbol_info.quote_asset_id)
             .unwrap_or("?".to_string())
     );
-    println!("  Internal decimals: base={}", symbol_info.base_decimals);
+    println!(
+        "  Internal decimals: base={}",
+        symbol_info.base_internal_scale
+    );
 
     // Calculate and display max tradeable value (overflow safety check)
     let quote_decimals = manager
-        .get_asset_decimal(symbol_info.quote_asset_id)
+        .get_asset_internal_scale(symbol_info.quote_asset_id)
         .unwrap_or(6);
-    let qty_scale = *crate::money::unit_amount(symbol_info.base_decimals);
+    let qty_scale = *crate::money::unit_amount(symbol_info.base_internal_scale);
 
     // Reference price: 100,000 (e.g., BTC @ $100k)
     let ref_price_human = 100_000u64;
@@ -244,7 +247,7 @@ pub fn load_orders(
     let symbol_info = manager
         .get_symbol_info_by_id(active_symbol_id)
         .context("Active symbol not found")?;
-    let base_multiplier = *symbol_info.qty_unit(); // 10^base_decimals
+    let base_multiplier = *symbol_info.qty_unit(); // 10^base_internal_scale
     let quote_multiplier = *symbol_info.price_unit(); // 10^price_decimals
 
     let mut orders = Vec::new();

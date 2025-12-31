@@ -187,8 +187,21 @@ impl DepositService {
 
         let mut records = Vec::new();
         for row in rows {
-            let amount_raw: i64 = row.get("amount");
-            let internal_scale: i16 = row.get("internal_scale");
+            // Use try_get to avoid panic on missing columns - log and skip bad rows
+            let amount_raw: i64 = match row.try_get("amount") {
+                Ok(v) => v,
+                Err(e) => {
+                    tracing::error!("Failed to read 'amount' column: {}", e);
+                    continue;
+                }
+            };
+            let internal_scale: i16 = match row.try_get("internal_scale") {
+                Ok(v) => v,
+                Err(e) => {
+                    tracing::error!("Failed to read 'internal_scale' column: {}", e);
+                    continue;
+                }
+            };
 
             // Use unified money module for formatting
             let amount_str = money::format_amount_signed(
@@ -198,13 +211,13 @@ impl DepositService {
             );
 
             records.push(DepositRecord {
-                tx_hash: row.get("tx_hash"),
-                user_id: row.get("user_id"),
-                asset: row.get("asset"),
+                tx_hash: row.try_get("tx_hash").unwrap_or_default(),
+                user_id: row.try_get("user_id").unwrap_or_default(),
+                asset: row.try_get("asset").unwrap_or_default(),
                 amount: amount_str,
-                status: row.get("status"),
-                created_at: row.get("created_at"),
-                block_height: row.get("block_height"),
+                status: row.try_get("status").unwrap_or_default(),
+                created_at: row.try_get("created_at").unwrap_or_default(),
+                block_height: row.try_get("block_height").ok(),
             });
         }
 

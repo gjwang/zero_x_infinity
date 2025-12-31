@@ -24,13 +24,19 @@ fn validate_config(manager: &SymbolManager) -> Result<(), String> {
 
     // All symbols must have valid asset references
     for (id, info) in manager.iter_symbols() {
-        if manager.get_asset_decimal(info.base_asset_id).is_none() {
+        if manager
+            .get_asset_internal_scale(info.base_asset_id)
+            .is_none()
+        {
             return Err(format!(
                 "Symbol {} (id={}) references unknown base_asset_id={}",
                 info.symbol, id, info.base_asset_id
             ));
         }
-        if manager.get_asset_decimal(info.quote_asset_id).is_none() {
+        if manager
+            .get_asset_internal_scale(info.quote_asset_id)
+            .is_none()
+        {
             return Err(format!(
                 "Symbol {} (id={}) references unknown quote_asset_id={}",
                 info.symbol, id, info.quote_asset_id

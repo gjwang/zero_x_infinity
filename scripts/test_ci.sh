@@ -78,6 +78,7 @@ RUN_DEPTH=false
 RUN_ACCOUNT=false
 RUN_TRANSFER=false
 RUN_OPENAPI=false
+RUN_FUNDING=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -90,6 +91,7 @@ while [[ $# -gt 0 ]]; do
         --test-account) RUN_ACCOUNT=true; RUN_ALL=false; shift ;;
         --test-transfer) RUN_TRANSFER=true; RUN_ALL=false; shift ;;
         --test-openapi-e2e) RUN_OPENAPI=true; RUN_ALL=false; shift ;;
+        --test-funding) RUN_FUNDING=true; RUN_ALL=false; shift ;;
         --help|-h)
             head -30 "$0" | tail -28
             echo "Granular Test Options:"
@@ -100,6 +102,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --test-account        Run only Account Integration"
             echo "  --test-transfer       Run only Transfer E2E"
             echo "  --test-openapi-e2e    Run only OpenAPI E2E"
+            echo "  --test-funding        Run only Funding & Trading E2E"
             exit 0
             ;;
         *) echo "Unknown option: $1"; exit 1 ;;
@@ -127,6 +130,26 @@ mkdir -p "$LOG_DIR" "$REPORT_DIR"
 # ============================================================================
 # Helper Functions
 # ============================================================================
+
+# Helper: check if a specific test or all tests should run
+should_run_test() {
+    local test_name=$1
+    if [ "$RUN_ALL" = true ]; then
+        return 0
+    fi
+    
+    case $test_name in
+        unit) [ "$RUN_UNIT" = true ] && return 0 ;;
+        gateway) [ "$RUN_GATEWAY" = true ] && return 0 ;;
+        kline) [ "$RUN_KLINE" = true ] && return 0 ;;
+        depth) [ "$RUN_DEPTH" = true ] && return 0 ;;
+        account) [ "$RUN_ACCOUNT" = true ] && return 0 ;;
+        transfer) [ "$RUN_TRANSFER" = true ] && return 0 ;;
+        openapi) [ "$RUN_OPENAPI" = true ] && return 0 ;;
+        funding) [ "$RUN_FUNDING" = true ] && return 0 ;;
+    esac
+    return 1
+}
 
 log_test_start() {
     local name="$1"

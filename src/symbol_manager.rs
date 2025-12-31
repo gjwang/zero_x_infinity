@@ -7,15 +7,12 @@ pub struct SymbolInfo {
     pub symbol_id: u32,
     pub base_asset_id: u32,
     pub quote_asset_id: u32,
-    /// Internal price scale (for storage/calculation)
-    /// DEPRECATED: Use price_scale() method instead for internal, price_precision() for API
-    pub price_decimal: u32,
-    /// API boundary precision for price (input/output)
-    /// DEPRECATED: Use price_precision() method instead
-    pub price_display_decimal: u32,
-    /// Base asset decimals (e.g., 8 for BTC = satoshi)
-    /// Stored here for fast access without additional lookup
-    pub base_decimals: u32,
+    /// Internal price scale (e.g., 2 for 0.01 tick)
+    pub price_scale: u32,
+    /// API boundary precision for price
+    pub price_precision: u32,
+    /// Base internal scale (e.g., 8 for BTC)
+    pub base_internal_scale: u32,
     /// Base maker fee rate (10^6 precision: 1000 = 0.10%)
     pub base_maker_fee: u64,
     /// Base taker fee rate (10^6 precision: 2000 = 0.20%)
@@ -28,17 +25,15 @@ impl SymbolInfo {
     // ========================================================================
 
     /// API boundary precision for price (for input validation + output formatting)
-    /// Use this instead of directly accessing price_display_decimal field.
     #[inline]
     pub fn price_precision(&self) -> u32 {
-        self.price_display_decimal
+        self.price_precision
     }
 
     /// Internal price scale (for internal calculations)
-    /// Use this instead of directly accessing price_decimal field.
     #[inline]
     pub fn price_scale(&self) -> u32 {
-        self.price_decimal
+        self.price_scale
     }
 
     // ========================================================================
@@ -51,7 +46,7 @@ impl SymbolInfo {
     /// Delegates to money::unit_amount() as the single source of truth.
     #[inline]
     pub fn qty_unit(&self) -> ScaledAmount {
-        crate::money::unit_amount(self.base_decimals)
+        crate::money::unit_amount(self.base_internal_scale)
     }
 
     /// Get price_unit (internal price scale unit) - e.g., 10^2 for 2 decimal places
@@ -87,7 +82,7 @@ impl SymbolInfo {
 
     /// Convert raw scaled quantity (u64) to Decimal for display
     ///
-    /// Example: 1_00000000 (scaled) with base_decimals=8 → Decimal(1.0)
+    /// Example: 1_00000000 (scaled) with base_internal_scale=8 → Decimal(1.0)
     #[inline]
     pub fn qty_as_decimal(&self, qty: u64) -> rust_decimal::Decimal {
         rust_decimal::Decimal::from(qty) / rust_decimal::Decimal::from(*self.qty_unit())
@@ -107,11 +102,9 @@ impl SymbolInfo {
 pub struct AssetInfo {
     pub asset_id: u32,
     /// Internal storage scale (e.g., 8 for BTC = 10^8 satoshi)
-    /// DEPRECATED: Use internal_scale() method instead
-    pub decimals: u32,
+    pub internal_scale: u32,
     /// API boundary precision for input/output (max decimals allowed)
-    /// DEPRECATED: Use asset_precision() method instead  
-    pub display_decimals: u32,
+    pub asset_precision: u32,
     pub name: String,
 }
 
@@ -122,17 +115,15 @@ impl AssetInfo {
 
     /// API boundary precision (for input validation and output formatting)
     /// This is the max decimals allowed in API requests/responses.
-    /// Use this instead of directly accessing display_decimals field.
     #[inline]
     pub fn asset_precision(&self) -> u32 {
-        self.display_decimals
+        self.asset_precision
     }
 
     /// Internal scale factor (for money calculations only)
-    /// Use this instead of directly accessing decimals field.
     #[inline]
     pub fn internal_scale(&self) -> u32 {
-        self.decimals
+        self.internal_scale
     }
 
     // ========================================================================
@@ -204,16 +195,16 @@ impl SymbolManager {
         id: u32,
         base_asset_id: u32,
         quote_asset_id: u32,
-        price_decimal: u32,
-        price_display_decimal: u32,
+        price_scale: u32,
+        price_precision: u32,
     ) -> Result<(), &'static str> {
         self.insert_symbol_with_fees(
             symbol,
             id,
             base_asset_id,
             quote_asset_id,
-            price_decimal,
-            price_display_decimal,
+            price_scale,
+            price_precision,
             1000, // Default maker fee: 0.10%
             2000, // Default taker fee: 0.20%
         )
@@ -226,16 +217,16 @@ impl SymbolManager {
         id: u32,
         base_asset_id: u32,
         quote_asset_id: u32,
-        price_decimal: u32,
-        price_display_decimal: u32,
+        price_scale: u32,
+        price_precision: u32,
         base_maker_fee: u64,
         base_taker_fee: u64,
     ) -> Result<(), &'static str> {
-        // Lookup base_decimals from assets - return error if not found
-        let base_decimals = self
+        // Lookup base_internal_scale from assets - return error if not found
+        let base_internal_scale = self
             .assets
             .get(&base_asset_id)
-            .map(|a| a.decimals)
+            .map(|a| a.internal_scale)
             .ok_or("base_asset_id not found in assets")?;
 
         self.symbol_to_id.insert(symbol.to_string(), id);
@@ -247,9 +238,9 @@ impl SymbolManager {
                 symbol_id: id,
                 base_asset_id,
                 quote_asset_id,
-                price_decimal,
-                price_display_decimal,
-                base_decimals,
+                price_scale,
+                price_precision,
+                base_internal_scale,
                 base_maker_fee,
                 base_taker_fee,
             },
@@ -274,13 +265,19 @@ impl SymbolManager {
         self.symbol_info.get(&id)
     }
 
-    pub fn add_asset(&mut self, asset_id: u32, decimals: u32, display_decimals: u32, name: &str) {
+    pub fn add_asset(
+        &mut self,
+        asset_id: u32,
+        internal_scale: u32,
+        asset_precision: u32,
+        name: &str,
+    ) {
         self.assets.insert(
             asset_id,
             AssetInfo {
                 asset_id,
-                decimals,
-                display_decimals,
+                internal_scale,
+                asset_precision,
                 name: name.to_string(),
             },
         );
@@ -290,12 +287,12 @@ impl SymbolManager {
         self.assets.get(&asset_id).map(|a| a.name.clone())
     }
 
-    pub fn get_asset_decimal(&self, asset_id: u32) -> Option<u32> {
-        self.assets.get(&asset_id).map(|a| a.decimals)
+    pub fn get_asset_internal_scale(&self, asset_id: u32) -> Option<u32> {
+        self.assets.get(&asset_id).map(|a| a.internal_scale)
     }
 
-    pub fn get_asset_display_decimals(&self, asset_id: u32) -> Option<u32> {
-        self.assets.get(&asset_id).map(|a| a.display_decimals)
+    pub fn get_asset_precision(&self, asset_id: u32) -> Option<u32> {
+        self.assets.get(&asset_id).map(|a| a.asset_precision)
     }
 
     pub fn get_asset_id(&self, name: &str) -> Option<u32> {
@@ -386,7 +383,7 @@ impl SymbolManager {
         let symbol_info = self
             .get_symbol_info_by_id(symbol_id)
             .ok_or("symbol not found")?;
-        crate::money::parse_decimal(price, symbol_info.price_decimal)
+        crate::money::parse_decimal(price, symbol_info.price_scale)
             .map(|s| *s)
             .map_err(|_| "invalid price")
     }
@@ -446,7 +443,8 @@ impl SymbolManager {
         asset_id: u32,
     ) -> Option<crate::gateway::types::DisplayAmount> {
         let asset = self.assets.get(&asset_id)?;
-        let formatted = crate::money::format_amount(*value, asset.decimals, asset.display_decimals);
+        let formatted =
+            crate::money::format_amount(*value, asset.internal_scale, asset.asset_precision);
         Some(crate::gateway::types::DisplayAmount::new(formatted))
     }
 }

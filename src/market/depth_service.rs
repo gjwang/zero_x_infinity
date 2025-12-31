@@ -40,10 +40,10 @@ impl DepthService {
 
         let price_display_decimals = symbol_info.price_precision();
         let qty_display_decimals = symbol_mgr
-            .get_asset_display_decimals(symbol_info.base_asset_id)
+            .get_asset_precision(symbol_info.base_asset_id)
             .unwrap_or(6);
         let quote_display_decimals = symbol_mgr
-            .get_asset_display_decimals(symbol_info.quote_asset_id)
+            .get_asset_precision(symbol_info.quote_asset_id)
             .unwrap_or(2);
 
         Self {
@@ -52,7 +52,7 @@ impl DepthService {
             ws_manager,
             symbol: symbol_info.symbol.clone(),
             _price_decimals: symbol_info.price_scale(),
-            qty_decimals: symbol_info.base_decimals,
+            qty_decimals: symbol_info.base_internal_scale,
             price_display_decimals,
             qty_display_decimals,
             _quote_display_decimals: quote_display_decimals,

@@ -229,7 +229,7 @@ impl InternalOrder {
     /// - Buy: `price × qty / qty_unit` = quote amount to lock
     /// - Sell: `qty` = base amount to lock
     ///
-    /// # Example (BTC/USDT with base_decimals=8, quote_decimals=6)
+    /// # Example (BTC/USDT with base_internal_scale=8, quote_decimals=6)
     /// ```text
     /// Buy 1 BTC @ 30000 USDT:
     ///   price = 30000_000000 (30000 USDT, 6 decimals)
