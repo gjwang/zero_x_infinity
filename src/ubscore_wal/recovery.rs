@@ -83,10 +83,21 @@ impl UBSCoreRecovery {
                                 if let Ok(payload) =
                                     bincode::deserialize::<OrderPayload>(&entry.payload)
                                 {
+                                    // money-type-safety.md 4.5.1: fail-fast, no hardcoded fallbacks
                                     let symbol_info =
                                         manager.get_symbol_info_by_id(payload.symbol_id);
-                                    let qty_unit =
-                                        symbol_info.map(|s| *s.qty_unit()).unwrap_or(100_000_000);
+                                    let qty_unit = match symbol_info {
+                                        Some(s) => *s.qty_unit(),
+                                        None => {
+                                            tracing::error!(
+                                                symbol_id = payload.symbol_id,
+                                                order_id = payload.order_id,
+                                                "Symbol not found during WAL recovery, skipping entry"
+                                            );
+                                            next_seq_id = entry.header.seq_id + 1;
+                                            return Ok(true); // Skip this entry
+                                        }
+                                    };
 
                                     // Calculate lock asset and amount
                                     let side = Side::try_from(payload.side).unwrap_or(Side::Buy);

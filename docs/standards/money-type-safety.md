@@ -392,6 +392,43 @@ echo "✅ Money safety audit passed!"
 | `decimals: u32` 硬编码 | ⚠️ 高 | 应从 `SymbolManager` 获取 |
 | API DTO 中 `u64` 金额字段 | 🚫 禁止 | 必须使用 `String` |
 | `Deref` 后直接算术 (`*a + *b`) | ⚠️ 高 | 应使用 `checked_add` |
+| **`.unwrap_or(100_000_000)` 或类似硬编码默认值** | 🚫 **禁止** | 必须 fail-fast |
+
+---
+
+### 4.5.1 🚫 反面教材：硬编码 Fallback 默认值
+
+> [!CAUTION]
+> **绝不允许未经定义的默认值！** 当精度信息无法获取时，必须 fail-fast 报错，而不是静默使用错误值。
+
+**错误示例** (历史代码，已修复):
+
+```rust
+// ❌ 极其危险：symbol 未找到时静默使用 100_000_000
+let qty_unit = symbol_info.map(|s| *s.qty_unit()).unwrap_or(100_000_000);
+
+// 问题：
+// 1. 如果 symbol_id 无效，静默计算出完全错误的金额
+// 2. 100_000_000 仅对 BTC (8位精度) 正确，USDT (6位) 会错1000倍
+// 3. 违反"快速失败"原则，导致难以调试的资金问题
+```
+
+**正确做法**:
+
+```rust
+// ✅ 正确：fail-fast，强制处理错误
+let symbol_info = self.manager.get_symbol_info_by_id(order.symbol_id)
+    .ok_or(RejectReason::SymbolNotFound)?;
+let qty_unit = *symbol_info.qty_unit();
+
+// ✅ 或者在恢复场景中记录错误并跳过
+if symbol_info.is_none() {
+    tracing::error!(symbol_id = order.symbol_id, "Symbol not found during recovery");
+    continue; // 跳过此条目，而非使用错误值
+}
+```
+
+**核心原则**：**静默错误 >> 显式失败**。使用错误的精度值进行计算，可能导致用户损失或系统资金不平衡。
 
 ---
 

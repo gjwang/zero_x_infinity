@@ -279,8 +279,21 @@ impl UBSCore {
     fn lock_funds(&mut self, order: &InternalOrder) {
         // This should never fail if pre_check passed
         let lock_asset = self.lock_asset_for_order(order);
-        let symbol_info = self.manager.get_symbol_info_by_id(order.symbol_id);
-        let qty_unit = symbol_info.map(|s| *s.qty_unit()).unwrap_or(100_000_000);
+
+        // money-type-safety.md 4.5.1: fail-fast, no hardcoded fallbacks
+        let symbol_info = match self.manager.get_symbol_info_by_id(order.symbol_id) {
+            Some(s) => s,
+            None => {
+                tracing::error!(
+                    symbol_id = order.symbol_id,
+                    order_id = order.order_id,
+                    "CRITICAL: Symbol not found in lock_funds - pre_check should have caught this"
+                );
+                return; // Skip locking rather than use wrong value
+            }
+        };
+        let qty_unit = *symbol_info.qty_unit();
+
         // Safe to unwrap: pre_check already validated this won't overflow
         let lock_amount = order
             .calculate_cost(qty_unit)
