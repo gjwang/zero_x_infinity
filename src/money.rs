@@ -131,6 +131,9 @@ pub enum MoneyError {
     #[error("Amount must be positive")]
     InvalidAmount,
 
+    #[error("Zero amount not allowed")]
+    ZeroNotAllowed,
+
     #[error("Amount too large, would overflow")]
     Overflow,
 
@@ -251,20 +254,54 @@ pub(crate) fn parse_amount(amount_str: &str, decimals: u32) -> Result<ScaledAmou
     Ok(ScaledAmount(amount))
 }
 
-/// Converts a Decimal to internal ScaledAmount. Checks scale limit.
+/// Converts a Decimal to internal ScaledAmount. Rejects zero values.
 ///
-/// This is used at the Gateway API boundary where `rust_decimal::Decimal`
-/// is used for JSON deserialization.
+/// This is the **default strict version** for scenarios where zero is not allowed
+/// (e.g., order quantity, price).
+///
+/// For scenarios where zero is valid (e.g., fees), use `parse_decimal_allow_zero`.
 ///
 /// # Arguments
-/// * `amount` - Validated Decimal value
+/// * `amount` - Validated Decimal value (must be positive, non-zero)
 /// * `decimals` - Target decimal places
 ///
 /// # Returns
 /// * Internal u64 scaled value
 pub(crate) fn parse_decimal(amount: Decimal, decimals: u32) -> Result<ScaledAmount, MoneyError> {
-    if amount.is_sign_negative() || amount.is_zero() {
+    if amount.is_zero() {
+        return Err(MoneyError::ZeroNotAllowed);
+    }
+    parse_decimal_inner(amount, decimals)
+}
+
+/// Converts a Decimal to internal ScaledAmount. Allows zero values.
+///
+/// This is the **explicit entry point** for scenarios where zero is valid
+/// (e.g., withdrawal fees). Callers should know they are explicitly allowing zero.
+///
+/// # Arguments
+/// * `amount` - Validated Decimal value (must be non-negative)
+/// * `decimals` - Target decimal places
+///
+/// # Returns
+/// * Internal u64 scaled value
+pub(crate) fn parse_decimal_allow_zero(
+    amount: Decimal,
+    decimals: u32,
+) -> Result<ScaledAmount, MoneyError> {
+    parse_decimal_inner(amount, decimals)
+}
+
+/// Internal implementation shared by both parse_decimal variants.
+/// Only rejects negative values; zero handling is done by the caller.
+fn parse_decimal_inner(amount: Decimal, decimals: u32) -> Result<ScaledAmount, MoneyError> {
+    if amount.is_sign_negative() {
         return Err(MoneyError::InvalidAmount);
+    }
+
+    // Fast path for zero
+    if amount.is_zero() {
+        return Ok(ScaledAmount(0));
     }
 
     // Force strict precision check

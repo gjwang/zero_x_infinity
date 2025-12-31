@@ -94,11 +94,10 @@ impl WithdrawService {
             WithdrawError::Money(e)
         })? as i64;
 
-        // Fee can be zero, which parse_decimal rejects, so handle separately
-        let fee_scaled = if fee.is_zero() {
-            0i64
-        } else {
-            *money::parse_decimal(fee, asset.decimals as u32).map_err(|e| {
+        // Fee can be zero (e.g., promotional zero-fee withdrawals)
+        // Use parse_decimal_allow_zero to explicitly allow this
+        let fee_scaled =
+            *money::parse_decimal_allow_zero(fee, asset.decimals as u32).map_err(|e| {
                 tracing::error!(
                     "Withdraw fee scaling failed: {:?} (asset: {}, decimals: {})",
                     e,
@@ -106,8 +105,7 @@ impl WithdrawService {
                     asset.decimals
                 );
                 WithdrawError::Money(e)
-            })? as i64
-        };
+            })? as i64;
 
         // 2. Lock & Check Balance
         // We act on Funding Account (type=2)
