@@ -330,6 +330,80 @@ impl ValidatedClientOrder {
     }
 }
 
+// ============================================================================
+// Phase 1b: ValidatedOrderExtractor - Axum Extractor for Type-Safe Validation
+// ============================================================================
+
+use axum::{
+    Json,
+    body::Body,
+    extract::{FromRequest, Request},
+    http::StatusCode,
+};
+use std::sync::Arc;
+
+use super::state::AppState;
+
+/// Validated Order Extractor - Framework-level validation.
+///
+/// This extractor performs order validation at the Axum framework level,
+/// preventing handlers from ever receiving invalid data.
+///
+/// Usage in handlers:
+/// ```ignore
+/// async fn create_order(
+///     State(state): State<Arc<AppState>>,
+///     Extension(user): Extension<AuthenticatedUser>,
+///     ValidatedOrderExtractor(validated): ValidatedOrderExtractor,
+/// ) -> impl IntoResponse { ... }
+/// ```
+#[derive(Debug)]
+pub struct ValidatedOrderExtractor(pub ValidatedClientOrder);
+
+/// Rejection type for ValidatedOrderExtractor
+pub struct OrderValidationRejection {
+    pub status: StatusCode,
+    pub message: String,
+}
+
+impl axum::response::IntoResponse for OrderValidationRejection {
+    fn into_response(self) -> axum::response::Response {
+        let body = Json(ApiResponse::<()>::error(
+            error_codes::INVALID_PARAMETER,
+            &self.message,
+        ));
+        (self.status, body).into_response()
+    }
+}
+
+impl FromRequest<Arc<AppState>, Body> for ValidatedOrderExtractor {
+    type Rejection = OrderValidationRejection;
+
+    async fn from_request(
+        req: Request<Body>,
+        state: &Arc<AppState>,
+    ) -> Result<Self, Self::Rejection> {
+        // 1. Extract JSON body as ClientOrder
+        let Json(client_order): Json<ClientOrder> =
+            Json::from_request(req, state)
+                .await
+                .map_err(|e| OrderValidationRejection {
+                    status: StatusCode::BAD_REQUEST,
+                    message: format!("Invalid JSON: {}", e),
+                })?;
+
+        // 2. Validate using existing validation function
+        let validated = validate_client_order(client_order, &state.symbol_mgr).map_err(|e| {
+            OrderValidationRejection {
+                status: StatusCode::BAD_REQUEST,
+                message: e.to_string(),
+            }
+        })?;
+
+        Ok(ValidatedOrderExtractor(validated))
+    }
+}
+
 /// Convert Decimal to u64
 ///
 /// Multiplies by 10^decimals and converts to u64

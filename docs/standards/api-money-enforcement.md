@@ -648,7 +648,7 @@ fi
 | 阶段 | 任务 | 状态 |
 |------|------|------|
 | **Phase 1a** | 实现 `StrictDecimal` 类型 (Serde 层格式验证) | ✅ 已完成 |
-| **Phase 1b** | 为核心订单 API 实现 `ValidatedOrder` Extractor | ⏳ 待实现 |
+| **Phase 1b** | 为核心订单 API 实现 `ValidatedOrder` Extractor | ✅ 已完成 |
 | **Phase 2a** | 实现 `DisplayAmount` 类型 (Response 输出封装) | ✅ 已完成 |
 | **Phase 2b** | 迁移 Response DTO 使用 `DisplayAmount` | ✅ 已完成 |
 | **Phase 3** | 为所有金额相关 API 统一改造 | ✅ 已完成 |
