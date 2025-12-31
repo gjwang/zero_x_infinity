@@ -486,8 +486,8 @@ pub async fn query_public_trades(
 
             // quote_qty = (price * qty) / qty_unit
             // This gives us the quote amount in internal units (×10^quote_decimals)
-            // money-type-safety: use SymbolInfo.qty_unit() instead of direct money:: call
-            let quote_qty_internal = (price_u64 * qty_u64) / *symbol_info.qty_unit();
+            // money-type-safety: use SymbolInfo.calculate_quote_qty() intent-based API
+            let quote_qty_internal = symbol_info.calculate_quote_qty(price_u64, qty_u64);
 
             // Parse timestamp to milliseconds
             let time_ms = chrono::DateTime::parse_from_rfc3339(&row.ts)

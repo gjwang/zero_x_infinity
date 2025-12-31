@@ -36,6 +36,15 @@ impl SymbolInfo {
     pub fn price_unit(&self) -> ScaledAmount {
         crate::money::unit_amount(self.price_decimal)
     }
+
+    /// Calculate quote quantity from price and quantity
+    ///
+    /// Formula: (price * qty) / qty_unit
+    /// Returns raw u64 amount in quote asset decimals
+    #[inline]
+    pub fn calculate_quote_qty(&self, price: u64, qty: u64) -> u64 {
+        (price * qty) / *self.qty_unit()
+    }
 }
 
 #[derive(Debug, Clone)]

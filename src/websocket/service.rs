@@ -271,10 +271,22 @@ impl WsService {
                     // Shortcut: Use decimal lib if available or simple float math for display?
                     // We imported `rust_decimal::Decimal`. Let's use it.
                     // money-type-safety: use SymbolManager's unit methods
-                    let price_unit = symbol_info.map(|s| *s.price_unit()).unwrap_or(100);
-                    let qty_unit = symbol_info.map(|s| *s.qty_unit()).unwrap_or(100_000_000);
-                    let p_dec = Decimal::from(price) / Decimal::from(price_unit);
-                    let q_dec = Decimal::from(qty) / Decimal::from(qty_unit);
+                    // CRITICAL: Fail fast if symbol_info is missing, do not use hardcoded defaults
+                    let symbol_info = match symbol_info {
+                        Some(s) => s,
+                        None => {
+                            tracing::error!(
+                                "Missing symbol info for trade broadcast: {}",
+                                symbol_name
+                            );
+                            continue; // Skip public broadcast if metadata is missing
+                        }
+                    };
+
+                    let price_unit = symbol_info.price_unit();
+                    let qty_unit = symbol_info.qty_unit();
+                    let p_dec = Decimal::from(price) / Decimal::from(*price_unit);
+                    let q_dec = Decimal::from(qty) / Decimal::from(*qty_unit);
                     let quote_val = p_dec * q_dec;
                     let quote_qty_str = format!(
                         "{:.prec$}",
