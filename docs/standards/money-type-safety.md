@@ -176,10 +176,28 @@ let precision = symbol_mgr.get_asset_precision(asset_id)
 ./scripts/audit_silent_defaults.sh
 ```
 
-**检查项包括：**
-- **禁止硬编码精度默认值**：如 `.unwrap_or(8)`。
-- **禁止核心逻辑静默清零**：如 `calculate_cost().unwrap_or(0)`。
-- **禁止身份解析跳过错误**：如 `user_id.parse().unwrap_or_default()`。
+**核心规则**：**所有 `.unwrap_or()` 默认为违规**，除非标注 `// SAFE_DEFAULT:` 说明原因。
+
+**允许的格式**：
+```rust
+// 在同一行末尾添加说明
+.unwrap_or(last_value) // SAFE_DEFAULT: empty list returns current value
+
+// 合法理由示例
+// SAFE_DEFAULT: counter defaults to 0
+// SAFE_DEFAULT: empty list semantics - no items means no change
+// SAFE_DEFAULT: optional display field - empty string is valid
+```
+
+**禁止的模式（必须修复或标注）**：
+```rust
+// ❌ 金额/费率默认 - 绝不允许
+.unwrap_or(0) // 可能导致资金计算错误
+.unwrap_or((1000, 2000)) // 费率默认导致用户损失
+
+// ❌ ID 默认 - 绝不允许  
+.unwrap_or(default_user_id) // 可能导致数据归属错误
+```
 
 CI 会强制执行此检查。
 

@@ -1,6 +1,10 @@
 #!/bin/bash
 # audit_silent_defaults.sh
 # Enforces Fail-Fast principle by prohibiting silent fallbacks in critical logic.
+#
+# RULE: All .unwrap_or() usages are VIOLATIONS unless marked with SAFE_DEFAULT:
+# Example of allowed usage:
+#   .unwrap_or(last_value) // SAFE_DEFAULT: empty list returns current value
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -8,54 +12,70 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 echo -e "${YELLOW}Starting Fail-Fast Audit: Scanning for silent defaults...${NC}"
-
-# Define high-risk patterns
-# 1. .unwrap_or(0) or .unwrap_or_default() in financial/config logic
-# 2. .unwrap_or(2) or .unwrap_or(8) for scales/precisions
-# 3. .unwrap_or("?") or .unwrap_or_else(|| format!(...)) for critical names
+echo -e "${YELLOW}Rule: All .unwrap_or() must have SAFE_DEFAULT: comment or be violations${NC}"
 
 EXIT_CODE=0
 
-# High-risk directories (limiting to .rs files to avoid false positives in .md or logs)
-TARGET_DIRS="src/ market/ sentinel/ websocket/ funding/ exchange_info/ gateway/"
+# ============================================================================
+# Check 1: ALL unwrap_or usages must be marked with SAFE_DEFAULT or be violations
+# ============================================================================
+echo -e "\n${YELLOW}[Unmarked unwrap_or Usage]${NC}"
 
-function check_pattern() {
-    local label=$1
-    local pattern=$2
-    local paths=$3
-    echo -e "\n${YELLOW}[$label]${NC}"
-    # Use find to get only .rs files
-    local results=$(find $paths -name "*.rs" -exec grep -rnE "$pattern" {} + 2>/dev/null)
-    if [ ! -z "$results" ]; then
-        echo -e "${RED}FAILURE: $label issues found!${NC}"
-        echo "$results"
-        return 1
-    else
-        echo -e "${GREEN}PASS: $label audit clear.${NC}"
-        return 0
-    fi
-}
+# Find all .unwrap_or usages in src/, exclude test code and those with SAFE_DEFAULT marker
+UNMARKED=$(find src/ -name "*.rs" -exec grep -n "\.unwrap_or" {} + 2>/dev/null | \
+    grep -v "SAFE_DEFAULT" | \
+    grep -v "#\[cfg(test)\]" | \
+    grep -v "mod tests" | \
+    grep -v "_test.rs")
 
-# 1. Check for hardcoded precision/scale defaults
-check_pattern "Hardcoded Precision" "\.unwrap_or\(([2468])\)" "$TARGET_DIRS" || EXIT_CODE=1
+if [ ! -z "$UNMARKED" ]; then
+    echo -e "${RED}FAILURE: Unmarked .unwrap_or() found! Add '// SAFE_DEFAULT: <reason>' or fix:${NC}"
+    echo "$UNMARKED"
+    EXIT_CODE=1
+else
+    echo -e "${GREEN}PASS: All .unwrap_or() usages are properly marked.${NC}"
+fi
 
-# 2. Check for balance/cost defaults in core logic
-SENSITIVE_CORE="src/pipeline_services.rs src/funding/ src/ubscore.rs src/internal_transfer/ src/account/ src/api_auth/"
-check_pattern "Silent Financial Defaults" "\.unwrap_or(_default)?\(0?\)" "$SENSITIVE_CORE" || EXIT_CODE=1
+# ============================================================================
+# Check 2: Direct row.get() usage (prevents panics on column rename)
+# ============================================================================
+echo -e "\n${YELLOW}[Unsafe DB Row Mapping]${NC}"
 
-# 3. Check for security-critical ID defaults
-check_pattern "Insecure User ID Logic" "claims\.sub\.parse.*\.unwrap_or(_default)?\(" "src/" || EXIT_CODE=1
+UNSAFE_ROW=$(find src/ -name "*.rs" -exec grep -n "row\.get(" {} + 2>/dev/null | \
+    grep -v "try_get" | \
+    grep -v "#\[cfg(test)\]")
 
-# 4. Check for critical metadata defaults in WebSocket broadcast
-check_pattern "Metadata Display Defaults" "\.unwrap_or(_else)?\(.*format!.*SYMBOL.*\)" "src/websocket/" || EXIT_CODE=1
+if [ ! -z "$UNSAFE_ROW" ]; then
+    echo -e "${RED}FAILURE: Direct row.get() found! Use SafeRow::try_get_log instead:${NC}"
+    echo "$UNSAFE_ROW"
+    EXIT_CODE=1
+else
+    echo -e "${GREEN}PASS: No unsafe DB row mapping.${NC}"
+fi
 
-# 5. Check for unsafe DB row mapping (prevents panics on column rename)
-check_pattern "Unsafe DB Row Mapping" "row\.get\(" "src/" || EXIT_CODE=1
+# ============================================================================
+# Check 3: Insecure user ID parsing
+# ============================================================================
+echo -e "\n${YELLOW}[Insecure User ID Logic]${NC}"
 
+INSECURE_ID=$(find src/ -name "*.rs" -exec grep -nE "claims\.sub\.parse.*\.unwrap_or(_default)?\(" {} + 2>/dev/null)
+
+if [ ! -z "$INSECURE_ID" ]; then
+    echo -e "${RED}FAILURE: Insecure user ID parsing found:${NC}"
+    echo "$INSECURE_ID"
+    EXIT_CODE=1
+else
+    echo -e "${GREEN}PASS: No insecure user ID parsing.${NC}"
+fi
+
+# ============================================================================
+# Summary
+# ============================================================================
 if [ $EXIT_CODE -eq 0 ]; then
     echo -e "\n${GREEN}COMPLETE: All Fail-Fast checks passed!${NC}"
 else
     echo -e "\n${RED}COMPLETE: Fail-Fast audit failed. Please fix the above issues.${NC}"
+    echo -e "${YELLOW}Hint: Add '// SAFE_DEFAULT: <reason>' to intentional fallbacks${NC}"
 fi
 
 exit $EXIT_CODE

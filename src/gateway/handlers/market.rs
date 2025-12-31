@@ -36,6 +36,7 @@ pub async fn get_klines(
         .ok_or_else(|| ApiError::service_unavailable("Persistence not enabled"))?;
 
     // Parse query parameters
+    // SAFE_DEFAULT: API documented default interval
     let interval = params.get("interval").map(|s| s.as_str()).unwrap_or("1m");
 
     // Validate interval
@@ -48,7 +49,7 @@ pub async fn get_klines(
     let limit: usize = params
         .get("limit")
         .and_then(|s| s.parse().ok())
-        .unwrap_or(100)
+        .unwrap_or(100) // SAFE_DEFAULT: API documented default limit
         .min(1000); // Cap at 1000
 
     // Query K-Lines from TDengine
@@ -90,7 +91,7 @@ pub async fn get_depth(
     let limit = params
         .get("limit")
         .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or(20)
+        .unwrap_or(20) // SAFE_DEFAULT: API documented default depth
         .min(100);
 
     // Get snapshot from DepthService (not OrderBook directly!)

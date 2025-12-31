@@ -1324,7 +1324,7 @@ impl SettlementService {
                 .iter()
                 .map(|t| t.trade_id)
                 .max()
-                .unwrap_or(last_trade_id);
+                .unwrap_or(last_trade_id); // SAFE_DEFAULT: empty list keeps current value
             if let Some(ref mut config) = self.persistence_config {
                 config.last_trade_id = max_id;
             }
@@ -1648,7 +1648,7 @@ impl SettlementService {
         let symbol_info = symbol_mgr.get_symbol_info_by_id(symbol_id);
         let (maker_fee_rate, taker_fee_rate) = symbol_info
             .map(|s| (s.base_maker_fee, s.base_taker_fee))
-            .unwrap_or((1000, 2000)); // Default: 0.10%/0.20%
+            .unwrap_or((1000, 2000)); // FIXME: UNSAFE - fee rate should fail explicitly
 
         // --- Taker Side ---
         let taker_status = if trade_event.taker_filled_qty >= trade_event.taker_order_qty {

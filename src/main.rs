@@ -923,12 +923,14 @@ Samples: {}
         exec_time,
         orders_per_sec,
         trades_per_sec,
+        // SAFE_DEFAULT: no orderbook = display None/0
         final_book.as_ref().map(|b| b.best_bid()).unwrap_or(None),
         final_book.as_ref().map(|b| b.best_ask()).unwrap_or(None),
         final_book.as_ref().map(|b| b.depth().0).unwrap_or(0),
         final_book.as_ref().map(|b| b.depth().1).unwrap_or(0),
         total_time,
         perf.breakdown(),
+        // SAFE_DEFAULT: no latency samples = display 0
         perf.min_latency().unwrap_or(0),
         perf.avg_latency().unwrap_or(0),
         perf.percentile(50.0).unwrap_or(0),
@@ -967,37 +969,38 @@ Samples: {}
     writeln!(
         perf_file,
         "latency_min_ns={}",
+        // SAFE_DEFAULT: no latency samples = output 0 in perf file
         perf.min_latency().unwrap_or(0)
     )
     .unwrap();
     writeln!(
         perf_file,
         "latency_avg_ns={}",
-        perf.avg_latency().unwrap_or(0)
+        perf.avg_latency().unwrap_or(0) // SAFE_DEFAULT: perf display
     )
     .unwrap();
     writeln!(
         perf_file,
         "latency_p50_ns={}",
-        perf.percentile(50.0).unwrap_or(0)
+        perf.percentile(50.0).unwrap_or(0) // SAFE_DEFAULT: perf display
     )
     .unwrap();
     writeln!(
         perf_file,
         "latency_p99_ns={}",
-        perf.percentile(99.0).unwrap_or(0)
+        perf.percentile(99.0).unwrap_or(0) // SAFE_DEFAULT: perf display
     )
     .unwrap();
     writeln!(
         perf_file,
         "latency_p999_ns={}",
-        perf.percentile(99.9).unwrap_or(0)
+        perf.percentile(99.9).unwrap_or(0) // SAFE_DEFAULT: perf display
     )
     .unwrap();
     writeln!(
         perf_file,
         "latency_max_ns={}",
-        perf.max_latency().unwrap_or(0)
+        perf.max_latency().unwrap_or(0) // SAFE_DEFAULT: perf display
     )
     .unwrap();
     println!("Perf baseline written to {}", perf_path);

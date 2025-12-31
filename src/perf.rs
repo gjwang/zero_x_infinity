@@ -248,9 +248,10 @@ impl PerfMetrics {
         // Latency Profile
         if !self.latency_samples.is_empty() {
             s.push_str("\n--- Latency Profile (sampled) ---\n");
-            let p50 = self.percentile(50.0).unwrap_or(0);
-            let p99 = self.percentile(99.0).unwrap_or(0);
-            let max = self.max_latency().unwrap_or(0);
+            // SAFE_DEFAULT: empty samples = 0 latency display
+            let p50 = self.percentile(50.0).unwrap_or(0); // SAFE_DEFAULT: no samples = 0
+            let p99 = self.percentile(99.0).unwrap_or(0); // SAFE_DEFAULT: no samples = 0
+            let max = self.max_latency().unwrap_or(0); // SAFE_DEFAULT: no samples = 0
 
             s.push_str(&format!("  P50:    {:>10} ns\n", p50));
             s.push_str(&format!("  P99:    {:>10} ns\n", p99));

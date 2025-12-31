@@ -85,7 +85,7 @@ pub async fn get_orders(
     let limit: usize = params
         .get("limit")
         .and_then(|s| s.parse().ok())
-        .unwrap_or(10);
+        .unwrap_or(10); // SAFE_DEFAULT: API documented default limit
 
     // Query orders from TDengine
     match crate::persistence::queries::query_orders(
@@ -136,7 +136,7 @@ pub async fn get_trades(
     let limit: usize = params
         .get("limit")
         .and_then(|s| s.parse().ok())
-        .unwrap_or(100);
+        .unwrap_or(100); // SAFE_DEFAULT: API documented default limit
 
     // Query user-specific trades from TDengine (SEC-004: filter by user_id)
     match crate::persistence::queries::query_user_trades(
@@ -185,7 +185,7 @@ pub async fn get_public_trades(
     let limit: usize = params
         .get("limit")
         .and_then(|s| s.parse().ok())
-        .unwrap_or(500)
+        .unwrap_or(500) // SAFE_DEFAULT: API documented default limit
         .min(1000); // Cap at 1000
 
     let from_id: Option<i64> = params.get("fromId").and_then(|s| s.parse().ok());
