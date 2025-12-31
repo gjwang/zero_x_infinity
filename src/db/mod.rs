@@ -35,8 +35,6 @@ impl Database {
     /// Load VIP levels for all users from users_tb
     /// Returns Vec<(user_id, vip_level)>
     pub async fn load_user_vip_levels(&self) -> Result<Vec<(u64, u8)>, sqlx::Error> {
-        use sqlx::Row;
-
         let rows = sqlx::query("SELECT user_id, vip_level FROM users_tb WHERE vip_level > 0")
             .fetch_all(&self.pool)
             .await?;
