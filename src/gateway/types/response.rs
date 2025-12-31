@@ -179,6 +179,21 @@ impl From<ApiError> for (StatusCode, Json<ApiResponse<()>>) {
     }
 }
 
+/// Convert OrderError to ApiError for seamless use in handlers
+impl From<crate::gateway::services::OrderError> for ApiError {
+    fn from(err: crate::gateway::services::OrderError) -> Self {
+        match err {
+            crate::gateway::services::OrderError::InvalidParameter(msg) => {
+                ApiError::bad_request(msg)
+            }
+            crate::gateway::services::OrderError::QueueFull => {
+                ApiError::service_unavailable("Order queue is full, please try again later")
+            }
+            crate::gateway::services::OrderError::Internal(msg) => ApiError::internal(msg),
+        }
+    }
+}
+
 // ============================================================================
 // Response DTOs
 // ============================================================================
