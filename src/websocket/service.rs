@@ -270,14 +270,13 @@ impl WsService {
 
                     // Shortcut: Use decimal lib if available or simple float math for display?
                     // We imported `rust_decimal::Decimal`. Let's use it.
-                    // money-type-safety: use SymbolManager's unit methods
+                    // money-type-safety: use SymbolInfo's intent-based display APIs
                     // CRITICAL: Fail fast if symbol_info is missing, do not use hardcoded defaults
                     if let Some(symbol_info) = symbol_info {
-                        let price_unit = symbol_info.price_unit();
-                        let qty_unit = symbol_info.qty_unit();
-                        let p_dec = Decimal::from(price) / Decimal::from(*price_unit);
-                        let q_dec = Decimal::from(qty) / Decimal::from(*qty_unit);
-                        let quote_val = p_dec * q_dec;
+                        // Intent-based APIs: hide price_unit/qty_unit details
+                        let p_dec = symbol_info.price_as_decimal(price);
+                        let q_dec = symbol_info.qty_as_decimal(qty);
+                        let quote_val = symbol_info.format_quote_value(price, qty);
                         let quote_qty_str = format!(
                             "{:.prec$}",
                             quote_val,
@@ -321,7 +320,7 @@ impl WsService {
                             ticker.low = p_dec;
                         }
                         ticker.volume += q_dec;
-                        ticker.quote_volume += p_dec * q_dec;
+                        ticker.quote_volume += quote_val;
 
                         let price_change = ticker.close - ticker.open;
                         let price_change_percent = if !ticker.open.is_zero() {

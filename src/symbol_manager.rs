@@ -45,6 +45,36 @@ impl SymbolInfo {
     pub fn calculate_quote_qty(&self, price: u64, qty: u64) -> u64 {
         (price * qty) / *self.qty_unit()
     }
+
+    // ========================================================================
+    // Intent-based Display APIs: Raw u64 → Decimal for human-readable output
+    // Encapsulates price_unit/qty_unit so callers don't handle scaling directly
+    // ========================================================================
+
+    /// Convert raw scaled price (u64) to Decimal for display
+    ///
+    /// Example: 85000_00 (scaled) with price_decimals=2 → Decimal(85000.00)
+    #[inline]
+    pub fn price_as_decimal(&self, price: u64) -> rust_decimal::Decimal {
+        rust_decimal::Decimal::from(price) / rust_decimal::Decimal::from(*self.price_unit())
+    }
+
+    /// Convert raw scaled quantity (u64) to Decimal for display
+    ///
+    /// Example: 1_00000000 (scaled) with base_decimals=8 → Decimal(1.0)
+    #[inline]
+    pub fn qty_as_decimal(&self, qty: u64) -> rust_decimal::Decimal {
+        rust_decimal::Decimal::from(qty) / rust_decimal::Decimal::from(*self.qty_unit())
+    }
+
+    /// Calculate quote value as Decimal for display
+    ///
+    /// Formula: price_decimal * qty_decimal
+    /// Use this for PublicTrade/Ticker quote_qty display
+    #[inline]
+    pub fn format_quote_value(&self, price: u64, qty: u64) -> rust_decimal::Decimal {
+        self.price_as_decimal(price) * self.qty_as_decimal(qty)
+    }
 }
 
 #[derive(Debug, Clone)]
