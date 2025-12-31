@@ -182,14 +182,17 @@ echo "Rule 5: Checking direct precision field access (informational)..."
 
 # Pattern: .decimals or .display_decimals outside core modules
 # Allowed: symbol_manager.rs, exchange_info/, money.rs (definitions)
+# Also exclude: comments, database row mappings (Asset struct), internal_transfer (bridging layer)
 # Informational for now - helps track migration progress
 PRECISION_DIRECT=$(grep -rn "\.decimals\b\|\.display_decimals\|\.price_decimal\b\|\.price_display_decimal" --include="*.rs" src/ \
     | grep -v "symbol_manager.rs" \
     | grep -v "exchange_info/" \
     | grep -v "money.rs" \
+    | grep -v "internal_transfer/" \
     | grep -v "DEPRECATED" \
     | grep -v "internal_scale\|asset_precision\|price_scale\|price_precision" \
-    | grep -v "// comment\|/// " \
+    | grep -v "//.*decimals\|///.*decimals" \
+    | grep -v "Formatted with" \
     2>/dev/null || true)
 
 if [ -n "$PRECISION_DIRECT" ]; then
