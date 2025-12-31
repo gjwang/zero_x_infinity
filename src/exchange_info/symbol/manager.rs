@@ -12,7 +12,7 @@ impl SymbolManager {
     pub async fn load_all(pool: &PgPool) -> Result<Vec<Symbol>, sqlx::Error> {
         let rows: Vec<Symbol> = sqlx::query_as(
             r#"SELECT symbol_id, symbol, base_asset_id, quote_asset_id,
-                      price_decimals, qty_decimals, min_qty, status, symbol_flags,
+                      price_scale, price_precision, qty_scale, qty_precision, min_qty, status, symbol_flags,
                       base_maker_fee, base_taker_fee
                FROM symbols_tb WHERE status = 1"#,
         )
@@ -26,7 +26,7 @@ impl SymbolManager {
     pub async fn get_by_id(pool: &PgPool, symbol_id: i32) -> Result<Option<Symbol>, sqlx::Error> {
         let row: Option<Symbol> = sqlx::query_as(
             r#"SELECT symbol_id, symbol, base_asset_id, quote_asset_id,
-                      price_decimals, qty_decimals, min_qty, status, symbol_flags,
+                      price_scale, price_precision, qty_scale, qty_precision, min_qty, status, symbol_flags,
                       base_maker_fee, base_taker_fee
                FROM symbols_tb WHERE symbol_id = $1"#,
         )
@@ -48,7 +48,7 @@ impl SymbolManager {
 
         let row: Option<Symbol> = sqlx::query_as(
             r#"SELECT symbol_id, symbol, base_asset_id, quote_asset_id, 
-                      price_decimals, qty_decimals, min_qty, status, symbol_flags,
+                      price_scale, price_precision, qty_scale, qty_precision, min_qty, status, symbol_flags,
                       base_maker_fee, base_taker_fee
                FROM symbols_tb WHERE symbol = $1"#,
         )

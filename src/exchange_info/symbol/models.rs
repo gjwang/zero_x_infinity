@@ -14,14 +14,24 @@ pub mod symbol_flags {
 }
 
 /// Trading pair (symbol)
+///
+/// Field naming follows precision terminology (See money-type-safety.md Section 2.5):
+/// - price_scale/qty_scale: for internal Decimal↔u64 conversion
+/// - price_precision/qty_precision: for API input validation and output formatting
 #[derive(Debug, Clone, FromRow)]
 pub struct Symbol {
     pub symbol_id: i32,
     pub symbol: String,
     pub base_asset_id: i32,
     pub quote_asset_id: i32,
-    pub price_decimals: i16,
-    pub qty_decimals: i16,
+    /// Internal price scale factor
+    pub price_scale: i16,
+    /// API price precision for input/output
+    pub price_precision: i16,
+    /// Internal quantity scale factor
+    pub qty_scale: i16,
+    /// API quantity precision for input/output  
+    pub qty_precision: i16,
     pub min_qty: i64,
     pub status: i16,
     pub symbol_flags: i32,
@@ -53,8 +63,10 @@ mod tests {
             symbol: "BTC_USDT".to_string(),
             base_asset_id: 1,
             quote_asset_id: 2,
-            price_decimals: 2,
-            qty_decimals: 6,
+            price_scale: 2,
+            price_precision: 2,
+            qty_scale: 6,
+            qty_precision: 6,
             min_qty: 1000,
             status: 1,
             symbol_flags: symbol_flags::DEFAULT,
@@ -73,8 +85,10 @@ mod tests {
             symbol: "ETH_BTC".to_string(),
             base_asset_id: 3,
             quote_asset_id: 1,
-            price_decimals: 6,
-            qty_decimals: 4,
+            price_scale: 6,
+            price_precision: 6,
+            qty_scale: 4,
+            qty_precision: 4,
             min_qty: 100,
             status: 1,
             symbol_flags: symbol_flags::IS_TRADABLE,
@@ -93,8 +107,10 @@ mod tests {
             symbol: "DISABLED_PAIR".to_string(),
             base_asset_id: 1,
             quote_asset_id: 2,
-            price_decimals: 2,
-            qty_decimals: 6,
+            price_scale: 2,
+            price_precision: 2,
+            qty_scale: 6,
+            qty_precision: 6,
             min_qty: 1000,
             status: 0,
             symbol_flags: 0,
@@ -113,8 +129,10 @@ mod tests {
             symbol: "COMING_SOON".to_string(),
             base_asset_id: 1,
             quote_asset_id: 2,
-            price_decimals: 2,
-            qty_decimals: 6,
+            price_scale: 2,
+            price_precision: 2,
+            qty_scale: 6,
+            qty_precision: 6,
             min_qty: 1000,
             status: 1,
             symbol_flags: symbol_flags::IS_VISIBLE,
@@ -133,8 +151,10 @@ mod tests {
             symbol: "BTC_USD".to_string(),
             base_asset_id: 1,
             quote_asset_id: 4,
-            price_decimals: 2,
-            qty_decimals: 8,
+            price_scale: 2,
+            price_precision: 2,
+            qty_scale: 8,
+            qty_precision: 8,
             min_qty: 1,
             status: 1,
             symbol_flags: symbol_flags::IS_TRADABLE
@@ -159,8 +179,10 @@ mod tests {
             symbol: "ALT_USDT".to_string(),
             base_asset_id: 5,
             quote_asset_id: 2,
-            price_decimals: 4,
-            qty_decimals: 2,
+            price_scale: 4,
+            price_precision: 4,
+            qty_scale: 2,
+            qty_precision: 2,
             min_qty: 100,
             status: 1,
             symbol_flags: symbol_flags::IS_TRADABLE

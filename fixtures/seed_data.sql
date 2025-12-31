@@ -26,8 +26,11 @@ ON CONFLICT (asset) DO NOTHING;
 -- ============================================================================
 -- Trading Pairs (Symbols)
 -- ============================================================================
-INSERT INTO symbols_tb (symbol, base_asset_id, quote_asset_id, price_decimals, qty_decimals, min_qty, symbol_flags)
-SELECT 'BTC_USDT', b.asset_id, q.asset_id, 2, 8, 100000, 15
+-- price_scale/qty_scale: internal scale factor
+-- price_precision/qty_precision: API display precision
+INSERT INTO symbols_tb (symbol, base_asset_id, quote_asset_id, 
+    price_scale, price_precision, qty_scale, qty_precision, min_qty, symbol_flags)
+SELECT 'BTC_USDT', b.asset_id, q.asset_id, 2, 2, 8, 6, 100000, 15
 FROM assets_tb b, assets_tb q 
 WHERE b.asset = 'BTC' AND q.asset = 'USDT'
 ON CONFLICT (symbol) DO NOTHING;
