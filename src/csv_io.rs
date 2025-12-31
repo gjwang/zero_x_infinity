@@ -140,10 +140,10 @@ pub fn load_symbol_manager() -> Result<(SymbolManager, u32)> {
         symbol_info.symbol,
         manager
             .get_asset_name(symbol_info.base_asset_id)
-            .unwrap_or("?".to_string()),
+            .unwrap_or("?".to_string()), // SAFE_DEFAULT: debug display
         manager
             .get_asset_name(symbol_info.quote_asset_id)
-            .unwrap_or("?".to_string())
+            .unwrap_or("?".to_string()) // SAFE_DEFAULT: debug display
     );
     println!(
         "  Internal decimals: base={}",
@@ -166,7 +166,7 @@ pub fn load_symbol_manager() -> Result<(SymbolManager, u32)> {
 
     let base_name = manager
         .get_asset_name(symbol_info.base_asset_id)
-        .unwrap_or("BASE".to_string());
+        .unwrap_or("BASE".to_string()); // SAFE_DEFAULT: debug display
 
     // Always print max tradeable value
     if max_qty_display < 100.0 {
@@ -307,14 +307,14 @@ pub fn load_orders(
             let price = if price_str.is_empty() {
                 0
             } else {
-                let price_float: f64 = price_str.parse().unwrap_or(0.0);
+                let price_float: f64 = price_str.parse().unwrap_or(0.0); // SAFE_DEFAULT: parse error = 0 price for test data
                 (price_float * quote_multiplier as f64).round() as u64
             };
 
             let qty = if qty_str.is_empty() {
                 0
             } else {
-                let qty_float: f64 = qty_str.parse().unwrap_or(0.0);
+                let qty_float: f64 = qty_str.parse().unwrap_or(0.0); // SAFE_DEFAULT: parse error = 0 qty for test data
                 (qty_float * base_multiplier as f64).round() as u64
             };
 
@@ -447,8 +447,8 @@ pub fn write_final_orderbook(book: &OrderBook, path: &str) -> Result<()> {
     writeln!(
         file,
         "{},{},{},{}",
-        book.best_bid().map(|p| p.to_string()).unwrap_or_default(),
-        book.best_ask().map(|p| p.to_string()).unwrap_or_default(),
+        book.best_bid().map(|p| p.to_string()).unwrap_or_default(), // SAFE_DEFAULT: no bid = empty string
+        book.best_ask().map(|p| p.to_string()).unwrap_or_default(), // SAFE_DEFAULT: no ask = empty string
         bid_depth,
         ask_depth
     )

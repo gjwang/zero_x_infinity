@@ -66,7 +66,7 @@ impl ConnectionManager {
         tracing::info!(
             user_id,
             conn_id,
-            total_connections = self.connections.get(&user_id).map(|v| v.len()).unwrap_or(0),
+            total_connections = self.connections.get(&user_id).map(|v| v.len()).unwrap_or(0), // SAFE_DEFAULT: display 0 if no connections
             "WebSocket connection added"
         );
 
@@ -136,7 +136,7 @@ impl ConnectionManager {
     /// Broadcast a message to all subscribers of a topic
     pub fn broadcast(&self, topic: &str, message: WsMessage) {
         if let Some(subscribers) = self.subscriptions.get(topic) {
-            let _json = serde_json::to_string(&message).unwrap_or_default();
+            let _json = serde_json::to_string(&message).unwrap_or_default(); // SAFE_DEFAULT: debug log serialization
             for conn_id in subscribers.iter() {
                 if let Some(entry) = self.conn_lookup.get(&conn_id) {
                     let (tx, _user_id) = entry.value();
@@ -162,7 +162,7 @@ impl ConnectionManager {
     /// Automatically removes failed connections (client disconnected).
     pub fn send_to_user(&self, user_id: Option<u64>, message: WsMessage) {
         if let Some(senders) = self.connections.get(&user_id) {
-            let json = serde_json::to_string(&message).unwrap_or_default();
+            let json = serde_json::to_string(&message).unwrap_or_default(); // SAFE_DEFAULT: debug log serialization
             for (_, tx) in senders.iter() {
                 if tx.send(message.clone()).is_err() {
                     tracing::warn!(user_id, "Failed to send - client disconnected");
@@ -172,7 +172,7 @@ impl ConnectionManager {
             tracing::debug!(
                 user_id,
                 recipients = senders.len(),
-                message_type = ?json.split('"').nth(3).unwrap_or("unknown"),
+                message_type = ?json.split('"').nth(3).unwrap_or("unknown"), // SAFE_DEFAULT: debug log display
                 "Message sent to user"
             );
         }
