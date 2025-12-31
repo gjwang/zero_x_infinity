@@ -1,4 +1,4 @@
-# API 统一转换层强制执行方案
+# API Type Enforcement | API 层类型强制执行方案
 
 > **目标**：确保所有 API Handler 都通过统一的转换层处理金额数据，禁止各处私自转换。
 >

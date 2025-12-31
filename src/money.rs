@@ -15,6 +15,8 @@
 //!
 //! ## Usage
 //! (Internal utilities for money handling. Use `SymbolManager` for public API.)
+//!
+//! **规范文档**: See [`docs/standards/money-type-safety.md`] for the Money Type Safety Standard.
 
 use crate::symbol_manager::{AssetInfo, SymbolManager};
 use rust_decimal::prelude::*;
