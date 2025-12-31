@@ -649,7 +649,7 @@ fi
 |------|------|------|
 | **Phase 1a** | 实现 `StrictDecimal` 类型 (Serde 层格式验证) | ✅ 已完成 |
 | **Phase 1b** | 为核心订单 API 实现 `ValidatedOrder` Extractor | ⏳ 待实现 |
-| **Phase 2a** | 实现 `DisplayAmount` 类型 (Response 输出封装) | ⏳ 待实现 |
+| **Phase 2a** | 实现 `DisplayAmount` 类型 (Response 输出封装) | ✅ 已完成 |
 | **Phase 2b** | 迁移 Response DTO 使用 `DisplayAmount` | ⏳ 待实现 |
 | **Phase 3** | 为所有金额相关 API 统一改造 | ⏳ 待实现 |
 | **Phase 4** | 实现 `audit_api_types.sh` 并集成 CI | ✅ 已完成 |
@@ -688,17 +688,35 @@ pub struct StrictDecimal(Decimal);
 - 检测直接 `.parse::<u64>()` 调用
 - 检测绕过 StrictDecimal 的 `Decimal::from_str`
 
+#### Phase 2a: DisplayAmount 类型 (2025-12-31)
+
+在 `src/gateway/types.rs` 添加了 `DisplayAmount` 类型：
+
+```rust
+/// 严格输出金额 - 只能通过 SymbolManager 创建
+/// - 没有公开构造函数 (pub(crate))
+/// - 始终序列化为 JSON String
+/// - 通过 SymbolManager.display_*() 创建
+pub struct DisplayAmount(String);
+```
+
+**SymbolManager 新增方法:**
+- `display_qty()` — 格式化数量
+- `display_price()` — 格式化价格
+- `display_price_u64()` — 格式化 u64 价格
+- `display_asset_amount()` — 格式化资产余额
+
 ### 验证
 
 ```bash
-# StrictDecimal 测试
-cargo test gateway::types
+# 完整测试套件
+cargo test gateway::types  # 28 通过
 
 # 审计脚本
 ./scripts/audit_api_types.sh
 
 # 全量测试
-cargo test  # 389+ 通过
+cargo test  # 393+ 通过
 ```
 
 ---

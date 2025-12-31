@@ -254,4 +254,59 @@ impl SymbolManager {
     pub fn money_formatter(&self, symbol_id: u32) -> Option<MoneyFormatter<'_>> {
         MoneyFormatter::new(self, symbol_id)
     }
+
+    // ========================================================================
+    // Layer 3: DisplayAmount Factory Methods (API Response Formatting)
+    // These are the ONLY legitimate ways to create DisplayAmount instances
+    // ========================================================================
+
+    /// Format quantity as DisplayAmount for API response
+    ///
+    /// This is the only way to create a DisplayAmount for quantity fields.
+    /// Ensures all quantity output goes through controlled formatting.
+    pub fn display_qty(
+        &self,
+        value: ScaledAmount,
+        symbol_id: u32,
+    ) -> Option<crate::gateway::types::DisplayAmount> {
+        self.format_qty(value, symbol_id)
+            .map(crate::gateway::types::DisplayAmount::new)
+    }
+
+    /// Format price as DisplayAmount for API response
+    ///
+    /// This is the only way to create a DisplayAmount for price fields.
+    /// Uses price_display_decimal for appropriate truncation.
+    pub fn display_price(
+        &self,
+        value: ScaledAmount,
+        symbol_id: u32,
+    ) -> Option<crate::gateway::types::DisplayAmount> {
+        self.format_price(value, symbol_id)
+            .map(crate::gateway::types::DisplayAmount::new)
+    }
+
+    /// Format u64 price as DisplayAmount for API response
+    ///
+    /// Convenience method for raw u64 prices.
+    pub fn display_price_u64(
+        &self,
+        value: u64,
+        symbol_id: u32,
+    ) -> Option<crate::gateway::types::DisplayAmount> {
+        self.display_price(ScaledAmount::from(value), symbol_id)
+    }
+
+    /// Format asset amount as DisplayAmount for API response
+    ///
+    /// For balance/funding responses where asset_id is known.
+    pub fn display_asset_amount(
+        &self,
+        value: ScaledAmount,
+        asset_id: u32,
+    ) -> Option<crate::gateway::types::DisplayAmount> {
+        let asset = self.assets.get(&asset_id)?;
+        let formatted = crate::money::format_amount(*value, asset.decimals, asset.display_decimals);
+        Some(crate::gateway::types::DisplayAmount::new(formatted))
+    }
 }

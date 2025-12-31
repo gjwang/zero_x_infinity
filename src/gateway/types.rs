@@ -106,6 +106,70 @@ impl Serialize for StrictDecimal {
 }
 
 // ============================================================================
+// DisplayAmount: Type-Safe Output for API Responses
+// ============================================================================
+
+/// Display amount for API responses - ensures all monetary output goes through
+/// controlled formatting.
+///
+/// **Design Principles:**
+/// 1. No public constructor - only SymbolManager can create instances
+/// 2. Always serializes as JSON string (preserves precision)
+/// 3. Formatting includes display_decimals truncation
+///
+/// **Usage:**
+/// ```ignore
+/// // In SymbolManager
+/// pub fn format_qty(&self, symbol_id: u32, amount: ScaledAmount) -> DisplayAmount {
+///     DisplayAmount::new(formatted_string)
+/// }
+///
+/// // In Response DTO
+/// pub struct BalanceResponse {
+///     pub free: DisplayAmount,  // Guaranteed to be properly formatted
+/// }
+/// ```
+#[derive(Debug, Clone)]
+pub struct DisplayAmount(String);
+
+impl DisplayAmount {
+    /// Create a new DisplayAmount from a formatted string.
+    ///
+    /// This is `pub(crate)` to restrict construction to SymbolManager.
+    /// External code cannot bypass the formatting layer.
+    pub(crate) fn new(s: String) -> Self {
+        Self(s)
+    }
+
+    /// Get the inner string value (for display/logging)
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// Create DisplayAmount for testing only
+    #[cfg(test)]
+    pub fn from_str_test(s: &str) -> Self {
+        Self(s.to_string())
+    }
+}
+
+impl std::fmt::Display for DisplayAmount {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Serialize for DisplayAmount {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        // Always serialize as string to preserve precision
+        serializer.serialize_str(&self.0)
+    }
+}
+
+// ============================================================================
 // Original Types
 // ============================================================================
 
@@ -535,6 +599,43 @@ mod tests {
         let result: Result<StrictDecimal, _> = serde_json::from_str(json);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("cannot be empty"));
+    }
+
+    // =========================================================================
+    // DisplayAmount Tests
+    // =========================================================================
+
+    #[test]
+    fn test_display_amount_serializes_as_string() {
+        let amount = DisplayAmount::from_str_test("1.23456789");
+        let json = serde_json::to_string(&amount).unwrap();
+        assert_eq!(json, "\"1.23456789\"");
+    }
+
+    #[test]
+    fn test_display_amount_in_response_struct() {
+        #[derive(serde::Serialize)]
+        struct TestResponse {
+            balance: DisplayAmount,
+        }
+
+        let resp = TestResponse {
+            balance: DisplayAmount::from_str_test("0.00012345"),
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        assert_eq!(json, r#"{"balance":"0.00012345"}"#);
+    }
+
+    #[test]
+    fn test_display_amount_display_trait() {
+        let amount = DisplayAmount::from_str_test("123.45");
+        assert_eq!(format!("{}", amount), "123.45");
+    }
+
+    #[test]
+    fn test_display_amount_as_str() {
+        let amount = DisplayAmount::from_str_test("99.99");
+        assert_eq!(amount.as_str(), "99.99");
     }
 
     // =========================================================================
