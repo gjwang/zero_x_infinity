@@ -50,3 +50,14 @@ cookies.txt
 admin/.venv/
 
 tmp/
+
+# Log files (never commit)
+*.log
+*_log.txt
+*.log.txt
+full_log.txt
+ci_failure.log
+job_*.txt
+funding_*.txt
+sentinel*.txt
+failed_workflow.yml
