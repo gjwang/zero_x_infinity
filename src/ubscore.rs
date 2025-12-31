@@ -122,9 +122,25 @@ impl UBSCore {
                         filled_qty: 0,
                         side,
                         order_type: crate::models::OrderType::try_from(payload.order_type)
-                            .unwrap_or(crate::models::OrderType::Limit),
+                            .map_err(|_| {
+                                io::Error::new(
+                                    io::ErrorKind::InvalidData,
+                                    format!(
+                                        "WAL CORRUPTION: Invalid order_type {} for order {}",
+                                        payload.order_type, payload.order_id
+                                    ),
+                                )
+                            })?,
                         time_in_force: crate::models::TimeInForce::try_from(payload.time_in_force)
-                            .unwrap_or(crate::models::TimeInForce::GTC),
+                            .map_err(|_| {
+                                io::Error::new(
+                                    io::ErrorKind::InvalidData,
+                                    format!(
+                                        "WAL CORRUPTION: Invalid time_in_force {} for order {}",
+                                        payload.time_in_force, payload.order_id
+                                    ),
+                                )
+                            })?,
                         status: crate::models::OrderStatus::NEW,
                         lock_version: 0,
                         seq_id: entry.header.seq_id,

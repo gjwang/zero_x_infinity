@@ -99,8 +99,20 @@ impl UBSCoreRecovery {
                                         }
                                     };
 
-                                    // Calculate lock asset and amount
-                                    let side = Side::try_from(payload.side).unwrap_or(Side::Buy);
+                                    // Critical: Side is essential for lock asset calculation
+                                    // Invalid Side = STOP recovery, this indicates WAL corruption
+                                    let side = match Side::try_from(payload.side) {
+                                        Ok(s) => s,
+                                        Err(_) => {
+                                            return Err(io::Error::new(
+                                                io::ErrorKind::InvalidData,
+                                                format!(
+                                                    "WAL CORRUPTION: Invalid side {} for order {}, manual intervention required",
+                                                    payload.side, payload.order_id
+                                                ),
+                                            ));
+                                        }
+                                    };
                                     let lock_asset = match (side, symbol_info) {
                                         (Side::Buy, Some(s)) => s.quote_asset_id,
                                         (Side::Sell, Some(s)) => s.base_asset_id,
