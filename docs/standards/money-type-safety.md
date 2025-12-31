@@ -128,18 +128,26 @@ pub struct ScaledAmountSigned(i64);  // 有符号：盈亏、差额
 > **内部的 `u64` 表示是实现细节，绝对不能暴露给客户端。**
 
 **强制规范**：
-1.  **统一转换层**：内部系统与外部 Client 之间，必须经过**统一的转换层**（`SymbolManager` / `MoneyFormatter`）。
-2.  **意图封装接口**：转换层必须使用经过意图封装的接口，**严禁各处私自转换**。
-3.  **Client 数据格式**：接收和返回给 Client 的金额，统一使用 **Decimal 的 String 类型**（如 `"1.50000000"`）。
-4.  **精度来源唯一**：资产精度（`decimals`）和显示精度（`display_decimals`）必须从 `SymbolManager` 获取，严禁硬编码。
+1.  **统一转换层**：内部系统与外部 Client 之间，必须经过**统一的转换层**。
+2.  **API 层使用 Decimal**：DTO 中的金额字段使用 `StrictDecimal`（自定义类型），利用 `rust_decimal` 的格式验证能力。
+3.  **分层验证**：
+    - **Serde 层**：格式验证（拒绝 `.5`、非数字等）→ 得到 `Decimal`
+    - **SymbolManager 层**：精度/范围验证 → 得到 `ScaledAmount`
+4.  **精度来源唯一**：资产精度从 `SymbolManager` 获取，严禁硬编码。
 
 ```
-┌─────────────┐     ┌───────────────────┐     ┌─────────────┐
-│   Client    │ ←→  │  Conversion Layer │ ←→  │  Internal   │
-│  (String)   │     │  (SymbolManager)  │     │   (u64)     │
-└─────────────┘     └───────────────────┘     └─────────────┘
-     "1.5"      parse_qty()→   150_000_000   ←format_qty()  "1.50000000"
+┌─────────────┐     ┌──────────────┐     ┌──────────────┐     ┌─────────────┐
+│   Client    │ ──→ │  Serde 层    │ ──→ │SymbolManager │ ──→ │  Internal   │
+│  (String)   │     │ (Decimal)    │     │ (验证精度)   │     │   (u64)     │
+└─────────────┘     └──────────────┘     └──────────────┘     └─────────────┘
+     "1.5"       格式验证     Decimal(1.5)   精度验证    ScaledAmount(150_000_000)
 ```
+
+**设计优势**：
+- **利用库能力**：`rust_decimal` 提供成熟的数字解析
+- **早期失败**：格式错误在反序列化阶段就拦截
+- **关注点分离**：格式验证 vs 精度验证 分开处理
+- **业务代码简化**：Handler 拿到的 `Decimal` 已是合法数字，只需验证范围
 
 ---
 
@@ -336,9 +344,9 @@ echo "✅ Money safety audit passed!"
 
 | 场景 | ✅ 正确做法 | ❌ 错误做法 |
 |------|------------|------------|
-| 解析金额 | `symbol_mgr.parse_qty(symbol, "1.5")` | `"1.5".parse::<u64>()` |
-| 格式化金额 | `symbol_mgr.format_price(symbol, amount)` | `format!("{}", amount)` |
-| API DTO 字段 | `quantity: String` | `quantity: u64` |
+| API DTO 字段 | `quantity: StrictDecimal` | `quantity: u64` 或 `quantity: String` |
+| Decimal → ScaledAmount | `symbol_mgr.decimal_to_scaled(symbol, decimal)` | 手动计算 `decimal * 10^8` |
+| ScaledAmount → String | `symbol_mgr.format_price(symbol, amount)` | `format!("{}", amount)` |
 | 获取精度 | `symbol_mgr.get_decimals(asset)` | `let decimals = 8;` |
 | 算术运算 | `amount.checked_add(other)?` | `*amount + *other` |
 | 比较运算 | `*amount > 0` | ✅ 允许 (Deref) |

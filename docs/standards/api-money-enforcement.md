@@ -174,14 +174,167 @@ pub struct PlaceOrderRequest {
 
 ---
 
-## 3. 推荐方案
+## 3. 推荐方案：StrictDecimal + Extractor
 
-对于我们的场景，**方案 C (Extractor + IntoResponse)** 是最实用的：
+### 3.1 核心设计：分层验证
 
-1. **框架层拦截**：Handler 无法绕过
-2. **编译期保证**：如果用错签名，编译失败
-3. **双向覆盖**：Request 和 Response 都强制通过统一层
-4. **集中维护**：所有转换逻辑在 Extractor/IntoResponse 中
+```
+Client (JSON String "1.5")
+    ↓ Serde: StrictDecimal 自定义反序列化
+API DTO (StrictDecimal) ← 格式已验证
+    ↓ Extractor: SymbolManager.decimal_to_scaled()
+Handler (ScaledAmount) ← 精度已验证
+```
+
+**关键洞察**：
+- **Serde 层负责格式验证**：利用 `rust_decimal` 的解析能力，拒绝非法格式
+- **SymbolManager 负责精度验证**：检查小数位是否符合资产精度
+- **业务代码只需验证范围**：数字格式和精度都已保证
+
+---
+
+### 3.2 StrictDecimal 实现
+
+```rust
+use rust_decimal::Decimal;
+use serde::{Deserialize, Deserializer};
+
+/// 严格格式的 Decimal，在反序列化时进行格式验证
+#[derive(Debug, Clone, Copy)]
+pub struct StrictDecimal(Decimal);
+
+impl StrictDecimal {
+    pub fn inner(&self) -> Decimal {
+        self.0
+    }
+}
+
+impl<'de> Deserialize<'de> for StrictDecimal {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        
+        // 严格格式检查：拒绝 .5, 5., 空字符串等
+        if s.is_empty() {
+            return Err(serde::de::Error::custom("Amount cannot be empty"));
+        }
+        if s.starts_with('.') {
+            return Err(serde::de::Error::custom("Invalid format: use 0.5 not .5"));
+        }
+        if s.ends_with('.') {
+            return Err(serde::de::Error::custom("Invalid format: use 5.0 not 5."));
+        }
+        
+        // 使用 Decimal 库解析
+        let d = Decimal::from_str(&s)
+            .map_err(|e| serde::de::Error::custom(format!("Invalid decimal: {}", e)))?;
+        
+        // 拒绝负数（金额必须非负）
+        if d.is_sign_negative() {
+            return Err(serde::de::Error::custom("Amount cannot be negative"));
+        }
+        
+        Ok(StrictDecimal(d))
+    }
+}
+```
+
+---
+
+### 3.3 DTO 使用示例
+
+```rust
+#[derive(Debug, Deserialize)]
+pub struct PlaceOrderRequest {
+    pub symbol: String,
+    pub quantity: StrictDecimal,  // 格式已验证
+    pub price: StrictDecimal,     // 格式已验证
+}
+```
+
+---
+
+### 3.4 SymbolManager 扩展
+
+```rust
+impl SymbolManager {
+    /// 将已验证的 Decimal 转换为 ScaledAmount
+    /// 只需验证精度，格式已在 Serde 层验证
+    pub fn decimal_to_scaled(
+        &self,
+        symbol: SymbolId,
+        decimal: Decimal,
+    ) -> Result<ScaledAmount, MoneyError> {
+        let decimals = self.get_symbol_decimals(symbol)?;
+        
+        // 检查精度是否超限
+        if decimal.scale() > decimals {
+            return Err(MoneyError::PrecisionExceeded {
+                provided: decimal.scale(),
+                max: decimals,
+            });
+        }
+        
+        // 转换为 u64
+        let scaled = decimal * Decimal::from(10u64.pow(decimals));
+        let raw = scaled.to_u64()
+            .ok_or(MoneyError::Overflow)?;
+        
+        Ok(ScaledAmount::from_raw(raw))
+    }
+}
+```
+
+---
+
+### 3.5 Extractor 整合
+
+```rust
+pub struct ValidatedOrder {
+    pub symbol_id: SymbolId,
+    pub quantity: ScaledAmount,
+    pub price: ScaledAmount,
+}
+
+#[async_trait]
+impl<S> FromRequest<S> for ValidatedOrder
+where
+    S: Send + Sync,
+{
+    type Rejection = ApiError;
+    
+    async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
+        let Json(raw): Json<PlaceOrderRequest> = Json::from_request(req, state).await?;
+        let symbol_mgr = state.symbol_manager();
+        let symbol_id = symbol_mgr.get_symbol_id(&raw.symbol)?;
+        
+        Ok(ValidatedOrder {
+            symbol_id,
+            // StrictDecimal 已验证格式，这里只验证精度
+            quantity: symbol_mgr.decimal_to_scaled(symbol_id, raw.quantity.inner())?,
+            price: symbol_mgr.decimal_to_scaled(symbol_id, raw.price.inner())?,
+        })
+    }
+}
+```
+
+---
+
+### 3.6 设计优势总结
+
+| 层级 | 职责 | 验证内容 |
+|------|------|----------|
+| **Serde (StrictDecimal)** | 格式验证 | 拒绝 `.5`, `5.`, 负数, 非数字 |
+| **SymbolManager** | 精度验证 | 检查小数位是否超限 |
+| **业务代码** | 范围验证 | 检查金额是否在合理范围 |
+
+**关键收益**：
+1. **利用库能力**：`rust_decimal` 提供成熟的数字解析
+2. **早期失败**：格式错误在反序列化阶段就拦截
+3. **关注点分离**：每层只负责一种验证
+4. **编译期保证**：Handler 拿到的是 `ScaledAmount`，无法出错
 
 ---
 
