@@ -408,8 +408,8 @@ pub fn format_qty(
 
     Ok(format_amount(
         *value,
-        asset.decimals,
-        asset.display_decimals,
+        asset.internal_scale(),
+        asset.asset_precision(),
     ))
 }
 
@@ -425,8 +425,8 @@ pub fn format_price(
 
     Ok(format_amount(
         *value,
-        symbol.price_decimal,
-        symbol.price_display_decimal,
+        symbol.price_scale(),
+        symbol.price_precision(),
     ))
 }
 
@@ -445,7 +445,7 @@ pub fn parse_qty(
         .get(&symbol.base_asset_id)
         .ok_or(MoneyError::AssetNotFound(symbol.base_asset_id))?;
 
-    parse_amount(amount_str, asset.decimals)
+    parse_amount(amount_str, asset.internal_scale())
 }
 
 /// Parse price string for a symbol
@@ -458,7 +458,7 @@ pub fn parse_price(
         .get_symbol_info_by_id(symbol_id)
         .ok_or(MoneyError::SymbolNotFound(symbol_id))?;
 
-    parse_amount(price_str, symbol.price_decimal)
+    parse_amount(price_str, symbol.price_scale())
 }
 
 // ============================================================================
@@ -484,7 +484,7 @@ pub fn parse_asset_amount(amount_str: &str, decimals: u32) -> Result<ScaledAmoun
 
 /// Format asset amount using AssetInfo
 pub fn format_with_asset_info(value: ScaledAmountSigned, asset: &AssetInfo) -> String {
-    format_amount_signed(*value, asset.decimals, asset.display_decimals)
+    format_amount_signed(*value, asset.internal_scale(), asset.asset_precision())
 }
 
 // ============================================================================
@@ -514,10 +514,10 @@ impl<'a> MoneyFormatter<'a> {
         Some(Self {
             symbol_mgr,
             symbol_id,
-            price_decimals: symbol.price_decimal,
-            price_display_decimals: symbol.price_display_decimal,
-            qty_decimals: base_asset.decimals,
-            qty_display_decimals: base_asset.display_decimals,
+            price_decimals: symbol.price_scale(),
+            price_display_decimals: symbol.price_precision(),
+            qty_decimals: base_asset.internal_scale(),
+            qty_display_decimals: base_asset.asset_precision(),
         })
     }
 

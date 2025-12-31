@@ -38,7 +38,7 @@ impl DepthService {
             .get_symbol_info_by_id(active_symbol_id)
             .expect("Active symbol not found");
 
-        let price_display_decimals = symbol_info.price_display_decimal;
+        let price_display_decimals = symbol_info.price_precision();
         let qty_display_decimals = symbol_mgr
             .get_asset_display_decimals(symbol_info.base_asset_id)
             .unwrap_or(6);
@@ -51,7 +51,7 @@ impl DepthService {
             queues,
             ws_manager,
             symbol: symbol_info.symbol.clone(),
-            _price_decimals: symbol_info.price_decimal,
+            _price_decimals: symbol_info.price_scale(),
             qty_decimals: symbol_info.base_decimals,
             price_display_decimals,
             qty_display_decimals,

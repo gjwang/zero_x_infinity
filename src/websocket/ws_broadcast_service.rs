@@ -139,7 +139,7 @@ impl WsService {
 
                 // Get price decimals
                 let (price_decimals, price_display_decimals) = symbol_info
-                    .map(|s| (s.price_decimal, s.price_display_decimal))
+                    .map(|s| (s.price_scale(), s.price_precision()))
                     .unwrap_or((2, 2));
 
                 let message = WsMessage::OrderUpdate {
@@ -183,7 +183,7 @@ impl WsService {
 
                 // Get price decimals
                 let (price_decimals, price_display_decimals) = symbol_info
-                    .map(|s| (s.price_decimal, s.price_display_decimal))
+                    .map(|s| (s.price_scale(), s.price_precision()))
                     .unwrap_or((2, 2));
 
                 // Get fee asset info for formatting

@@ -186,8 +186,8 @@ pub async fn query_order(
             .to_string(),
             price: format_display(
                 row.price as u64,
-                symbol_info.price_decimal,
-                symbol_info.price_display_decimal,
+                symbol_info.price_scale(),
+                symbol_info.price_precision(),
             ),
             qty: format_display(row.qty as u64, base_decimals, base_display_decimals),
             filled_qty: format_display(row.filled_qty as u64, base_decimals, base_display_decimals),
@@ -260,8 +260,8 @@ pub async fn query_orders(
             .to_string(),
             price: format_display(
                 row.price as u64,
-                symbol_info.price_decimal,
-                symbol_info.price_display_decimal,
+                symbol_info.price_scale(),
+                symbol_info.price_precision(),
             ),
             qty: format_display(row.qty as u64, base_decimals, base_display_decimals),
             filled_qty: format_display(row.filled_qty as u64, base_decimals, base_display_decimals),
@@ -400,8 +400,8 @@ pub async fn query_trades(
                 side: if is_buy { "BUY" } else { "SELL" }.to_string(),
                 price: format_display(
                     row.price as u64,
-                    symbol_info.price_decimal,
-                    symbol_info.price_display_decimal,
+                    symbol_info.price_scale(),
+                    symbol_info.price_precision(),
                 ),
                 qty: format_display(row.qty as u64, base_decimals, base_display_decimals),
                 fee: format_display(fee as u64, fee_decimals, fee_display_decimals),
@@ -498,8 +498,8 @@ pub async fn query_public_trades(
                 id: row.trade_id,
                 price: format_display(
                     price_u64,
-                    symbol_info.price_decimal,
-                    symbol_info.price_display_decimal,
+                    symbol_info.price_scale(),
+                    symbol_info.price_precision(),
                 ),
                 qty: format_display(qty_u64, base_decimals, base_display_decimals),
                 quote_qty: format_display(
@@ -809,23 +809,23 @@ pub async fn query_klines(
             close_time: row.ts.timestamp_millis() + interval_to_ms(interval) - 1,
             open: format_display(
                 row.open as u64,
-                symbol_info.price_decimal,
-                symbol_info.price_display_decimal,
+                symbol_info.price_scale(),
+                symbol_info.price_precision(),
             ),
             high: format_display(
                 row.high as u64,
-                symbol_info.price_decimal,
-                symbol_info.price_display_decimal,
+                symbol_info.price_scale(),
+                symbol_info.price_precision(),
             ),
             low: format_display(
                 row.low as u64,
-                symbol_info.price_decimal,
-                symbol_info.price_display_decimal,
+                symbol_info.price_scale(),
+                symbol_info.price_precision(),
             ),
             close: format_display(
                 row.close as u64,
-                symbol_info.price_decimal,
-                symbol_info.price_display_decimal,
+                symbol_info.price_scale(),
+                symbol_info.price_precision(),
             ),
             volume: format_display(row.volume as u64, base_decimals, base_display_decimals),
             // quote_volume = SUM(price * qty) where:
@@ -985,8 +985,8 @@ pub async fn query_user_trades(
                 side: if is_buy { "BUY" } else { "SELL" }.to_string(),
                 price: format_display(
                     row.price as u64,
-                    symbol_info.price_decimal,
-                    symbol_info.price_display_decimal,
+                    symbol_info.price_scale(),
+                    symbol_info.price_precision(),
                 ),
                 qty: format_display(row.qty as u64, base_decimals, base_display_decimals),
                 fee: format_display(real_fee, fee_decimals, fee_display_decimals),

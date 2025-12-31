@@ -42,8 +42,8 @@ impl<'a> DepthFormatter<'a> {
 
         Ok(format_qty_internal(
             value,
-            asset.decimals,
-            asset.display_decimals,
+            asset.internal_scale(),
+            asset.asset_precision(),
         ))
     }
 
@@ -54,7 +54,7 @@ impl<'a> DepthFormatter<'a> {
             .get_symbol_info_by_id(symbol_id)
             .ok_or_else(|| format!("Symbol {} not found", symbol_id))?;
 
-        Ok(format_price_internal(value, symbol.price_display_decimal))
+        Ok(format_price_internal(value, symbol.price_precision()))
     }
 
     /// Format depth data (bids/asks) for a symbol

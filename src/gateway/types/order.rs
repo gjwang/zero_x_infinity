@@ -113,7 +113,7 @@ pub fn validate_client_order(
                 if price_decimal.is_zero() {
                     return Err("Price must be greater than zero");
                 }
-                if price_decimal.scale() > symbol_info.price_decimal {
+                if price_decimal.scale() > symbol_info.price_precision() {
                     return Err("Too many decimal places in price");
                 }
                 price_decimal
@@ -135,7 +135,7 @@ pub fn validate_client_order(
         .get(&symbol_info.base_asset_id)
         .ok_or("Base asset not found")?;
 
-    if qty_decimal.scale() > base_asset.decimals {
+    if qty_decimal.scale() > base_asset.asset_precision() {
         return Err("Too many decimal places in quantity");
     }
 
@@ -147,8 +147,8 @@ pub fn validate_client_order(
         time_in_force: req.time_in_force,
         price,
         qty: qty_decimal,
-        price_decimals: symbol_info.price_decimal,
-        qty_decimals: base_asset.decimals,
+        price_decimals: symbol_info.price_scale(),
+        qty_decimals: base_asset.internal_scale(),
     })
 }
 
