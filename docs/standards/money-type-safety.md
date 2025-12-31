@@ -203,7 +203,32 @@ CI 会强制执行此检查。
 
 ---
 
-### 2.6 设计架构：
+### 2.7 设计缺口 (Design Gaps - Known TODOs)
+
+以下是当前设计中已知的待完善项，需在后续迭代中修复：
+
+#### 2.7.1 提币手续费配置化
+
+**问题**：当前 `src/funding/handlers.rs` 使用 `Decimal::ZERO` 作为提币手续费占位符。
+
+**正确做法**：应从 `chain_assets.withdraw_fee` 配置表读取，不应硬编码。
+
+```rust
+// 当前 (MVP 占位)
+let fee = Decimal::ZERO;
+
+// 目标实现
+let fee = chain_assets_repo
+    .get_withdraw_fee(&req.asset, &chain_slug)
+    .await?
+    .ok_or_else(|| ApiError::invalid_param("withdraw fee not configured for this asset"))?;
+```
+
+**影响**：所有提币目前 0 手续费，上线前必须修复。
+
+---
+
+### 2.8 设计架构：
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
