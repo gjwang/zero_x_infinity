@@ -13,8 +13,22 @@
 | Status | 🚧 **IN PROGRESS** |
 | :--- | :--- |
 | **Context** | Phase V: Extreme Optimization (Step 3) |
-| **Goal** | Enforce type-safe money handling at API boundary to prevent precision/overflow bugs |
-| **Scope** | Gateway handlers, Funding handlers, CI audit |
+| **Goal** | Complete all pending tasks from money-type-safety.md - unified money handling enforcement |
+| **Scope** | CI Audit, API Layer Enforcement, Internal Legacy Migration |
+
+---
+
+### 0. Task Overview (from money-type-safety.md)
+
+| Phase | Task | Status |
+|-------|------|--------|
+| **Phase 0** | Newtype 定义, API 收缩, 文档治理 | ✅ 已完成 |
+| **Phase 1** | `audit_money_safety.sh` 集成 CI | 🚧 本次实现 |
+| **Phase 1.5** | API Money Enforcement (Extractor + IntoResponse) | 🚧 本次实现 |
+| **Phase 2** | 存量代码全面扫描与迁移 | 🚧 本次实现 |
+| **Phase 2.5** | Legacy 代码迁移至意图封装 API | 🚧 本次实现 |
+
+**本阶段目标**：一次性完成所有待实现任务，实现 Money Safety 的全面落地。
 
 ---
 
@@ -92,7 +106,7 @@ We already have `src/money.rs` with:
 
 ### 3. Implementation Plan
 
-#### 3.1 CI Audit Script (P0)
+#### 3.1 Phase 1: CI Audit Script (P0)
 
 **Purpose**: Prevent regression by detecting manual scaling outside `money.rs`.
 
@@ -103,62 +117,72 @@ set -e
 
 echo "🔍 Auditing money safety..."
 
-# 1. Check for manual scaling
-if grep -rn "10u64.pow" --include="*.rs" src/ | grep -v "money.rs"; then
-    echo "❌ FAIL: Found 10u64.pow outside money.rs"
-    exit 1
-fi
+# Allowed locations (whitelist)
+ALLOWED_FILES="money.rs|symbol_manager.rs"
 
-# 2. Check for Decimal power operations
-if grep -rn "Decimal::from(10).powi" --include="*.rs" src/ | grep -v "money.rs"; then
-    echo "❌ FAIL: Found Decimal power operation outside money.rs"
+# 1. Check for manual scaling
+VIOLATIONS=$(grep -rn "10u64.pow" --include="*.rs" src/ | grep -v -E "$ALLOWED_FILES" || true)
+if [ -n "$VIOLATIONS" ]; then
+    echo "❌ FAIL: Found 10u64.pow outside allowed files:"
+    echo "$VIOLATIONS"
     exit 1
 fi
 
 echo "✅ Money safety audit passed!"
 ```
 
-#### 3.2 Gateway Handler Migration (P0)
+---
 
-**Target**: `src/gateway/handlers.rs` - `place_order` handler
+#### 3.2 Phase 1.5: API Money Enforcement (P0)
 
-**Before**:
-```rust
-let qty: u64 = request.quantity.parse()?;
-let price: u64 = request.price.parse()?;
-```
+**Target**: Gateway/API layer type enforcement
 
-**After**:
-```rust
-use crate::money;
+| File | Current | Target |
+|------|---------|--------|
+| `src/gateway/handlers.rs` | Manual parse | `money::parse_qty/price()` |
+| `src/gateway/types.rs` | `String` fields | `StrictDecimal` type |
 
-let qty = money::parse_qty(&request.quantity, symbol_id, &symbol_mgr)
-    .map_err(|e| (StatusCode::BAD_REQUEST, format!("{}", e)))?;
-let price = money::parse_price(&request.price, symbol_id, &symbol_mgr)
-    .map_err(|e| (StatusCode::BAD_REQUEST, format!("{}", e)))?;
-```
+---
 
-**Error Mapping**:
-| MoneyError | HTTP Response |
-|------------|---------------|
-| `PrecisionOverflow` | `400 PRECISION_EXCEEDED` |
-| `InvalidAmount` | `400 INVALID_AMOUNT` |
-| `ZeroNotAllowed` | `400 ZERO_NOT_ALLOWED` |
-| `Overflow` | `400 AMOUNT_OVERFLOW` |
+#### 3.3 Phase 2: Legacy Code Scan & Migration
 
-#### 3.3 Funding Handler Migration (P1)
+**Scan Results**: Files containing `10u64.pow()` outside `money.rs`:
 
-**Target**: `src/funding/deposit.rs`, `src/funding/withdraw.rs`
+| File | Line(s) | Context | Action |
+|------|---------|---------|--------|
+| `src/symbol_manager.rs` | 25 | `qty_unit()` helper | ✅ Keep (core infrastructure) |
+| `src/models.rs` | 363, 385, 386, 399, 413 | Test helpers | 🔧 Move to test module or use constants |
+| `src/sentinel/eth.rs` | 585, 613 | Chain precision conversion | 🔧 Use `ChainAsset::decimals` |
+| `src/persistence/queries.rs` | 485, 1153, 1174 | Quote qty calculation | 🔧 Use `SymbolInfo::quote_qty()` |
+| `src/csv_io.rs` | 148, 152, 248 | CSV parsing | 🔧 Use `SymbolManager` |
+| `src/websocket/service.rs` | 273, 274, 310, 311 | Depth/Ticker formatting | ✅ Already using `money::` module |
 
-Use intent-based API on `AssetInfo`:
+**Priority Order**:
+1. **P0**: `persistence/queries.rs` - High traffic path
+2. **P1**: `sentinel/eth.rs` - Security critical
+3. **P2**: `models.rs` - Test helpers (lowest risk)
+4. **P3**: `csv_io.rs` - Batch import (offline)
 
-```rust
-// Deposit amount - must be positive
-let amount_scaled = asset_info.parse_amount(request.amount)?;
+---
 
-// Withdrawal fee - can be zero
-let fee_scaled = asset_info.parse_amount_allow_zero(request.fee)?;
-```
+#### 3.4 Phase 2.5: Intent-based API Migration
+
+**Goal**: Replace direct `money::` calls with `Asset` / `AssetInfo` methods.
+
+| Old Pattern | New Pattern |
+|-------------|-------------|
+| `money::parse_decimal(d, asset.decimals as u32)` | `asset.parse_amount(d)` |
+| `money::parse_decimal_allow_zero(d, decimals)` | `asset.parse_amount_allow_zero(d)` |
+| `money::format_amount(amt, dec, disp)` | `asset.format_amount(amt)` |
+
+**Files to migrate**:
+| File | Status |
+|------|--------|
+| `src/funding/deposit.rs` | ✅ Already uses `money::format_amount_signed` |
+| `src/funding/withdraw.rs` | ✅ Already uses `money::format_amount_signed` |
+| `src/funding/service.rs` | 🔧 Migrate to `asset.format_amount()` |
+| `src/market/depth_service.rs` | 🔧 Use `MoneyFormatter` |
+| `src/internal_transfer/api.rs` | ✅ Uses local `format_amount` wrapper |
 
 ---
 
@@ -195,10 +219,10 @@ cargo test
 ### 5. Success Criteria
 
 - [ ] `scripts/audit_money_safety.sh` passes in CI
-- [ ] Gateway order handler uses `money::parse_qty/price`
+- [ ] All `10u64.pow()` outside whitelist removed or justified
+- [ ] Gateway handlers use `money::parse_qty/price`
 - [ ] Funding handlers use `Asset::parse_amount*`
 - [ ] All 370+ tests pass
-- [ ] No manual `10u64.pow()` outside `money.rs`
 
 ---
 
