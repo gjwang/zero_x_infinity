@@ -472,3 +472,145 @@ echo "✅ Money safety audit passed!"
 | 获取精度 | `symbol_mgr.get_decimals(asset)` | `let decimals = 8;` |
 | 算术运算 | `amount.checked_add(other)?` | `*amount + *other` |
 | 比较运算 | `*amount > 0` | ✅ 允许 (Deref) |
+
+---
+
+## Part VI: 实施记录与验收 (Implementation Record & Verification)
+
+> **Phase 0x14-c 实施日期**: 2025-12-31
+> **状态**: ✅ 完成
+
+### 6.1 完成工作总结
+
+#### 核心设施 (Layer 1)
+
+| 文件 | 变更 |
+|------|------|
+| [`money.rs`](../src/money.rs) | 新增 `unit_amount(decimals: u32) -> ScaledAmount` 作为**唯一的 scaling factor 来源** |
+
+```rust
+/// Returns the unit amount (1.0) for a given decimal precision as ScaledAmount.
+/// This is the **ONLY** source of scaling factor in the codebase.
+/// 
+/// # Examples
+/// - `unit_amount(8)` returns `ScaledAmount(100_000_000)` for BTC
+/// - `unit_amount(6)` returns `ScaledAmount(1_000_000)` for USDT
+/// - `unit_amount(18)` returns `ScaledAmount(10^18)` for ETH
+pub(crate) fn unit_amount(decimals: u32) -> ScaledAmount {
+    ScaledAmount::from(10u64.pow(decimals))
+}
+```
+
+#### 高层封装重构 (Layer 2)
+
+| 文件 | 变更 |
+|------|------|
+| [`symbol_manager.rs`](../src/symbol_manager.rs) | `SymbolInfo::qty_unit()` 返回类型从 `u64` 改为 `ScaledAmount`，委托给 `money::unit_amount()` |
+
+#### 业务代码迁移 (Layer 3)
+
+| 文件 | 位置 | 变更 |
+|------|------|------|
+| [`csv_io.rs`](../src/csv_io.rs) | L148, L152, L248 | `10u64.pow(...)` → `*money::unit_amount(...)` |
+| [`websocket/service.rs`](../src/websocket/service.rs) | L273-274, L310-311 | 同上 |
+| [`sentinel/eth.rs`](../src/sentinel/eth.rs) | L585, L613 | 同上 |
+| [`persistence/queries.rs`](../src/persistence/queries.rs) | L485 | 同上 |
+| [`pipeline_runner.rs`](../src/pipeline_runner.rs) | L79, L195, L205 | `qty_unit()` → `*qty_unit()` |
+| [`pipeline_mt.rs`](../src/pipeline_mt.rs) | L129 | 同上 |
+| [`ubscore.rs`](../src/ubscore.rs) | L263, L283, L318 | 同上 |
+| [`ubscore_wal/recovery.rs`](../src/ubscore_wal/recovery.rs) | L89 | 同上 |
+
+#### CI 审计脚本
+
+新增 [`scripts/audit_money_safety.sh`](../scripts/audit_money_safety.sh):
+- 检测 `10u64.pow` 在 `money.rs` 外的违规使用
+- 允许 `#[cfg(test)]` 测试代码豁免
+- 退出码 1 表示有违规
+
+---
+
+### 6.2 测试验收方法
+
+#### 方法 1: 运行审计脚本 (推荐)
+
+```bash
+# 从项目根目录运行
+./scripts/audit_money_safety.sh
+
+# 预期输出:
+# 🔍 Money Safety Audit
+# =====================
+# Rule 1: Checking 10u64.pow usage...
+# ✅ All 10u64.pow usage is in allowed locations
+# =====================
+# ✅ Money Safety Audit PASSED
+```
+
+**验收标准**: 脚本退出码为 `0`，输出 `✅ Money Safety Audit PASSED`
+
+#### 方法 2: 手动 grep 验证
+
+```bash
+# 检查 10u64.pow 是否只在 money.rs 和测试代码中
+grep -rn "10u64\.pow" --include="*.rs" src/ | grep -v "money.rs" | grep -v "test"
+
+# 预期输出: 空 (无匹配)
+```
+
+#### 方法 3: 运行单元测试
+
+```bash
+# 运行 unit_amount 相关测试
+cargo test unit_amount
+
+# 运行全量测试
+cargo test
+
+# 预期: 380+ 测试通过，0 失败
+```
+
+#### 方法 4: 编译验证
+
+```bash
+cargo build
+
+# 预期: 编译成功，无 warning
+```
+
+---
+
+### 6.3 回归测试清单
+
+| 测试项 | 命令 | 预期结果 |
+|--------|------|----------|
+| 审计脚本 | `./scripts/audit_money_safety.sh` | ✅ PASSED |
+| 单元测试 | `cargo test --lib` | 371+ passed |
+| 集成测试 | `cargo test --test '*'` | 9+ passed |
+| 编译 | `cargo build` | 成功 |
+| Clippy | `cargo clippy -- -D warnings` | 无 warning |
+
+---
+
+### 6.4 未来 CI 集成 (TODO)
+
+将审计脚本添加到 `.github/workflows/ci.yml`:
+
+```yaml
+  money-safety-audit:
+    name: Money Safety Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Money Safety Audit
+        run: ./scripts/audit_money_safety.sh
+```
+
+---
+
+### 6.5 相关 Commit
+
+```
+bdcf1ec feat(money): enforce type-safe scaling via unit_amount()
+```
+
+**Branch**: `0x14-c-money-safety`
