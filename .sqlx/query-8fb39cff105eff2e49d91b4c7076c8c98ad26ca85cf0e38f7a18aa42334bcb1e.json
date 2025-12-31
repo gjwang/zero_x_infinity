@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT decimals FROM assets_tb WHERE asset_id = $1",
+  "query": "SELECT internal_scale FROM assets_tb WHERE asset_id = $1",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "decimals",
+        "name": "internal_scale",
         "type_info": "Int2"
       }
     ],
@@ -18,5 +18,5 @@
       false
     ]
   },
-  "hash": "b82b4fc3ee570f29a5c6475e8773b12a3c038573dd12b21b3e773d8a3b0b59b2"
+  "hash": "8fb39cff105eff2e49d91b4c7076c8c98ad26ca85cf0e38f7a18aa42334bcb1e"
 }

@@ -664,7 +664,7 @@ pub async fn query_all_balances_with_pg(
     for row in rows {
         // Query PostgreSQL for asset configuration (ONLY source of truth!)
         let asset_info: Option<(String, i16)> =
-            sqlx::query_as("SELECT asset, decimals FROM assets_tb WHERE asset_id = $1")
+            sqlx::query_as("SELECT asset, internal_scale FROM assets_tb WHERE asset_id = $1")
                 .bind(row.asset_id as i32)
                 .fetch_optional(pg_pool)
                 .await

@@ -98,7 +98,7 @@ impl ServiceAdapter for FundingAdapter {
 
         // Get asset decimals
         let _decimals: i16 = match sqlx::query_scalar!(
-            "SELECT decimals FROM assets_tb WHERE asset_id = $1",
+            "SELECT internal_scale FROM assets_tb WHERE asset_id = $1",
             asset_id as i32
         )
         .fetch_optional(&mut *tx)
@@ -270,7 +270,7 @@ impl ServiceAdapter for FundingAdapter {
 
         // Get asset decimals
         let _decimals: i16 = match sqlx::query_scalar!(
-            "SELECT decimals FROM assets_tb WHERE asset_id = $1",
+            "SELECT internal_scale FROM assets_tb WHERE asset_id = $1",
             asset_id as i32
         )
         .fetch_optional(&self.pool)
@@ -380,7 +380,7 @@ impl ServiceAdapter for FundingAdapter {
 
         // Get asset decimals
         let _decimals: i16 = match sqlx::query_scalar!(
-            "SELECT decimals FROM assets_tb WHERE asset_id = $1",
+            "SELECT internal_scale FROM assets_tb WHERE asset_id = $1",
             asset_id as i32
         )
         .fetch_optional(&self.pool)
