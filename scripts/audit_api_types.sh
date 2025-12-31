@@ -114,6 +114,45 @@ fi
 echo ""
 
 # =============================================================================
+# Rule 4: No f64 in DTOs (forbidden in financial systems)
+# =============================================================================
+
+echo "Rule 4: Checking for f64 in DTOs (forbidden)..."
+
+F64_FIELDS=$(grep -rn "pub.*:\s*f64" --include="*.rs" src/gateway/ 2>/dev/null | grep -v "#\[cfg(test)\]" | grep -v "// safe:" || true)
+
+if [ -n "$F64_FIELDS" ]; then
+    echo -e "${RED}❌ FAIL: Found f64 fields in API DTO (forbidden in financial systems)${NC}"
+    echo "$F64_FIELDS"
+    echo "   → Should use DisplayAmount for output, StrictDecimal for input"
+    VIOLATIONS=$((VIOLATIONS + 1))
+else
+    echo -e "${GREEN}✅ No f64 fields found (financial safety)${NC}"
+fi
+
+echo ""
+
+# =============================================================================
+# Rule 5: Raw Decimal in Response DTOs (informational)
+# =============================================================================
+
+echo "Rule 5: Checking for raw Decimal in Response DTOs (informational)..."
+
+# This is informational for now - strict enforcement in Phase 2b
+RAW_DECIMAL=$(grep -rn "pub.*:\s*Decimal\s*[,}]" --include="*.rs" src/gateway/types.rs 2>/dev/null | grep -v "StrictDecimal" | grep -v "#\[cfg(test)\]" || true)
+
+if [ -n "$RAW_DECIMAL" ]; then
+    echo -e "${YELLOW}⚠️  INFO: Raw Decimal found in types.rs${NC}"
+    echo "$RAW_DECIMAL"
+    echo "   → Consider using DisplayAmount for responses (Phase 2b)"
+    # Not a violation, just informational
+else
+    echo -e "${GREEN}✅ No raw Decimal in response types${NC}"
+fi
+
+echo ""
+
+# =============================================================================
 # Summary
 # =============================================================================
 

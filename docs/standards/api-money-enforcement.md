@@ -653,7 +653,7 @@ fi
 | **Phase 2b** | 迁移 Response DTO 使用 `DisplayAmount` | ⏳ 待实现 |
 | **Phase 3** | 为所有金额相关 API 统一改造 | ⏳ 待实现 |
 | **Phase 4** | 实现 `audit_api_types.sh` 并集成 CI | ✅ 已完成 |
-| **Phase 5** | 扩展审计脚本检查 Response DTO 类型 | ⏳ 待实现 |
+| **Phase 5** | 扩展审计脚本检查 Response DTO 类型 | ✅ 已完成 |
 | **Phase 6** | 添加 pre-commit hook 本地拦截 | 📋 规划中 |
 
 ---
@@ -706,17 +706,24 @@ pub struct DisplayAmount(String);
 - `display_price_u64()` — 格式化 u64 价格
 - `display_asset_amount()` — 格式化资产余额
 
+#### Phase 5: 扩展审计脚本 (2025-12-31)
+
+扩展 `scripts/audit_api_types.sh` 添加新规则：
+
+- **Rule 4**: 检测 `f64` 字段 (金融系统禁止)
+- **Rule 5**: 检测 Response DTO 中的裸 `Decimal` (信息性警告)
+
 ### 验证
 
 ```bash
 # 完整测试套件
 cargo test gateway::types  # 28 通过
 
-# 审计脚本
-./scripts/audit_api_types.sh
+# 审计脚本 (5 条规则)
+./scripts/audit_api_types.sh  # ✅ PASSED
 
 # 全量测试
-cargo test  # 393+ 通过
+cargo test  # 388+ 通过
 ```
 
 ---
