@@ -1,0 +1,312 @@
+# 0x14-c Money Type Safety: API 层金额强制执行
+
+<h3>
+  <a href="#-english">🇺🇸 English</a>
+  &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
+  <a href="#-chinese">🇨🇳 中文</a>
+</h3>
+
+<div id="-english"></div>
+
+## 🇺🇸 English
+
+| Status | 🚧 **IN PROGRESS** |
+| :--- | :--- |
+| **Context** | Phase V: Extreme Optimization (Step 3) |
+| **Goal** | Enforce type-safe money handling at API boundary to prevent precision/overflow bugs |
+| **Scope** | Gateway handlers, Funding handlers, CI audit |
+
+---
+
+### 1. Problem Statement
+
+> **"Money is a domain concept, not a primitive type."**
+
+Our exchange processes millions of dollars daily. A single precision bug could cause:
+- **Account reconciliation failure**: Unable to balance books 100%
+- **Silent fund loss**: Truncation/overflow goes undetected
+- **Regulatory risk**: Audit trails become unreliable
+
+#### 1.1 Current Anti-patterns
+
+```rust
+// ❌ Manual scaling everywhere - error-prone, hard to maintain
+let qty: u64 = request.quantity.parse()?;
+let scaled = qty * 10u64.pow(8);  // What if someone forgets this?
+
+// ❌ Hardcoded decimals - what if different assets have different precision?
+let formatted = format!("{:.8}", amount as f64 / 100_000_000.0);
+```
+
+#### 1.2 The Solution: Centralized Money Module
+
+We already have `src/money.rs` with:
+- `ScaledAmount` - Newtype wrapper preventing raw arithmetic
+- `parse_decimal()` / `format_amount()` - Audited conversion functions
+- `MoneyFormatter` - Batch formatting for order books
+
+**This phase activates these tools in production code paths.**
+
+---
+
+### 2. Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     Client (JSON String)                        │
+│                      "quantity": "1.5"                          │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│  Layer 1: Gateway Handler (src/gateway/handlers.rs)             │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ money::parse_qty(&req.quantity, symbol_id, &mgr)?       │   │
+│  │ → Returns ScaledAmount or MoneyError                    │   │
+│  └─────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│  Layer 2: Money Module (src/money.rs)                           │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ - Precision validation (reject if too many decimals)   │   │
+│  │ - Overflow protection (checked arithmetic)              │   │
+│  │ - Zero rejection (for quantities)                       │   │
+│  └─────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│  Layer 3: SymbolManager (src/symbol_manager.rs)                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ - Provides decimals per asset/symbol                    │   │
+│  │ - Single source of truth for precision configuration   │   │
+│  └─────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                 Internal: ScaledAmount(u64)                     │
+│                        150_000_000                              │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 3. Implementation Plan
+
+#### 3.1 CI Audit Script (P0)
+
+**Purpose**: Prevent regression by detecting manual scaling outside `money.rs`.
+
+```bash
+# scripts/audit_money_safety.sh
+#!/bin/bash
+set -e
+
+echo "🔍 Auditing money safety..."
+
+# 1. Check for manual scaling
+if grep -rn "10u64.pow" --include="*.rs" src/ | grep -v "money.rs"; then
+    echo "❌ FAIL: Found 10u64.pow outside money.rs"
+    exit 1
+fi
+
+# 2. Check for Decimal power operations
+if grep -rn "Decimal::from(10).powi" --include="*.rs" src/ | grep -v "money.rs"; then
+    echo "❌ FAIL: Found Decimal power operation outside money.rs"
+    exit 1
+fi
+
+echo "✅ Money safety audit passed!"
+```
+
+#### 3.2 Gateway Handler Migration (P0)
+
+**Target**: `src/gateway/handlers.rs` - `place_order` handler
+
+**Before**:
+```rust
+let qty: u64 = request.quantity.parse()?;
+let price: u64 = request.price.parse()?;
+```
+
+**After**:
+```rust
+use crate::money;
+
+let qty = money::parse_qty(&request.quantity, symbol_id, &symbol_mgr)
+    .map_err(|e| (StatusCode::BAD_REQUEST, format!("{}", e)))?;
+let price = money::parse_price(&request.price, symbol_id, &symbol_mgr)
+    .map_err(|e| (StatusCode::BAD_REQUEST, format!("{}", e)))?;
+```
+
+**Error Mapping**:
+| MoneyError | HTTP Response |
+|------------|---------------|
+| `PrecisionOverflow` | `400 PRECISION_EXCEEDED` |
+| `InvalidAmount` | `400 INVALID_AMOUNT` |
+| `ZeroNotAllowed` | `400 ZERO_NOT_ALLOWED` |
+| `Overflow` | `400 AMOUNT_OVERFLOW` |
+
+#### 3.3 Funding Handler Migration (P1)
+
+**Target**: `src/funding/deposit.rs`, `src/funding/withdraw.rs`
+
+Use intent-based API on `AssetInfo`:
+
+```rust
+// Deposit amount - must be positive
+let amount_scaled = asset_info.parse_amount(request.amount)?;
+
+// Withdrawal fee - can be zero
+let fee_scaled = asset_info.parse_amount_allow_zero(request.fee)?;
+```
+
+---
+
+### 4. Validation
+
+#### 4.1 Unit Tests
+
+```bash
+cargo test money::
+```
+
+#### 4.2 Integration Tests
+
+```bash
+# Must pass before merge
+./scripts/audit_money_safety.sh
+
+# Full test suite
+cargo test
+```
+
+#### 4.3 Manual Verification
+
+| Test Case | Input | Expected Result |
+|-----------|-------|-----------------|
+| Valid quantity | `"1.5"` | `150_000_000` (8 decimals) |
+| Precision exceeded | `"1.123456789"` (9 decimals) | `400 PRECISION_EXCEEDED` |
+| Zero quantity | `"0"` | `400 ZERO_NOT_ALLOWED` |
+| Negative | `"-1.0"` | `400 INVALID_AMOUNT` |
+| Overflow | `"999999999999999999999"` | `400 AMOUNT_OVERFLOW` |
+
+---
+
+### 5. Success Criteria
+
+- [ ] `scripts/audit_money_safety.sh` passes in CI
+- [ ] Gateway order handler uses `money::parse_qty/price`
+- [ ] Funding handlers use `Asset::parse_amount*`
+- [ ] All 370+ tests pass
+- [ ] No manual `10u64.pow()` outside `money.rs`
+
+---
+
+<div id="-chinese"></div>
+
+## 🇨🇳 中文
+
+| 状态 | 🚧 **进行中** |
+| :--- | :--- |
+| **上下文** | Phase V: 极致优化 (第三步) |
+| **目标** | 在 API 边界强制类型安全的金额处理，防止精度/溢出 Bug |
+| **范围** | Gateway handlers、Funding handlers、CI 审计 |
+
+---
+
+### 1. 问题陈述
+
+> **"金额是领域概念，不是原始类型。"**
+
+我们的交易所每天处理数百万美元。一个精度 Bug 可能导致：
+- **账本对不齐**：无法 100% 平账
+- **静默资金损失**：截断/溢出未被检测
+- **合规风险**：审计轨迹变得不可靠
+
+#### 1.1 当前反模式
+
+```rust
+// ❌ 到处手动缩放 - 容易出错，难以维护
+let qty: u64 = request.quantity.parse()?;
+let scaled = qty * 10u64.pow(8);  // 如果有人忘了呢？
+
+// ❌ 硬编码精度 - 不同资产精度不同怎么办？
+let formatted = format!("{:.8}", amount as f64 / 100_000_000.0);
+```
+
+#### 1.2 解决方案：集中式 Money 模块
+
+我们已经有 `src/money.rs`：
+- `ScaledAmount` - Newtype 包装，防止裸算术运算
+- `parse_decimal()` / `format_amount()` - 经过审计的转换函数
+- `MoneyFormatter` - 用于深度图的批量格式化
+
+**本阶段在生产代码路径中激活这些工具。**
+
+---
+
+### 2. 架构
+
+与英文版相同，请参见上方架构图。
+
+---
+
+### 3. 实施计划
+
+#### 3.1 CI 审计脚本 (P0)
+
+**目的**：检测 `money.rs` 外的手动缩放，防止回归。
+
+#### 3.2 Gateway Handler 迁移 (P0)
+
+**目标**：`src/gateway/handlers.rs` - 下单 handler
+
+使用 `money::parse_qty()` 和 `money::parse_price()` 替代手工解析。
+
+#### 3.3 Funding Handler 迁移 (P1)
+
+**目标**：`src/funding/deposit.rs`, `src/funding/withdraw.rs`
+
+使用 `AssetInfo` 上的意图封装 API。
+
+---
+
+### 4. 验证
+
+#### 4.1 测试命令
+
+```bash
+# 审计脚本必须通过
+./scripts/audit_money_safety.sh
+
+# 全量测试
+cargo test
+```
+
+#### 4.2 手工验证用例
+
+| 测试用例 | 输入 | 预期结果 |
+|----------|------|----------|
+| 有效数量 | `"1.5"` | `150_000_000` |
+| 精度超限 | `"1.123456789"` | `400 PRECISION_EXCEEDED` |
+| 零值数量 | `"0"` | `400 ZERO_NOT_ALLOWED` |
+| 负数 | `"-1.0"` | `400 INVALID_AMOUNT` |
+| 溢出 | `"999999999999999999999"` | `400 AMOUNT_OVERFLOW` |
+
+---
+
+### 5. 完成标准
+
+- [ ] `scripts/audit_money_safety.sh` 在 CI 中通过
+- [ ] Gateway 订单 handler 使用 `money::parse_qty/price`
+- [ ] Funding handlers 使用 `Asset::parse_amount*`
+- [ ] 所有 370+ 测试通过
+- [ ] `money.rs` 外无手动 `10u64.pow()`
+
+---
+
+## References
+
+- [Money Type Safety Standard](./standards/money-type-safety.md)
+- [API Money Enforcement](./standards/api-money-enforcement.md)
+- [0x14-b Order Commands](./0x14-b-order-commands.md) (Previous phase)
