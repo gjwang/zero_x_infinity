@@ -713,23 +713,12 @@ pub async fn get_trades(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<crate::api_auth::AuthenticatedUser>,
     Query(params): Query<std::collections::HashMap<String, String>>,
-) -> Result<
-    (
-        StatusCode,
-        Json<ApiResponse<Vec<crate::persistence::queries::TradeApiData>>>,
-    ),
-    (StatusCode, Json<ApiResponse<()>>),
-> {
+) -> ApiResult<Vec<crate::persistence::queries::TradeApiData>> {
     // Check if persistence is enabled
-    let db_client = state.db_client.as_ref().ok_or_else(|| {
-        (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ApiResponse::<()>::error(
-                error_codes::SERVICE_UNAVAILABLE,
-                "Persistence not enabled",
-            )),
-        )
-    })?;
+    let db_client = state
+        .db_client
+        .as_ref()
+        .ok_or_else(|| ApiError::service_unavailable("Persistence not enabled"))?;
 
     // SEC-004 FIX: Extract user_id from authenticated user
     let user_id = user.user_id as u64;
@@ -750,14 +739,8 @@ pub async fn get_trades(
     )
     .await
     {
-        Ok(trades) => Ok((StatusCode::OK, Json(ApiResponse::success(trades)))),
-        Err(e) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error(
-                error_codes::SERVICE_UNAVAILABLE,
-                format!("Query failed: {}", e),
-            )),
-        )),
+        Ok(trades) => ok(trades),
+        Err(e) => ApiError::db_error(format!("Query failed: {}", e)).into_err(),
     }
 }
 
@@ -782,23 +765,12 @@ pub async fn get_trades(
 pub async fn get_public_trades(
     State(state): State<Arc<AppState>>,
     Query(params): Query<std::collections::HashMap<String, String>>,
-) -> Result<
-    (
-        StatusCode,
-        Json<ApiResponse<Vec<crate::persistence::queries::PublicTradeApiData>>>,
-    ),
-    (StatusCode, Json<ApiResponse<()>>),
-> {
+) -> ApiResult<Vec<crate::persistence::queries::PublicTradeApiData>> {
     // Check if persistence is enabled
-    let db_client = state.db_client.as_ref().ok_or_else(|| {
-        (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ApiResponse::<()>::error(
-                error_codes::SERVICE_UNAVAILABLE,
-                "Persistence not enabled",
-            )),
-        )
-    })?;
+    let db_client = state
+        .db_client
+        .as_ref()
+        .ok_or_else(|| ApiError::service_unavailable("Persistence not enabled"))?;
 
     // Parse query parameters
     let limit: usize = params
@@ -819,14 +791,8 @@ pub async fn get_public_trades(
     )
     .await
     {
-        Ok(trades) => Ok((StatusCode::OK, Json(ApiResponse::success(trades)))),
-        Err(e) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error(
-                error_codes::SERVICE_UNAVAILABLE,
-                format!("Query failed: {}", e),
-            )),
-        )),
+        Ok(trades) => ok(trades),
+        Err(e) => ApiError::db_error(format!("Query failed: {}", e)).into_err(),
     }
 }
 
@@ -852,23 +818,12 @@ pub async fn get_balances(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<crate::api_auth::AuthenticatedUser>,
     Query(params): Query<std::collections::HashMap<String, String>>,
-) -> Result<
-    (
-        StatusCode,
-        Json<ApiResponse<crate::persistence::queries::BalanceApiData>>,
-    ),
-    (StatusCode, Json<ApiResponse<()>>),
-> {
+) -> ApiResult<crate::persistence::queries::BalanceApiData> {
     // Check if persistence is enabled
-    let db_client = state.db_client.as_ref().ok_or_else(|| {
-        (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ApiResponse::<()>::error(
-                error_codes::SERVICE_UNAVAILABLE,
-                "Persistence not enabled",
-            )),
-        )
-    })?;
+    let db_client = state
+        .db_client
+        .as_ref()
+        .ok_or_else(|| ApiError::service_unavailable("Persistence not enabled"))?;
 
     // 1. Use user_id from authenticated user
     let user_id = user.user_id as u64;
@@ -876,15 +831,7 @@ pub async fn get_balances(
     let asset_id: u32 = params
         .get("asset_id")
         .and_then(|s| s.parse().ok())
-        .ok_or_else(|| {
-            (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<()>::error(
-                    error_codes::INVALID_PARAMETER,
-                    "Missing or invalid asset_id parameter",
-                )),
-            )
-        })?;
+        .ok_or_else(|| ApiError::bad_request("Missing or invalid asset_id parameter"))?;
 
     // Query balance from TDengine
     match crate::persistence::queries::query_balance(
@@ -895,21 +842,9 @@ pub async fn get_balances(
     )
     .await
     {
-        Ok(Some(balance)) => Ok((StatusCode::OK, Json(ApiResponse::success(balance)))),
-        Ok(None) => Err((
-            StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error(
-                error_codes::ORDER_NOT_FOUND,
-                "Balance not found",
-            )),
-        )),
-        Err(e) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error(
-                error_codes::SERVICE_UNAVAILABLE,
-                format!("Query failed: {}", e),
-            )),
-        )),
+        Ok(Some(balance)) => ok(balance),
+        Ok(None) => ApiError::not_found("Balance not found").into_err(),
+        Err(e) => ApiError::db_error(format!("Query failed: {}", e)).into_err(),
     }
 }
 
@@ -930,37 +865,20 @@ pub async fn get_balances(
 pub async fn get_all_balances(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<crate::api_auth::AuthenticatedUser>,
-) -> Result<
-    (
-        StatusCode,
-        Json<ApiResponse<Vec<crate::funding::service::BalanceInfo>>>,
-    ),
-    (StatusCode, Json<ApiResponse<()>>),
-> {
+) -> ApiResult<Vec<crate::funding::service::BalanceInfo>> {
     // Extract user_id from authenticated user
     let user_id = user.user_id;
 
     // Check if PostgreSQL is available
-    let pg_db = state.pg_db.as_ref().ok_or_else(|| {
-        (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ApiResponse::<()>::error(
-                error_codes::SERVICE_UNAVAILABLE,
-                "Account database not available",
-            )),
-        )
-    })?;
+    let pg_db = state
+        .pg_db
+        .as_ref()
+        .ok_or_else(|| ApiError::service_unavailable("Account database not available"))?;
 
     // Query all balances
     match crate::funding::service::TransferService::get_all_balances(pg_db.pool(), user_id).await {
-        Ok(balances) => Ok((StatusCode::OK, Json(ApiResponse::success(balances)))),
-        Err(e) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error(
-                error_codes::SERVICE_UNAVAILABLE,
-                format!("Query failed: {}", e),
-            )),
-        )),
+        Ok(balances) => ok(balances),
+        Err(e) => ApiError::db_error(format!("Query failed: {}", e)).into_err(),
     }
 }
 
@@ -981,21 +899,15 @@ pub async fn get_all_balances(
 pub async fn get_account(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<crate::api_auth::AuthenticatedUser>,
-) -> Result<(StatusCode, Json<ApiResponse<AccountResponseData>>), (StatusCode, Json<ApiResponse<()>>)>
-{
+) -> ApiResult<AccountResponseData> {
     let user_id = user.user_id;
     tracing::info!("DEBUG: get_account called for user_id: {}", user_id);
 
     // 1. Get Funding balances from Postgres (Source of truth for funding)
-    let pg_db = state.pg_db.as_ref().ok_or_else(|| {
-        (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ApiResponse::<()>::error(
-                error_codes::SERVICE_UNAVAILABLE,
-                "Account database not available",
-            )),
-        )
-    })?;
+    let pg_db = state
+        .pg_db
+        .as_ref()
+        .ok_or_else(|| ApiError::service_unavailable("Account database not available"))?;
 
     let mut balances =
         match crate::funding::service::TransferService::get_all_balances(pg_db.pool(), user_id)
@@ -1003,13 +915,7 @@ pub async fn get_account(
         {
             Ok(b) => b,
             Err(e) => {
-                return Err((
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<()>::error(
-                        error_codes::SERVICE_UNAVAILABLE,
-                        format!("Postgres query failed: {}", e),
-                    )),
-                ));
+                return ApiError::db_error(format!("Postgres query failed: {}", e)).into_err();
             }
         };
 
@@ -1047,7 +953,7 @@ pub async fn get_account(
     }
 
     let data = AccountResponseData { balances };
-    Ok((StatusCode::OK, Json(ApiResponse::success(data))))
+    ok(data)
 }
 
 /// Get K-Line data
@@ -1070,23 +976,12 @@ pub async fn get_account(
 pub async fn get_klines(
     State(state): State<Arc<AppState>>,
     Query(params): Query<std::collections::HashMap<String, String>>,
-) -> Result<
-    (
-        StatusCode,
-        Json<ApiResponse<Vec<crate::persistence::queries::KLineApiData>>>,
-    ),
-    (StatusCode, Json<ApiResponse<()>>),
-> {
+) -> ApiResult<Vec<crate::persistence::queries::KLineApiData>> {
     // Check if persistence is enabled
-    let db_client = state.db_client.as_ref().ok_or_else(|| {
-        (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ApiResponse::<()>::error(
-                error_codes::SERVICE_UNAVAILABLE,
-                "Persistence not enabled",
-            )),
-        )
-    })?;
+    let db_client = state
+        .db_client
+        .as_ref()
+        .ok_or_else(|| ApiError::service_unavailable("Persistence not enabled"))?;
 
     // Parse query parameters
     let interval = params.get("interval").map(|s| s.as_str()).unwrap_or("1m");
@@ -1094,13 +989,8 @@ pub async fn get_klines(
     // Validate interval
     let valid_intervals = ["1m", "5m", "15m", "30m", "1h", "1d"];
     if !valid_intervals.contains(&interval) {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<()>::error(
-                error_codes::INVALID_PARAMETER,
-                "Invalid interval. Valid values: 1m, 5m, 15m, 30m, 1h, 1d",
-            )),
-        ));
+        return ApiError::bad_request("Invalid interval. Valid values: 1m, 5m, 15m, 30m, 1h, 1d")
+            .into_err();
     }
 
     let limit: usize = params
@@ -1119,14 +1009,8 @@ pub async fn get_klines(
     )
     .await
     {
-        Ok(klines) => Ok((StatusCode::OK, Json(ApiResponse::success(klines)))),
-        Err(e) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error(
-                error_codes::SERVICE_UNAVAILABLE,
-                format!("Query failed: {}", e),
-            )),
-        )),
+        Ok(klines) => ok(klines),
+        Err(e) => ApiError::db_error(format!("Query failed: {}", e)).into_err(),
     }
 }
 /// Get order book depth
@@ -1148,10 +1032,7 @@ pub async fn get_klines(
 pub async fn get_depth(
     State(state): State<Arc<AppState>>,
     Query(params): Query<std::collections::HashMap<String, String>>,
-) -> Result<
-    (StatusCode, Json<ApiResponse<super::types::DepthApiData>>),
-    (StatusCode, Json<ApiResponse<()>>),
-> {
+) -> ApiResult<super::types::DepthApiData> {
     // Parse limit (default 20, max 100)
     let limit = params
         .get("limit")
@@ -1166,30 +1047,14 @@ pub async fn get_depth(
     let symbol_name = state
         .symbol_mgr
         .get_symbol(state.active_symbol_id)
-        .ok_or_else(|| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error(
-                    error_codes::SERVICE_UNAVAILABLE,
-                    "Symbol not found",
-                )),
-            )
-        })?;
+        .ok_or_else(|| ApiError::internal("Symbol not found"))?;
 
     // Use DepthFormatter for type-safe formatting
     let formatter = DepthFormatter::new(&state.symbol_mgr);
 
     let (formatted_bids, formatted_asks) = formatter
         .format_depth_data(&snapshot.bids, &snapshot.asks, state.active_symbol_id)
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error(
-                    error_codes::SERVICE_UNAVAILABLE,
-                    &e,
-                )),
-            )
-        })?;
+        .map_err(|e| ApiError::internal(e))?;
 
     let data = super::types::DepthApiData {
         symbol: symbol_name.to_string(),
@@ -1198,7 +1063,7 @@ pub async fn get_depth(
         last_update_id: snapshot.update_id,
     };
 
-    Ok((StatusCode::OK, Json(ApiResponse::success(data))))
+    ok(data)
 }
 
 #[cfg(test)]
@@ -1715,21 +1580,15 @@ pub async fn get_exchange_info(
 pub async fn get_account_jwt(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<crate::user_auth::service::Claims>,
-) -> Result<(StatusCode, Json<ApiResponse<AccountResponseData>>), (StatusCode, Json<ApiResponse<()>>)>
-{
+) -> ApiResult<AccountResponseData> {
     let user_id = claims.sub.parse::<i64>().unwrap_or_default();
     tracing::info!("DEBUG: get_account_jwt called for user_id: {}", user_id);
 
     // 1. Get Funding balances from Postgres
-    let pg_db = state.pg_db.as_ref().ok_or_else(|| {
-        (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ApiResponse::<()>::error(
-                error_codes::SERVICE_UNAVAILABLE,
-                "Account database not available",
-            )),
-        )
-    })?;
+    let pg_db = state
+        .pg_db
+        .as_ref()
+        .ok_or_else(|| ApiError::service_unavailable("Account database not available"))?;
 
     let mut balances =
         match crate::funding::service::TransferService::get_all_balances(pg_db.pool(), user_id)
@@ -1737,13 +1596,7 @@ pub async fn get_account_jwt(
         {
             Ok(b) => b,
             Err(e) => {
-                return Err((
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<()>::error(
-                        error_codes::SERVICE_UNAVAILABLE,
-                        format!("Postgres query failed: {}", e),
-                    )),
-                ));
+                return ApiError::db_error(format!("Postgres query failed: {}", e)).into_err();
             }
         };
 
@@ -1777,7 +1630,7 @@ pub async fn get_account_jwt(
     }
 
     let data = AccountResponseData { balances };
-    Ok((StatusCode::OK, Json(ApiResponse::success(data))))
+    ok(data)
 }
 
 // ============================================================================
@@ -1789,39 +1642,28 @@ pub async fn create_transfer_jwt(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<crate::user_auth::service::Claims>,
     Json(req): Json<crate::funding::transfer::TransferRequest>,
-) -> Result<
-    (
-        StatusCode,
-        Json<ApiResponse<crate::funding::transfer::TransferResponse>>,
-    ),
-    (StatusCode, Json<ApiResponse<()>>),
-> {
+) -> ApiResult<crate::funding::transfer::TransferResponse> {
     let user_id = claims.sub.parse::<i64>().unwrap_or_default();
     tracing::info!("[TRACE] Transfer Request (JWT): User {}", user_id);
 
     if let Some(ref coordinator) = state.transfer_coordinator {
-        return create_transfer_fsm_handler(state.clone(), coordinator, user_id as u64, req).await;
+        // FSM path returns legacy Result type, so we need to convert
+        return match create_transfer_fsm_handler(state.clone(), coordinator, user_id as u64, req)
+            .await
+        {
+            Ok((_, json)) => Ok((StatusCode::OK, json)),
+            Err((status, json)) => Err((status, json)),
+        };
     }
 
-    let db = state.pg_db.as_ref().ok_or_else(|| {
-        (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ApiResponse::<()>::error(
-                error_codes::SERVICE_UNAVAILABLE,
-                "Database not available",
-            )),
-        )
-    })?;
+    let db = state
+        .pg_db
+        .as_ref()
+        .ok_or_else(|| ApiError::service_unavailable("Database not available"))?;
 
     match crate::funding::service::TransferService::execute(db, user_id, req).await {
-        Ok(resp) => Ok((StatusCode::OK, Json(ApiResponse::success(resp)))),
-        Err(e) => Err((
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<()>::error(
-                error_codes::INVALID_PARAMETER,
-                e.to_string(),
-            )),
-        )),
+        Ok(resp) => ok(resp),
+        Err(e) => ApiError::bad_request(e.to_string()).into_err(),
     }
 }
 
@@ -1830,30 +1672,19 @@ pub async fn create_order_jwt(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<crate::user_auth::service::Claims>,
     Json(req): Json<ClientOrder>,
-) -> Result<(StatusCode, Json<ApiResponse<OrderResponseData>>), (StatusCode, Json<ApiResponse<()>>)>
-{
+) -> ApiResult<OrderResponseData> {
     let user_id = claims.sub.parse::<u64>().unwrap_or_default();
     tracing::info!("[TRACE] Create Order (JWT): User {}", user_id);
 
-    let validated =
-        super::types::validate_client_order(req.clone(), &state.symbol_mgr).map_err(|e| {
-            (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<()>::error(error_codes::INVALID_PARAMETER, e)),
-            )
-        })?;
+    let validated = super::types::validate_client_order(req.clone(), &state.symbol_mgr)
+        .map_err(ApiError::bad_request)?;
 
     let order_id = state.next_order_id();
     let timestamp = now_ns();
 
     let internal_order = validated
         .into_internal_order(order_id, user_id, timestamp)
-        .map_err(|e| {
-            (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<()>::error(error_codes::INVALID_PARAMETER, e)),
-            )
-        })?;
+        .map_err(ApiError::bad_request)?;
 
     let action = OrderAction::Place(crate::pipeline::SequencedOrder::new(
         order_id,
@@ -1862,24 +1693,15 @@ pub async fn create_order_jwt(
     ));
 
     if state.order_queue.push(action).is_err() {
-        return Err((
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ApiResponse::<()>::error(
-                error_codes::SERVICE_UNAVAILABLE,
-                "Order queue is full",
-            )),
-        ));
+        return ApiError::service_unavailable("Order queue is full").into_err();
     }
 
-    Ok((
-        StatusCode::OK,
-        Json(ApiResponse::success(OrderResponseData {
-            order_id,
-            cid: req.cid,
-            order_status: "ACCEPTED".to_string(),
-            accepted_at: now_ms(),
-        })),
-    ))
+    ok(OrderResponseData {
+        order_id,
+        cid: req.cid,
+        order_status: "ACCEPTED".to_string(),
+        accepted_at: now_ms(),
+    })
 }
 
 /// Cancel order (JWT)
@@ -1887,8 +1709,7 @@ pub async fn cancel_order_jwt(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<crate::user_auth::service::Claims>,
     Json(req): Json<CancelOrderRequest>,
-) -> Result<(StatusCode, Json<ApiResponse<OrderResponseData>>), (StatusCode, Json<ApiResponse<()>>)>
-{
+) -> ApiResult<OrderResponseData> {
     let user_id = claims.sub.parse::<u64>().unwrap_or_default();
     tracing::info!(
         "[TRACE] Cancel Order (JWT) {}: User {}",
@@ -1903,24 +1724,15 @@ pub async fn cancel_order_jwt(
     };
 
     if state.order_queue.push(action).is_err() {
-        return Err((
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ApiResponse::<()>::error(
-                error_codes::SERVICE_UNAVAILABLE,
-                "Order queue is full",
-            )),
-        ));
+        return ApiError::service_unavailable("Order queue is full").into_err();
     }
 
-    Ok((
-        StatusCode::OK,
-        Json(ApiResponse::success(OrderResponseData {
-            order_id: req.order_id,
-            cid: None,
-            order_status: "CANCEL_PENDING".to_string(),
-            accepted_at: now_ms(),
-        })),
-    ))
+    ok(OrderResponseData {
+        order_id: req.order_id,
+        cid: None,
+        order_status: "CANCEL_PENDING".to_string(),
+        accepted_at: now_ms(),
+    })
 }
 
 /// Get orders (JWT)
@@ -1928,23 +1740,12 @@ pub async fn get_orders_jwt(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<crate::user_auth::service::Claims>,
     Query(params): Query<std::collections::HashMap<String, String>>,
-) -> Result<
-    (
-        StatusCode,
-        Json<ApiResponse<Vec<crate::persistence::queries::OrderApiData>>>,
-    ),
-    (StatusCode, Json<ApiResponse<()>>),
-> {
+) -> ApiResult<Vec<crate::persistence::queries::OrderApiData>> {
     let user_id = claims.sub.parse::<u64>().unwrap_or_default();
-    let db_client = state.db_client.as_ref().ok_or_else(|| {
-        (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ApiResponse::<()>::error(
-                error_codes::SERVICE_UNAVAILABLE,
-                "Persistence not enabled",
-            )),
-        )
-    })?;
+    let db_client = state
+        .db_client
+        .as_ref()
+        .ok_or_else(|| ApiError::service_unavailable("Persistence not enabled"))?;
 
     let limit: usize = params
         .get("limit")
@@ -1960,14 +1761,8 @@ pub async fn get_orders_jwt(
     )
     .await
     {
-        Ok(orders) => Ok((StatusCode::OK, Json(ApiResponse::success(orders)))),
-        Err(e) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error(
-                error_codes::SERVICE_UNAVAILABLE,
-                format!("Query failed: {}", e),
-            )),
-        )),
+        Ok(orders) => ok(orders),
+        Err(e) => ApiError::db_error(format!("Query failed: {}", e)).into_err(),
     }
 }
 
@@ -1976,36 +1771,17 @@ pub async fn get_balance_jwt(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<crate::user_auth::service::Claims>,
     Query(params): Query<std::collections::HashMap<String, String>>,
-) -> Result<
-    (
-        StatusCode,
-        Json<ApiResponse<crate::persistence::queries::BalanceApiData>>,
-    ),
-    (StatusCode, Json<ApiResponse<()>>),
-> {
+) -> ApiResult<crate::persistence::queries::BalanceApiData> {
     let user_id = claims.sub.parse::<u64>().unwrap_or_default();
-    let db_client = state.db_client.as_ref().ok_or_else(|| {
-        (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ApiResponse::<()>::error(
-                error_codes::SERVICE_UNAVAILABLE,
-                "Persistence not enabled",
-            )),
-        )
-    })?;
+    let db_client = state
+        .db_client
+        .as_ref()
+        .ok_or_else(|| ApiError::service_unavailable("Persistence not enabled"))?;
 
     let asset_id: u32 = params
         .get("asset_id")
         .and_then(|s| s.parse().ok())
-        .ok_or_else(|| {
-            (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<()>::error(
-                    error_codes::INVALID_PARAMETER,
-                    "Missing or invalid asset_id parameter",
-                )),
-            )
-        })?;
+        .ok_or_else(|| ApiError::bad_request("Missing or invalid asset_id parameter"))?;
 
     match crate::persistence::queries::query_balance(
         db_client.taos(),
@@ -2015,20 +1791,8 @@ pub async fn get_balance_jwt(
     )
     .await
     {
-        Ok(Some(balance)) => Ok((StatusCode::OK, Json(ApiResponse::success(balance)))),
-        Ok(None) => Err((
-            StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error(
-                error_codes::ORDER_NOT_FOUND,
-                "Balance not found",
-            )),
-        )),
-        Err(e) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error(
-                error_codes::SERVICE_UNAVAILABLE,
-                format!("Query failed: {}", e),
-            )),
-        )),
+        Ok(Some(balance)) => ok(balance),
+        Ok(None) => ApiError::not_found("Balance not found").into_err(),
+        Err(e) => ApiError::db_error(format!("Query failed: {}", e)).into_err(),
     }
 }
