@@ -13,7 +13,7 @@ use crate::pipeline::OrderAction;
 use super::super::state::AppState;
 use super::super::types::{
     ApiError, ApiResult, CancelOrderRequest, ClientOrder, MoveOrderRequest, OrderResponseData,
-    ReduceOrderRequest, accepted, decimal_to_u64, error_codes, ok,
+    ReduceOrderRequest, accepted, error_codes, ok,
 };
 use super::helpers::{now_ms, now_ns};
 
@@ -168,12 +168,11 @@ pub async fn reduce_order(
     Json(req): Json<ReduceOrderRequest>,
 ) -> ApiResult<OrderResponseData> {
     let user_id = user.user_id as u64;
-    let symbol_info = state
-        .symbol_mgr
-        .get_symbol_info_by_id(state.active_symbol_id)
-        .ok_or_else(|| ApiError::internal("Active symbol not found"))?;
 
-    let reduce_qty_u64 = decimal_to_u64(req.reduce_qty.inner(), symbol_info.base_decimals)
+    // Use SymbolManager intent-based API (money-type-safety.md compliance)
+    let reduce_qty_u64 = state
+        .symbol_mgr
+        .decimal_to_qty(req.reduce_qty.inner(), state.active_symbol_id)
         .map_err(ApiError::bad_request)?;
 
     tracing::info!(
@@ -221,12 +220,11 @@ pub async fn move_order(
     Json(req): Json<MoveOrderRequest>,
 ) -> ApiResult<OrderResponseData> {
     let user_id = user.user_id as u64;
-    let symbol_info = state
-        .symbol_mgr
-        .get_symbol_info_by_id(state.active_symbol_id)
-        .ok_or_else(|| ApiError::internal("Active symbol not found"))?;
 
-    let new_price_u64 = decimal_to_u64(req.new_price.inner(), symbol_info.price_decimal)
+    // Use SymbolManager intent-based API (money-type-safety.md compliance)
+    let new_price_u64 = state
+        .symbol_mgr
+        .decimal_to_price(req.new_price.inner(), state.active_symbol_id)
         .map_err(ApiError::bad_request)?;
 
     tracing::info!(

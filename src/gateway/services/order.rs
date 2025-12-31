@@ -11,7 +11,7 @@ use crate::pipeline::{OrderAction, SequencedOrder};
 use crate::symbol_manager::SymbolManager;
 
 use crate::gateway::handlers::helpers::{now_ms, now_ns};
-use crate::gateway::types::{ClientOrder, decimal_to_u64};
+use crate::gateway::types::ClientOrder;
 
 /// Order service error
 #[derive(Debug)]
@@ -142,12 +142,10 @@ impl<'a> OrderService<'a> {
         order_id: u64,
         reduce_qty: rust_decimal::Decimal,
     ) -> Result<OrderResult, OrderError> {
-        let symbol_info = self
+        // Use SymbolManager intent-based API (money-type-safety.md compliance)
+        let reduce_qty_u64 = self
             .symbol_mgr
-            .get_symbol_info_by_id(self.active_symbol_id)
-            .ok_or_else(|| OrderError::Internal("Active symbol not found".to_string()))?;
-
-        let reduce_qty_u64 = decimal_to_u64(reduce_qty, symbol_info.base_decimals)
+            .decimal_to_qty(reduce_qty, self.active_symbol_id)
             .map_err(|e| OrderError::InvalidParameter(e.to_string()))?;
 
         tracing::info!(
@@ -180,12 +178,10 @@ impl<'a> OrderService<'a> {
         order_id: u64,
         new_price: rust_decimal::Decimal,
     ) -> Result<OrderResult, OrderError> {
-        let symbol_info = self
+        // Use SymbolManager intent-based API (money-type-safety.md compliance)
+        let new_price_u64 = self
             .symbol_mgr
-            .get_symbol_info_by_id(self.active_symbol_id)
-            .ok_or_else(|| OrderError::Internal("Active symbol not found".to_string()))?;
-
-        let new_price_u64 = decimal_to_u64(new_price, symbol_info.price_decimal)
+            .decimal_to_price(new_price, self.active_symbol_id)
             .map_err(|e| OrderError::InvalidParameter(e.to_string()))?;
 
         tracing::info!(

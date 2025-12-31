@@ -251,6 +251,49 @@ impl SymbolManager {
         crate::money::parse_price(price_str, symbol_id, self).ok()
     }
 
+    // ========================================================================
+    // Layer 2.5: Decimal → ScaledAmount (Intent-based API for ReduceOrder/MoveOrder)
+    // ========================================================================
+
+    /// Convert Decimal quantity to ScaledAmount (intent-based API)
+    ///
+    /// For ReduceOrder and similar operations where Decimal is already parsed.
+    /// Encapsulates decimals lookup - caller only needs symbol_id.
+    pub fn decimal_to_qty(
+        &self,
+        qty: rust_decimal::Decimal,
+        symbol_id: u32,
+    ) -> Result<u64, &'static str> {
+        let symbol_info = self
+            .get_symbol_info_by_id(symbol_id)
+            .ok_or("symbol not found")?;
+        let asset = self
+            .assets
+            .get(&symbol_info.base_asset_id)
+            .ok_or("base asset not found")?;
+        asset
+            .parse_amount(qty)
+            .map(|s| *s)
+            .map_err(|_| "invalid quantity")
+    }
+
+    /// Convert Decimal price to ScaledAmount (intent-based API)
+    ///
+    /// For MoveOrder and similar operations where Decimal is already parsed.
+    /// Encapsulates decimals lookup - caller only needs symbol_id.
+    pub fn decimal_to_price(
+        &self,
+        price: rust_decimal::Decimal,
+        symbol_id: u32,
+    ) -> Result<u64, &'static str> {
+        let symbol_info = self
+            .get_symbol_info_by_id(symbol_id)
+            .ok_or("symbol not found")?;
+        crate::money::parse_decimal(price, symbol_info.price_decimal)
+            .map(|s| *s)
+            .map_err(|_| "invalid price")
+    }
+
     pub fn money_formatter(&self, symbol_id: u32) -> Option<MoneyFormatter<'_>> {
         MoneyFormatter::new(self, symbol_id)
     }
