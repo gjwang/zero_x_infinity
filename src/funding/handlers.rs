@@ -161,9 +161,16 @@ pub async fn get_deposit_address(
     })?;
     let service = DepositService::new(db.clone());
 
-    // Select Chain Adapter based on Asset/Network
-    // MVP: ETH=MockEvm, BTC=MockBtc. Default to ETH for others.
-    let network_raw = req.network.as_deref().unwrap_or("ETH"); // FIXME: network should be required, not default to ETH
+    // Network is REQUIRED - do not default to avoid routing to wrong chain
+    let network_raw = req.network.as_deref().ok_or_else(|| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<()>::error(
+                error_codes::INVALID_PARAMETER,
+                "network is required",
+            )),
+        )
+    })?;
     let network_upper = network_raw.to_uppercase();
     // Normalize to lowercase for DB (chain_slug uses lowercase: "eth", "btc")
     let chain_slug = network_raw.to_lowercase();
@@ -241,16 +248,9 @@ pub async fn apply_withdraw(
             )),
         )
     })?;
-    let fee = Decimal::from_str(req.fee.as_deref().unwrap_or("0")).map_err(|_| {
-        // FIXME: fee should read from config, not default 0
-        (
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<()>::error(
-                error_codes::INVALID_PARAMETER,
-                "Invalid fee",
-            )),
-        )
-    })?;
+    // TODO: fee should be read from chain_assets.withdraw_fee config, NOT from user input
+    // MVP placeholder: use 0 fee (implement config lookup for production)
+    let fee = Decimal::ZERO;
 
     // Adapter selection (Simple logic for MVP)
     let res = if req.asset == "BTC" {

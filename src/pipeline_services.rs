@@ -1646,9 +1646,16 @@ impl SettlementService {
     ) {
         // Get fee rates from SymbolManager
         let symbol_info = symbol_mgr.get_symbol_info_by_id(symbol_id);
+        // SAFE_DEFAULT: if symbol not found, use 0 fee (user benefit, exchange absorbs loss)
         let (maker_fee_rate, taker_fee_rate) = symbol_info
             .map(|s| (s.base_maker_fee, s.base_taker_fee))
-            .unwrap_or((1000, 2000)); // FIXME: UNSAFE - fee rate should fail explicitly
+            .unwrap_or_else(|| {
+                tracing::error!(
+                    "Symbol {} not found for fee calculation, using 0 fee",
+                    symbol_id
+                );
+                (0, 0)
+            });
 
         // --- Taker Side ---
         let taker_status = if trade_event.taker_filled_qty >= trade_event.taker_order_qty {

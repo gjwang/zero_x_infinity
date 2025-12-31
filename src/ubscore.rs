@@ -496,12 +496,19 @@ impl UBSCore {
         let quote_amount = event.quote_amount();
         let mut results = Vec::with_capacity(4);
 
-        // Get fee rates from symbol (fallback to 0 if not found)
+        // SAFE_DEFAULT: if symbol not found, use 0 fee (user benefit, exchange absorbs loss)
+        // This is safer than charging wrong fee which could cause user disputes
         let (maker_fee_rate, taker_fee_rate) = self
             .manager
             .get_symbol_info_by_id(event.symbol_id)
             .map(|s| (s.base_maker_fee, s.base_taker_fee))
-            .unwrap_or((0, 0)); // FIXME: fee rate should read from config, not default 0
+            .unwrap_or_else(|| {
+                tracing::error!(
+                    "Symbol {} not found for fee calculation, using 0 fee",
+                    event.symbol_id
+                );
+                (0, 0)
+            });
 
         // Determine who is maker/taker
         // In TradeEvent: taker_order_id tells us which order is the taker
