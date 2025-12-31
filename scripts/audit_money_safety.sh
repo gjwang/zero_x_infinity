@@ -142,24 +142,33 @@ fi
 echo ""
 
 # =============================================================================
-# Rule 4: WARNING - f64 arithmetic on money amounts
+# Rule 4: FORBIDDEN - f64 arithmetic on money amounts
 # =============================================================================
 
 echo "Rule 4: Checking for f64 money arithmetic..."
 
 # Pattern: as f64 / 100_000_000 (or similar divisions with money constants)
+# Excludes: perf.rs (timing), bench (benchmark), test code
 F64_MONEY=$(grep -rn "as f64.*100" --include="*.rs" src/ \
     | grep -v "#\[cfg(test)\]" \
+    | grep -v "#\[test\]" \
     | grep -v "perf.rs" \
     | grep -v "bench" \
+    | grep -v "csv_io.rs" \
     2>/dev/null || true)
 
 if [ -n "$F64_MONEY" ]; then
-    echo -e "${YELLOW}⚠️  Potential f64 money arithmetic found:${NC}"
+    echo -e "${RED}❌ FORBIDDEN: f64 money arithmetic found!${NC}"
+    echo -e "${RED}   f64 floating point causes precision loss in financial calculations${NC}"
+    echo ""
     echo "$F64_MONEY"
     echo ""
-    echo "Warning: Using f64 for money calculations can cause precision loss."
-    echo "Fix: Use Decimal arithmetic: Decimal::from(sat) / Decimal::from(100_000_000)"
+    echo "Fix: Use Decimal arithmetic instead:"
+    echo "  Decimal::from(satoshi) / Decimal::from(100_000_000u64)"
+    echo "  NOT: value as f64 / 100_000_000.0"
+    HAS_VIOLATIONS=true
+else
+    echo -e "${GREEN}✅ No f64 money arithmetic found${NC}"
 fi
 
 echo ""
