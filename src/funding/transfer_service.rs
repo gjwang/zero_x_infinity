@@ -131,7 +131,7 @@ impl TransferService {
         let rows = sqlx::query(
             r#"
             SELECT b.user_id, b.asset_id, b.account_type, b.available, b.frozen,
-                   a.asset as asset_name, a.decimals
+                   a.asset as asset_name, a.internal_scale
             FROM balances_tb b
             JOIN assets_tb a ON b.asset_id = a.asset_id
             WHERE b.user_id = $1
@@ -156,7 +156,7 @@ impl TransferService {
             let available: i64 = row.get("available");
             let frozen: i64 = row.get("frozen");
             let asset_name: String = row.get("asset_name");
-            let decimals: i16 = row.get("decimals");
+            let internal_scale: i16 = row.get("internal_scale");
 
             let account_type_name = match account_type {
                 1 => "spot",
@@ -170,13 +170,13 @@ impl TransferService {
                 account_type: account_type_name.to_string(),
                 available: DisplayAmount::new(money::format_amount_signed(
                     available,
-                    decimals as u32,
-                    decimals as u32,
+                    internal_scale as u32,
+                    internal_scale as u32,
                 )),
                 frozen: DisplayAmount::new(money::format_amount_signed(
                     frozen,
-                    decimals as u32,
-                    decimals as u32,
+                    internal_scale as u32,
+                    internal_scale as u32,
                 )),
             });
         }
