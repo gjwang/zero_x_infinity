@@ -173,7 +173,7 @@ impl DepositService {
         let rows = sqlx::query(
             r#"
             SELECT d.tx_hash, d.user_id, d.asset, d.amount, d.status, d.created_at, d.block_height,
-                   a.decimals
+                   a.internal_scale
             FROM deposit_history d
             JOIN assets_tb a ON d.asset = a.asset
             WHERE d.user_id = $1
@@ -188,11 +188,14 @@ impl DepositService {
         let mut records = Vec::new();
         for row in rows {
             let amount_raw: i64 = row.get("amount");
-            let decimals: i16 = row.get("decimals");
+            let internal_scale: i16 = row.get("internal_scale");
 
             // Use unified money module for formatting
-            let amount_str =
-                money::format_amount_signed(amount_raw, decimals as u32, decimals as u32);
+            let amount_str = money::format_amount_signed(
+                amount_raw,
+                internal_scale as u32,
+                internal_scale as u32,
+            );
 
             records.push(DepositRecord {
                 tx_hash: row.get("tx_hash"),
