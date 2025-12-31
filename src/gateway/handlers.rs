@@ -1054,7 +1054,7 @@ pub async fn get_depth(
 
     let (formatted_bids, formatted_asks) = formatter
         .format_depth_data(&snapshot.bids, &snapshot.asks, state.active_symbol_id)
-        .map_err(|e| ApiError::internal(e))?;
+        .map_err(ApiError::internal)?;
 
     let data = super::types::DepthApiData {
         symbol: symbol_name.to_string(),
