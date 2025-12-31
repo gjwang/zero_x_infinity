@@ -55,6 +55,30 @@ impl Database {
     }
 }
 
+/// Extension trait for safe row access with logging
+pub trait SafeRow {
+    /// Try to get a value from a column, log error and return None if it fails
+    fn try_get_log<'r, T>(&'r self, column: &str) -> Option<T>
+    where
+        T: sqlx::Decode<'r, sqlx::Postgres> + sqlx::Type<sqlx::Postgres>;
+}
+
+impl SafeRow for sqlx::postgres::PgRow {
+    fn try_get_log<'r, T>(&'r self, column: &str) -> Option<T>
+    where
+        T: sqlx::Decode<'r, sqlx::Postgres> + sqlx::Type<sqlx::Postgres>,
+    {
+        use sqlx::Row;
+        match self.try_get(column) {
+            Ok(v) => Some(v),
+            Err(e) => {
+                tracing::error!("Failed to read column '{}': {}", column, e);
+                None
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

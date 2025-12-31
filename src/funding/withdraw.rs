@@ -221,53 +221,40 @@ impl WithdrawService {
         .fetch_all(self.db.pool())
         .await?;
 
-        let mut records = Vec::new();
-        for row in rows {
-            // Use try_get to avoid panic on missing columns - log and skip bad rows
-            let amount_raw: i64 = match row.try_get("amount") {
-                Ok(v) => v,
-                Err(e) => {
-                    tracing::error!("Failed to read 'amount' column: {}", e);
-                    continue;
-                }
-            };
-            let fee_raw: i64 = match row.try_get("fee") {
-                Ok(v) => v,
-                Err(e) => {
-                    tracing::error!("Failed to read 'fee' column: {}", e);
-                    continue;
-                }
-            };
-            let internal_scale: i16 = match row.try_get("internal_scale") {
-                Ok(v) => v,
-                Err(e) => {
-                    tracing::error!("Failed to read 'internal_scale' column: {}", e);
-                    continue;
-                }
-            };
+        use crate::db::SafeRow;
+        let records: Vec<WithdrawRecord> = rows
+            .into_iter()
+            .filter_map(|row| {
+                let amount_raw: i64 = row.try_get_log("amount")?;
+                let fee_raw: i64 = row.try_get_log("fee")?;
+                let internal_scale: i16 = row.try_get_log("internal_scale")?;
 
-            // Use unified money module for formatting
-            let amount_str = money::format_amount_signed(
-                amount_raw,
-                internal_scale as u32,
-                internal_scale as u32,
-            );
-            let fee_str =
-                money::format_amount_signed(fee_raw, internal_scale as u32, internal_scale as u32);
+                // Use unified money module for formatting
+                let amount_str = money::format_amount_signed(
+                    amount_raw,
+                    internal_scale as u32,
+                    internal_scale as u32,
+                );
+                let fee_str = money::format_amount_signed(
+                    fee_raw,
+                    internal_scale as u32,
+                    internal_scale as u32,
+                );
 
-            records.push(WithdrawRecord {
-                request_id: row.try_get("request_id").unwrap_or_default(),
-                user_id: row.try_get("user_id").unwrap_or_default(),
-                asset: row.try_get("asset").unwrap_or_default(),
-                amount: amount_str,
-                fee: fee_str,
-                to_address: row.try_get("to_address").unwrap_or_default(),
-                status: row.try_get("status").unwrap_or_default(),
-                tx_hash: row.try_get("tx_hash").ok(),
-                created_at: row.try_get("created_at").unwrap_or_default(),
-                updated_at: row.try_get("updated_at").unwrap_or_default(),
-            });
-        }
+                Some(WithdrawRecord {
+                    request_id: row.try_get("request_id").unwrap_or_default(),
+                    user_id: row.try_get("user_id").unwrap_or_default(),
+                    asset: row.try_get("asset").unwrap_or_default(),
+                    amount: amount_str,
+                    fee: fee_str,
+                    to_address: row.try_get("to_address").unwrap_or_default(),
+                    status: row.try_get("status").unwrap_or_default(),
+                    tx_hash: row.try_get("tx_hash").ok(),
+                    created_at: row.try_get("created_at").unwrap_or_default(),
+                    updated_at: row.try_get("updated_at").unwrap_or_default(),
+                })
+            })
+            .collect();
 
         Ok(records)
     }
