@@ -6,9 +6,9 @@
 pub mod connection;
 pub mod handler;
 pub mod messages;
-pub mod service;
+pub mod ws_broadcast_service;
 
 pub use connection::ConnectionManager;
 pub use handler::ws_handler;
 pub use messages::{PushEvent, WsMessage};
-pub use service::WsService;
+pub use ws_broadcast_service::WsService;

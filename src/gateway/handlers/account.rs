@@ -79,7 +79,7 @@ pub async fn get_balances(
 pub async fn get_all_balances(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<crate::api_auth::AuthenticatedUser>,
-) -> ApiResult<Vec<crate::funding::service::BalanceInfo>> {
+) -> ApiResult<Vec<crate::funding::transfer_service::BalanceInfo>> {
     // Extract user_id from authenticated user
     let user_id = user.user_id;
 
@@ -90,7 +90,9 @@ pub async fn get_all_balances(
         .ok_or_else(|| ApiError::service_unavailable("Account database not available"))?;
 
     // Query all balances
-    match crate::funding::service::TransferService::get_all_balances(pg_db.pool(), user_id).await {
+    match crate::funding::transfer_service::TransferService::get_all_balances(pg_db.pool(), user_id)
+        .await
+    {
         Ok(balances) => ok(balances),
         Err(e) => ApiError::db_error(format!("Query failed: {}", e)).into_err(),
     }
@@ -123,15 +125,17 @@ pub async fn get_account(
         .as_ref()
         .ok_or_else(|| ApiError::service_unavailable("Account database not available"))?;
 
-    let mut balances =
-        match crate::funding::service::TransferService::get_all_balances(pg_db.pool(), user_id)
-            .await
-        {
-            Ok(b) => b,
-            Err(e) => {
-                return ApiError::db_error(format!("Postgres query failed: {}", e)).into_err();
-            }
-        };
+    let mut balances = match crate::funding::transfer_service::TransferService::get_all_balances(
+        pg_db.pool(),
+        user_id,
+    )
+    .await
+    {
+        Ok(b) => b,
+        Err(e) => {
+            return ApiError::db_error(format!("Postgres query failed: {}", e)).into_err();
+        }
+    };
 
     // Filter out any "spot" records from Postgres (if they exist due to legacy/residue)
     // Design intent: Spot balances ONLY come from TDengine/Settlement.
@@ -150,7 +154,7 @@ pub async fn get_account(
             Ok(spot_balances) => {
                 for sb in spot_balances {
                     // Map BalanceApiData to BalanceInfo
-                    balances.push(crate::funding::service::BalanceInfo {
+                    balances.push(crate::funding::transfer_service::BalanceInfo {
                         asset_id: 0, // Not strictly required for the response type
                         asset: sb.asset,
                         account_type: "spot".to_string(),

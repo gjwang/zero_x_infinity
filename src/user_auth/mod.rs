@@ -1,5 +1,5 @@
+pub mod auth_service;
 pub mod handlers;
 pub mod middleware;
-pub mod service;
 
-pub use service::UserAuthService;
+pub use auth_service::UserAuthService;

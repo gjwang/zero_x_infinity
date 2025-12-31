@@ -21,7 +21,7 @@ use super::transfer::create_transfer_fsm_handler;
 /// Account info for JWT auth
 pub async fn get_account_jwt(
     State(state): State<Arc<AppState>>,
-    Extension(claims): Extension<crate::user_auth::service::Claims>,
+    Extension(claims): Extension<crate::user_auth::auth_service::Claims>,
 ) -> ApiResult<AccountResponseData> {
     let user_id = claims.sub.parse::<i64>().unwrap_or_default();
     tracing::info!("DEBUG: get_account_jwt called for user_id: {}", user_id);
@@ -32,15 +32,17 @@ pub async fn get_account_jwt(
         .as_ref()
         .ok_or_else(|| ApiError::service_unavailable("Account database not available"))?;
 
-    let mut balances =
-        match crate::funding::service::TransferService::get_all_balances(pg_db.pool(), user_id)
-            .await
-        {
-            Ok(b) => b,
-            Err(e) => {
-                return ApiError::db_error(format!("Postgres query failed: {}", e)).into_err();
-            }
-        };
+    let mut balances = match crate::funding::transfer_service::TransferService::get_all_balances(
+        pg_db.pool(),
+        user_id,
+    )
+    .await
+    {
+        Ok(b) => b,
+        Err(e) => {
+            return ApiError::db_error(format!("Postgres query failed: {}", e)).into_err();
+        }
+    };
 
     // Filter out any "spot" records from Postgres
     balances.retain(|b| b.account_type != "spot");
@@ -56,7 +58,7 @@ pub async fn get_account_jwt(
         {
             Ok(spot_balances) => {
                 for sb in spot_balances {
-                    balances.push(crate::funding::service::BalanceInfo {
+                    balances.push(crate::funding::transfer_service::BalanceInfo {
                         asset_id: 0,
                         asset: sb.asset,
                         account_type: "spot".to_string(),
@@ -78,7 +80,7 @@ pub async fn get_account_jwt(
 /// Create transfer (JWT)
 pub async fn create_transfer_jwt(
     State(state): State<Arc<AppState>>,
-    Extension(claims): Extension<crate::user_auth::service::Claims>,
+    Extension(claims): Extension<crate::user_auth::auth_service::Claims>,
     Json(req): Json<crate::funding::transfer::TransferRequest>,
 ) -> ApiResult<crate::funding::transfer::TransferResponse> {
     let user_id = claims.sub.parse::<i64>().unwrap_or_default();
@@ -99,7 +101,7 @@ pub async fn create_transfer_jwt(
         .as_ref()
         .ok_or_else(|| ApiError::service_unavailable("Database not available"))?;
 
-    match crate::funding::service::TransferService::execute(db, user_id, req).await {
+    match crate::funding::transfer_service::TransferService::execute(db, user_id, req).await {
         Ok(resp) => ok(resp),
         Err(e) => ApiError::bad_request(e.to_string()).into_err(),
     }
@@ -108,7 +110,7 @@ pub async fn create_transfer_jwt(
 /// Create order (JWT)
 pub async fn create_order_jwt(
     State(state): State<Arc<AppState>>,
-    Extension(claims): Extension<crate::user_auth::service::Claims>,
+    Extension(claims): Extension<crate::user_auth::auth_service::Claims>,
     Json(req): Json<ClientOrder>,
 ) -> ApiResult<OrderResponseData> {
     let user_id = claims.sub.parse::<u64>().unwrap_or_default();
@@ -146,7 +148,7 @@ pub async fn create_order_jwt(
 /// Cancel order (JWT)
 pub async fn cancel_order_jwt(
     State(state): State<Arc<AppState>>,
-    Extension(claims): Extension<crate::user_auth::service::Claims>,
+    Extension(claims): Extension<crate::user_auth::auth_service::Claims>,
     Json(req): Json<CancelOrderRequest>,
 ) -> ApiResult<OrderResponseData> {
     let user_id = claims.sub.parse::<u64>().unwrap_or_default();
@@ -177,7 +179,7 @@ pub async fn cancel_order_jwt(
 /// Get orders (JWT)
 pub async fn get_orders_jwt(
     State(state): State<Arc<AppState>>,
-    Extension(claims): Extension<crate::user_auth::service::Claims>,
+    Extension(claims): Extension<crate::user_auth::auth_service::Claims>,
     Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> ApiResult<Vec<crate::persistence::queries::OrderApiData>> {
     let user_id = claims.sub.parse::<u64>().unwrap_or_default();
@@ -208,7 +210,7 @@ pub async fn get_orders_jwt(
 /// Get single balance (JWT)
 pub async fn get_balance_jwt(
     State(state): State<Arc<AppState>>,
-    Extension(claims): Extension<crate::user_auth::service::Claims>,
+    Extension(claims): Extension<crate::user_auth::auth_service::Claims>,
     Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> ApiResult<crate::persistence::queries::BalanceApiData> {
     let user_id = claims.sub.parse::<u64>().unwrap_or_default();

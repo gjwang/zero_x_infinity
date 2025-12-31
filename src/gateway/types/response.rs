@@ -211,7 +211,7 @@ pub struct OrderResponseData {
 /// Account response data (for legacy /account endpoint)
 #[derive(Debug, Serialize, ToSchema)]
 pub struct AccountResponseData {
-    pub balances: Vec<crate::funding::service::BalanceInfo>,
+    pub balances: Vec<crate::funding::transfer_service::BalanceInfo>,
 }
 
 /// Market depth API response data

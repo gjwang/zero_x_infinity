@@ -49,7 +49,8 @@ pub async fn create_transfer(
         .as_ref()
         .ok_or_else(|| ApiError::service_unavailable("Database not available"))?;
 
-    match crate::funding::service::TransferService::execute(db, user_id as i64, req).await {
+    match crate::funding::transfer_service::TransferService::execute(db, user_id as i64, req).await
+    {
         Ok(resp) => ok(resp),
         Err(e) => {
             let err_msg = e.to_string();

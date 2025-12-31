@@ -1,7 +1,7 @@
 use axum::{Json, extract::State, http::StatusCode};
 use std::sync::Arc;
 
-use super::service::{AuthResponse, LoginRequest, RegisterRequest};
+use super::auth_service::{AuthResponse, LoginRequest, RegisterRequest};
 use crate::gateway::types::error_codes;
 use crate::gateway::{state::AppState, types::ApiResponse};
 
@@ -142,7 +142,7 @@ pub struct CreateApiKeyResponse {
 )]
 pub async fn create_api_key(
     State(state): State<Arc<AppState>>,
-    axum::Extension(claims): axum::Extension<super::service::Claims>,
+    axum::Extension(claims): axum::Extension<super::auth_service::Claims>,
     Json(req): Json<CreateApiKeyRequest>,
 ) -> Result<
     (StatusCode, Json<ApiResponse<CreateApiKeyResponse>>),
@@ -186,18 +186,18 @@ pub async fn create_api_key(
     get,
     path = "/api/v1/user/apikeys",
     responses(
-        (status = 200, description = "List of API Keys", body = ApiResponse<Vec<super::service::ApiKeyInfo>>),
+        (status = 200, description = "List of API Keys", body = ApiResponse<Vec<super::auth_service::ApiKeyInfo>>),
         (status = 401, description = "Unauthorized")
     ),
     tag = "User"
 )]
 pub async fn list_api_keys(
     State(state): State<Arc<AppState>>,
-    axum::Extension(claims): axum::Extension<super::service::Claims>,
+    axum::Extension(claims): axum::Extension<super::auth_service::Claims>,
 ) -> Result<
     (
         StatusCode,
-        Json<ApiResponse<Vec<super::service::ApiKeyInfo>>>,
+        Json<ApiResponse<Vec<super::auth_service::ApiKeyInfo>>>,
     ),
     (StatusCode, Json<ApiResponse<()>>),
 > {
@@ -244,7 +244,7 @@ pub async fn list_api_keys(
 )]
 pub async fn delete_api_key(
     State(state): State<Arc<AppState>>,
-    axum::Extension(claims): axum::Extension<super::service::Claims>,
+    axum::Extension(claims): axum::Extension<super::auth_service::Claims>,
     axum::extract::Path(api_key): axum::extract::Path<String>,
 ) -> Result<(StatusCode, Json<ApiResponse<()>>), (StatusCode, Json<ApiResponse<()>>)> {
     let user_id = claims.sub.parse::<i64>().unwrap_or_default();

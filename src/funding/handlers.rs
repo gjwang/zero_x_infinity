@@ -139,7 +139,7 @@ pub async fn mock_deposit(
 /// GET /api/v1/capital/deposit/address
 pub async fn get_deposit_address(
     State(state): State<Arc<AppState>>,
-    axum::Extension(claims): axum::Extension<crate::user_auth::service::Claims>,
+    axum::Extension(claims): axum::Extension<crate::user_auth::auth_service::Claims>,
     Query(req): Query<GetAddressRequest>,
 ) -> Result<Json<ApiResponse<AddressResponse>>, (StatusCode, Json<ApiResponse<()>>)> {
     let db = state.pg_db.as_ref().ok_or((
@@ -194,7 +194,7 @@ pub async fn get_deposit_address(
 /// POST /api/v1/capital/withdraw/apply
 pub async fn apply_withdraw(
     State(state): State<Arc<AppState>>,
-    axum::Extension(claims): axum::Extension<crate::user_auth::service::Claims>,
+    axum::Extension(claims): axum::Extension<crate::user_auth::auth_service::Claims>,
     Json(req): Json<WithdrawApplyRequest>,
 ) -> Result<Json<ApiResponse<WithdrawResponse>>, (StatusCode, Json<ApiResponse<()>>)> {
     let db = state.pg_db.as_ref().ok_or((
@@ -278,7 +278,7 @@ pub async fn apply_withdraw(
 /// GET /api/v1/capital/deposit/history
 pub async fn get_deposit_history(
     State(state): State<Arc<AppState>>,
-    axum::Extension(claims): axum::Extension<crate::user_auth::service::Claims>,
+    axum::Extension(claims): axum::Extension<crate::user_auth::auth_service::Claims>,
 ) -> Result<
     Json<ApiResponse<Vec<super::deposit::DepositRecord>>>,
     (StatusCode, Json<ApiResponse<()>>),
@@ -310,7 +310,7 @@ pub async fn get_deposit_history(
 /// GET /api/v1/capital/withdraw/history
 pub async fn get_withdraw_history(
     State(state): State<Arc<AppState>>,
-    axum::Extension(claims): axum::Extension<crate::user_auth::service::Claims>,
+    axum::Extension(claims): axum::Extension<crate::user_auth::auth_service::Claims>,
 ) -> Result<
     Json<ApiResponse<Vec<super::withdraw::WithdrawRecord>>>,
     (StatusCode, Json<ApiResponse<()>>),
