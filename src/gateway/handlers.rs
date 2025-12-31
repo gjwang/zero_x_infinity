@@ -15,7 +15,7 @@ use super::state::AppState;
 use super::types::{
     AccountResponseData, ApiError, ApiResponse, ApiResult, CancelOrderRequest, ClientOrder,
     DepthApiData, MoveOrderRequest, OrderResponseData, ReduceOrderRequest, accepted,
-    decimal_to_u64, error_codes,
+    decimal_to_u64, error_codes, ok,
 };
 
 use crate::symbol_manager::SymbolManager;
@@ -209,8 +209,7 @@ pub async fn cancel_order(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<crate::api_auth::AuthenticatedUser>,
     Json(req): Json<CancelOrderRequest>,
-) -> Result<(StatusCode, Json<ApiResponse<OrderResponseData>>), (StatusCode, Json<ApiResponse<()>>)>
-{
+) -> ApiResult<OrderResponseData> {
     // 1. Extract user_id from authenticated user
     let user_id = user.user_id as u64;
     tracing::info!(
@@ -231,13 +230,8 @@ pub async fn cancel_order(
             "[TRACE] Cancel Order {}: ❌ Queue Full in Gateway",
             req.order_id
         );
-        return Err((
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ApiResponse::<()>::error(
-                error_codes::SERVICE_UNAVAILABLE,
-                "Order queue is full, please try again later",
-            )),
-        ));
+        return ApiError::service_unavailable("Order queue is full, please try again later")
+            .into_err();
     }
 
     tracing::info!(
@@ -247,15 +241,12 @@ pub async fn cancel_order(
     );
 
     // 3. Return response
-    Ok((
-        StatusCode::OK,
-        Json(ApiResponse::success(OrderResponseData {
-            order_id: req.order_id,
-            cid: None,
-            order_status: "CANCEL_PENDING".to_string(),
-            accepted_at: now_ms(),
-        })),
-    ))
+    ok(OrderResponseData {
+        order_id: req.order_id,
+        cid: None,
+        order_status: "CANCEL_PENDING".to_string(),
+        accepted_at: now_ms(),
+    })
 }
 
 /// Reduce order quantity
@@ -276,27 +267,15 @@ pub async fn reduce_order(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<crate::api_auth::AuthenticatedUser>,
     Json(req): Json<ReduceOrderRequest>,
-) -> Result<(StatusCode, Json<ApiResponse<OrderResponseData>>), (StatusCode, Json<ApiResponse<()>>)>
-{
+) -> ApiResult<OrderResponseData> {
     let user_id = user.user_id as u64;
     let symbol_info = state
         .symbol_mgr
         .get_symbol_info_by_id(state.active_symbol_id)
-        .ok_or((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error(
-                error_codes::INTERNAL_ERROR,
-                "Active symbol not found",
-            )),
-        ))?;
+        .ok_or_else(|| ApiError::internal("Active symbol not found"))?;
 
     let reduce_qty_u64 = decimal_to_u64(req.reduce_qty.inner(), symbol_info.base_decimals)
-        .map_err(|e| {
-            (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<()>::error(error_codes::INVALID_PARAMETER, e)),
-            )
-        })?;
+        .map_err(ApiError::bad_request)?;
 
     tracing::info!(
         "[TRACE] Reduce Order {}: Received from User {}",
@@ -312,24 +291,15 @@ pub async fn reduce_order(
     };
 
     if state.order_queue.push(action).is_err() {
-        return Err((
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ApiResponse::<()>::error(
-                error_codes::SERVICE_UNAVAILABLE,
-                "Order queue is full",
-            )),
-        ));
+        return ApiError::service_unavailable("Order queue is full").into_err();
     }
 
-    Ok((
-        StatusCode::ACCEPTED,
-        Json(ApiResponse::success(OrderResponseData {
-            order_id: req.order_id,
-            cid: None,
-            order_status: "ACCEPTED".to_string(),
-            accepted_at: now_ms(),
-        })),
-    ))
+    accepted(OrderResponseData {
+        order_id: req.order_id,
+        cid: None,
+        order_status: "ACCEPTED".to_string(),
+        accepted_at: now_ms(),
+    })
 }
 
 /// Move order price
@@ -350,27 +320,15 @@ pub async fn move_order(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<crate::api_auth::AuthenticatedUser>,
     Json(req): Json<MoveOrderRequest>,
-) -> Result<(StatusCode, Json<ApiResponse<OrderResponseData>>), (StatusCode, Json<ApiResponse<()>>)>
-{
+) -> ApiResult<OrderResponseData> {
     let user_id = user.user_id as u64;
     let symbol_info = state
         .symbol_mgr
         .get_symbol_info_by_id(state.active_symbol_id)
-        .ok_or((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error(
-                error_codes::INTERNAL_ERROR,
-                "Active symbol not found",
-            )),
-        ))?;
+        .ok_or_else(|| ApiError::internal("Active symbol not found"))?;
 
-    let new_price_u64 =
-        decimal_to_u64(req.new_price.inner(), symbol_info.price_decimal).map_err(|e| {
-            (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<()>::error(error_codes::INVALID_PARAMETER, e)),
-            )
-        })?;
+    let new_price_u64 = decimal_to_u64(req.new_price.inner(), symbol_info.price_decimal)
+        .map_err(ApiError::bad_request)?;
 
     tracing::info!(
         "[TRACE] Move Order {}: Received from User {}",
@@ -386,24 +344,15 @@ pub async fn move_order(
     };
 
     if state.order_queue.push(action).is_err() {
-        return Err((
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ApiResponse::<()>::error(
-                error_codes::SERVICE_UNAVAILABLE,
-                "Order queue is full",
-            )),
-        ));
+        return ApiError::service_unavailable("Order queue is full").into_err();
     }
 
-    Ok((
-        StatusCode::ACCEPTED,
-        Json(ApiResponse::success(OrderResponseData {
-            order_id: req.order_id,
-            cid: None,
-            order_status: "ACCEPTED".to_string(),
-            accepted_at: now_ms(),
-        })),
-    ))
+    accepted(OrderResponseData {
+        order_id: req.order_id,
+        cid: None,
+        order_status: "ACCEPTED".to_string(),
+        accepted_at: now_ms(),
+    })
 }
 
 /// Cancel order by ID (DELETE method)
@@ -411,8 +360,7 @@ pub async fn cancel_order_by_id(
     state: State<Arc<AppState>>,
     user: Extension<crate::api_auth::AuthenticatedUser>,
     Path(order_id): Path<u64>,
-) -> Result<(StatusCode, Json<ApiResponse<OrderResponseData>>), (StatusCode, Json<ApiResponse<()>>)>
-{
+) -> ApiResult<OrderResponseData> {
     cancel_order(state, user, Json(CancelOrderRequest { order_id })).await
 }
 

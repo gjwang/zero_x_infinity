@@ -130,6 +130,29 @@ impl ApiError {
         )
     }
 
+    /// 503 Service Unavailable (queue full, etc.)
+    pub fn service_unavailable(msg: impl Into<String>) -> Self {
+        Self::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            error_codes::SERVICE_UNAVAILABLE,
+            msg,
+        )
+    }
+
+    /// Database error (500)
+    pub fn db_error(msg: impl Into<String>) -> Self {
+        Self::internal(format!("Database error: {}", msg.into()))
+    }
+
+    /// Rate limited (429)
+    pub fn rate_limited(msg: impl Into<String>) -> Self {
+        Self::new(
+            StatusCode::TOO_MANY_REQUESTS,
+            error_codes::RATE_LIMITED,
+            msg,
+        )
+    }
+
     /// Convert to handler error tuple
     pub fn into_err<T>(self) -> ApiResult<T> {
         Err((
